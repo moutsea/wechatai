@@ -1,0 +1,51 @@
+{
+  "id": "wechatai",
+  "name": "Wechatai Channel",
+  "version": "1.0.1",
+  "description": "Outbound-only relay for personal WeChat conversations and proactive deliveries.",
+  "channels": ["wechatai"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "channelConfigs": {
+    "wechatai": {
+      "label": "Wechatai",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["endpoint", "token", "agentId"],
+              "properties": {
+                "endpoint": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "agentId": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9_-]+$"
+                },
+                "enabled": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "uiHints": {
+        "accounts.*.token": {
+          "sensitive": true
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Allow: /api/plugins/protocol
+
+Sitemap: https://wechatai.app/sitemap.xml

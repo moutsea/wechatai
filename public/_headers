@@ -1,0 +1,22 @@
+/login
+  X-Robots-Tag: noindex
+/register
+  X-Robots-Tag: noindex
+/app
+  X-Robots-Tag: noindex
+/app/*
+  X-Robots-Tag: noindex
+/demo
+  X-Robots-Tag: noindex
+/demo/*
+  X-Robots-Tag: noindex
+/404
+  X-Robots-Tag: noindex
+https://:subdomain.workers.dev/*
+  X-Robots-Tag: noindex
+https://:version.:subdomain.workers.dev/*
+  X-Robots-Tag: noindex
+
+/downloads/*
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff

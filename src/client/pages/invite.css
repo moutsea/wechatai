@@ -1,0 +1,296 @@
+.invite-page {
+  max-width: 1120px;
+}
+.invite-hero {
+  padding: 30px;
+  border-radius: 18px;
+  background: var(--dark-surface);
+  color: white;
+}
+.invite-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 28px;
+}
+.invite-kicker {
+  color: var(--lime);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.invite-hero h2 {
+  font-size: clamp(22px, 2.5vw, 30px);
+  font-weight: 500;
+  margin: 14px 0 10px;
+  letter-spacing: -0.8px;
+}
+.invite-hero h2 strong {
+  color: var(--lime);
+  font-size: 1.2em;
+}
+.invite-hero p {
+  margin: 0;
+  color: #becbc2;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.invite-permanent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #c3d8c9;
+  font-size: 12px;
+  margin-top: 18px;
+}
+.invite-gift {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 106px;
+  height: 106px;
+  border: 1px solid #59f29438;
+  border-radius: 28px;
+  color: var(--lime);
+  background: #59f2940b;
+  transform: rotate(-7deg);
+  margin-right: 12px;
+}
+.invite-link-box {
+  border-top: 1px solid var(--dark-line);
+  margin-top: 26px;
+  padding-top: 22px;
+}
+.invite-link-box label {
+  display: block;
+  color: #c3d0c7;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+.invite-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 6px 6px 16px;
+  border: 1px solid #3c5144;
+  background: var(--dark-raised);
+  border-radius: 10px;
+  color: #94b19f;
+}
+.invite-copy-row input {
+  color: #e2eee6;
+  background: transparent;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 8px 0;
+  font-size: 13px;
+}
+.invite-copy-row input::placeholder {
+  color: #a2b3a9;
+}
+.invite-copy-row .button {
+  flex-shrink: 0;
+  background: var(--lime);
+  color: var(--on-lime);
+}
+.invite-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 26px 0;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.invite-stats > div {
+  padding: 0 26px;
+  border-right: 1px solid var(--line);
+}
+.invite-stats > div:first-child {
+  padding-left: 0;
+}
+.invite-stats > div:last-child {
+  border: 0;
+}
+.invite-stats span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.invite-stats strong {
+  display: block;
+  font-size: 29px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+.invite-stats small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 10px;
+}
+.invite-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin: 30px 0 32px;
+}
+.invite-steps > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.invite-step-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  background: var(--green-soft);
+  color: var(--green);
+  border-radius: 10px;
+}
+.invite-steps h3 {
+  font-size: 13px;
+  margin: 1px 0 7px;
+}
+.invite-steps h3 small {
+  font-weight: 400;
+  color: var(--muted);
+  margin-right: 8px;
+}
+.invite-steps p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0;
+}
+.invite-record,
+.invite-record-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 17px 22px;
+}
+.invite-record-head {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.invite-record {
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.invite-record time {
+  color: var(--muted);
+}
+.invite-record > :last-child,
+.invite-record-head > :last-child {
+  justify-self: end;
+}
+.invite-rewarded {
+  color: var(--green);
+  background: var(--green-soft);
+}
+.invite-empty {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 32px 20px;
+  color: var(--muted);
+  gap: 12px;
+  text-align: center;
+}
+.invite-empty strong {
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.invite-empty p {
+  font-size: 12px;
+  margin: 0;
+}
+.invite-rules {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.9;
+  margin: 18px 0 0;
+}
+.invite-received {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px;
+  background: var(--green-soft);
+  color: var(--green);
+  border-radius: 10px;
+  margin-top: 18px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.invite-received > svg {
+  flex-shrink: 0;
+}
+.invite-received a {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 4px;
+}
+.auth-invitation {
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  background: var(--sage);
+  border-radius: 10px;
+  color: var(--green);
+  font-size: 13px;
+  line-height: 1.8;
+  margin: 20px 0;
+}
+@media (max-width: 700px) {
+  .invite-hero {
+    padding: 23px 20px;
+  }
+  .invite-gift {
+    display: none;
+  }
+  .invite-copy-row {
+    flex-wrap: wrap;
+    padding: 10px;
+    gap: 8px;
+  }
+  .invite-copy-row input {
+    flex: 1;
+  }
+  .invite-copy-row .button {
+    width: 100%;
+  }
+  .invite-stats > div {
+    padding: 0 14px;
+  }
+  .invite-stats strong {
+    font-size: 25px;
+  }
+  .invite-stats small {
+    display: block;
+    margin: 5px 0 0;
+  }
+  .invite-steps {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+  .invite-record,
+  .invite-record-head {
+    grid-template-columns: 0.7fr 1fr 1.3fr;
+    padding: 16px 12px;
+    gap: 6px;
+  }
+  .invite-record .tag {
+    font-size: 10px;
+  }
+  .invite-received {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,10 @@
+name: wechatai
+label: Wechatai 微信
+kind: platform
+version: 1.0.0
+description: Personal WeChat channel through Wechatai, with durable replies and scheduled delivery.
+author: Wechatai
+optional_env:
+  - name: WECHATAI_HERMES_ALLOWED_USERS
+    description: Connector IDs allowed by the one-command pairing installer.
+    password: false

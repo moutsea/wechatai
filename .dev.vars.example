@@ -1,0 +1,17 @@
+# Generate separate random values of at least 32 characters. Never commit .dev.vars.
+BETTER_AUTH_SECRET=
+ENCRYPTION_KEY=
+# Optional: each OAuth button is enabled only when both values are configured.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+# Optional: paid features remain unavailable until Stripe is configured.
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PORTAL_CONFIG_ID=
+STRIPE_PLUS_MONTHLY_PRICE_ID=
+STRIPE_PLUS_YEARLY_PRICE_ID=
+STRIPE_CREDITS_5000_PRICE_ID=
+STRIPE_CREDITS_20000_PRICE_ID=
+STRIPE_CREDITS_50000_PRICE_ID=

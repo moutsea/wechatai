@@ -1,0 +1,30 @@
+{
+  "name": "@wechatai/openclaw-channel",
+  "version": "1.0.1",
+  "description": "Personal WeChat channel through the Wechatai relay",
+  "files": [
+    "index.js",
+    "transport.js",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "type": "module",
+  "peerDependencies": {
+    "openclaw": ">=2026.6.10"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "channel": {
+      "id": "wechatai",
+      "label": "Wechatai",
+      "selectionLabel": "Wechatai (personal WeChat)",
+      "docsPath": "https://wechatai.app/developers/openclaw",
+      "blurb": "Connect your own Wechatai account; supports scheduled and background replies."
+    }
+  }
+}
