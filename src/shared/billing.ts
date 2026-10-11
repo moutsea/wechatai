@@ -1,4 +1,15 @@
 export const BILLING_SERVICE = "wechatai";
+// Calendar months in Beijing time; Jan 31 renews to the last day of February.
+export function extendMembership(from: number, months: 1 | 12) {
+  const offset = 8 * 60 * 60 * 1000;
+  const date = new Date(from + offset);
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
+  return date.getTime() - offset;
+}
 export const BILLING_OFFERS = [
   {
     id: "plus_monthly",

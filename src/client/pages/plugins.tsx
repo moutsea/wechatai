@@ -1,3 +1,11 @@
+import { modelKind } from "../../shared/model-kind";
+import { NotificationEditor } from "./notification-editor";
+import type { NotificationPlugin } from "../../shared/notification";
+import { PersonalAssistantEditor } from "./personal-assistant-editor";
+import { PersonalRecords } from "./personal-records";
+import type { PersonalAssistantPlugin } from "../../shared/personal-assistant";
+import { RoleplayEditor } from "./roleplay-editor";
+import type { RoleplayPlugin } from "../../shared/roleplay";
 import { OpenClawEditor } from "./openclaw-editor";
 import {
   isRemoteAgent,
@@ -39,9 +47,17 @@ const initial: WebResearchInput = {
 export function Plugins() {
   const { data, request, refresh, notify, demo } = useApp();
   const [editor, setEditor] = useState<WebResearchPlugin | "new" | null>(null);
+  const [notificationEditor, setNotificationEditor] = useState<NotificationPlugin | "new" | null>(
+    null,
+  );
   const [form, setForm] = useState(initial);
   const [agentKind, setAgentKind] = useState<RemoteAgentKind>("openclaw");
   const [clawEditor, setClawEditor] = useState<RemoteAgentPlugin | "new" | null>(null);
+  const [personalEditor, setPersonalEditor] = useState<PersonalAssistantPlugin | "new" | null>(
+    null,
+  );
+  const [personalRecords, setPersonalRecords] = useState<PersonalAssistantPlugin | null>(null);
+  const [roleEditor, setRoleEditor] = useState<RoleplayPlugin | "new" | null>(null);
   const [imageEditor, setImageEditor] = useState<ImageGenerationPlugin | "new" | null>(null);
   const [viewing, setViewing] = useState<PluginKind | null>(null);
   const [viewedId, setViewedId] = useState("");
@@ -52,10 +68,23 @@ export function Plugins() {
   const [query, setQuery] = useState("");
   const [reply, setReply] = useState<{ text: string; cost: number } | null>(null);
   if (!data) return null;
-  const selectedModel = data.assistants.find((a) => a.id === form.modelId);
+  const textModels = data.assistants.filter((a) => modelKind(a) === "text");
+  const selectedModel = textModels.find((a) => a.id === form.modelId);
   const update = <K extends keyof WebResearchInput>(key: K, value: WebResearchInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const open = (p: UserPlugin | "new") => {
+    if (p !== "new" && p.pluginId === "wechatai/notification") {
+      setNotificationEditor(p);
+      return;
+    }
+    if (p !== "new" && p.pluginId === "wechatai/personal-assistant") {
+      setPersonalEditor(p);
+      return;
+    }
+    if (p !== "new" && p.pluginId === "wechatai/roleplay") {
+      setRoleEditor(p);
+      return;
+    }
     if (p !== "new" && isRemoteAgent(p)) {
       setAgentKind(p.pluginId === "wechatai/hermes" ? "hermes" : "openclaw");
       setClawEditor(p);
@@ -67,15 +96,19 @@ export function Plugins() {
     }
     setError("");
     setEditor(p);
-    setForm(
-      p === "new" ? { ...initial, modelId: data.assistants[0]?.id ?? "" } : { ...p, apiKey: "" },
-    );
+    setForm(p === "new" ? { ...initial, modelId: textModels[0]?.id ?? "" } : { ...p, apiKey: "" });
   };
   const configure = (kind: PluginKind) => {
+    if (kind === "wechatai/notification") {
+      setNotificationEditor("new");
+      return;
+    }
     if (kind === "wechatai/openclaw" || kind === "wechatai/hermes") {
       setAgentKind(kind === "wechatai/hermes" ? "hermes" : "openclaw");
       setClawEditor("new");
-    } else if (kind === "wechatai/image-generation") setImageEditor("new");
+    } else if (kind === "wechatai/personal-assistant") setPersonalEditor("new");
+    else if (kind === "wechatai/roleplay") setRoleEditor("new");
+    else if (kind === "wechatai/image-generation") setImageEditor("new");
     else open("new");
   };
   const action = async (id: string, operation: string) => {
@@ -156,15 +189,16 @@ export function Plugins() {
       <PageHead
         eyebrow="PLUGINS"
         title="插件"
-        description="给微信添一点新能力。所有插件均为 Plus 专享。"
+        description="给微信添一点新能力。所有插件均为 Plus 会员专享。"
         action={
-          <Link className="text-link" to="/guide#plugins">
+          <Link className="text-link" to="/docs/ds-chat">
             使用指南 <ArrowRight size={15} />
           </Link>
         }
       />
       <PluginLibrary
         onConfigure={configure}
+        onResume={open}
         onView={(kind) => {
           setViewedId("");
           setViewing(kind);
@@ -188,34 +222,70 @@ export function Plugins() {
           </p>
         )}
       <p className="research-billing">
-        输入与最终回复按 token 计费，生成图片另计 5 credits / 张；插件内部调用不重复计收。上游 API
+        消息提醒为 Plus 会员免费权益，不扣 credits。其他插件输入与最终回复按 token
+        计费，生成图片另计 5 credits / 张；插件内部调用不重复计收。上游 API
         费用由你的服务商另行收取。
       </p>
-      {viewing && !editor && !imageEditor && !clawEditor && !testing && !deleting && (
-        <PluginConfiguration
-          kind={viewing}
-          selectedId={viewedId}
-          onSelect={setViewedId}
-          busy={Boolean(busy)}
-          onClose={() => {
-            if (!busy) setViewing(null);
+      {viewing &&
+        !notificationEditor &&
+        !personalEditor &&
+        !personalRecords &&
+        !roleEditor &&
+        !editor &&
+        !imageEditor &&
+        !clawEditor &&
+        !testing &&
+        !deleting && (
+          <PluginConfiguration
+            kind={viewing}
+            selectedId={viewedId}
+            onSelect={setViewedId}
+            busy={Boolean(busy)}
+            onClose={() => {
+              if (!busy) setViewing(null);
+            }}
+            onAdd={configure}
+            onEdit={open}
+            onTest={(p) => {
+              if (isRemoteAgent(p)) {
+                setAgentKind(p.pluginId === "wechatai/hermes" ? "hermes" : "openclaw");
+                setClawEditor(p);
+                return;
+              }
+              setTesting(p);
+              setReply(null);
+              setQuery("");
+              setError("");
+            }}
+            onRecords={setPersonalRecords}
+            onDelete={setDeleting}
+            onAction={(id, operation) => void action(id, operation)}
+          />
+        )}
+      {notificationEditor && (
+        <NotificationEditor
+          plugin={notificationEditor}
+          onClose={() => setNotificationEditor(null)}
+          onSaved={(id) => {
+            setViewedId(id);
+            setViewing("wechatai/notification");
+            setNotificationEditor(null);
           }}
-          onAdd={configure}
-          onEdit={open}
-          onTest={(p) => {
-            if (isRemoteAgent(p)) {
-              setAgentKind(p.pluginId === "wechatai/hermes" ? "hermes" : "openclaw");
-              setClawEditor(p);
-              return;
-            }
-            setTesting(p);
-            setReply(null);
-            setQuery("");
-            setError("");
-          }}
-          onDelete={setDeleting}
-          onAction={(id, operation) => void action(id, operation)}
         />
+      )}
+      {personalEditor && (
+        <PersonalAssistantEditor
+          plugin={personalEditor}
+          onClose={() => setPersonalEditor(null)}
+          onSaved={(id) => {
+            setViewedId(id);
+            setViewing("wechatai/personal-assistant");
+            setPersonalEditor(null);
+          }}
+        />
+      )}
+      {personalRecords && (
+        <PersonalRecords plugin={personalRecords} onClose={() => setPersonalRecords(null)} />
       )}
       {clawEditor && (
         <OpenClawEditor
@@ -232,6 +302,16 @@ export function Plugins() {
             setClawEditor(null);
             setViewing(null);
           }}
+        />
+      )}
+      {roleEditor && (
+        <RoleplayEditor
+          plugin={roleEditor}
+          onSaved={(id) => {
+            setViewedId(id);
+            setViewing("wechatai/roleplay");
+          }}
+          onClose={() => setRoleEditor(null)}
         />
       )}
       {imageEditor && (
@@ -280,7 +360,12 @@ export function Plugins() {
                   value={form.modelId}
                   onChange={(e) => update("modelId", e.target.value)}
                 >
-                  {data.assistants.map((a) => (
+                  {!selectedModel && (
+                    <option value={form.modelId} disabled>
+                      请选择文本模型
+                    </option>
+                  )}
+                  {textModels.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.channelName} / {a.name}
                       {a.name !== a.model ? `（${a.model}）` : ""}
@@ -420,7 +505,7 @@ export function Plugins() {
               >
                 取消
               </button>
-              <button className="button" disabled={Boolean(busy)}>
+              <button className="button" disabled={Boolean(busy) || !selectedModel}>
                 {busy ? "正在保存…" : "保存配置"}
                 <Power size={16} />
               </button>
@@ -435,9 +520,13 @@ export function Plugins() {
           description={
             demo
               ? "预览模式仅展示示例，不发送真实请求。"
-              : testing.pluginId === "wechatai/image-generation"
-                ? "会实际生成一张图片，消耗 5 credits 加描述文字的输入费用；图片保留 30 天。"
-                : "会实际调用你的模型和搜索服务，并按输入与最终回复消耗 credits。"
+              : testing.pluginId === "wechatai/personal-assistant"
+                ? "会实际调用你的模型并消耗 credits；仅演练操作，不保存笔记、账目或提醒，不发送提醒。"
+                : testing.pluginId === "wechatai/image-generation"
+                  ? "会实际生成一张图片，消耗 5 credits 加描述文字的输入费用；图片保留 30 天。"
+                  : testing.pluginId === "wechatai/roleplay"
+                    ? "会实际调用你的模型，按角色设定、输入和最终回复消耗 credits；测试不写入故事会话。"
+                    : "会实际调用你的模型和搜索服务，并按输入与最终回复消耗 credits。"
           }
           onClose={() => {
             if (!busy) setTesting(null);
@@ -456,7 +545,9 @@ export function Plugins() {
                   placeholder={
                     testing.pluginId === "wechatai/image-generation"
                       ? "例如：一只橘猫坐在窗边读书，温暖阳光，水彩风格"
-                      : "例如：查一下 DeepSeek Harness 的功能，并附上来源"
+                      : testing.pluginId === "wechatai/roleplay"
+                        ? "例如：你好，今天我们去哪里？"
+                        : "例如：查一下 DeepSeek Harness 的功能，并附上来源"
                   }
                 />
               </label>
@@ -488,7 +579,11 @@ export function Plugins() {
       {deleting && (
         <Modal
           title={`删除「${deleting.name}」？`}
-          description="将删除插件配置，已有会话记录保留，但无法继续调用此插件。"
+          description={
+            deleting.pluginId === "wechatai/personal-assistant"
+              ? "将永久删除这份助理的全部笔记、账目和提醒，并取消提醒。已有聊天记录保留。建议先导出需要保留的数据。"
+              : "将删除插件配置，已有会话记录保留，但无法继续调用此插件。"
+          }
           onClose={() => {
             if (!busy) setDeleting(null);
           }}

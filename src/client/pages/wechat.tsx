@@ -178,7 +178,9 @@ export function Wechat() {
                 <>
                   <QRCodeSVG value={connection.qrUrl} size={192} marginSize={3} fgColor="#294c3d" />
                   <span>
-                    {connection.status === "scanned" ? "已扫码，请在手机上确认" : "打开微信扫一扫"}
+                    {connection.status === "scanned"
+                      ? "已扫码，请在手机上确认"
+                      : "使用微信 ClawBot 的「扫一扫」"}
                   </span>
                 </>
               ) : (
@@ -284,7 +286,11 @@ export function Wechat() {
             <h2>接下来，很简单。</h2>
             {[
               ["01", "配置渠道与模型", "为渠道填写协议、API Key 和地址，再添加它支持的模型。"],
-              ["02", "扫码并确认连接", "按手机上的提示，绑定你的个人微信。"],
+              [
+                "02",
+                "扫码并确认连接",
+                "打开微信「设置」，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫描二维码并确认连接。",
+              ],
               ["03", "发送 /help，收到使用教程", "免费了解常用命令，再开始你的第一段对话。"],
             ].map(([n, title, desc]) => (
               <div className="guide-step" key={n}>

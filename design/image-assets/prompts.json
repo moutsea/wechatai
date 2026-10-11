@@ -1,0 +1,83 @@
+{
+  "created": "2026-10-09",
+  "generator": "built-in image_gen",
+  "assets": [
+    {
+      "key": "xingye",
+      "kind": "roles",
+      "prompt": "Use case: illustration-story. Asset type: square profile avatar for an original character in a WeChat AI app. Create ONE finished 1:1 illustration, 1024x1024. Cohesive premium contemporary illustrated portrait: refined anime-inspired editorial art, expressive believable adult face, crisp silhouettes, restrained painterly shading, clean colored shapes, subtle paper softness, not photorealistic, not chibi. Head and upper shoulders fill 80% of the square, face centered with generous safe margin for rounded cropping, eye contact, no hands. Minimal soft colored background with at most one abstract environmental cue. Rich but tasteful colors, dark contour accents and gentle warm light. Must be an independently designed original character, no resemblance to a known anime, game or film character or real person. No words, letters, logos, border, collage or watermark.\nSubject: Lu Xingye, a 28-year-old Chinese man, confident witty civilian route surveyor who runs a rooftop coffee stand. Short tousled deep brown hair, warm amber-brown eyes, healthy warm skin, easy lopsided friendly smile, olive utility overshirt over ivory t-shirt, small understated orange zipper tab. Sunlit ochre and pale apricot backdrop with a faint abstract rooftop sky shape. Relaxed adventurous personality, no weapons or supernatural powers.",
+      "original": "design/image-assets/originals/roles/xingye.png",
+      "web": "public/images/roles/xingye.webp"
+    },
+    {
+      "key": "shenyan",
+      "kind": "roles",
+      "prompt": "Use case: illustration-story. Asset type: square profile avatar for an original character in a WeChat AI app. Create ONE finished 1:1 illustration, 1024x1024. Cohesive premium contemporary illustrated portrait: refined anime-inspired editorial art, expressive believable adult face, crisp silhouettes, restrained painterly shading, clean colored shapes, subtle paper softness, not photorealistic, not chibi. Head and upper shoulders fill 80% of the square, face centered with generous safe margin for rounded cropping, eye contact, no hands. Minimal soft colored background with at most one abstract environmental cue. Rich but tasteful colors, dark contour accents and gentle warm light. Must be an independently designed original character, no resemblance to a known anime, game or film character or real person. No words, letters, logos, border, collage or watermark.\nSubject: Shen Yan, a 30-year-old Chinese male restorer of old radios and wooden objects. Neatly parted black hair, thoughtful dark brown eyes, calm reserved expression with a subtle softness, charcoal work shirt and muted slate apron strap, mature handsome face distinct from a teenage idol. Cool blue-grey background with a soft rainy-window abstract shape, warm reflection along cheek. Quiet, attentive neighbor, no costume or weapon.",
+      "original": "design/image-assets/originals/roles/shenyan.png",
+      "web": "public/images/roles/shenyan.webp"
+    },
+    {
+      "key": "wanqing",
+      "kind": "roles",
+      "prompt": "Use case: illustration-story. Asset type: square profile avatar for an original character in a WeChat AI app. Create ONE finished 1:1 illustration, 1024x1024. Cohesive premium contemporary illustrated portrait: refined anime-inspired editorial art, expressive believable adult face, crisp silhouettes, restrained painterly shading, clean colored shapes, subtle paper softness, not photorealistic, not chibi. Head and upper shoulders fill 80% of the square, face centered with generous safe margin for rounded cropping, eye contact, no hands. Minimal soft colored background with at most one abstract environmental cue. Rich but tasteful colors, dark contour accents and gentle warm light. Must be an independently designed original character, no resemblance to a known anime, game or film character or real person. No words, letters, logos, border, collage or watermark.\nSubject: Su Wanqing, a 27-year-old Chinese woman who owns an independent bookshop. Shoulder-length softly wavy chestnut-brown hair tucked behind one ear, warm brown eyes, gentle engaged smile, soft cream cardigan over a dusty rose blouse, tiny simple round stud earrings. Dusty rose and warm ivory background with barely suggested book-spine rectangles. Natural approachable adult with individuality, not glamorous doll-like, no book in front of her face.",
+      "original": "design/image-assets/originals/roles/wanqing.png",
+      "web": "public/images/roles/wanqing.webp"
+    },
+    {
+      "key": "zhiyao",
+      "kind": "roles",
+      "prompt": "Use case: illustration-story. Asset type: square profile avatar for an original character in a WeChat AI app. Create ONE finished 1:1 illustration, 1024x1024. Cohesive premium contemporary illustrated portrait: refined anime-inspired editorial art, expressive believable adult face, crisp silhouettes, restrained painterly shading, clean colored shapes, subtle paper softness, not photorealistic, not chibi. Head and upper shoulders fill 80% of the square, face centered with generous safe margin for rounded cropping, eye contact, no hands. Minimal soft colored background with at most one abstract environmental cue. Rich but tasteful colors, dark contour accents and gentle warm light. Must be an independently designed original character, no resemblance to a known anime, game or film character or real person. No words, letters, logos, border, collage or watermark.\nSubject: Xu Zhiyao, a 26-year-old Chinese woman, witty playful freelance city reporter. Short asymmetrical dark plum-brown bob, one small mustard hair clip, bright dark eyes, mischievous knowing grin with raised eyebrow, lilac casual jacket over dark crew-neck top. Lavender background with a subtle abstract yellow memo-paper square. Smart modern adult friend, lively but not sexualized, clearly different facial structure and hairstyle from a gentle bookshop owner.",
+      "original": "design/image-assets/originals/roles/zhiyao.png",
+      "web": "public/images/roles/zhiyao.webp"
+    },
+    {
+      "key": "cenwu",
+      "kind": "roles",
+      "prompt": "Use case: illustration-story. Asset type: square profile avatar for an original character in a WeChat AI app. Create ONE finished 1:1 illustration, 1024x1024. Cohesive premium contemporary illustrated portrait: refined anime-inspired editorial art, expressive believable adult face, crisp silhouettes, restrained painterly shading, clean colored shapes, subtle paper softness, not photorealistic, not chibi. Head and upper shoulders fill 80% of the square, face centered with generous safe margin for rounded cropping, eye contact, no hands. Minimal soft colored background with at most one abstract environmental cue. Rich but tasteful colors, dark contour accents and gentle warm light. Must be an independently designed original character, no resemblance to a known anime, game or film character or real person. No words, letters, logos, border, collage or watermark.\nSubject: Cen Wu, a 29-year-old androgynous fantasy cartographer with East Asian features. Shoulder-length dark teal hair loosely tied low, hazel eyes, thoughtful subtly amused expression, weathered moss-green travel cloak with a small brass geometric compass clasp over simple ivory collar. Sage and pale jade background with one softly abstract floating island contour. Grounded original light-fantasy traveler, no elf ears, crowns, animal traits, weapons or familiar franchise costume.",
+      "original": "design/image-assets/originals/roles/cenwu.png",
+      "web": "public/images/roles/cenwu.webp"
+    },
+    {
+      "key": "judeng",
+      "kind": "roles",
+      "prompt": "Use case: illustration-story. ONE square 1024x1024 profile avatar in a premium contemporary illustrated character family: crisp shapes, restrained painterly shading and subtle paper softness, expressive face, not photorealistic, not a 3D toy. Subject: Judeng, an original plump talking orange tabby cat, cream muzzle and chest, amber-green eyes, short rounded ears with safe margin, slightly smug but affectionate expression, tiny irregular cream patch above one eyebrow giving unique identity. Head and upper chest fill 80% of square, directly looking at viewer. Pale sky-blue background with a warm sunny abstract patch. No clothes, collar text, human body, hands, famous cartoon resemblance, words, lettering, border, watermark or collage. Warm clear colors and bold outline details remain legible at 48px.",
+      "original": "design/image-assets/originals/roles/judeng.png",
+      "web": "public/images/roles/judeng.webp"
+    },
+    {
+      "key": "roleplay",
+      "kind": "plugins",
+      "prompt": "Use case: logo-brand. Asset type: app plugin icon, ONE finished square 1024x1024 image. Premium cohesive family of sculpted editorial app symbols: bold simple silhouette, slightly dimensional matte ceramic and softly beveled surfaces, restrained soft shading, crisp edges, not photorealistic. Full-bleed solid very dark evergreen background #10261d, without a separate outer rounded-square frame (the UI will clip corners). Center the symbol at 70% canvas size, generous even margins. Dominant vivid mint green #58ed9c and warm ivory, with one small secondary accent if specified. Excellent legibility at 48 pixels. Original design for an independent integration, do not copy official brand marks. No words, letters, numbers, watermark, multi-icon sheet or surrounding objects.\nSubject: a distinctive pair of overlapping theatrical face masks, one warm ivory and one vivid mint, each with just two simple expressive eye cuts, friendly and imaginative rather than creepy. Small apricot crescent accent at the overlap. Integrated single compact symbol for role-playing characters and storytelling. Simple balanced visual identity, not realistic human faces.",
+      "original": "design/image-assets/originals/plugins/roleplay.png",
+      "web": "public/images/plugins/roleplay.webp"
+    },
+    {
+      "key": "hermes",
+      "kind": "plugins",
+      "prompt": "Use case: logo-brand. Asset type: app plugin icon, ONE finished square 1024x1024 image. Premium cohesive family of sculpted editorial app symbols: bold simple silhouette, slightly dimensional matte ceramic and softly beveled surfaces, restrained soft shading, crisp edges, not photorealistic. Full-bleed solid very dark evergreen background #10261d, without a separate outer rounded-square frame (the UI will clip corners). Center the symbol at 70% canvas size, generous even margins. Dominant vivid mint green #58ed9c and warm ivory, with one small secondary accent if specified. Excellent legibility at 48 pixels. Original design for an independent integration, do not copy official brand marks. No words, letters, numbers, watermark, multi-icon sheet or surrounding objects.\nSubject: a compact original winged envelope emblem representing a swift messenger agent. A warm ivory folded envelope with a single mint sculpted wing sweeping up to the right, only three broad feather forms, small pale gold seal. Strong diagonal sense of motion but compact balanced silhouette. Not a luxury fashion logo, no letter H, no caduceus, no official Hermes branding.",
+      "original": "design/image-assets/originals/plugins/hermes.png",
+      "web": "public/images/plugins/hermes.webp"
+    },
+    {
+      "key": "openclaw",
+      "kind": "plugins",
+      "prompt": "Use case: logo-brand. Asset type: app plugin icon, ONE finished square 1024x1024 image. Premium cohesive family of sculpted editorial app symbols: bold simple silhouette, slightly dimensional matte ceramic and softly beveled surfaces, restrained soft shading, crisp edges, not photorealistic. Full-bleed solid very dark evergreen background #10261d, without a separate outer rounded-square frame (the UI will clip corners). Center the symbol at 70% canvas size, generous even margins. Dominant vivid mint green #58ed9c and warm ivory, with one small secondary accent if specified. Excellent legibility at 48 pixels. Original design for an independent integration, do not copy official brand marks. No words, letters, numbers, watermark, multi-icon sheet or surrounding objects.\nSubject: a friendly stylized robotic lobster claw emblem, one bold open pincer made from two mint curved geometric pieces with a small coral-red joint at the base and ivory inset highlight. A compact distinctive grasping/claw silhouette, not a whole animal and not a hand. Convey capable practical automation. Original integration icon, not a copy of the OpenClaw official logo.",
+      "original": "design/image-assets/originals/plugins/openclaw.png",
+      "web": "public/images/plugins/openclaw.webp"
+    },
+    {
+      "key": "ds-chat",
+      "kind": "plugins",
+      "prompt": "Use case: logo-brand. Asset type: app plugin icon, ONE finished square 1024x1024 image. Premium cohesive family of sculpted editorial app symbols: bold simple silhouette, slightly dimensional matte ceramic and softly beveled surfaces, restrained soft shading, crisp edges, not photorealistic. Full-bleed solid very dark evergreen background #10261d, without a separate outer rounded-square frame (the UI will clip corners). Center the symbol at 70% canvas size, generous even margins. Dominant vivid mint green #58ed9c and warm ivory, with one small secondary accent if specified. Excellent legibility at 48 pixels. Original design for an independent integration, do not copy official brand marks. No words, letters, numbers, watermark, multi-icon sheet or surrounding objects.\nSubject: one rounded mint chat bubble merging into a simplified globe/compass orb, with two clear ivory latitude/meridian arcs and a small pale sky-blue four-direction compass needle in the center. Represents conversational web research and exploration. Very simple large graphic features, avoid tiny intricate grid, no whale, no DeepSeek branding, no letters.",
+      "original": "design/image-assets/originals/plugins/ds-chat.png",
+      "web": "public/images/plugins/ds-chat.webp"
+    },
+    {
+      "key": "image-generation",
+      "kind": "plugins",
+      "prompt": "Use case: logo-brand. Asset type: app plugin icon, ONE finished square 1024x1024 image. Premium cohesive family of sculpted editorial app symbols: bold simple silhouette, slightly dimensional matte ceramic and softly beveled surfaces, restrained soft shading, crisp edges, not photorealistic. Full-bleed solid very dark evergreen background #10261d, without a separate outer rounded-square frame (the UI will clip corners). Center the symbol at 70% canvas size, generous even margins. Dominant vivid mint green #58ed9c and warm ivory, with one small secondary accent if specified. Excellent legibility at 48 pixels. Original design for an independent integration, do not copy official brand marks. No words, letters, numbers, watermark, multi-icon sheet or surrounding objects.\nSubject: an original tilted ivory picture frame with rounded inner corners, containing two mint mountain-shaped color planes and a small apricot sun, one broad mint brushstroke emerging seamlessly from lower right edge as if forming the picture. Compact bold single emblem for AI image creation. No sparkles, no pencil lettering, no extra decorative objects.",
+      "original": "design/image-assets/originals/plugins/image-generation.png",
+      "web": "public/images/plugins/image-generation.webp"
+    }
+  ]
+}

@@ -25,6 +25,8 @@ export const pluginManifestSchema = z
         streaming: z.boolean(),
         cancellation: z.boolean(),
         approvals: z.boolean(),
+        // Optional for protocol 1.0 manifests authored before command routing existed.
+        commands: z.enum(["platform", "native"]).default("platform"),
       })
       .strict(),
     configSchema: z.record(z.string(), z.unknown()),

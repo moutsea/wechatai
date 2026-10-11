@@ -13,13 +13,13 @@ export function NotFound() {
         <div>
           <span className="eyebrow">404 · PAGE NOT FOUND</span>
           <h1>这个页面没有找到。</h1>
-          <p>可以回到首页，或前往使用指南继续了解微信 AI。</p>
+          <p>可以回到首页，或前往使用文档继续了解微信 AI。</p>
           <div className="hero-actions">
             <Link className="button" to="/">
               回到首页
             </Link>
-            <Link className="text-link" to="/guide">
-              使用指南
+            <Link className="text-link" to="/docs">
+              使用文档
             </Link>
           </div>
         </div>

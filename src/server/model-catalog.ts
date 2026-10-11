@@ -1,21 +1,49 @@
 import type { Channel } from "../shared/types";
 import { modelsEndpoint } from "../shared/model-endpoint";
 import { AppError } from "./config";
-import { readJson, validateBaseUrl, validatePublicDNS } from "./security";
+import { readJson, validateModelBaseUrl, validateModelDNS } from "./security";
 import { MAX_CONTEXT_TOKENS } from "../shared/context";
+import { inferModelKind, type ModelKind } from "../shared/model-kind";
 
-type AvailableModel = { id: string; name: string; contextTokens?: number };
+export type AvailableModel = { id: string; name: string; kind: ModelKind; contextTokens?: number };
 const object = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 
+export function parseAvailableModel(item: unknown): AvailableModel | null {
+  const entry = object(item);
+  const id = typeof entry.id === "string" ? entry.id.trim() : "";
+  // eslint-disable-next-line no-control-regex
+  if (!id || id.length > 120 || /[\x00-\x1f\x7f]/.test(id)) return null;
+  const name =
+    typeof entry.display_name === "string"
+      ? entry.display_name.trim()
+      : typeof entry.name === "string"
+        ? entry.name.trim()
+        : "";
+  const context = entry.context_length ?? entry.context_window ?? entry.context;
+  const contextTokens =
+    typeof context === "number" &&
+    Number.isInteger(context) &&
+    context >= 512 &&
+    context <= MAX_CONTEXT_TOKENS
+      ? context
+      : undefined;
+  return {
+    id,
+    name: (name || id).slice(0, 40),
+    kind: inferModelKind(id, entry),
+    ...(contextTokens ? { contextTokens } : {}),
+  };
+}
+
 export async function fetchAvailableModels(env: Env, channel: Channel, apiKey: string) {
-  validateBaseUrl(channel.baseUrl, env.LLM_ALLOWED_HOSTS);
+  validateModelBaseUrl(env, channel.baseUrl);
   const models = new Map<string, AvailableModel>();
   let invalid = 0;
   try {
-    await validatePublicDNS(channel.baseUrl);
+    await validateModelDNS(env, channel.baseUrl);
     const url = new URL(modelsEndpoint(channel.baseUrl));
     const headers: Record<string, string> = { accept: "application/json" };
     if (channel.protocol === "anthropic") {
@@ -62,29 +90,12 @@ export async function fetchAvailableModels(env: Env, channel: Channel, apiKey: s
       if (payload.error || !Array.isArray(payload.data))
         throw new AppError("models_format", "上游返回的模型列表格式不正确，请手动添加模型", 502);
       for (const item of payload.data) {
-        const entry = object(item);
-        const id = typeof entry.id === "string" ? entry.id.trim() : "";
-        // Explicitly reject control characters in untrusted upstream identifiers.
-        // eslint-disable-next-line no-control-regex
-        if (!id || id.length > 120 || /[\x00-\x1f\x7f]/.test(id)) {
+        const model = parseAvailableModel(item);
+        if (!model) {
           invalid++;
           continue;
         }
-        const name = typeof entry.display_name === "string" ? entry.display_name.trim() : "";
-        const context = entry.context_length ?? entry.context_window;
-        const contextTokens =
-          typeof context === "number" &&
-          Number.isInteger(context) &&
-          context >= 512 &&
-          context <= MAX_CONTEXT_TOKENS
-            ? context
-            : undefined;
-        if (!models.has(id))
-          models.set(id, {
-            id,
-            name: (name || id).slice(0, 40),
-            ...(contextTokens ? { contextTokens } : {}),
-          });
+        if (!models.has(model.id)) models.set(model.id, model);
       }
       if (models.size + invalid > 10000)
         throw new AppError("models_too_large", "上游模型列表过大，请手动添加需要的模型", 502);

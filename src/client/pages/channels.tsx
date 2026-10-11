@@ -12,7 +12,8 @@ import {
   Download,
 } from "lucide-react";
 import { useApp } from "../context";
-import { AssistantIcon, Modal, PageHead, Empty } from "../ui";
+import { Modal, PageHead, Empty } from "../ui";
+import { ChannelIcon } from "../channel-icon";
 import { json } from "../api";
 import {
   protocolLabels,
@@ -27,10 +28,13 @@ import { protocolPaths } from "../../shared/model-endpoint";
 import {
   DEFAULT_CONTEXT_TOKENS,
   DEFAULT_INPUT_TOKENS,
+  DEFAULT_OUTPUT_TOKENS,
   MAX_CONTEXT_TOKENS,
   modelInputBudget,
 } from "../../shared/context";
 import { TOKENS_PER_CREDIT, OUTPUT_TOKEN_WEIGHT } from "../../shared/credits";
+import { modelKind, modelKindLabels, type ModelKind } from "../../shared/model-kind";
+import { KimiseekBalance, useKimiseekConnect } from "./kimiseek-connect";
 
 const newChannel: ChannelInput = {
   name: "",
@@ -48,7 +52,7 @@ const newModel: ModelInput = {
   systemPrompt: "你是一个友好、可靠的助手。请用清晰简洁的中文回答。",
   shortcut: "",
   maxInputTokens: DEFAULT_INPUT_TOKENS,
-  maxOutputTokens: 1024,
+  maxOutputTokens: DEFAULT_OUTPUT_TOKENS,
   contextTokens: DEFAULT_CONTEXT_TOKENS,
   maxCredits: 0,
   color: "sage",
@@ -71,7 +75,9 @@ export function Channels() {
     id: string;
     name: string;
   } | null>(null);
-  const [busy, setBusy] = useState("");
+  const [actionBusy, setBusy] = useState("");
+  const kimiseek = useKimiseekConnect(() => setChannelEditor(null));
+  const busy = actionBusy || (kimiseek.busy ? "kimiseek" : "");
   const [error, setError] = useState("");
   const [importResults, setImportResults] = useState<
     Record<string, { text: string; failed: boolean }>
@@ -235,6 +241,20 @@ export function Channels() {
           </button>
         }
       />
+      {kimiseek.pendingUrl && (
+        <p className="simple-note" role="status">
+          正在关联 KimiSeek… 若新窗口未打开，
+          <a
+            className="text-link"
+            href={kimiseek.pendingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            点击继续关联
+          </a>
+          。
+        </p>
+      )}
       {data.channels.length ? (
         <div className="channel-card-grid">
           {data.channels.map((channel) => {
@@ -248,7 +268,7 @@ export function Channels() {
                 aria-label={`${channel.name} 渠道`}
               >
                 <div className="channel-card-header">
-                  <AssistantIcon small color={channel.color} />
+                  <ChannelIcon small channel={channel} />
                   <div className="channel-card-identity">
                     <h2>{channel.name}</h2>
                     <p title={channel.baseUrl}>{channel.baseUrl}</p>
@@ -283,73 +303,99 @@ export function Channels() {
                 {channel.description && (
                   <p className="channel-card-description">{channel.description}</p>
                 )}
+                {channel.integration === "kimiseek" && (
+                  <KimiseekBalance
+                    disabled={Boolean(busy)}
+                    onRecharge={() => void kimiseek.start("recharge")}
+                  />
+                )}
                 {models.length ? (
-                  <ul className="channel-card-models" aria-label={`${channel.name} 的模型`}>
-                    {models.map((a) => {
-                      const active = data.currentSession?.assistantId === a.id;
-                      const label = a.name === channel.name ? a.model : a.name;
+                  <div className="channel-model-groups">
+                    {(["text", "image", "other"] as const).map((kind) => {
+                      const group = models.filter((a) => modelKind(a) === kind);
+                      if (!group.length) return null;
                       return (
-                        <li
-                          className={`channel-model-row ${active ? "is-current" : ""}`}
-                          key={a.id}
-                        >
-                          <span className="channel-model-dot" aria-hidden="true" />
-                          <div className="channel-model-name">
-                            <strong title={label}>{label}</strong>
-                            {label !== a.model && <small title={a.model}>{a.model}</small>}
-                          </div>
-                          <div className="channel-model-tools">
-                            {active ? (
-                              <span className="channel-model-current">
-                                <Check size={13} />
-                                当前
-                              </span>
-                            ) : (
-                              <button
-                                className="channel-model-use"
-                                disabled={Boolean(busy)}
-                                aria-label={`使用模型 ${a.name}`}
-                                onClick={() => void action("model", a.id, "activate")}
-                              >
-                                使用
-                              </button>
-                            )}
-                            <button
-                              className="icon-button"
-                              aria-label={`测试模型 ${a.name}`}
-                              title="测试连接，会消耗少量 credits"
-                              disabled={Boolean(busy)}
-                              onClick={() => void action("model", a.id, "test")}
-                            >
-                              {busy === `test:${a.id}` ? (
-                                <LoaderCircle className="spin" size={15} />
-                              ) : (
-                                <Zap size={15} />
-                              )}
-                            </button>
-                            <button
-                              className="icon-button"
-                              aria-label={`编辑模型 ${a.name}`}
-                              title="编辑模型"
-                              disabled={Boolean(busy)}
-                              onClick={() => openModel(channel, a)}
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              className="icon-button"
-                              aria-label={`删除模型 ${a.name}`}
-                              title="删除模型"
-                              disabled={Boolean(busy)}
-                              onClick={() => setDeleting({ kind: "model", id: a.id, name: a.name })}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </li>
+                        <details className="channel-model-group" key={kind} open>
+                          <summary>
+                            {modelKindLabels[kind]}
+                            <span>{group.length}</span>
+                          </summary>
+                          {kind === "image" && <p>在「AI 生图」插件中选择这些模型使用。</p>}
+                          <ul className="channel-card-models" aria-label={`${channel.name} 的模型`}>
+                            {group.map((a) => {
+                              const active = data.currentSession?.assistantId === a.id;
+                              const label = a.name === channel.name ? a.model : a.name;
+                              return (
+                                <li
+                                  className={`channel-model-row ${active ? "is-current" : ""}`}
+                                  key={a.id}
+                                >
+                                  <span className="channel-model-dot" aria-hidden="true" />
+                                  <div className="channel-model-name">
+                                    <strong title={label}>{label}</strong>
+                                    {label !== a.model && <small title={a.model}>{a.model}</small>}
+                                  </div>
+                                  <div className="channel-model-tools">
+                                    {kind === "text" &&
+                                      (active ? (
+                                        <span className="channel-model-current">
+                                          <Check size={13} />
+                                          当前
+                                        </span>
+                                      ) : (
+                                        <button
+                                          className="channel-model-use"
+                                          disabled={Boolean(busy)}
+                                          aria-label={`使用模型 ${a.name}`}
+                                          onClick={() => void action("model", a.id, "activate")}
+                                        >
+                                          使用
+                                        </button>
+                                      ))}
+                                    {kind === "text" && (
+                                      <button
+                                        className="icon-button"
+                                        aria-label={`测试模型 ${a.name}`}
+                                        title="测试连接，会消耗少量 credits"
+                                        disabled={Boolean(busy)}
+                                        onClick={() => void action("model", a.id, "test")}
+                                      >
+                                        {busy === `test:${a.id}` ? (
+                                          <LoaderCircle className="spin" size={15} />
+                                        ) : (
+                                          <Zap size={15} />
+                                        )}
+                                      </button>
+                                    )}
+                                    <button
+                                      className="icon-button"
+                                      aria-label={`编辑模型 ${a.name}`}
+                                      title="编辑模型"
+                                      disabled={Boolean(busy)}
+                                      onClick={() => openModel(channel, a)}
+                                    >
+                                      <Pencil size={14} />
+                                    </button>
+                                    <button
+                                      className="icon-button"
+                                      aria-label={`删除模型 ${a.name}`}
+                                      title="删除模型"
+                                      disabled={Boolean(busy)}
+                                      onClick={() =>
+                                        setDeleting({ kind: "model", id: a.id, name: a.name })
+                                      }
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </details>
                       );
                     })}
-                  </ul>
+                  </div>
                 ) : (
                   <div className="channel-card-empty">获取上游模型，或手动添加。</div>
                 )}
@@ -387,7 +433,7 @@ export function Channels() {
                       添加模型
                     </button>
                   </div>
-                  {!activeHere && models.length > 0 && (
+                  {!activeHere && models.some((a) => modelKind(a) === "text") && (
                     <button
                       className="text-button channel-card-activate"
                       disabled={Boolean(busy)}
@@ -430,9 +476,20 @@ export function Channels() {
         >
           <form onSubmit={(e) => void saveChannel(e)}>
             <div className="form-body">
-              <label>
-                渠道名称
+              <div className="channel-name-field">
+                <div className="channel-name-label">
+                  <label htmlFor="channel-name">渠道名称</label>
+                  <button
+                    type="button"
+                    className="text-link"
+                    disabled={Boolean(busy)}
+                    onClick={() => void kimiseek.start("connect")}
+                  >
+                    {kimiseek.busy ? "正在关联…" : "kimiseek 一键导入"}
+                  </button>
+                </div>
                 <input
+                  id="channel-name"
                   autoFocus
                   required
                   maxLength={40}
@@ -440,7 +497,25 @@ export function Channels() {
                   onChange={(e) => updateChannel("name", e.target.value)}
                   placeholder="例如：OpenAI 官方、我的中转服务"
                 />
-              </label>
+                {kimiseek.pendingUrl && (
+                  <small>
+                    正在打开 KimiSeek 充值页，完成后自动导入。
+                    <a
+                      className="text-link"
+                      href={kimiseek.pendingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      未打开？点此继续
+                    </a>
+                  </small>
+                )}
+                {kimiseek.error && (
+                  <small className="form-error" role="alert">
+                    {kimiseek.error}
+                  </small>
+                )}
+              </div>
               <label>
                 备注（可选）
                 <input
@@ -578,6 +653,20 @@ export function Channels() {
                   onChange={(e) => update("description", e.target.value)}
                   placeholder="例如：用于日常提问"
                 />
+              </label>
+              <label>
+                模型类型
+                <select
+                  value={modelKind(form)}
+                  onChange={(e) => update("kind", e.target.value as ModelKind)}
+                >
+                  {Object.entries(modelKindLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <small>优先读取上游分类；未提供时自动识别，也可在这里调整。</small>
               </label>
               <label>
                 系统提示词（可选）

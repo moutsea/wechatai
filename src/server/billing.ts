@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { AppError, secret } from "./config";
+import { paymentNoticeStatements } from "./billing-notifications";
 import {
   BILLING_OFFERS,
   BILLING_SERVICE,
@@ -23,6 +24,8 @@ type Order = {
   customer_id: string;
   session_id: string | null;
   subscription_id: string | null;
+  checkout_mode: "payment" | "subscription" | null;
+  membership_months: number;
   status: string;
   created_at: number;
 };
@@ -78,11 +81,7 @@ async function verifiedPrice(env: Env, offer: Offer) {
     product.deleted ||
     !product.active ||
     !belongs(env, product.metadata) ||
-    (offer.interval
-      ? price.type !== "recurring" ||
-        price.recurring?.interval !== offer.interval ||
-        price.recurring.interval_count !== 1
-      : price.type !== "one_time")
+    price.type !== "one_time"
   )
     throw new AppError("billing_configuration", "支付方案配置不匹配，请联系支持", 503);
   return price;
@@ -142,19 +141,19 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
   const mode = billingMode(env);
   const customer = await ownedCustomer(env, user);
   if (offer.kind === "plus") {
-    const snapshot = await env.ACCOUNTS.getByName(user.id).snapshot();
     const subscriptions = await stripe.subscriptions.list({ customer, status: "all", limit: 100 });
     if (
-      snapshot.plan === "plus" ||
       subscriptions.data.some(
         (sub) =>
           belongs(env, sub.metadata) &&
+          !sub.cancel_at_period_end &&
+          !sub.cancel_at &&
           ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"].includes(sub.status),
       )
     )
       throw new AppError(
         "already_subscribed",
-        "已有会员或待处理订阅，请通过「管理订阅」处理续费",
+        "已有自动续费或待处理订阅，请先通过「管理订阅」取消自动续费，再购买单次会员；剩余有效期会保留",
         409,
       );
   }
@@ -167,7 +166,8 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
   if (
     order &&
     !order.session_id &&
-    (Date.now() - order.created_at >= 24 * 60 * 60 * 1000 ||
+    (order.checkout_mode !== "payment" ||
+      Date.now() - order.created_at >= 24 * 60 * 60 * 1000 ||
       (order.offer_id === offer.id &&
         (order.price_id !== price.id || order.amount !== offer.amount)))
   ) {
@@ -190,6 +190,11 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
       order.offer_id === offer.id &&
       order.price_id === price.id &&
       order.amount === offer.amount &&
+      order.checkout_mode === "payment" &&
+      previous.mode === "payment" &&
+      ["card", "alipay", "wechat_pay"].every((method) =>
+        previous.payment_method_types.includes(method),
+      ) &&
       previous.url
     )
       return { url: previous.url };
@@ -208,7 +213,7 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
   if (!order) {
     const id = crypto.randomUUID();
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO billing_order (id, user_id, mode, offer_id, kind, price_id, amount, currency, credits, customer_id, pending_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'cny', ?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO billing_order (id, user_id, mode, offer_id, kind, price_id, amount, currency, credits, customer_id, pending_key, created_at, checkout_mode, membership_months) VALUES (?, ?, ?, ?, ?, ?, ?, 'cny', ?, ?, ?, ?, 'payment', ?)",
     )
       .bind(
         id,
@@ -222,6 +227,7 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
         customer,
         pendingKey,
         Date.now(),
+        offer.kind === "plus" ? (offer.interval === "year" ? 12 : 1) : 0,
       )
       .run();
     order = await env.DB.prepare("SELECT * FROM billing_order WHERE pending_key = ?")
@@ -241,18 +247,19 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
   };
   const session = await stripe.checkout.sessions.create(
     {
-      mode: offer.kind === "plus" ? "subscription" : "payment",
+      mode: "payment",
       customer,
       client_reference_id: order.id,
       line_items: [{ price: order.price_id, quantity: 1 }],
-      payment_method_types: ["card"],
+      payment_method_types: ["card", "alipay", "wechat_pay"],
+      payment_method_options: { wechat_pay: { client: "web" } },
       branding_settings: { display_name: "微伴 Wechatai", button_color: "#59f294" },
       custom_text: {
         submit: {
           message:
             offer.kind === "credits"
               ? `到账 ${offer.credits.toLocaleString("en-US")} credits，不随每日刷新清零。模型 API 费用另付。`
-              : `${offer.interval === "year" ? "年付" : "月付"} Plus，每日 1,000 credits。可在会员页管理或取消续费。模型 API 费用另付。`,
+              : `${offer.interval === "year" ? "一年" : "一个月"} Plus，每日 1,000 credits。单次付费，不自动续费；提前购买顺延有效期。模型 API 费用另付。`,
         },
       },
       locale: "zh",
@@ -260,9 +267,7 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
       success_url: `${env.APP_URL}/app/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${env.APP_URL}/app/billing?checkout=cancelled`,
       metadata,
-      ...(offer.kind === "plus"
-        ? { subscription_data: { metadata } }
-        : { payment_intent_data: { metadata } }),
+      payment_intent_data: { metadata },
     },
     { idempotencyKey: `wechatai:checkout:${mode}:${order.id}` },
   );
@@ -295,6 +300,7 @@ async function syncSubscription(env: Env, sub: Stripe.Subscription) {
   const item = sub.items.data[0];
   if (
     order.kind !== "plus" ||
+    order.checkout_mode === "payment" ||
     sub.livemode !== (billingMode(env) === "live") ||
     objectId(sub.customer) !== order.customer_id ||
     sub.items.data.length !== 1 ||
@@ -336,6 +342,7 @@ async function fulfillInvoice(
   if (
     !subId ||
     order.kind !== "plus" ||
+    order.checkout_mode === "payment" ||
     invoice.livemode !== (billingMode(env) === "live") ||
     objectId(invoice.customer) !== order.customer_id ||
     invoice.currency !== order.currency ||
@@ -368,11 +375,17 @@ async function fulfillInvoice(
     expires: lines[0].period.end * 1000,
     subscriptionId: subId,
   });
-  await env.DB.prepare(
-    "UPDATE billing_order SET status = 'paid', pending_key = NULL, subscription_id = ?, paid_at = COALESCE(paid_at, ?) WHERE id = ?",
-  )
-    .bind(subId, Date.now(), order.id)
-    .run();
+  await env.DB.batch([
+    ...paymentNoticeStatements(
+      env,
+      order.id,
+      invoice.id,
+      invoice.billing_reason === "subscription_cycle",
+    ),
+    env.DB.prepare(
+      "UPDATE billing_order SET status = 'paid', pending_key = NULL, subscription_id = ?, paid_at = COALESCE(paid_at, ?) WHERE id = ?",
+    ).bind(subId, Date.now(), order.id),
+  ]);
 }
 async function fulfillSession(env: Env, session: Stripe.Checkout.Session) {
   const order = await orderForMetadata(env, session.metadata);
@@ -382,7 +395,8 @@ async function fulfillSession(env: Env, session: Stripe.Checkout.Session) {
     session.client_reference_id !== order.id ||
     objectId(session.customer) !== order.customer_id ||
     (order.session_id && order.session_id !== session.id) ||
-    session.mode !== (order.kind === "plus" ? "subscription" : "payment") ||
+    session.mode !==
+      (order.checkout_mode ?? (order.kind === "plus" ? "subscription" : "payment")) ||
     session.amount_total !== order.amount ||
     session.currency !== order.currency
   )
@@ -397,19 +411,31 @@ async function fulfillSession(env: Env, session: Stripe.Checkout.Session) {
     items.data[0].amount_total !== order.amount
   )
     mismatch();
-  if (order.kind === "credits") {
+  if (session.mode === "payment") {
     if (!objectId(session.payment_intent)) mismatch();
-    await env.ACCOUNTS.getByName(order.user_id).applyPayment({
-      id: session.id,
-      kind: "purchase",
-      units: order.credits * 1000,
-      expires: Number.MAX_SAFE_INTEGER,
-    });
-    await env.DB.prepare(
-      "UPDATE billing_order SET status = 'paid', pending_key = NULL, session_id = ?, paid_at = COALESCE(paid_at, ?) WHERE id = ?",
-    )
-      .bind(session.id, Date.now(), order.id)
-      .run();
+    const account = env.ACCOUNTS.getByName(order.user_id);
+    if (order.kind === "plus") {
+      const months = order.membership_months;
+      if (
+        (months !== 1 && months !== 12) ||
+        months !== (offerFor(order.offer_id).interval === "year" ? 12 : 1)
+      )
+        mismatch();
+      await account.applyPayment({ id: session.id, kind: "membership", months });
+    } else {
+      await account.applyPayment({
+        id: session.id,
+        kind: "purchase",
+        units: order.credits * 1000,
+        expires: Number.MAX_SAFE_INTEGER,
+      });
+    }
+    await env.DB.batch([
+      ...paymentNoticeStatements(env, order.id, session.id),
+      env.DB.prepare(
+        "UPDATE billing_order SET status = 'paid', pending_key = NULL, session_id = ?, paid_at = COALESCE(paid_at, ?) WHERE id = ?",
+      ).bind(session.id, Date.now(), order.id),
+    ]);
   } else {
     const subId = objectId(session.subscription);
     if (!subId) mismatch();

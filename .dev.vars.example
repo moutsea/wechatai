@@ -1,6 +1,8 @@
 # Generate separate random values of at least 32 characters. Never commit .dev.vars.
 BETTER_AUTH_SECRET=
 ENCRYPTION_KEY=
+# Same random secret as KimiSeek WECHATAI_CONNECT_SECRET (at least 32 characters).
+KIMISEEK_CONNECT_SECRET=
 # Optional: each OAuth button is enabled only when both values are configured.
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -15,3 +17,8 @@ STRIPE_PLUS_YEARLY_PRICE_ID=
 STRIPE_CREDITS_5000_PRICE_ID=
 STRIPE_CREDITS_20000_PRICE_ID=
 STRIPE_CREDITS_50000_PRICE_ID=
+# Optional: admin payment notices. Only live payments can enqueue notices.
+# Keep the production token out of local development configuration.
+BILLING_NOTIFY_TOKEN=
+# all (default) or first_payment
+BILLING_NOTIFY_SCOPE=all

@@ -1,7 +1,9 @@
 import type { PlatformMeter } from "./plugins";
 import type { UserPlugin } from "./image-generation";
+import type { ModelKind } from "./model-kind";
 export type Protocol = "chat-completions" | "responses" | "anthropic";
 export type Channel = {
+  integration?: "kimiseek";
   id: string;
   name: string;
   description: string;
@@ -11,7 +13,9 @@ export type Channel = {
   createdAt: number;
   hasKey: boolean;
 };
-export type ChannelInput = Omit<Channel, "id" | "createdAt" | "hasKey"> & { apiKey?: string };
+export type ChannelInput = Omit<Channel, "id" | "createdAt" | "hasKey" | "integration"> & {
+  apiKey?: string;
+};
 export type ModelImportResult = {
   total: number;
   imported: number;
@@ -20,6 +24,7 @@ export type ModelImportResult = {
   limited: number;
 };
 export type Assistant = {
+  kind?: ModelKind;
   id: string;
   channelId: string;
   channelName: string;

@@ -10,6 +10,7 @@ import {
 } from "../../shared/image-generation";
 import { IMAGE_WAITING_MESSAGE, waitingMessageDefaults } from "../../shared/waiting-message";
 import { WaitingMessageField } from "./waiting-message-field";
+import { modelKind, modelKindLabels } from "../../shared/model-kind";
 
 export function ImagePluginEditor({
   plugin,
@@ -27,8 +28,7 @@ export function ImagePluginEditor({
           name: "AI 生图",
           shortcut: "画图",
           modelId:
-            data?.assistants.find((a) => /qwen-image|gpt-image|dall-e|flux|imagen/i.test(a.model))
-              ?.id ??
+            data?.assistants.find((a) => modelKind(a) === "image")?.id ??
             data?.assistants[0]?.id ??
             "",
           enabled: true,
@@ -105,12 +105,21 @@ export function ImagePluginEditor({
               value={form.modelId}
               onChange={(e) => update("modelId", e.target.value)}
             >
-              {data.assistants.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.channelName} / {a.name}
-                  {a.name !== a.model ? `（${a.model}）` : ""}
-                </option>
-              ))}
+              {(["image", "text", "other"] as const).map(
+                (kind) =>
+                  data.assistants.some((a) => modelKind(a) === kind) && (
+                    <optgroup key={kind} label={modelKindLabels[kind]}>
+                      {data.assistants
+                        .filter((a) => modelKind(a) === kind)
+                        .map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.channelName} / {a.name}
+                            {a.name !== a.model ? `（${a.model}）` : ""}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ),
+              )}
             </select>
             <small>
               实际模型 ID：<code>{selected?.model}</code>

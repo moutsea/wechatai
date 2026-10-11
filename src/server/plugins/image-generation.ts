@@ -4,7 +4,7 @@ import { imageGenerationManifest, type ImageGenerationPlugin } from "../../share
 import { IMAGE_CREDITS, type PluginInvocation } from "../../shared/plugins";
 import { apiEndpoint } from "../../shared/model-endpoint";
 import { AppError, MODEL_REQUEST_TIMEOUT_MS } from "../config";
-import { validateBaseUrl, validatePublicDNS, readJson } from "../security";
+import { validateModelBaseUrl, validateModelDNS, validatePublicDNS, readJson } from "../security";
 import { MAX_GENERATED_BYTES, MediaStore } from "../media";
 import { publicPageUrl } from "./web-tools";
 import { countPluginInput, invokePlugin } from "./gateway";
@@ -160,10 +160,10 @@ export async function invokeImageGeneration(
     request,
     async () => {
       const endpoint = apiEndpoint(
-        validateBaseUrl(model.baseUrl, env.LLM_ALLOWED_HOSTS),
+        validateModelBaseUrl(env, model.baseUrl),
         "/v1/images/generations",
       );
-      await validatePublicDNS(endpoint);
+      await validateModelDNS(env, endpoint);
       checkpoint();
       if (deadline - Date.now() < 1000)
         throw new AppError("image_timeout", "生图请求已超时，请稍后重试", 504);

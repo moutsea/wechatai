@@ -69,7 +69,8 @@ ${protocolLinks.schema}
 内置 AI 生图已支持图片交付；第三方注册、执行 API、代码上传与第三方媒体接入尚未开放。先实现可在本地验证的适配逻辑，标明待接入部分，不要编造平台接口或认证方式。`;
 
 const json = (value: unknown) => "```json\n" + JSON.stringify(value, null, 2) + "\n```";
-const agentSection = `## 给 AI agent 的起点
+const agentSection = `
+## 给 AI agent 的起点
 
 下面的地址无需登录或 API Key，直接 GET 即可读取。文档读取免费，不触发模型调用，不消耗 credits。网页与 Markdown 使用同一份内容；JSON Schema 从平台的实际校验规则生成。
 
@@ -187,6 +188,7 @@ const anchors: Record<string, string> = {
   "Schema 与校验": "validation",
   责任与身份: "identity",
   声明: "manifest",
+  命令路由: "commands",
   调用边界: "invocation",
   结果与事件: "results",
   平台计量: "metering",
@@ -203,7 +205,7 @@ export const protocolSections = protocolMarkdown
   });
 export const llmsText = `# Wechatai · 微伴
 
-> 在微信里使用自定义 AI 的独立产品。插件协议 ${PLUGIN_PROTOCOL_VERSION} 文档公开可读，当前运行时支持内置 LLM 与 Plus DS Chat 插件，搜索 API 由用户自行配置。
+> 在微信里使用自定义 AI 的独立产品。插件协议 ${PLUGIN_PROTOCOL_VERSION} 文档公开可读，当前支持内置 LLM，以及 Plus 会员专享的 DS Chat、AI 生图、OpenClaw、Hermes、角色扮演、个人助理和消息提醒插件；模型和搜索 API 由用户自行配置。
 
 ## 插件开发
 
@@ -212,10 +214,11 @@ export const llmsText = `# Wechatai · 微伴
 - [协议 JSON API](${protocolLinks.api}): 版本、Schema 地址与合法数据示例。
 - [固定版本 ${PLUGIN_PROTOCOL_VERSION}](${protocolLinks.versionedApi}): 指定协议版本的索引。
 - [JSON Schema](${protocolLinks.schema}): Draft 2020-12 的 Manifest、Invocation、Result、Event 和 Block 定义。
+- [消息提醒 HTTP 接入](${SITE_URL}/developers/notifications.md): Plus 会员的免费 Webhook，专属 Token、文字推送与投递状态；这是独立的通知接口，不是通用插件执行接口。
 
 ## 使用指南
 
-- [微信使用指南](${SITE_URL}/guide): 配置渠道、微信命令、会话与 credits。
+- [微信使用指南](${SITE_URL}/docs): 配置渠道、微信命令、会话与 credits。
 
-仅文档接口公开，读取免费，无需认证。第三方执行、注册、上传代码与媒体交付接口尚未开放，请勿臆造这些接口。
+文档接口公开，读取免费，无需认证。消息提醒使用专属 Token 鉴权；第三方插件执行、注册、上传代码与媒体交付接口尚未开放，请勿臆造这些接口。
 `;

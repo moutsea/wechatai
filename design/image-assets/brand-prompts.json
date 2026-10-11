@@ -1,0 +1,41 @@
+{
+  "generated": "2026-10-09",
+  "tool": "Built-in image_gen imagegen",
+  "purpose": "Brand-aware variants of DS Chat, OpenClaw and Hermes integration plugin icons",
+  "assets": [
+    {
+      "key": "ds-chat-brand",
+      "originalKey": "ds-chat",
+      "references": [
+        "design/image-assets/brand-references/deepseek-official.png",
+        "design/image-assets/originals/plugins/roleplay.png"
+      ],
+      "prompt": "Use case: logo-brand. Create ONE square 1024x1024 finished plugin icon for the Wechatai app, not a mockup or logo sheet. Full-bleed dark evergreen #10261d background; the app will clip rounded corners. Main emblem centered and fills 75% of canvas with generous safe margin. Apply the matte sculpted, subtly beveled soft 3D ceramic rendering of the STYLE reference, preserving strong simple silhouettes readable at 44 pixels. Do not copy the theatrical masks or add an outer border. No words, no wordmark, no letters, no watermark. This is an integration icon for an independent product. Preserve recognizable source-brand motifs and source-brand main color while using the shared dark green background and subtle mint edge lighting.\nImage 1 is the official DeepSeek whale logo: identity reference. Image 2 is only a style/material/background reference. Replace the generic web globe with this unmistakable DeepSeek blue whale, retaining the exact broad round body, curved white negative-space belly/open mouth, small white eye, fin and elevated two-lobed tail pointing upper right. Keep the friendly flat-logo silhouette rather than making a realistic whale. Main whale vivid periwinkle/royal blue #4d6bfe with warm ivory cutouts. Give the flat identity a restrained dimensional sculpted treatment. A single very subtle mint underside rim light may connect it to Wechatai; no globe, compass, extra symbols or distracting ring. Brand recognition first.",
+      "original": "design/image-assets/originals/plugins/ds-chat-brand.png",
+      "web": "public/images/plugins/ds-chat-brand.webp"
+    },
+    {
+      "key": "openclaw-brand",
+      "originalKey": "openclaw",
+      "references": [
+        "design/image-assets/brand-references/openclaw-official.png",
+        "design/image-assets/originals/plugins/roleplay.png"
+      ],
+      "prompt": "Use case: logo-brand. Create ONE square 1024x1024 finished plugin icon for the Wechatai app, not a mockup or logo sheet. Full-bleed dark evergreen #10261d background; the app will clip rounded corners. Main emblem centered and fills 75% of canvas with generous safe margin. Apply the matte sculpted, subtly beveled soft 3D ceramic rendering of the STYLE reference, preserving strong simple silhouettes readable at 44 pixels. Do not copy the theatrical masks or add an outer border. No words, no wordmark, no letters, no watermark. This is an integration icon for an independent product. Preserve recognizable source-brand motifs and source-brand main color while using the shared dark green background and subtle mint edge lighting.\nImage 1 is the official OpenClaw mascot: identity reference. Image 2 is only a style/material/background reference. Replace the single green mechanical claw with the recognizable complete OpenClaw red lobster mascot: rounded red oval central body, two short curved antennae, two side pincers, two short legs, two big round black eye wells with vivid cyan pupils. Preserve the friendly minimal proportions of the reference and its bright coral-red coloring. Use a softly sculpted matte coral-red shell and subtle cyan eye shine. Keep all appendages safely inside canvas. Do not make a biological lobster or a crab with many legs, and do not replace it with a disconnected pincer. No added gadgets.",
+      "original": "design/image-assets/originals/plugins/openclaw-brand.png",
+      "web": "public/images/plugins/openclaw-brand.webp"
+    },
+    {
+      "key": "hermes-brand",
+      "originalKey": "hermes",
+      "references": [
+        "design/image-assets/brand-references/hermes-nous-girl-large.png",
+        "design/image-assets/brand-references/hermes-wing-large.png",
+        "design/image-assets/originals/plugins/roleplay.png"
+      ],
+      "prompt": "Use case: logo-brand. Create ONE square 1024x1024 finished plugin icon for the Wechatai app, not a mockup or logo sheet. Full-bleed dark evergreen #10261d background; the app will clip rounded corners. Main emblem centered and fills 75% of canvas with generous safe margin. Apply the matte sculpted, subtly beveled soft 3D ceramic rendering of the STYLE reference, preserving strong simple silhouettes readable at 44 pixels. Do not copy the theatrical masks or add an outer border. No words, no wordmark, no letters, no watermark. This is an integration icon for an independent product. Preserve recognizable source-brand motifs and source-brand main color while using the shared dark green background and subtle mint edge lighting.\nImage 1 is the official Nous Research girl graphic used for Hermes branding: PRIMARY identity reference. Image 2 is the wing motif from the official Hermes Agent site: secondary reference. Image 3 is only a style/material/background reference. Replace the generic winged envelope with a recognizable stylized cameo of the girl: shoulder-length black bob with blunt bangs and gently curled ends, broad light headband with small angular accent, face turned three-quarter toward the left looking back, distinctive anime eye and calm expression. Faithfully preserve the reference face direction and hair silhouette. Exclude the NOUS wordmark and enclosing rectangular border entirely. Render as a bold two-tone dark-hair / warm-ivory-face sculpted bas-relief emblem, not a photorealistic person, not a generic Greek male god. Use a small simplified royal-blue wing from Image 2 tucked behind the right side of the head as an understated secondary accent, not a second competing icon. Preserve facial readability at 44px with few clean shapes. Dark green canvas, subtle mint edge light. No envelope, no text.",
+      "original": "design/image-assets/originals/plugins/hermes-brand.png",
+      "web": "public/images/plugins/hermes-brand.webp"
+    }
+  ]
+}

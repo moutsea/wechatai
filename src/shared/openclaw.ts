@@ -28,6 +28,7 @@ export type OpenClawAgent = z.infer<typeof openClawAgentsSchema>[number];
 export type OpenClawPairing = { command: string; expiresAt: number };
 export type OpenClawStatus = {
   pairingClaimed?: boolean;
+  nativeCommands?: boolean;
   hasKey: boolean;
   lastSeen: number;
   agents: OpenClawAgent[];
@@ -80,8 +81,10 @@ export const openClawManifest = pluginManifestSchema.parse({
     output: ["text"],
     sessions: "remote",
     streaming: false,
+    // Native /stop is supported; protocol-level cancellation is not yet exposed.
     cancellation: false,
     approvals: false,
+    commands: "native",
   },
   configSchema: {
     type: "object",

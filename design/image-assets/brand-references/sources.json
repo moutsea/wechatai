@@ -1,0 +1,43 @@
+{
+  "retrieved": "2026-10-09",
+  "purpose": "Brand identity references for Wechatai integration plugin icons",
+  "references": [
+    {
+      "file": "deepseek-official.png",
+      "url": "https://github.com/deepseek-ai",
+      "source": "Official GitHub organization avatar"
+    },
+    {
+      "file": "deepseek-wordmark.svg",
+      "url": "https://raw.githubusercontent.com/deepseek-ai/DeepSeek-V2/main/figures/logo.svg",
+      "source": "Official repository wordmark"
+    },
+    {
+      "file": "openclaw-official.png",
+      "url": "https://openclaw.ai/apple-touch-icon.png",
+      "source": "Official website app icon"
+    },
+    {
+      "file": "openclaw-official.svg",
+      "url": "https://openclaw.ai/favicon.svg",
+      "source": "Official website favicon"
+    },
+    {
+      "file": "hermes-official.png",
+      "url": "https://hermes-agent.nousresearch.com/icon.png",
+      "source": "Official Hermes Agent website icon"
+    },
+    {
+      "file": "hermes-wing.svg",
+      "url": "https://web-assets.nousresearch.com/nousnet-web/assets/hermes-landing/teams/hermes-wing.6ee276e9bff5a166.svg",
+      "source": "Wing asset linked from official Hermes Agent website",
+      "rasterizedReference": "hermes-wing-large.png"
+    },
+    {
+      "file": "hermes-nous-girl.svg",
+      "url": "https://web-assets.nousresearch.com/nousnet-web/assets/hermes-landing/teams/nous-girl.66f8944c40c50f8c.svg",
+      "source": "Nous girl graphic linked from official Hermes Agent website",
+      "rasterizedReference": "hermes-nous-girl-large.png"
+    }
+  ]
+}

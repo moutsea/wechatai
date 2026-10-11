@@ -35,9 +35,9 @@ function network() {
   let qr = 0;
   const queues = new Map<string, WxMessage[]>();
   const polls: string[] = [];
-  const sends: { token: string; to: string; text: string; context: string }[] = [];
+  const sends: { token: string; to: string; text: string; context: string; clientId: string }[] = [];
   const modelInputs: string[] = [];
-  const control = { duplicateBot: false };
+  const control = { duplicateBot: false, failedSends: 0 };
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -69,6 +69,7 @@ function network() {
       if (target.pathname.endsWith("sendmessage")) {
         const { msg } = (await request.json()) as {
           msg: {
+            client_id: string;
             to_user_id: string;
             context_token: string;
             item_list: { text_item: { text: string } }[];
@@ -79,7 +80,12 @@ function network() {
           to: msg.to_user_id,
           context: msg.context_token,
           text: msg.item_list[0].text_item.text,
+          clientId: msg.client_id,
         });
+        if (control.failedSends > 0) {
+          control.failedSends--;
+          return Response.json({ ret: 1 }, { status: 503 });
+        }
         return Response.json({ ret: 0 });
       }
       if (target.hostname === "cloudflare-dns.com")
@@ -123,6 +129,11 @@ async function model(stub: Account) {
 async function cycles(stub: Account, count: number) {
   for (let i = 0; i < count; i++) await runDurableObjectAlarm(stub);
 }
+async function skipWelcome(stub: Account, id: string) {
+  await runInDurableObject(stub, (_, state) => {
+    state.storage.sql.exec("DELETE FROM settings WHERE key = ?", wechatLinkKey(id, "guideDelivery"));
+  });
+}
 beforeEach(() => network());
 afterEach(async () => {
   for (const stub of accounts.splice(0))
@@ -133,6 +144,91 @@ afterEach(async () => {
 });
 
 describe("personal WeChat link limits and isolation", () => {
+  it("receives, processes and delivers a message within one alarm, without repeating work", async () => {
+    const net = network();
+    const stub = account();
+    await model(stub);
+    const id = await create(stub, "日常");
+    await api(stub, "wechat.bind", { id });
+    await cycles(stub, 1);
+    await skipWelcome(stub, id);
+    net.queues.set("token-1", [msg(1, "你好")]);
+    await cycles(stub, 1);
+    expect(net.modelInputs).toHaveLength(1);
+    expect(net.sends.map((s) => s.text)).toEqual(["回答：你好"]);
+    net.queues.set("token-1", [msg(1, "你好")]);
+    await cycles(stub, 1);
+    expect(net.modelInputs).toHaveLength(1);
+    expect(net.sends).toHaveLength(1);
+  });
+
+  it("sends a ready answer while another connection is still long polling", async () => {
+    const net = network();
+    const stub = account();
+    await plus(stub);
+    await model(stub);
+    for (const name of ["日常", "工作"]) {
+      const id = await create(stub, name);
+      await api(stub, "wechat.bind", { id });
+    }
+    await cycles(stub, 1);
+    for (const link of (await stub.snapshot()).connections) await skipWelcome(stub, link.id);
+    const original = vi.mocked(fetch).getMockImplementation()!;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    let polling = false;
+    let deliveredWhilePolling = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const request = new Request(url, init);
+      if (request.url.endsWith("getupdates") && request.headers.get("Authorization") === "Bearer token-2") {
+        polling = true;
+        timeout = setTimeout(release, 1000);
+        await held;
+        polling = false;
+      }
+      const response = await original(url, init);
+      if (request.url.endsWith("sendmessage") && net.sends.some((s) => s.text === "回答：你好")) {
+        deliveredWhilePolling = polling;
+        if (timeout) clearTimeout(timeout);
+        release();
+      }
+      return response;
+    });
+    net.queues.set("token-1", [msg(1, "你好")]);
+    try {
+      await cycles(stub, 1);
+      expect(deliveredWhilePolling).toBe(true);
+      expect(net.sends.map((s) => s.text)).toEqual(["回答：你好"]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+      release();
+    }
+  });
+
+  it("retries delivery without rerunning or charging the model, before the next queued message", async () => {
+    const net = network();
+    const stub = account();
+    await model(stub);
+    const id = await create(stub, "日常");
+    await api(stub, "wechat.bind", { id });
+    await cycles(stub, 1);
+    await skipWelcome(stub, id);
+    net.queues.set("token-1", [msg(1, "第一条", 1), msg(1, "第二条", 2)]);
+    net.control.failedSends = 1;
+    await cycles(stub, 1);
+    const balance = (await stub.snapshot()).wallet.balance;
+    expect(net.modelInputs).toHaveLength(1);
+    expect(net.sends.map((s) => s.text)).toEqual(["回答：第一条"]);
+    await cycles(stub, 1);
+    expect(net.sends[1].clientId).toBe(net.sends[0].clientId);
+    expect(net.modelInputs).toHaveLength(1);
+    expect((await stub.snapshot()).wallet.balance).toBe(balance);
+    await cycles(stub, 1);
+    expect(net.modelInputs).toHaveLength(2);
+    expect(net.sends.map((s) => s.text)).toEqual(["回答：第一条", "回答：第一条", "回答：第二条"]);
+  });
+
   it("atomically permits one Free link, rebinds in place, and releases a deleted slot", async () => {
     const stub = account();
     const results = await Promise.all(

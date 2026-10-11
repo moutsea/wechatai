@@ -1,0 +1,227 @@
+.site-info-page {
+  background: #fff;
+}
+.info-header {
+  max-width: 1220px;
+  margin: auto;
+  padding: 27px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.info-header > div {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  font-size: 13px;
+}
+.info-header > div > a:first-child {
+  color: var(--muted);
+}
+.info-main {
+  max-width: 920px;
+  margin: auto;
+  padding: 66px 40px 96px;
+}
+.info-intro {
+  max-width: 680px;
+}
+.info-intro h1 {
+  margin: 18px 0;
+  font-size: clamp(32px, 4vw, 44px);
+  letter-spacing: -0.04em;
+}
+.info-intro p {
+  color: var(--muted);
+  font-size: 15px;
+}
+.info-intro time {
+  display: block;
+  margin-top: 22px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.info-navigation {
+  display: flex;
+  gap: 28px;
+  margin: 36px 0 44px;
+  border-bottom: 1px solid var(--line);
+}
+.info-navigation a {
+  padding: 14px 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.info-navigation a.active {
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 600;
+}
+.info-document {
+  max-width: 760px;
+}
+.info-document section + section {
+  margin-top: 36px;
+}
+.info-document h2 {
+  margin-bottom: 16px;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  line-height: 1.6;
+}
+.info-document p,
+.info-document li {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 2;
+  overflow-wrap: anywhere;
+}
+.info-document p + p {
+  margin-top: 12px;
+}
+.info-document ul {
+  margin: 0;
+  padding-left: 22px;
+}
+.info-document li + li {
+  margin-top: 12px;
+}
+.info-document strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.info-document a,
+.contact-privacy a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.info-document a:hover,
+.contact-privacy a:hover {
+  color: var(--green-hover);
+}
+.info-document code {
+  padding: 2px 4px;
+  background: var(--surface-soft);
+  border-radius: 4px;
+  font-size: 0.95em;
+}
+.contact-email {
+  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+.contact-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--green-soft);
+  color: var(--green);
+  margin-bottom: 24px;
+}
+.contact-content h2 {
+  margin-bottom: 12px;
+  font-size: 22px;
+}
+.contact-content p {
+  color: var(--muted);
+  font-size: 14px;
+}
+.contact-address {
+  margin: 24px 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--green);
+  font-size: clamp(18px, 3vw, 26px);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.contact-address:hover {
+  color: var(--green-hover);
+}
+.contact-email > span:last-child {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-top: 36px;
+}
+.contact-grid > section {
+  min-width: 0;
+}
+.contact-grid > section > svg {
+  color: var(--green);
+  margin-bottom: 16px;
+}
+.contact-grid h2 {
+  font-size: 18px;
+}
+.contact-note,
+.contact-grid .text-link {
+  margin-top: 16px;
+}
+.contact-content .contact-note {
+  font-size: 12px;
+}
+.contact-privacy {
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.auth-form .auth-policies {
+  margin-top: 18px;
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.auth-policies a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .info-header {
+    padding: 22px 24px;
+    gap: 16px;
+  }
+  .info-header > div {
+    gap: 14px;
+    font-size: 12px;
+  }
+  .info-main {
+    padding: 42px 24px 64px;
+  }
+  .info-navigation {
+    gap: 24px;
+    margin: 28px 0 32px;
+  }
+  .info-document h2 {
+    font-size: 19px;
+  }
+  .contact-email {
+    padding: 24px;
+  }
+  .contact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 400px) {
+  .info-header > div > a:first-child {
+    display: none;
+  }
+  .contact-address {
+    gap: 6px;
+    font-size: 17px;
+  }
+}

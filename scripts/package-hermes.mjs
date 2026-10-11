@@ -5,10 +5,10 @@ import { resolve } from "node:path";
 
 const output = resolve("public/downloads");
 await mkdir(output, { recursive: true });
-const archive = resolve(output, "wechatai-hermes-1.0.0.tgz");
+const archive = resolve(output, "wechatai-hermes-1.1.2.tgz");
 execFileSync(
   "tar",
-  ["-czf", archive, "__init__.py", "adapter.py", "transport.py", "plugin.yaml", "README.md"],
+  ["-czf", archive, "__init__.py", "adapter.py", "transport.py", "plugin.yaml", "README.md", "LICENSE"],
   {
     cwd: resolve("integrations/hermes"),
     env: { ...process.env, COPYFILE_DISABLE: "1" },

@@ -8,21 +8,21 @@ const steps = [
     title: "配置渠道与模型",
     description: "填入自己的服务地址和 API Key，选择接口协议，再添加想使用的大模型。",
     details: ["支持三种常见 LLM 协议", "一键获取可用模型，也可以手动添加"],
-    guide: "/guide#models",
+    guide: "/docs/channels-models",
     guideLabel: "查看模型配置教程",
   },
   {
     title: "连接你的微信",
-    description: "在工作台获取专属二维码，用微信扫码并在手机上确认，完成个人微信绑定。",
+    description: "在工作台获取二维码。打开微信设置，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫码并确认连接。",
     details: ["个人专属连接，只回应你绑定的微信", "连接后发出第一条消息，收到欢迎和教程入口"],
-    guide: "/guide#start",
+    guide: "/docs/wechat-connection#connect",
     guideLabel: "查看微信连接教程",
   },
   {
     title: "像平常一样聊天",
     description: "打开微信里的对话，直接向模型提问。想换一个模型或开启新话题，发送命令就能完成。",
     details: ["发送 /models 查看模型，按需切换", "发送 /new 开始新话题，保留旧记录"],
-    guide: "/guide#commands",
+    guide: "/docs/commands",
     guideLabel: "查看微信命令速查",
   },
 ];
@@ -68,7 +68,7 @@ function StepPreview({ step }: { step: number }) {
           <div className="steps-qr">
             <QrCode size={116} strokeWidth={1.3} />
           </div>
-          <span>微信扫一扫 · 在手机上确认</span>
+          <span>微信 ClawBot 扫一扫 · 在手机上确认</span>
           <div className="steps-preview-success">
             <Check size={15} /> 个人专属连接
           </div>

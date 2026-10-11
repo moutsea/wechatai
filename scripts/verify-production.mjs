@@ -1,8 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import Stripe from "stripe";
+import { productionOrigin } from "./site-origin.mjs";
 
-const origin = "https://wechatai.app";
+const origin = productionOrigin();
 const secrets = JSON.parse(await readFile(".production-secrets.local", "utf8"));
 const stripe = new Stripe(secrets.STRIPE_SECRET_KEY, { timeout: 15000, maxNetworkRetries: 2 });
 if (!secrets.STRIPE_SECRET_KEY.startsWith("sk_live_"))
@@ -29,6 +30,17 @@ try {
       .join("; ");
     await writeFile(".production-smoke.local", JSON.stringify(account), { mode: 0o600 });
   }
+  const login = await fetch(`${origin}/api/auth/sign-in/email`, {
+    method: "POST",
+    headers: { origin, "content-type": "application/json" },
+    body: JSON.stringify({ email: account.email, password: account.password }),
+  });
+  if (!login.ok) throw new Error(`Production sign-in HTTP ${login.status}`);
+  account.cookie = login.headers
+    .getSetCookie()
+    .map((s) => s.split(";")[0])
+    .join("; ");
+  await writeFile(".production-smoke.local", JSON.stringify(account), { mode: 0o600 });
   const request = async (path, body) => {
     const r = await fetch(`${origin}/api${path}`, {
       method: body ? "POST" : "GET",
@@ -83,29 +95,39 @@ try {
     console.log(JSON.stringify({ check: name, status: r.status }));
   }
   if (process.argv.includes("--checkout")) {
-    // Creates and immediately expires one unpaid session. Never submit a card or charge money.
-    const { url } = await request("/billing/checkout", { offerId: "plus_yearly" });
-    const id = new URL(url).pathname.split("/").at(-1);
-    const session = await stripe.checkout.sessions.retrieve(id);
-    if (
-      !session.livemode ||
-      session.metadata.service !== "wechatai" ||
-      session.metadata.userId !== account.userId ||
-      session.amount_total !== 8800 ||
-      session.currency !== "cny" ||
-      session.mode !== "subscription" ||
-      session.status !== "open"
-    )
-      throw new Error("Live checkout mismatch");
-    await stripe.checkout.sessions.expire(session.id);
-    console.log(
-      JSON.stringify({
-        check: "live annual checkout",
-        amount: 88,
-        currency: "cny",
-        status: "expired without payment",
-      }),
-    );
+    // Verify every offer, then expire each unpaid session. Never submit payment details.
+    for (const offer of catalog.offers) {
+      const { url } = await request("/billing/checkout", { offerId: offer.id });
+      const id = new URL(url).pathname.split("/").at(-1);
+      const session = await stripe.checkout.sessions.retrieve(id);
+      try {
+        if (
+          !session.livemode ||
+          session.metadata.service !== "wechatai" ||
+          session.metadata.userId !== account.userId ||
+          session.amount_total !== Math.round(offer.price * 100) ||
+          session.currency !== "cny" ||
+          session.mode !== "payment" ||
+          !["card", "alipay", "wechat_pay"].every((method) =>
+            session.payment_method_types.includes(method),
+          ) ||
+          session.status !== "open"
+        )
+          throw new Error("Live checkout mismatch");
+      } finally {
+        if (session.status === "open") await stripe.checkout.sessions.expire(session.id);
+      }
+      console.log(
+        JSON.stringify({
+          check: "live wallet checkout",
+          offer: offer.id,
+          amount: offer.price,
+          paymentMethods: session.payment_method_types,
+          currency: "cny",
+          status: "expired without payment",
+        }),
+      );
+    }
   }
   const dashboard = await request("/dashboard");
   if (dashboard.plan !== "free" || dashboard.wallet.purchased !== 0)

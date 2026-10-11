@@ -2,10 +2,14 @@ import { ChevronDown, MessageCircle, RotateCcw } from "lucide-react";
 import { formatCredits, type ChatMessage } from "../shared/types";
 import { ChatMarkdown, CopyMessage } from "./chat-markdown";
 
-export function ModelAvatar() {
+export function ModelAvatar({ src }: { src?: string }) {
   return (
     <span className="message-avatar assistant" aria-hidden="true">
-      <MessageCircle size={18} strokeWidth={1.7} />
+      {src ? (
+        <img src={src} alt="" width={36} height={36} loading="lazy" decoding="async" />
+      ) : (
+        <MessageCircle size={18} strokeWidth={1.7} />
+      )}
     </span>
   );
 }
@@ -13,9 +17,11 @@ export function ModelAvatar() {
 export function ChatMessageBubble({
   message,
   modelName,
+  avatar,
 }: {
   message: ChatMessage;
   modelName?: string;
+  avatar?: string;
 }) {
   if (message.role === "system")
     return (
@@ -35,7 +41,7 @@ export function ChatMessageBubble({
           我
         </span>
       ) : (
-        <ModelAvatar />
+        <ModelAvatar src={avatar} />
       )}
       <div className="message-body">
         <div className="message-label">

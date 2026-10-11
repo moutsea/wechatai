@@ -1,3 +1,13 @@
+import { notificationInputSchema } from "../shared/notification";
+import {
+  personalAssistantInputSchema,
+  personalRecordInputSchema,
+  personalQuerySchema,
+  amountCents,
+  centsAmount,
+  type PersonalRecord,
+} from "../shared/personal-assistant";
+import { roleplayInputSchema, roleVariables } from "../shared/roleplay";
 import { isRemoteAgent } from "../shared/remote-agent";
 import { openClawInputSchema } from "../shared/openclaw";
 import { BILLING_OFFERS } from "../shared/billing";
@@ -17,6 +27,11 @@ const defaults = {
 };
 export function createDemo() {
   let plugins: UserPlugin[] = [];
+  const personal = new Map<string, PersonalRecord[]>();
+  const summaries = new Map<
+    string,
+    { text: string; updatedAt: number; contextStart: number; resetAt: number; throughId: number }
+  >();
   let assistants: Assistant[] = [
     {
       ...defaults,
@@ -262,10 +277,13 @@ export function createDemo() {
       credits,
     })),
   });
-  const create = (assistantId: string | null, title = "新的对话") => {
+  const create = (assistantId: string | null, title = "新的对话", pluginInstanceId?: string) => {
+    const plugin = plugins.find((p) => p.id === pluginInstanceId);
+    if (plugin) assistantId = "modelId" in plugin ? plugin.modelId : null;
     const s: ChatSession = {
       id: crypto.randomUUID(),
       assistantId,
+      ...(plugin ? { pluginInstanceId: plugin.id, pluginName: plugin.name } : {}),
       title,
       archived: false,
       resetAt: 0,
@@ -278,6 +296,23 @@ export function createDemo() {
     if (assistantId)
       lastModels.set(assistants.find((a) => a.id === assistantId)!.channelId, assistantId);
     messages[s.id] = [];
+    if (plugin?.pluginId === "wechatai/roleplay" && plugin.firstMessage) {
+      messages[s.id] = [
+        {
+          id: Date.now(),
+          sessionId: s.id,
+          role: "assistant",
+          content: roleVariables(plugin.firstMessage, plugin),
+          createdAt: Date.now(),
+          inputTokens: 0,
+          outputTokens: 0,
+          cost: 0,
+          estimated: false,
+          model: "角色开场白",
+        },
+      ];
+      s.messageCount = 1;
+    }
     return s;
   };
   return async <T>(path: string, options?: RequestInit): Promise<T> => {
@@ -287,7 +322,60 @@ export function createDemo() {
     if (path === "/plugins" || path.startsWith("/plugins/")) {
       const id = path.split("/")[2];
       const previous = plugins.find((p) => p.id === id);
-      if (path === "/plugins/exit") {
+      if (path.includes("/records")) {
+        if (previous?.pluginId !== "wechatai/personal-assistant") throw new Error("配置不存在");
+        const records = personal.get(id) ?? [];
+        const recordId = path.split("/")[4];
+        if (path.endsWith("/query")) {
+          const q = personalQuerySchema.parse(body);
+          const filtered = records.filter(
+            (r) =>
+              (!q.kind || r.kind === q.kind) &&
+              (!q.reminderType || (r.kind === "reminder" && r.reminderType === q.reminderType)) &&
+              (q.completed === undefined || r.completed === q.completed) &&
+              (!q.from || r.date >= q.from) &&
+              (!q.to || r.date <= q.to) &&
+              (!q.query || [r.title, r.content, r.category].some((v) => v.includes(q.query))),
+          );
+          const totals = new Map<string, { income: number; expense: number }>();
+          for (const r of filtered.filter((r) => r.kind === "entry")) {
+            const t = totals.get(r.currency) ?? { income: 0, expense: 0 };
+            t[r.direction] += amountCents(r.amount!);
+            totals.set(r.currency, t);
+          }
+          result = {
+            records: filtered.slice(q.offset, q.offset + q.limit),
+            total: filtered.length,
+            totals: [...totals].map(([currency, t]) => ({
+              currency,
+              income: centsAmount(t.income),
+              expense: centsAmount(t.expense),
+              net: centsAmount(t.income - t.expense),
+            })),
+          };
+        } else if (method === "DELETE") {
+          personal.set(
+            id,
+            records.filter((r) => r.id !== recordId),
+          );
+          result = { deleted: true };
+        } else {
+          const old = records.find((r) => r.id === body.recordId);
+          const r: PersonalRecord = {
+            ...personalRecordInputSchema.parse({ ...old, ...body.record }),
+            id: old?.id ?? crypto.randomUUID(),
+            revision: (old?.revision ?? 0) + 1,
+            createdAt: old?.createdAt ?? Date.now(),
+            updatedAt: Date.now(),
+          };
+          personal.set(id, [r, ...records.filter((v) => v.id !== r.id)]);
+          result = r;
+        }
+      } else if (path.endsWith("/notification")) {
+        result = { endpoint: "https://wechatai.app/api/notify", hasToken: false, deliveries: [] };
+      } else if (path.includes("/notification/token")) {
+        throw new Error("演示模式不生成真实 Token，请登录使用");
+      } else if (path === "/plugins/exit") {
         const plain =
           sessions.find((s) => s.id === lastPlainSession && !s.pluginInstanceId && !s.archived) ??
           sessions.find((s) => !s.pluginInstanceId && !s.archived);
@@ -308,13 +396,14 @@ export function createDemo() {
         };
       } else if (method === "GET") result = plugins;
       else if (method === "DELETE") {
+        personal.delete(id);
         plugins = plugins.filter((p) => p.id !== id);
         result = snapshot();
       } else if (path.endsWith("/activate") && previous) {
         if (!sessions.find((s) => s.id === current)?.pluginInstanceId) lastPlainSession = current;
         const s =
           sessions.find((s) => s.pluginInstanceId === id && !s.archived) ??
-          create(isRemoteAgent(previous) ? null : previous.modelId, "新的对话");
+          create("modelId" in previous ? previous.modelId : null, "新的对话", previous.id);
         s.pluginInstanceId = id;
         s.pluginName = previous.name;
         current = s.id;
@@ -322,9 +411,13 @@ export function createDemo() {
       } else if (path.endsWith("/test"))
         result = {
           text:
-            previous?.pluginId === "wechatai/image-generation"
-              ? "**这是预览示例**，不会实际生成图片或扣费。正式使用时，这里会显示图片，可打开原图保存。"
-              : "**这是预览示例**，未发送真实搜索或模型请求。\n\n正式使用时，这里会显示模型根据资料整理的回答和来源链接。",
+            previous?.pluginId === "wechatai/personal-assistant"
+              ? "**这是个人助理预览示例**，没有调用模型、保存记录或设置提醒。"
+              : previous?.pluginId === "wechatai/image-generation"
+                ? "**这是预览示例**，不会实际生成图片或扣费。正式使用时，这里会显示图片，可打开原图保存。"
+                : previous?.pluginId === "wechatai/roleplay"
+                  ? "**这是角色对话预览**，正式使用时会根据你的角色设定回复。测试不会写入故事会话。"
+                  : "**这是预览示例**，未发送真实搜索或模型请求。\n\n正式使用时，这里会显示模型根据资料整理的回答和来源链接。",
           cost: 0,
         };
       else if (
@@ -339,6 +432,53 @@ export function createDemo() {
           hasKey: false,
         };
         plugins = [...plugins.filter((p) => p.id !== id), p];
+        result = p;
+      } else if ((body.pluginId ?? previous?.pluginId) === "wechatai/notification") {
+        const p: UserPlugin = {
+          ...notificationInputSchema.parse({ ...previous, ...body }),
+          id: id || crypto.randomUUID(),
+          pluginId: "wechatai/notification",
+          version: "1.0.0",
+          shortcut: "notice_demo",
+          createdAt: previous?.createdAt ?? Date.now(),
+          hasKey: false,
+        };
+        plugins = [...plugins.filter((p) => p.id !== id), p];
+        result = p;
+      } else if ((body.pluginId ?? previous?.pluginId) === "wechatai/personal-assistant") {
+        const p: UserPlugin = {
+          ...personalAssistantInputSchema.parse({ ...previous, ...body }),
+          id: id || crypto.randomUUID(),
+          pluginId: "wechatai/personal-assistant",
+          version: "1.0.0",
+          createdAt: previous?.createdAt ?? Date.now(),
+          hasKey: true,
+        };
+        if (plugins.some((other) => other.id !== id && other.shortcut === p.shortcut))
+          throw new Error("这个快捷名称已被使用");
+        plugins = [...plugins.filter((p) => p.id !== id), p];
+        result = p;
+      } else if ((body.pluginId ?? previous?.pluginId) === "wechatai/roleplay") {
+        const input = roleplayInputSchema.parse({ ...previous, ...body });
+        if (
+          plugins.some(
+            (p) => p.id !== id && p.shortcut.toLowerCase() === input.shortcut.toLowerCase(),
+          ) ||
+          assistants.some((a) => a.shortcut.toLowerCase() === input.shortcut.toLowerCase())
+        )
+          throw new Error("这个快捷名称已被使用");
+        const p: UserPlugin = {
+          ...input,
+          id: id || crypto.randomUUID(),
+          pluginId: "wechatai/roleplay",
+          version: "1.0.0",
+          createdAt: previous?.createdAt ?? Date.now(),
+          hasKey: true,
+        };
+        plugins = [...plugins.filter((p) => p.id !== id), p];
+        sessions = sessions.map((s) =>
+          s.pluginInstanceId === p.id ? { ...s, assistantId: p.modelId, pluginName: p.name } : s,
+        );
         result = p;
       } else if ((body.pluginId ?? previous?.pluginId) === "wechatai/image-generation") {
         const input = imageGenerationInputSchema.parse({ ...previous, ...body });
@@ -457,7 +597,8 @@ export function createDemo() {
     } else if (path.startsWith("/models/")) path = path.replace("/models/", "/assistants/");
     if (path === "/dashboard") result = snapshot();
     else if (path === "/sessions" && method === "GET") result = sessions;
-    else if (path === "/sessions") result = create(body.assistantId, body.title);
+    else if (path === "/sessions")
+      result = create(body.assistantId, body.title, body.pluginInstanceId);
     else if (/^\/sessions\/[^/]+\/messages/.test(path))
       result = (messages[path.split("/")[2]] || [])
         .filter(
@@ -467,7 +608,24 @@ export function createDemo() {
               Number.MAX_SAFE_INTEGER),
         )
         .slice(-100);
-    else if (path.startsWith("/sessions/")) {
+    else if (/^\/sessions\/[^/]+\/summary$/.test(path)) {
+      const id = path.split("/")[2];
+      if (method === "PATCH")
+        summaries.set(id, {
+          text: body.text,
+          updatedAt: Date.now(),
+          throughId: 0,
+          contextStart: 0,
+          resetAt: 0,
+        });
+      result = summaries.get(id) ?? {
+        text: "",
+        updatedAt: 0,
+        throughId: 0,
+        contextStart: 0,
+        resetAt: 0,
+      };
+    } else if (path.startsWith("/sessions/")) {
       const s = sessions.find((s) => s.id === path.split("/")[2]);
       if (!s) throw new Error("会话不存在");
       if (body.action === "switch") {
@@ -478,8 +636,9 @@ export function createDemo() {
       if (body.action === "rename") s.title = body.title;
       if (body.action === "archive") {
         s.archived = true;
-        if (current === s.id) create(s.assistantId);
+        if (current === s.id) create(s.assistantId, "新的对话", s.pluginInstanceId);
       }
+      if (["reset", "clear", "delete"].includes(body.action)) summaries.delete(s.id);
       if (body.action === "restore") s.archived = false;
       if (body.action === "reset")
         messages[s.id].push({
@@ -500,7 +659,7 @@ export function createDemo() {
       }
       if (body.action === "delete") {
         sessions = sessions.filter((item) => item.id !== s.id);
-        if (current === s.id) create(s.assistantId);
+        if (current === s.id) create(s.assistantId, "新的对话", s.pluginInstanceId);
       }
       result = snapshot();
     } else if (path === "/assistants") {

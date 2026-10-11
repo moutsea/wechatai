@@ -65,6 +65,38 @@ export function validateBaseUrl(value: string, allowedHosts = "") {
     throw new AppError("host_not_allowed", "该模型服务域名尚未被平台允许");
   return url.toString().replace(/\/+$/, "");
 }
+// Local integration testing is limited to one server-configured loopback service.
+// This exception can never be enabled by an API client or on the production app.
+function localKimiseek(env: Env, value: string) {
+  try {
+    const local = ["localhost", "127.0.0.1", "[::1]"];
+    const configured = new URL(secret(env, "KIMISEEK_API_URL", false));
+    const target = new URL(value);
+    return (
+      local.includes(new URL(env.APP_URL).hostname) &&
+      local.includes(configured.hostname) &&
+      configured.protocol === "http:" &&
+      target.origin === configured.origin &&
+      !target.username &&
+      !target.password &&
+      !target.search &&
+      !target.hash
+    );
+  } catch {
+    return false;
+  }
+}
+export function validateModelBaseUrl(env: Env, value: string) {
+  if (
+    localKimiseek(env, value) &&
+    value.replace(/\/+$/, "") === secret(env, "KIMISEEK_API_URL", false).replace(/\/+$/, "")
+  )
+    return value.replace(/\/+$/, "");
+  return validateBaseUrl(value, env.LLM_ALLOWED_HOSTS);
+}
+export async function validateModelDNS(env: Env, value: string) {
+  if (!localKimiseek(env, value)) await validatePublicDNS(value);
+}
 export function publicIPv4(ip: string) {
   const [a, b] = ip.split(".").map(Number);
   return (

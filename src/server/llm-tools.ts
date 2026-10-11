@@ -10,7 +10,7 @@ import {
   type ModelMessage,
 } from "./llm";
 import { countTextTokens, limitTextTokens } from "./tokenizer";
-import { validateBaseUrl } from "./security";
+import { validateModelBaseUrl } from "./security";
 
 export type ModelTool = { name: string; description: string; parameters: Record<string, unknown> };
 export type ModelToolCall = { id: string; name: string; arguments: unknown };
@@ -254,7 +254,7 @@ export async function callModelWithTools(
   allowTools = true,
   resultLimit = 4000,
 ) {
-  validateBaseUrl(model.baseUrl, env.LLM_ALLOWED_HOSTS);
+  validateModelBaseUrl(env, model.baseUrl);
   const body = fitToolRequest(model, messages, tools, rounds, output, allowTools, resultLimit);
   return parseToolReply(
     model.protocol,

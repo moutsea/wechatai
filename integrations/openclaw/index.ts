@@ -200,33 +200,35 @@ export function createWechataiChannel(
         const timer = setInterval(() => {
           if (heartbeatBusy || ctx.abortSignal.aborted) return;
           heartbeatBusy = true;
-          void relay(a, "heartbeat", { agents }, ctx.abortSignal)
+          void relay(a, "heartbeat", { agents, nativeCommands: true }, ctx.abortSignal)
             .catch(() => {})
             .finally(() => {
               heartbeatBusy = false;
             });
         }, 20000);
-        try {
+        const runLane = async (lane: "message" | "control") => {
           while (!ctx.abortSignal.aborted) {
             let retryAfterMs = 5000;
             try {
               await flush(journal, a, ctx.abortSignal);
               if (!ctx.getStatus().connected)
-                await relay(a, "heartbeat", { agents }, ctx.abortSignal);
+                await relay(a, "heartbeat", { agents, nativeCommands: true }, ctx.abortSignal);
               const pollStarted = Date.now();
               const result = await relay<{ jobs: Job[]; retryAfterMs?: number }>(
                 a,
                 "poll",
-                { runnerId: journal.runnerId, waitMs: 15000 },
+                { runnerId: journal.runnerId, waitMs: 15000, nativeCommands: true, lane },
                 ctx.abortSignal,
               );
+              // Older relay versions ignore the lane; never run a normal job twice.
+              const jobs = result.jobs.filter((job) => (job.lane ?? "message") === lane);
               // Long polls return immediately when work arrives. Keep a small floor
               // for empty immediate responses (e.g. another runner) to avoid a hot loop.
               retryAfterMs = Math.max(
-                result.jobs.length || Date.now() - pollStarted >= 1000 ? 0 : 1000,
+                jobs.length || Date.now() - pollStarted >= 1000 ? 0 : 1000,
                 Math.min(30000, Math.max(0, result.retryAfterMs ?? 5000)),
               );
-              for (const job of result.jobs) {
+              for (const job of jobs) {
                 await executeJob(
                   job,
                   journal,
@@ -252,7 +254,8 @@ export function createWechataiChannel(
                         Surface: "wechatai",
                         OriginatingChannel: "wechatai",
                         OriginatingTo: job.routeId,
-                        CommandAuthorized: false,
+                        // Only explicitly routed slash jobs may control the Agent.
+                        CommandAuthorized: Boolean(job.command),
                       });
                       const chunks: string[] = [];
                       let failed = false;
@@ -320,6 +323,9 @@ export function createWechataiChannel(
             if (retryAfterMs)
               await delay(retryAfterMs, undefined, { signal: ctx.abortSignal }).catch(() => {});
           }
+        };
+        try {
+          await Promise.all([runLane("message"), runLane("control")]);
         } finally {
           unsubscribe();
           clearInterval(outboxTimer);

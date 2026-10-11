@@ -11,6 +11,8 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+USER_AGENT = "Wechatai-Hermes/1.1.2"
+
 
 class RelayError(Exception):
     def __init__(self, status):
@@ -36,7 +38,7 @@ def request(account, action, body):
     req = urllib.request.Request(
         origin(account["endpoint"]) + "/api/hermes/" + action,
         data=json.dumps(body, ensure_ascii=False).encode(),
-        headers={"Authorization": "Bearer " + account["token"], "Content-Type": "application/json"},
+        headers={"Authorization": "Bearer " + account["token"], "Content-Type": "application/json", "User-Agent": USER_AGENT},
         method="POST",
     )
     try:
@@ -129,7 +131,7 @@ class Journal:
         interrupted = state == "running" or job["state"] == "claimed"
         self.start(job)
         if job["state"] != "claimed":
-            result = await relay(account, "claim", {"id": job["id"], "runnerId": self.runner_id})
+            result = await relay(account, "claim", {"id": job["id"], "runnerId": self.runner_id, "nativeCommands": True})
             if not result.get("claimed"):
                 return
         if interrupted:

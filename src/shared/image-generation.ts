@@ -1,7 +1,10 @@
 import { z } from "zod";
+import type { NotificationPlugin } from "./notification";
 import { pluginManifestSchema } from "./plugins";
 import type { OpenClawPlugin } from "./openclaw";
 import type { HermesPlugin } from "./hermes";
+import type { PersonalAssistantPlugin } from "./personal-assistant";
+import type { RoleplayPlugin } from "./roleplay";
 import type { WebResearchPlugin } from "./web-research";
 import {
   IMAGE_WAITING_MESSAGE,
@@ -33,7 +36,14 @@ export type ImageGenerationPlugin = ImageGenerationInput & {
   createdAt: number;
   hasKey: boolean;
 };
-export type UserPlugin = WebResearchPlugin | ImageGenerationPlugin | OpenClawPlugin | HermesPlugin;
+export type UserPlugin =
+  | NotificationPlugin
+  | WebResearchPlugin
+  | ImageGenerationPlugin
+  | OpenClawPlugin
+  | HermesPlugin
+  | RoleplayPlugin
+  | PersonalAssistantPlugin;
 export const imageGenerationManifest = pluginManifestSchema.parse({
   protocolVersion: "1.0",
   id: "wechatai/image-generation",

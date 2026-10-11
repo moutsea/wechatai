@@ -126,7 +126,7 @@ export async function connect({ endpoint, code }) {
   try {
     console.log("1/3 正在安装微伴渠道…");
     const archive = await boundedBody(
-      await fetch(`${endpoint}/downloads/wechatai-openclaw-1.0.1.tgz`, {
+      await fetch(`${endpoint}/downloads/wechatai-openclaw-1.1.2.tgz`, {
         redirect: "error",
         signal: AbortSignal.timeout(60000),
       }),

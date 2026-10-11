@@ -17,6 +17,7 @@ import {
 } from "../../shared/openclaw";
 import { OPENCLAW_WAITING_MESSAGE } from "../../shared/waiting-message";
 import { WaitingMessageField } from "./waiting-message-field";
+import { remoteAgentConnection } from "../remote-agent-status";
 
 export function OpenClawEditor({
   plugin,
@@ -71,8 +72,7 @@ export function OpenClawEditor({
           pairing &&
           !helpers.current.busy &&
           state.pairingClaimed &&
-          state.hasKey &&
-          state.lastSeen > Date.now() - 60000
+          remoteAgentConnection(state).state === "online"
         ) {
           stopped = true;
           setPairing(null);
@@ -98,8 +98,8 @@ export function OpenClawEditor({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [pairing]);
-  const connected =
-    (status?.hasKey ?? saved?.hasKey) && (status?.lastSeen ?? saved?.lastSeen ?? 0) > now - 60000;
+  const connection = remoteAgentConnection(status ?? saved ?? { hasKey: false }, now);
+  const connected = connection.state === "online";
   const agents = status?.agents ?? saved?.agents ?? [];
   const secondsLeft = Math.max(0, Math.ceil(((pairing?.expiresAt ?? 0) - now) / 1000));
   const update = <K extends keyof OpenClawInput>(key: K, value: OpenClawInput[K]) =>
@@ -142,7 +142,9 @@ export function OpenClawEditor({
     e.preventDefault();
     await run(async () => {
       const p = await persist();
-      notify("配置已保存");
+      notify(
+        remoteAgentConnection(p).connectedBefore ? "配置已保存" : "配置已保存，完成连接后即可使用",
+      );
       onComplete(p.id);
     });
   }
@@ -165,12 +167,16 @@ export function OpenClawEditor({
                 ? `${agentName} 已连接`
                 : pairing
                   ? `等待 ${agentName} 连接`
-                  : "一条命令，自动配置"}
+                  : saved
+                    ? `${agentName} ${connection.label}`
+                    : "一条命令，自动配置"}
             </strong>
             <p>
               {connected
                 ? "在微信发送 /use " + form.shortcut + "，即可开始对话。"
-                : "自动安装渠道、选择默认助手并完成配对，无需填写密钥。"}
+                : saved
+                  ? connection.description
+                  : "自动安装渠道、选择默认助手并完成配对，无需填写密钥。"}
             </p>
           </div>
         </div>
@@ -241,6 +247,11 @@ export function OpenClawEditor({
                   : "尚未完成连接，请重新生成命令"}
             </div>
           </div>
+        )}
+        {status?.hasKey && !status.nativeCommands && !pairing && (
+          <p className="muted">
+            当前连接器尚不支持 Agent 原生命令。点击「重新连接」，生成并执行新命令即可升级。
+          </p>
         )}
         {agents.length > 1 && (
           <label>
@@ -432,7 +443,7 @@ export function OpenClawEditor({
                     setStatus(null);
                     setSaved({ ...saved, hasKey: false, lastSeen: 0, agents: [] });
                     await refresh();
-                    notify("OpenClaw 已断开");
+                    notify(`${agentName} 已断开`);
                   })
                 }
               >

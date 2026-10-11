@@ -1,5 +1,6 @@
 export const DEFAULT_CONTEXT_TOKENS = 128_000;
 export const DEFAULT_INPUT_TOKENS = 128_000;
+export const DEFAULT_OUTPUT_TOKENS = 8_192;
 export const MAX_CONTEXT_TOKENS = 2_000_000;
 export const CONTEXT_SUMMARY_THRESHOLD = 0.8;
 

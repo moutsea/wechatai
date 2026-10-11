@@ -114,12 +114,14 @@ async function makeRetryDue(stub: Account) {
 describe("guide links", () => {
   it("builds a public guide URL without account data or query parameters", () => {
     expect(guideUrl("https://app.example.com/path?token=private#hash")).toBe(
-      "https://app.example.com/guide",
+      "https://app.example.com/docs/getting-started",
     );
-    expect(wechatHelp("https://app.example.com")).toContain("https://app.example.com/guide");
+    expect(wechatHelp("https://app.example.com")).toContain(
+      "https://app.example.com/docs/getting-started",
+    );
     const welcome = welcomeGuide("https://app.example.com");
     expect(welcome).toContain("你好，欢迎使用微伴");
-    expect(welcome).toContain("https://app.example.com/guide#commands");
+    expect(welcome).toContain("https://app.example.com/docs/commands");
     expect(welcome).not.toContain("/models");
     expect(welcome).not.toContain("/new");
   });
@@ -129,16 +131,16 @@ describe("guide links", () => {
     "http://[::1]:5173",
     "http://192.168.1.2:5173",
   ])("sends a direct guide link for a local site: %s", (url) => {
-    expect(guideUrl(url)).toBe(`${url}/guide`);
-    expect(welcomeGuide(url)).toContain(`${url}/guide#commands`);
+    expect(guideUrl(url)).toBe(`${url}/docs/getting-started`);
+    expect(welcomeGuide(url)).toContain(`${url}/docs/commands`);
     expect(welcomeGuide(url)).not.toContain("工作台左下角");
-    expect(wechatHelp(url)).toContain(`${url}/guide`);
+    expect(wechatHelp(url)).toContain(`${url}/docs/getting-started`);
   });
   it.each(["ftp://app.example.com", "https://user:pass@app.example.com", "not-a-url"])(
     "does not send an unusable or credential-bearing link: %s",
     (url) => {
       expect(guideUrl(url)).toBeNull();
-      expect(welcomeGuide(url)).toContain("网页工作台左下角「使用指南」");
+      expect(welcomeGuide(url)).toContain("网页工作台左下角「文档」");
       expect(welcomeGuide(url)).not.toContain(url);
     },
   );
@@ -154,21 +156,19 @@ describe("connection onboarding", () => {
     await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(0);
     mock.batches.push([message()]);
-    await runDurableObjectAlarm(stub); // Receive the owner context.
-    await runDurableObjectAlarm(stub); // Deliver the guide.
+    await runDurableObjectAlarm(stub); // Receive the owner context and deliver the guide.
     expect(mock.sends).toHaveLength(1);
     expect(mock.sends[0]).toMatchObject({ to_user_id: "owner", context_token: "context-owner" });
     expect(mock.sends[0].item_list[0].text_item.text).toContain("欢迎使用微伴");
     expect(mock.sends[0].item_list[0].text_item.text).toContain(
-      new URL("/guide#commands", env.PUBLIC_SITE_URL).toString(),
+      new URL("/docs/commands", env.PUBLIC_SITE_URL).toString(),
     );
-    await runDurableObjectAlarm(stub); // Handle /help.
-    await runDurableObjectAlarm(stub); // Deliver /help.
+    await runDurableObjectAlarm(stub); // Handle and deliver /help.
     expect(mock.sends).toHaveLength(2);
-    expect(mock.sends[1].item_list[0].text_item.text).toContain("/delete");
+    expect(mock.sends[1].item_list[0].text_item.text).toContain("/wx delete");
     expect(mock.sends[1].item_list[0].text_item.text).toContain("完整使用教程");
     expect(mock.sends[1].item_list[0].text_item.text).toContain(
-      new URL("/guide", env.PUBLIC_SITE_URL).toString(),
+      new URL("/docs/getting-started", env.PUBLIC_SITE_URL).toString(),
     );
     expect(mock.state.models).toBe(0);
     expect((await stub.snapshot()).wallet.balance).toBe(balance);
@@ -219,7 +219,7 @@ describe("connection onboarding", () => {
     );
     expect(welcomes).toHaveLength(2);
     expect(welcomes[0].client_id).not.toBe(welcomes[1].client_id);
-    expect(welcomes[1].item_list[0].text_item.text).toContain("/guide#commands");
+    expect(welcomes[1].item_list[0].text_item.text).toContain("/docs/commands");
     expect(mock.sends.at(-1)?.item_list[0].text_item.text).toContain("可用额度");
     stub = await restart(stub);
     await runDurableObjectAlarm(stub);
@@ -243,17 +243,15 @@ describe("connection onboarding", () => {
     await bind(stub);
     mock.batches.push([message()]);
     await runDurableObjectAlarm(stub);
-    await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(1);
     expect(mock.sends[0].client_id).not.toBe("legacy-welcome");
-    expect(mock.sends[0].item_list[0].text_item.text).toContain("/guide#commands");
+    expect(mock.sends[0].item_list[0].text_item.text).toContain("/docs/commands");
   });
   it("starts a fresh welcome after reconnecting while an earlier send is backing off", async () => {
     const mock = network();
     const stub = await newAccount();
     await bind(stub);
     mock.batches.push([message()]);
-    await runDurableObjectAlarm(stub);
     mock.state.failedSends = 1;
     await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(1);
@@ -261,24 +259,22 @@ describe("connection onboarding", () => {
     await bind(stub);
     mock.batches.push([message("/help", "owner", 2)]);
     await runDurableObjectAlarm(stub);
-    await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(2);
     expect(mock.sends[1].client_id).not.toBe(mock.sends[0].client_id);
-    expect(mock.sends[1].item_list[0].text_item.text).toContain("/guide#commands");
+    expect(mock.sends[1].item_list[0].text_item.text).toContain("/docs/commands");
   });
   it("retries with the same delivery ID across restart without blocking normal replies", async () => {
     const mock = network();
     let stub = await newAccount();
     await bind(stub);
     mock.batches.push([message()]);
-    await runDurableObjectAlarm(stub);
     mock.state.failedSends = 1;
     await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(1);
     await runDurableObjectAlarm(stub); // Process /help while guide is backing off.
     await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(2);
-    expect(mock.sends[1].item_list[0].text_item.text).toContain("/delete");
+    expect(mock.sends[1].item_list[0].text_item.text).toContain("/wx delete");
     await makeRetryDue(stub);
     stub = await restart(stub);
     await runDurableObjectAlarm(stub);
@@ -286,22 +282,23 @@ describe("connection onboarding", () => {
     expect(mock.sends[2].client_id).toBe(mock.sends[0].client_id);
     expect(mock.state.models).toBe(0);
   });
-  it("does not send a queued welcome using a previous owner's context after rebinding", async () => {
+  it("does not retry a queued welcome using a previous owner's context after rebinding", async () => {
     const mock = network();
     const stub = await newAccount();
     await bind(stub);
     mock.batches.push([message()]);
+    mock.state.failedSends = 1;
     await runDurableObjectAlarm(stub);
+    expect(mock.sends).toHaveLength(1);
     await stub.api("wechat.disconnect");
     mock.state.owner = "new-owner";
     await bind(stub);
     await runDurableObjectAlarm(stub);
-    expect(mock.sends).toHaveLength(0);
+    expect(mock.sends).toHaveLength(1);
     mock.batches.push([message("/help", "new-owner", 2)]);
     await runDurableObjectAlarm(stub);
-    await runDurableObjectAlarm(stub);
-    expect(mock.sends).toHaveLength(1);
-    expect(mock.sends[0]).toMatchObject({
+    expect(mock.sends).toHaveLength(2);
+    expect(mock.sends[1]).toMatchObject({
       to_user_id: "new-owner",
       context_token: "context-new-owner",
     });

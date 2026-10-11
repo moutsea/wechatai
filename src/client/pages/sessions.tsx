@@ -1,7 +1,10 @@
+import { modelKind } from "../../shared/model-kind";
+import { RoleSummary } from "./role-summary";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   Archive,
+  BookOpen,
   ArrowRight,
   Check,
   History,
@@ -22,6 +25,7 @@ import { Empty, Modal, PageHead, relativeTime } from "../ui";
 import { json } from "../api";
 import { type ChatMessage, type ChatSession } from "../../shared/types";
 import { ChatMessageBubble, ModelAvatar } from "../chat-message";
+import { pluginIconSource, roleAvatarSource } from "../../shared/plugin-visuals";
 export function Sessions() {
   const { data, base, request, refresh, notify } = useApp();
   const [params, setParams] = useSearchParams();
@@ -34,6 +38,7 @@ export function Sessions() {
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messageError, setMessageError] = useState("");
+  const [summaryId, setSummaryId] = useState("");
   const [operation, setOperation] = useState("");
   const [title, setTitle] = useState("");
   const [assistantId, setAssistantId] = useState("");
@@ -130,9 +135,21 @@ export function Sessions() {
     }
   };
   if (!data) return null;
+  const textModels = data.assistants.filter((a) => modelKind(a) === "text");
   const pluginName = (s: ChatSession) =>
     data.plugins?.find((p) => p.id === s.pluginInstanceId)?.name || s.pluginName;
+  const sessionAvatar = (s: ChatSession) => {
+    const plugin = data.plugins?.find((p) => p.id === s.pluginInstanceId);
+    if (!plugin) return undefined;
+    return (
+      (plugin.pluginId === "wechatai/roleplay" && roleAvatarSource(plugin.avatar)) ||
+      pluginIconSource(plugin.pluginId)
+    );
+  };
   const session = sessions.find((s) => s.id === selected);
+  const role = data.plugins?.find(
+    (p) => p.id === session?.pluginInstanceId && p.pluginId === "wechatai/roleplay",
+  );
   const assistant = data.assistants.find((a) => a.id === session?.assistantId);
   const visible = sessions.filter(
     (s) =>
@@ -142,13 +159,17 @@ export function Sessions() {
     if (!session && action !== "new") return;
     setBusy(true);
     try {
-      if (action === "new") {
+      if (action === "new" || action === "new-story") {
         const created = await request<ChatSession>(
           "/sessions",
           json({
             assistantId,
-            title: title || "新的对话",
-            connectionId: data.selectedConnectionId,
+            ...(action === "new-story" ? { pluginInstanceId: role?.id } : {}),
+            title: action === "new-story" ? "新的对话" : title || "新的对话",
+            connectionId:
+              action === "new-story"
+                ? (session?.connectionId ?? "default")
+                : data.selectedConnectionId,
           }),
         );
         setSelected(created.id);
@@ -173,6 +194,7 @@ export function Sessions() {
             clear: "当前会话记录已清空",
             delete: "会话已删除",
             new: "新会话已创建，并设为微信当前会话",
+            "new-story": "新故事已创建，原会话已保留",
           } as Record<string, string>
         )[action] || "操作完成",
       );
@@ -225,6 +247,9 @@ export function Sessions() {
     );
   return (
     <div className="sessions-page page-enter">
+      {summaryId && (
+        <RoleSummary key={summaryId} sessionId={summaryId} onClose={() => setSummaryId("")} />
+      )}
       <PageHead
         eyebrow="EVERY CONVERSATION MATTERS"
         title="会话记录"
@@ -232,9 +257,9 @@ export function Sessions() {
         action={
           <button
             className="button"
-            disabled={!data.assistants.length}
+            disabled={!textModels.length}
             onClick={() => {
-              setAssistantId(data.assistants[0]?.id || "");
+              setAssistantId(textModels[0]?.id || "");
               setTitle("");
               setOperation("new");
             }}
@@ -290,7 +315,7 @@ export function Sessions() {
                       setMobileDetail(true);
                     }}
                   >
-                    <ModelAvatar />
+                    <ModelAvatar src={sessionAvatar(s)} />
                     <div className="session-item-copy">
                       <div className="session-item-title">
                         <strong>{s.title}</strong>
@@ -391,6 +416,29 @@ export function Sessions() {
                     </button>
                     {more && (
                       <div className="dropdown-menu">
+                        {role && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setSummaryId(session.id);
+                                setMore(false);
+                              }}
+                            >
+                              <BookOpen size={15} />
+                              剧情摘要
+                            </button>
+                            <button
+                              disabled={busy || !role.enabled}
+                              onClick={() => {
+                                setMore(false);
+                                void act("new-story");
+                              }}
+                            >
+                              <Plus size={15} />
+                              开始新故事
+                            </button>
+                          </>
+                        )}
                         {[
                           ["rename", "重命名", Pencil],
                           ["reset", "重置上下文", RotateCcw],
@@ -475,6 +523,7 @@ export function Sessions() {
                           <ChatMessageBubble
                             message={m}
                             modelName={pluginName(session) || assistant?.name}
+                            avatar={sessionAvatar(session)}
                           />
                         </Fragment>
                       ))
@@ -604,7 +653,7 @@ export function Sessions() {
                   <label>
                     使用哪个模型
                     <select value={assistantId} onChange={(e) => setAssistantId(e.target.value)}>
-                      {data.assistants.map((a) => (
+                      {textModels.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.channelName} / {a.name} · {a.model}
                         </option>

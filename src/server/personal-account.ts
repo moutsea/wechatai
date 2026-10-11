@@ -1,3 +1,28 @@
+import { extendMembership } from "../shared/billing";
+import {
+  notificationInputSchema,
+  notificationMessageSchema,
+  type NotificationPlugin,
+} from "../shared/notification";
+import { NotificationStore } from "./notification-store";
+import { createNotificationToken } from "./notification-token";
+import { readAdminAccountStats } from "./admin-account";
+import {
+  personalAssistantInputSchema,
+  personalAssistantManifest,
+  beijingTime,
+  type PersonalAssistantPlugin,
+} from "../shared/personal-assistant";
+import { PersonalRecordsStore } from "./personal-records";
+import { PERSONAL_CONTEXT_TOKENS } from "./plugins/personal-context";
+import { dailyTasksMessage } from "./plugins/personal-daily";
+import { PersonalRunStore, type PersonalRun, type PersonalRunInput } from "./personal-runs";
+import type { ReminderSchedule, ReminderScheduler } from "./reminder-scheduler";
+import {
+  invokePersonalAssistant,
+  personalAssistantPrompt,
+  type PersonalAssistantProgress,
+} from "./plugins/personal-assistant";
 import {
   isRemoteAgent,
   remoteAgentName,
@@ -15,6 +40,13 @@ import {
 } from "./openclaw-token";
 import { openClawInputSchema, type OpenClawPlugin } from "../shared/openclaw";
 import { OpenClawRelay, clawPairExchangeSchema, type ClawRoute } from "./openclaw-relay";
+import {
+  roleplayInputSchema,
+  roleplayManifest,
+  roleVariables,
+  type RoleplayPlugin,
+} from "../shared/roleplay";
+import { roleplayPrompt, ROLEPLAY_SUMMARY_PROMPT } from "./plugins/roleplay";
 import { DurableObject } from "cloudflare:workers";
 import type {
   Assistant,
@@ -62,7 +94,19 @@ import {
   type ResolvedModel,
 } from "./channels";
 import { decrypt, encrypt, validateBaseUrl } from "./security";
-import { fetchAvailableModels } from "./model-catalog";
+import { fetchAvailableModels, parseAvailableModel, type AvailableModel } from "./model-catalog";
+import { modelKind } from "../shared/model-kind";
+import { validateModelBaseUrl } from "./security";
+import {
+  integrationNonce,
+  kimiseekConfig,
+  kimiseekRequest,
+  kimiseekResponseSchema,
+  type KimiseekFlow,
+  type KimiseekIdentity,
+  type KimiseekResponse,
+  type KimiseekCommand,
+} from "./kimiseek";
 import { dayWindow, Wallet } from "./wallet";
 import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
 import { invokeWebResearch } from "./plugins/web-research";
@@ -80,8 +124,9 @@ import {
   webResearchManifest,
   type WebResearchPlugin,
 } from "../shared/web-research";
-import { modelInputBudget } from "../shared/context";
+import { DEFAULT_OUTPUT_TOKENS, modelInputBudget } from "../shared/context";
 import { wechatHelp, welcomeGuide } from "../shared/guide";
+import { leadingMention, nativeCommand, platformCommand } from "../shared/command-routing";
 import { REFERRAL_CREDITS } from "../shared/referrals";
 import { qualifyReferral, wechatIdentityHash, type ReferralRow } from "./referrals";
 import {
@@ -107,6 +152,9 @@ type LinkRecord = { id: string; name: string; createdAt: number };
 type StoredAssistant = ResolvedModel;
 type StoredSession = ChatSession & { contextStart: number };
 type StoredPlugin = (
+  | Omit<NotificationPlugin, "hasKey">
+  | Omit<RoleplayPlugin, "hasKey">
+  | Omit<PersonalAssistantPlugin, "hasKey">
   | Omit<WebResearchPlugin, "hasKey">
   | Omit<ImageGenerationPlugin, "hasKey">
   | Omit<OpenClawPlugin, "hasKey">
@@ -138,11 +186,19 @@ export class PersonalAccount extends DurableObject<Env> {
   private attachments: AttachmentQueue;
   private media: MediaStore;
   private claw: OpenClawRelay;
+  private personalRecords: PersonalRecordsStore;
+  private personalRuns: PersonalRunStore;
+  private reminderDelivery: Promise<void> | null = null;
+  private notifications: NotificationStore;
+  private notificationDelivery: Promise<void> | null = null;
   private wechatPolls = new Set<AbortController>();
   private wechatWakeVersion = 0;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.wallet = new Wallet(ctx.storage);
+    this.notifications = new NotificationStore(ctx.storage);
+    this.personalRecords = new PersonalRecordsStore(ctx.storage.sql);
+    this.personalRuns = new PersonalRunStore(ctx.storage);
     this.attachments = new AttachmentQueue(ctx.storage.sql);
     this.media = new MediaStore(ctx.storage.sql, env.MEDIA, ctx.id.toString());
     this.claw = new OpenClawRelay(ctx.storage, {
@@ -194,10 +250,18 @@ export class PersonalAccount extends DurableObject<Env> {
               units / 1000,
               remoteAgentName(this.plugin(route.pluginId).pluginId),
             );
+          const boundary = ["new", "reset"].includes(event.command);
+          if (boundary)
+            this.sql.exec(
+              "INSERT INTO messages (sessionId,role,content,createdAt) VALUES (?, 'system', ?,?)",
+              route.sessionId,
+              `${remoteAgentName(this.plugin(route.pluginId).pluginId)} 原生命令 /${event.command} 已返回；微伴历史记录保留。`,
+              Date.now(),
+            );
           const session = this.session(route.sessionId);
           this.saveSession({
             ...session,
-            messageCount: session.messageCount + (text ? 1 : 0),
+            messageCount: session.messageCount + (text ? 1 : 0) + (boundary ? 1 : 0),
             updatedAt: Date.now(),
           });
         }
@@ -227,6 +291,7 @@ export class PersonalAccount extends DurableObject<Env> {
       },
     });
     ctx.blockConcurrencyWhile(async () => {
+      ctx.storage.transactionSync(() => this.personalRecords.init());
       this.attachments.init();
       this.media.init();
       ctx.storage.sql
@@ -241,7 +306,8 @@ export class PersonalAccount extends DurableObject<Env> {
         CREATE TABLE IF NOT EXISTS inbox (id TEXT PRIMARY KEY, payload TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', reply TEXT NOT NULL DEFAULT '', part INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL, sessionId TEXT);
         CREATE TABLE IF NOT EXISTS wechat_links (id TEXT PRIMARY KEY, name TEXT NOT NULL, createdAt INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, createdAt INTEGER NOT NULL);
-        CREATE TABLE IF NOT EXISTS usage (id TEXT PRIMARY KEY, createdAt INTEGER NOT NULL, tokens INTEGER NOT NULL, units INTEGER NOT NULL);`);
+        CREATE TABLE IF NOT EXISTS usage (id TEXT PRIMARY KEY, createdAt INTEGER NOT NULL, tokens INTEGER NOT NULL, units INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS usage_created ON usage(createdAt);`);
       migrateChannels(ctx.storage);
       // Upgrade the built-in default name, retaining user aliases, keys and history.
       for (const row of this.sql
@@ -289,6 +355,25 @@ export class PersonalAccount extends DurableObject<Env> {
       ctx.storage.sql.exec(
         "CREATE INDEX IF NOT EXISTS inbox_connection ON inbox(connectionId, state, createdAt)",
       );
+      this.personalRuns.init();
+      // A new instance cannot have a live model invocation from its predecessor.
+      // Recover immediately instead of waiting for the six-minute lease to expire.
+      const interrupted = this.sql
+        .exec("UPDATE runs SET status='interrupted' WHERE status='running' RETURNING id")
+        .toArray().length;
+      this.setSetting("busy", null);
+      this.personalRuns.prune();
+      if (interrupted) {
+        console.info(JSON.stringify({ event: "chat.restart_recovery", interrupted }));
+        if (
+          this.sql.exec("SELECT id FROM inbox WHERE state IN ('pending','reply') LIMIT 1").toArray()
+            .length
+        ) {
+          const current = await ctx.storage.getAlarm();
+          if (current === null || current > Date.now() + 1000)
+            await ctx.storage.setAlarm(Date.now() + 1000);
+        }
+      }
     });
   }
   private get sql() {
@@ -316,14 +401,16 @@ export class PersonalAccount extends DurableObject<Env> {
   ) {
     const connectionId = session.connectionId ?? DEFAULT_WECHAT_LINK;
     const agentName = remoteAgentName(this.plugin(pluginId).pluginId);
+    const command = nativeCommand(text);
     if (
       message.item_list?.some((i) => i.type === 2 || i.type === 4) ||
-      this.attachments.get({
-        connectionId,
-        sessionId: session.id,
-        generation: this.connection(connectionId).generation,
-        contextStart: session.contextStart,
-      })?.items.length
+      (!command &&
+        this.attachments.get({
+          connectionId,
+          sessionId: session.id,
+          generation: this.connection(connectionId).generation,
+          contextStart: session.contextStart,
+        })?.items.length)
     )
       throw new AppError(
         "claw_text_only",
@@ -345,7 +432,9 @@ export class PersonalAccount extends DurableObject<Env> {
       );
       const plugin = this.plugin(pluginId);
       const reply =
-        isRemoteAgent(plugin) && plugin.waitingMessageEnabled ? plugin.waitingMessage : "";
+        !command && isRemoteAgent(plugin) && plugin.waitingMessageEnabled
+          ? plugin.waitingMessage
+          : "";
       this.sql.exec(
         "INSERT OR IGNORE INTO runs VALUES (?,NULL,'complete',?,?)",
         id,
@@ -426,6 +515,10 @@ export class PersonalAccount extends DurableObject<Env> {
     if (!this.ctx.id.equals(this.env.ACCOUNTS.idFromName(userId)))
       throw new Error("Account identity mismatch");
     if (!this.getSetting("ownerId", "")) this.setSetting("ownerId", userId);
+  }
+  // Server binding RPC; deliberately not exposed by the account api(action) dispatcher.
+  adminStats() {
+    return readAdminAccountStats(this.sql);
   }
   async referralWechatIdentity(): Promise<string | null> {
     const used = this.getSetting<ReferralUse | null>("referralUse", null);
@@ -532,18 +625,27 @@ export class PersonalAccount extends DurableObject<Env> {
           "插件已停用，请在网页启用，或用 /exit 返回普通模型",
           403,
         );
-      if (!isRemoteAgent(p)) this.assistant(p.modelId);
+      if (!isRemoteAgent(p) && p.pluginId !== "wechatai/notification") {
+        if (p.pluginId === "wechatai/image-generation") this.assistant(p.modelId);
+        else this.textAssistant(p.modelId);
+      }
     }
     return p;
   }
   private publicPlugin(p: StoredPlugin): UserPlugin {
     const { encryptedKey, ...rest } = p;
+    if (p.pluginId === "wechatai/notification") {
+      const { encryptedKey: _key, ...safe } = p;
+      return { ...safe, hasKey: this.notifications.hasToken(p.id) };
+    }
     if (isRemoteAgent(p)) return { ...rest, ...this.claw.status(p.id) } as RemoteAgentPlugin;
     return {
       ...rest,
       hasKey:
-        p.pluginId === "wechatai/image-generation"
-          ? this.assistant(p.modelId).hasKey
+        p.pluginId === "wechatai/image-generation" ||
+        p.pluginId === "wechatai/roleplay" ||
+        p.pluginId === "wechatai/personal-assistant"
+          ? (this.assistants().find((a) => a.id === p.modelId)?.hasKey ?? false)
           : Boolean(encryptedKey),
     };
   }
@@ -554,6 +656,39 @@ export class PersonalAccount extends DurableObject<Env> {
     const kind = raw && typeof raw === "object" ? Reflect.get(raw, "pluginId") : undefined;
     if (previous && kind && kind !== previous.pluginId)
       throw new AppError("plugin_type_identity", "更换插件类型请新建配置");
+    if ((kind ?? previous?.pluginId) === "wechatai/notification") {
+      const input = notificationInputSchema.parse(
+        raw && typeof raw === "object" ? { ...previous, ...raw } : raw,
+      );
+      this.requireLink(input.connectionId, true);
+      if (!previous && this.plugins().length >= 20)
+        throw new AppError("plugin_limit", "最多 20 个插件配置", 403);
+      const pluginId = id ?? crypto.randomUUID();
+      const plugin: StoredPlugin = {
+        ...input,
+        id: pluginId,
+        pluginId: "wechatai/notification",
+        version: "1.0.0",
+        shortcut: `notice_${pluginId.slice(0, 8)}`,
+        createdAt: previous?.createdAt ?? Date.now(),
+        encryptedKey: "",
+      };
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(
+          "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+          pluginId,
+          JSON.stringify(plugin),
+        );
+        if (
+          !input.enabled ||
+          (previous?.pluginId === "wechatai/notification" &&
+            previous.connectionId !== input.connectionId)
+        )
+          this.notifications.cancel(pluginId);
+      });
+      await this.flushNotificationSchedule();
+      return this.publicPlugin(plugin);
+    }
     if (["wechatai/openclaw", "wechatai/hermes"].includes(kind ?? previous?.pluginId)) {
       const input = (
         (kind ?? previous?.pluginId) === "wechatai/hermes" ? hermesInputSchema : openClawInputSchema
@@ -584,6 +719,83 @@ export class PersonalAccount extends DurableObject<Env> {
         p.id,
         JSON.stringify(p),
       );
+      return this.publicPlugin(p);
+    }
+    if ((kind ?? previous?.pluginId) === "wechatai/personal-assistant") {
+      const input = personalAssistantInputSchema.parse(
+        raw && typeof raw === "object" ? { ...previous, ...raw } : raw,
+      );
+      this.textAssistant(input.modelId);
+      if (input.reminderConnectionId) this.requireLink(input.reminderConnectionId);
+      if (!previous && this.plugins().length >= 20)
+        throw new AppError("plugin_limit", "最多可创建 20 个插件配置", 403);
+      if (
+        this.plugins().some(
+          (p) => p.id !== id && p.shortcut.toLowerCase() === input.shortcut.toLowerCase(),
+        ) ||
+        this.assistants().some((a) => a.shortcut.toLowerCase() === input.shortcut.toLowerCase())
+      )
+        throw new AppError("shortcut_exists", "这个快捷名称已被使用");
+      const plugin: StoredPlugin = {
+        ...input,
+        id: id ?? crypto.randomUUID(),
+        pluginId: "wechatai/personal-assistant",
+        version: "1.0.0",
+        createdAt: previous?.createdAt ?? Date.now(),
+        encryptedKey: "",
+      };
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(
+          "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+          plugin.id,
+          JSON.stringify(plugin),
+        );
+        for (const session of this.sessions().filter((s) => s.pluginInstanceId === plugin.id))
+          this.saveSession({ ...session, assistantId: input.modelId, pluginName: input.name });
+      });
+      await this.scheduleWechat();
+      return this.publicPlugin(plugin);
+    }
+    if ((kind ?? previous?.pluginId) === "wechatai/roleplay") {
+      const parsed = roleplayInputSchema.safeParse(
+        raw && typeof raw === "object" ? { ...previous, ...raw } : raw,
+      );
+      if (!parsed.success)
+        throw new AppError(
+          "invalid_role",
+          "角色配置无效：" +
+            parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("；"),
+        );
+      const input = parsed.data;
+      this.textAssistant(input.modelId);
+      if (!previous && this.plugins().length >= 20)
+        throw new AppError("plugin_limit", "最多可创建 20 个插件配置", 403);
+      if (
+        this.plugins().some(
+          (p) => p.id !== id && p.shortcut.toLowerCase() === input.shortcut.toLowerCase(),
+        ) ||
+        this.assistants().some((a) => a.shortcut.toLowerCase() === input.shortcut.toLowerCase())
+      )
+        throw new AppError("shortcut_exists", "这个快捷名称已被模型或插件使用");
+      const p: StoredPlugin = {
+        ...input,
+        id: id ?? crypto.randomUUID(),
+        pluginId: "wechatai/roleplay",
+        version: "1.0.0",
+        createdAt: previous?.createdAt ?? Date.now(),
+        encryptedKey: "",
+      };
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(
+          "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
+          p.id,
+          JSON.stringify(p),
+        );
+        // A role owns its story independently of the answer model. Historical
+        // message model IDs remain intact when its configured model changes.
+        for (const s of this.sessions().filter((s) => s.pluginInstanceId === p.id))
+          this.saveSession({ ...s, assistantId: input.modelId, pluginName: input.name });
+      });
       return this.publicPlugin(p);
     }
     if ((kind ?? previous?.pluginId) === "wechatai/image-generation") {
@@ -621,7 +833,7 @@ export class PersonalAccount extends DurableObject<Env> {
       throw new AppError("plugin_type", "插件类型不匹配");
     const input = webResearchInputSchema.parse(raw);
     const pluginId = id ?? crypto.randomUUID();
-    this.assistant(input.modelId);
+    this.textAssistant(input.modelId);
     if (previous && "modelId" in previous && previous.modelId !== input.modelId)
       throw new AppError("plugin_model_identity", "更换模型请创建新插件配置，以保留原会话的归属");
     validateBaseUrl(input.searchEndpoint);
@@ -651,7 +863,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.assistants().some((a) => a.shortcut === input.shortcut)
     )
       throw new AppError("shortcut_exists", "这个快捷名称已被模型或插件使用");
-    this.assistant(input.modelId);
+    this.textAssistant(input.modelId);
     const { apiKey: _key, ...safe } = input;
     const p: StoredPlugin = {
       ...safe,
@@ -671,6 +883,11 @@ export class PersonalAccount extends DurableObject<Env> {
   private activatePlugin(id: string, connectionId = this.selectedLink()) {
     this.busy();
     const p = this.plugin(id, true);
+    if (p.pluginId === "wechatai/notification")
+      throw new AppError(
+        "receive_only",
+        "消息提醒通过 HTTP 接收推送，无需 /use 进入；配置入口在网页插件页面",
+      );
     if (this.links().length) this.requireLink(connectionId, true);
     const s = this.sessions(connectionId).find((s) => s.pluginInstanceId === id && !s.archived);
     if (s) {
@@ -691,16 +908,19 @@ export class PersonalAccount extends DurableObject<Env> {
     const currentId = this.linkSetting(connectionId, "current", "");
     const sessions = this.sessions(connectionId);
     const current = sessions.find((s) => s.id === currentId);
-    if (current && !current.pluginInstanceId) return current;
+    const models = this.assistants().filter((a) => modelKind(a) === "text");
+    if (current && !current.pluginInstanceId && models.some((a) => a.id === current.assistantId))
+      return current;
     const previous = this.linkSetting(connectionId, "lastPlainSession", "");
-    const plain = sessions.filter((s) => !s.pluginInstanceId && !s.archived);
+    const plain = sessions.filter(
+      (s) => !s.pluginInstanceId && !s.archived && models.some((a) => a.id === s.assistantId),
+    );
     const target = plain.find((s) => s.id === previous) ?? plain[0];
     if (target) {
       this.selectSession(target);
       return target;
     }
-    const model =
-      this.assistants().find((a) => a.id === current?.assistantId) ?? this.assistants()[0];
+    const model = models.find((a) => a.id === current?.assistantId) ?? models[0];
     if (!model) {
       this.setLinkSetting(connectionId, "current", "");
       return null;
@@ -748,6 +968,132 @@ export class PersonalAccount extends DurableObject<Env> {
     const { encryptedKey: _secret, keyContext: _binding, ...visible } = channel;
     return visible;
   }
+  async kimiseek(command: KimiseekCommand): Promise<string> {
+    try {
+      const data =
+        command.action === "start"
+          ? this.beginKimiseek(command.operation)
+          : command.action === "status"
+            ? this.kimiseekFlow(command.id)
+            : command.action === "claim"
+              ? this.claimKimiseek(command.id)
+              : command.action === "complete"
+                ? await this.completeKimiseek(command.id, command.result)
+                : command.action === "fail"
+                  ? this.failKimiseek(command.id, command.message)
+                  : await this.kimiseekBalance(command.identity);
+      return JSON.stringify({ ok: true, data: data ?? null });
+    } catch (e) {
+      return JSON.stringify({
+        ok: false,
+        error: e instanceof AppError ? e.code : "kimiseek_failed",
+        message: e instanceof AppError ? e.message : "KimiSeek 关联未完成，请稍后重试",
+        status: e instanceof AppError ? e.status : 500,
+      });
+    }
+  }
+  private beginKimiseek(operation: "connect" | "recharge") {
+    if (operation === "connect") this.busy();
+    kimiseekConfig(this.env);
+    const channel = this.channels().find((c) => c.integration === "kimiseek");
+    if (operation === "recharge" && !channel)
+      throw new AppError("not_linked", "请先一键导入 KimiSeek");
+    if (!channel && this.channels().length >= this.limits().channels)
+      throw new AppError("channel_limit", "已达到当前会员的渠道数量上限", 403);
+    const previous = this.getSetting<KimiseekFlow | null>("kimiseekFlow", null);
+    if (previous?.status === "working" && previous.expires > Date.now())
+      throw new AppError("connect_busy", "正在关联 KimiSeek，请稍候", 409);
+    const flow: KimiseekFlow = {
+      id: integrationNonce(),
+      operation,
+      expires: Date.now() + 300000,
+      status: "pending",
+    };
+    this.setSetting("kimiseekFlow", flow);
+    return flow;
+  }
+  private kimiseekFlow(id: string) {
+    const flow = this.getSetting<KimiseekFlow | null>("kimiseekFlow", null);
+    if (!flow || flow.id !== id)
+      throw new AppError("flow_missing", "关联请求不存在，请重新点击导入", 404);
+    if (flow.expires < Date.now() && ["pending", "working"].includes(flow.status))
+      return { ...flow, status: "failed" as const, message: "关联已超时，请重新点击导入" };
+    return flow;
+  }
+  private claimKimiseek(id: string) {
+    const flow = this.kimiseekFlow(id);
+    if (flow.status !== "pending")
+      throw new AppError("flow_expired", "关联请求已处理或已过期，请重新操作", 409);
+    this.setSetting("kimiseekFlow", { ...flow, status: "working" });
+    return flow;
+  }
+  private failKimiseek(id: string, message: string) {
+    const flow = this.getSetting<KimiseekFlow | null>("kimiseekFlow", null);
+    if (flow?.id === id && flow.status === "working")
+      this.setSetting("kimiseekFlow", { ...flow, status: "failed", message });
+  }
+  private async completeKimiseek(id: string, raw: KimiseekResponse) {
+    const flow = this.kimiseekFlow(id);
+    if (flow.status !== "working") throw new AppError("flow_expired", "关联请求已失效", 409);
+    const result = kimiseekResponseSchema.parse(raw);
+    let channel = this.channels().find((c) => c.integration === "kimiseek");
+    const previous = channel;
+    if (flow.operation === "connect") {
+      if (!result.apiKey) throw new AppError("key_missing", "KimiSeek 未返回可用密钥", 502);
+      channel = await this.prepareChannel(channel?.id, {
+        name: channel?.name ?? "KimiSeek",
+        description: channel?.description ?? "国产大模型 · KimiSeek",
+        protocol: "chat-completions",
+        baseUrl: kimiseekConfig(this.env).apiUrl,
+        color: channel?.color ?? "sage",
+        apiKey: result.apiKey,
+      });
+      channel.integration = "kimiseek";
+    }
+    if (!channel) throw new AppError("channel_missing", "关联渠道已被删除，请重新导入", 409);
+    if (
+      this.kimiseekFlow(id).status !== "working" ||
+      JSON.stringify(this.channels().find((c) => c.integration === "kimiseek")) !==
+        JSON.stringify(previous)
+    )
+      throw new AppError("channel_changed", "渠道已被修改，请重新关联", 409);
+    return this.ctx.storage.transactionSync(() => {
+      this.writeChannel(channel!);
+      const models = [
+        ...new Map(
+          (result.models ?? [])
+            .map(parseAvailableModel)
+            .filter((m): m is AvailableModel => m !== null)
+            .map((m) => [m.id, m]),
+        ).values(),
+      ];
+      const imported =
+        flow.operation === "connect"
+          ? this.importCatalog(channel!, models, (result.models?.length ?? 0) - models.length)
+          : null;
+      const message = imported
+        ? `已关联 KimiSeek，导入 ${imported.imported} 个模型${imported.existing ? `，${imported.existing} 个已存在` : ""}${imported.limited ? `，${imported.limited} 个因数量上限未导入` : ""}`
+        : "已打开 KimiSeek 充值页面";
+      this.setSetting("kimiseekBalance", result.balance);
+      this.setSetting("kimiseekFlow", {
+        ...flow,
+        status: "complete",
+        channelId: channel!.id,
+        message,
+      });
+      return { channelId: channel!.id, message };
+    });
+  }
+  private async kimiseekBalance(identity: KimiseekIdentity) {
+    this.identify(identity.id);
+    if (!this.channels().some((c) => c.integration === "kimiseek"))
+      throw new AppError("not_linked", "请先关联 KimiSeek", 404);
+    const cached = this.getSetting<KimiseekResponse["balance"] | null>("kimiseekBalance", null);
+    if (cached && cached.checkedAt > Date.now() - 15000) return cached;
+    const result = await kimiseekRequest(this.env, identity, "balance");
+    this.setSetting("kimiseekBalance", result.balance);
+    return result.balance;
+  }
   private assistants() {
     const channels = new Map(this.channels().map((c) => [c.id, c]));
     return this.sql
@@ -768,6 +1114,16 @@ export class PersonalAccount extends DurableObject<Env> {
     const a = this.assistants().find((a) => a.id === id);
     if (!a) throw new AppError("assistant_missing", "找不到这个模型配置", 404);
     return a;
+  }
+  private textAssistant(id: string | null) {
+    const model = this.assistant(id);
+    if (modelKind(model) !== "text")
+      throw new AppError(
+        "model_type",
+        "该模型不能用于文字对话，请选择文本模型；生图模型请在 AI 生图插件中使用",
+        422,
+      );
+    return model;
   }
   private sessions(connectionId?: string) {
     return this.sql
@@ -860,27 +1216,382 @@ export class PersonalAccount extends DurableObject<Env> {
       return id;
     });
   }
+  private notificationPlugin(id: string, usable = true) {
+    const p = this.plugin(id, usable);
+    if (p.pluginId !== "wechatai/notification")
+      throw new AppError("plugin_type", "不是消息提醒插件");
+    return p;
+  }
+  private async flushNotificationSchedule() {
+    if (!this.notifications.pendingSync()) return;
+    const schedule = this.notifications.schedule();
+    try {
+      const schedulers = this.env.REMINDERS as DurableObjectNamespace<ReminderScheduler>;
+      await schedulers
+        .getByName(`${this.ctx.id}:notifications`)
+        .synchronizeNotifications(this.ctx.id.toString(), schedule);
+      this.notifications.acknowledge(schedule.revision);
+    } catch {
+      // Saved queue + schedule outbox survive application deployments. The account
+      // alarm retries registration; delivery uses a separate scheduler instance.
+      await this.scheduleRecovery();
+      console.warn(JSON.stringify({ event: "notification.schedule_pending" }));
+    }
+  }
+  // Internal preflight for the HTTP account quota. HMAC validity alone does not
+  // prove that a credential is still active after rotation or revocation.
+  notificationCredentialValid(pluginId: string, credential: string): boolean {
+    try {
+      this.notifications.authorize(pluginId, credential);
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === "invalid_token") return false;
+      throw error;
+    }
+  }
+  // Internal RPC. Revalidate the secret: it may have been revoked since the
+  // edge preflight. No cookie session or model access is granted.
+  async notificationRequest(
+    pluginId: string,
+    credential: string,
+    action: "send" | "status",
+    raw: unknown,
+    key = "",
+  ): Promise<string> {
+    try {
+      this.notifications.authorize(pluginId, credential);
+      let plugin = this.notificationPlugin(pluginId);
+      if (action === "status") {
+        if (typeof raw !== "string" || !/^[a-f0-9-]{36}$/.test(raw))
+          throw new AppError("invalid_id", "无效的消息 ID");
+        const receipt = this.notifications.receipt(pluginId, raw);
+        if (!receipt)
+          throw new AppError("notification_missing", "消息不存在或已超过 7 天保留期", 404);
+        return JSON.stringify({ ok: true, data: receipt });
+      }
+      const parsed = notificationMessageSchema.safeParse(raw);
+      if (!parsed.success)
+        throw new AppError(
+          "invalid_message",
+          "请提供 text（1–4000 字）和可选 title（最多 120 字），或飞书文字消息格式",
+        );
+      if (key && !/^[A-Za-z0-9._:-]{1,120}$/.test(key))
+        throw new AppError(
+          "invalid_idempotency_key",
+          "Idempotency-Key 需为 1–120 位字母、数字或 . _ : -",
+        );
+      const dedupe = key || crypto.randomUUID();
+      const existing = this.notifications.existing(pluginId, dedupe, parsed.data);
+      if (existing) {
+        await this.flushNotificationSchedule();
+        return JSON.stringify({
+          ok: true,
+          data: { id: existing.id, status: existing.state, duplicate: true },
+        });
+      }
+      // Persist a recovery alarm before accepting new work, then revalidate all
+      // mutable permissions after that await.
+      await this.scheduleRecovery();
+      this.notifications.authorize(pluginId, credential);
+      plugin = this.notificationPlugin(pluginId);
+      this.requireLink(plugin.connectionId, true);
+      const connection = this.connection(plugin.connectionId);
+      if (connection.status !== "connected" || !connection.encryptedCredentials)
+        throw new AppError("wechat_not_connected", "接收微信尚未连接，请先扫码连接", 409);
+      if (!connection.contextToken)
+        throw new AppError(
+          "wechat_context_required",
+          "请先在接收微信的对话中发送一条消息，再调用推送接口",
+          409,
+        );
+      const { job, duplicate } = this.notifications.enqueue(
+        pluginId,
+        dedupe,
+        parsed.data,
+        plugin.connectionId,
+        connection.generation,
+      );
+      await this.flushNotificationSchedule();
+      return JSON.stringify({ ok: true, data: { id: job.id, status: job.state, duplicate } });
+    } catch (error) {
+      return JSON.stringify({
+        ok: false,
+        error: error instanceof AppError ? error.code : "notification_error",
+        message:
+          error instanceof AppError
+            ? error.message
+            : "消息暂未处理，请使用相同 Idempotency-Key 重试",
+        status: error instanceof AppError ? error.status : 503,
+      });
+    }
+  }
+  async dispatchNotifications(): Promise<ReminderSchedule> {
+    const delivery = (this.notificationDelivery ??= this.deliverNotifications());
+    try {
+      await delivery;
+      return this.notifications.schedule();
+    } finally {
+      if (this.notificationDelivery === delivery) this.notificationDelivery = null;
+    }
+  }
+  private async deliverNotifications() {
+    for (const job of this.notifications.due()) {
+      if (Date.now() - job.createdAt >= 86400000) {
+        this.notifications.finish(job.id, "failed", "超过 24 小时未送达");
+        continue;
+      }
+      const plugin = this.plugins().find((p) => p.id === job.pluginId);
+      if (
+        !plugin ||
+        plugin.pluginId !== "wechatai/notification" ||
+        !plugin.enabled ||
+        plugin.connectionId !== job.connectionId
+      ) {
+        this.notifications.finish(job.id, "failed", "插件已停用、删除或接收微信已更改");
+        continue;
+      }
+      const link = this.connection(job.connectionId);
+      if (
+        link.generation !== job.generation ||
+        !this.links().some((l) => l.id === job.connectionId)
+      ) {
+        this.notifications.finish(job.id, "failed", "微信绑定已更改，请通过新的请求重新发送");
+        continue;
+      }
+      if (this.plan() !== "plus" || !this.linkEnabled(job.connectionId)) {
+        this.notifications.retry(job.id, "Plus 会员已到期，续费后继续投递", 60000);
+        continue;
+      }
+      if (link.status !== "connected" || !link.encryptedCredentials || !link.contextToken) {
+        this.notifications.retry(job.id, "请连接微信并在对话中发送一条消息", 60000);
+        continue;
+      }
+      if (!this.notifications.claim(job.id)) continue;
+      try {
+        const credentials = JSON.parse(
+          await decrypt(this.env, link.encryptedCredentials, `${this.ctx.id}:wechat`),
+        ) as WxCredentials;
+        const current = this.notifications.get(job.id);
+        const latest = this.notificationPlugin(job.pluginId);
+        const target = this.connection(job.connectionId);
+        if (
+          current?.state !== "sending" ||
+          latest.connectionId !== job.connectionId ||
+          target.generation !== job.generation ||
+          target.status !== "connected" ||
+          !target.contextToken ||
+          !this.linkEnabled(job.connectionId)
+        )
+          continue;
+        const text = `消息来自 ${latest.name.replace(/\s+/g, " ")}（消息提醒插件）。\n\n──────────\n\n${job.title ? `${job.title}\n\n` : ""}${job.text}`;
+        await sendText(credentials, target.contextToken!, `notify:${job.id}`, text, 5000);
+        this.notifications.finish(job.id, "sent");
+      } catch (error) {
+        // Retried sends reuse client_id. Never log the token, message or recipient.
+        this.notifications.retry(
+          job.id,
+          error instanceof AppError ? error.message : "微信发送暂未成功，正在重试",
+          Math.min(300000, 5000 * 2 ** Math.min(job.attempts, 6)),
+        );
+      }
+    }
+  }
+  private personalReminderTarget(plugin: Pick<PersonalAssistantPlugin, "reminderConnectionId">) {
+    const id = plugin.reminderConnectionId;
+    if (!id || !this.links().some((l) => l.id === id) || !this.linkEnabled(id)) return null;
+    const link = this.connection(id);
+    return link.status === "connected" ? { connectionId: id, generation: link.generation } : null;
+  }
+  private async flushReminderSchedule(force = false) {
+    if (!force && !this.personalRecords.schedulePending()) return true;
+    const schedule = this.personalRecords.schedule();
+    try {
+      // Wrangler cannot infer the class of an external Worker DO binding.
+      const schedulers = this.env.REMINDERS as DurableObjectNamespace<ReminderScheduler>;
+      await schedulers
+        .getByName(this.ctx.id.toString())
+        .synchronize(this.ctx.id.toString(), schedule);
+      this.personalRecords.acknowledgeSchedule(schedule.revision);
+      return !this.personalRecords.schedulePending();
+    } catch {
+      // This outbox is committed with the records and survives a deployment even
+      // if the scheduler's acknowledgement is lost. Replaying is idempotent.
+      console.warn(JSON.stringify({ event: "personal.reminder_schedule_pending" }));
+      return false;
+    }
+  }
+  private async requireReminderSchedule(force = false) {
+    if (!(await this.flushReminderSchedule(force)))
+      throw new AppError(
+        "reminder_sync_pending",
+        "记录已保存，提醒调度正在重试同步，请勿重复创建；可稍后在个人助理中查询状态",
+        503,
+      );
+  }
+  // Internal RPC used only by the separately deployed reminder scheduler. It can
+  // run during a slow chat alarm and never invokes a model or consumes credits.
+  async dispatchPersonalReminders(): Promise<ReminderSchedule> {
+    const delivery = (this.reminderDelivery ??= this.deliverPersonalReminders());
+    try {
+      await delivery;
+      return this.personalRecords.schedule();
+    } finally {
+      if (this.reminderDelivery === delivery) this.reminderDelivery = null;
+    }
+  }
+  // Also used to migrate existing account schedules without modifying reminders.
+  async registerPersonalReminders(): Promise<ReminderSchedule> {
+    await this.requireReminderSchedule(true);
+    return this.personalRecords.schedule();
+  }
+  private async deliverPersonalReminders() {
+    for (const reminder of this.personalRecords.due()) {
+      const plugin = this.plugins().find((p) => p.id === reminder.pluginId);
+      if (!plugin || plugin.pluginId !== "wechatai/personal-assistant") {
+        this.personalRecords.defer(reminder, "blocked", "助理配置已删除");
+        continue;
+      }
+      if (Date.now() - reminder.dueAt > 86400000) {
+        this.personalRecords.finish(reminder, false);
+        continue;
+      }
+      if (this.plan() !== "plus" || !plugin.enabled) {
+        this.personalRecords.defer(reminder, "paused", "助理已停用或 Plus 已到期");
+        continue;
+      }
+      if (
+        plugin.reminderConnectionId !== reminder.connectionId ||
+        !this.links().some((l) => l.id === reminder.connectionId)
+      ) {
+        this.personalRecords.defer(reminder, "blocked", "提醒链接已变更，请重新设置提醒时间");
+        continue;
+      }
+      const link = this.connection(reminder.connectionId);
+      if (link.generation !== reminder.generation) {
+        this.personalRecords.defer(reminder, "blocked", "微信已重新绑定，请重新设置提醒时间");
+        continue;
+      }
+      if (
+        !this.linkEnabled(reminder.connectionId) ||
+        link.status !== "connected" ||
+        !link.encryptedCredentials
+      ) {
+        this.personalRecords.defer(reminder, "paused", "微信未连接");
+        continue;
+      }
+      if (!link.contextToken) {
+        this.personalRecords.defer(reminder, "waiting_context", "请先在微信发送一条消息");
+        continue;
+      }
+      const record = this.personalRecords.get(plugin.id, reminder.recordId);
+      if (record.kind !== "reminder" || !record.reminderEnabled) {
+        this.personalRecords.finish(reminder, true);
+        continue;
+      }
+      // Persist the delivery lease before I/O. Retries reuse one occurrence ID.
+      this.personalRecords.defer(reminder, "retry", "正在发送提醒", 30000);
+      try {
+        const credentials = JSON.parse(
+          await decrypt(this.env, link.encryptedCredentials, `${this.ctx.id}:wechat`),
+        ) as WxCredentials;
+        const latest = this.connection(reminder.connectionId);
+        if (
+          latest.generation !== reminder.generation ||
+          this.personalRecords.get(plugin.id, record.id).revision !== reminder.revision
+        )
+          continue;
+        const latestPlugin = this.plugin(plugin.id);
+        if (
+          this.plan() !== "plus" ||
+          !latestPlugin.enabled ||
+          latestPlugin.pluginId !== "wechatai/personal-assistant" ||
+          latestPlugin.reminderConnectionId !== reminder.connectionId
+        )
+          continue;
+        const reminderText =
+          record.reminderType === "daily_tasks"
+            ? dailyTasksMessage(this.personalRecords, plugin.id, reminder.dueAt)
+            : `⏰ 提醒\n\n${record.title}\n时间：${beijingTime(reminder.dueAt)}（北京时间）${record.content ? `\n\n${record.content.slice(0, 500)}` : ""}`;
+        if (!reminderText) {
+          this.personalRecords.finish(reminder, true);
+          continue;
+        }
+        const text = pluginNotificationText(personalAssistantManifest, plugin, reminderText);
+        await sendText(
+          credentials,
+          latest.contextToken!,
+          `personal:${reminder.id}:${reminder.dueAt}`,
+          text,
+          5000,
+        );
+        this.personalRecords.finish(reminder, true);
+        console.info(
+          JSON.stringify({
+            event: "personal.reminder_delivered",
+            reminderId: reminder.id,
+            dueAt: reminder.dueAt,
+            delayMs: Math.max(0, Date.now() - reminder.dueAt),
+            attempts: reminder.attempts + 1,
+          }),
+        );
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            event: "personal.reminder_delivery_failed",
+            reminderId: reminder.id,
+            dueAt: reminder.dueAt,
+            delayMs: Math.max(0, Date.now() - reminder.dueAt),
+            attempts: reminder.attempts + 1,
+            code:
+              error instanceof AppError
+                ? error.code
+                : error instanceof Error
+                  ? error.name
+                  : "unknown",
+          }),
+        );
+        this.personalRecords.defer(
+          reminder,
+          reminder.attempts >= 4 ? "waiting_context" : "retry",
+          reminder.attempts >= 4
+            ? "发送暂未成功，可先在微信发送一条消息以更新连接"
+            : "微信发送失败，稍后重试",
+          Math.min(60000, 5000 * 2 ** Math.min(4, reminder.attempts)),
+        );
+      }
+    }
+  }
+  private async scheduleRecovery() {
+    // Deployments can terminate an alarm before its finally block runs. Persist a
+    // short recovery wakeup, independent of the model's much longer execution lock.
+    // Alarms never overlap, so this does not interrupt an in-flight model call.
+    const now = Date.now();
+    const current = await this.ctx.storage.getAlarm();
+    await this.ctx.storage.setAlarm(
+      Math.max(now + 1000, Math.min(now + 30000, current ?? Infinity)),
+    );
+  }
   private async scheduleWechat() {
     this.attachments.expire();
     const links = this.links()
       .slice(0, this.limits().connections)
       .map((l) => this.connection(l.id))
       .filter((l) => ["connected", "waiting", "scanned"].includes(l.status));
+    const wakeups = [
+      this.attachments.nextExpiry(),
+      this.media.nextExpiry(),
+      this.personalRecords.schedulePending() ? Date.now() + 1000 : null,
+      this.notifications.pendingSync() ? Date.now() + 1000 : null,
+    ].filter((v): v is number => v !== null);
     if (links.length) {
       const hasReply =
         this.sql.exec("SELECT id FROM inbox WHERE state = 'reply' LIMIT 1").toArray().length > 0;
-      await this.ctx.storage.setAlarm(
-        Date.now() + (links.every((l) => l.error) ? 15000 : hasReply ? 100 : 1000),
-      );
-    } else if (this.referralPending()) await this.ctx.storage.setAlarm(Date.now() + 60000);
-    else {
-      const expiries = [this.attachments.nextExpiry(), this.media.nextExpiry()].filter(
-        (v): v is number => v !== null,
-      );
-      const expires = expiries.length ? Math.min(...expiries) : null;
-      if (expires !== null) await this.ctx.storage.setAlarm(Math.max(Date.now() + 1000, expires));
-      else await this.ctx.storage.deleteAlarm();
+      wakeups.push(Date.now() + (links.every((l) => l.error) ? 15000 : hasReply ? 100 : 1000));
     }
+    if (this.referralPending()) wakeups.push(Date.now() + 60000);
+    if (wakeups.length)
+      await this.ctx.storage.setAlarm(Math.max(Date.now() + 100, Math.min(...wakeups)));
+    else await this.ctx.storage.deleteAlarm();
   }
   private async disconnectLink(id: string, remove = false) {
     this.requireLink(id);
@@ -1029,13 +1740,80 @@ export class PersonalAccount extends DurableObject<Env> {
         throw new AppError("plugin_type", "插件类型不匹配", 403);
       if (action === "snapshot") data = this.snapshot();
       else if (action === "plugin.list") data = this.plugins().map((p) => this.publicPlugin(p));
-      else if (action === "plugin.save")
+      else if (
+        ["notification.status", "notification.token", "notification.revoke"].includes(action)
+      ) {
+        const plugin = this.plugin(String(p.id));
+        if (plugin.pluginId !== "wechatai/notification")
+          throw new AppError("plugin_type", "不是消息提醒插件");
+        const endpoint = new URL("/api/notify", this.env.APP_URL).href;
+        if (action === "notification.token") {
+          this.requirePluginPlus();
+          const result = createNotificationToken(this.env, this.ctx.id.toString(), plugin.id);
+          this.notifications.rotate(plugin.id, result.hash);
+          data = { token: result.token, endpoint };
+        } else if (action === "notification.revoke") {
+          this.notifications.revoke(plugin.id);
+          await this.flushNotificationSchedule();
+          data = { ok: true };
+        } else
+          data = {
+            endpoint,
+            hasToken: this.notifications.hasToken(plugin.id),
+            deliveries: this.notifications.receipts(plugin.id),
+          };
+      } else if (action.startsWith("personal.")) {
+        const plugin = this.plugin(String(p.pluginId));
+        if (plugin.pluginId !== "wechatai/personal-assistant")
+          throw new AppError("plugin_type", "不是个人助理配置");
+        if (action === "personal.list") data = this.personalRecords.query(plugin.id, p.query ?? {});
+        else {
+          this.busy();
+          if (action === "personal.save") {
+            this.requirePluginPlus();
+            if (!plugin.enabled)
+              throw new AppError("plugin_disabled", "请先启用个人助理再编辑记录", 403);
+          }
+          const draft = this.personalRecords.draft(
+            plugin.id,
+            !!this.personalReminderTarget(plugin),
+            plugin.currency,
+          );
+          if (action === "personal.save")
+            data = draft.save(
+              p.record,
+              typeof p.recordId === "string" ? p.recordId : undefined,
+              typeof p.revision === "number" ? p.revision : undefined,
+            );
+          else if (action === "personal.delete")
+            data = draft.remove(String(p.recordId), Number(p.revision));
+          else throw new AppError("not_found", "未知记录操作", 404);
+          this.ctx.storage.transactionSync(() =>
+            this.personalRecords.commit(
+              plugin.id,
+              draft.changes,
+              this.personalReminderTarget(plugin),
+              "web",
+            ),
+          );
+          this.wechatWakeVersion++;
+          for (const poll of this.wechatPolls) poll.abort();
+          await this.scheduleWechat();
+          await this.requireReminderSchedule();
+        }
+      } else if (action === "plugin.save")
         data = await this.savePlugin(typeof p.id === "string" ? p.id : undefined, p);
       else if (action === "plugin.delete") {
         this.busy();
         this.plugin(String(p.id));
         this.claw.revoke(String(p.id));
+        this.notifications.revoke(String(p.id));
+        this.personalRuns.cancelPlugin(String(p.id));
+        this.personalRecords.deletePlugin(String(p.id));
         this.sql.exec("DELETE FROM plugins WHERE id = ?", String(p.id));
+        await this.scheduleWechat();
+        await this.flushReminderSchedule();
+        await this.flushNotificationSchedule();
         data = this.snapshot();
       } else if (action === "plugin.clawPair" || action === "plugin.hermesPair") {
         const pairing = this.claw.createPairing(String(p.id), this.ctx.id.toString());
@@ -1084,6 +1862,8 @@ export class PersonalAccount extends DurableObject<Env> {
         );
       else if (action === "plugin.test") {
         const plugin = this.plugin(String(p.id), true);
+        if (plugin.pluginId === "wechatai/notification")
+          throw new AppError("receive_only", "请使用消息提醒配置页中的 HTTP 示例测试推送");
         if (isRemoteAgent(plugin))
           return JSON.stringify({
             ok: true,
@@ -1181,14 +1961,73 @@ export class PersonalAccount extends DurableObject<Env> {
           .toArray()
           .reverse()
           .map((m) => ({ ...m, estimated: Boolean(m.estimated) }));
+      } else if (action === "session.summary" || action === "session.summary.save") {
+        this.requirePlus();
+        const s = this.session(String(p.id));
+        const role = this.plugins().find((p) => p.id === s.pluginInstanceId);
+        if (role?.pluginId !== "wechatai/roleplay")
+          throw new AppError("role_session_required", "只有角色会话支持编辑剧情摘要");
+        const current = this.sql
+          .exec<SessionSummary>(
+            "SELECT text,throughId,updatedAt FROM context_summaries WHERE sessionId = ?",
+            s.id,
+          )
+          .toArray()[0];
+        if (action === "session.summary.save") {
+          this.busy();
+          if (
+            p.updatedAt !== (current?.updatedAt ?? 0) ||
+            p.contextStart !== s.contextStart ||
+            p.resetAt !== s.resetAt
+          )
+            throw new AppError("summary_changed", "摘要或会话已变更，请重新打开后编辑", 409);
+          if (typeof p.text !== "string" || p.text.length > 12000)
+            throw new AppError("invalid_summary", "剧情摘要最多 12000 字符");
+          const text = p.text.trim();
+          const a = this.assistant(role.modelId);
+          if (
+            text &&
+            inputTokens(roleplayPrompt(role, [], 0).systemPrompt, [
+              { role: "user", content: text },
+            ]) >
+              modelInputBudget(a) * 0.8
+          )
+            throw new AppError(
+              "summary_too_long",
+              "摘要与角色设定过长，请精简内容，为新消息预留空间",
+              422,
+            );
+          this.sql.exec(
+            "INSERT INTO context_summaries VALUES (?, ?, ?, ?) ON CONFLICT(sessionId) DO UPDATE SET text = excluded.text, throughId = excluded.throughId, updatedAt = excluded.updatedAt",
+            s.id,
+            text,
+            current?.throughId ?? s.contextStart,
+            Math.max(Date.now(), (current?.updatedAt ?? 0) + 1),
+          );
+        }
+        data = {
+          ...(this.sql
+            .exec<SessionSummary>(
+              "SELECT text,throughId,updatedAt FROM context_summaries WHERE sessionId = ?",
+              s.id,
+            )
+            .toArray()[0] ?? { text: "", throughId: s.contextStart, updatedAt: 0 }),
+          contextStart: s.contextStart,
+          resetAt: s.resetAt,
+        };
       } else if (action === "session.create") {
         this.requirePlus();
         this.busy();
+        const plugin =
+          typeof p.pluginInstanceId === "string"
+            ? this.plugin(p.pluginInstanceId, true)
+            : undefined;
         data = this.createSession(
-          String(p.assistantId),
+          plugin ? ("modelId" in plugin ? plugin.modelId : null) : String(p.assistantId),
           typeof p.title === "string" ? p.title : "新的对话",
           false,
           typeof p.connectionId === "string" ? p.connectionId : this.selectedLink(),
+          plugin?.id,
         );
       } else if (action === "session.action") {
         this.requirePlus();
@@ -1204,6 +2043,7 @@ export class PersonalAccount extends DurableObject<Env> {
           for (const session of this.sessions()) this.claw.cancelSession(session.id);
           this.sql.exec("DELETE FROM sessions");
           this.sql.exec("DELETE FROM context_summaries");
+          this.personalRecords.forgetContextChanges();
           this.sql.exec("DELETE FROM runs");
           this.sql.exec("DELETE FROM pending_attachments");
           this.revokeMedia();
@@ -1233,6 +2073,7 @@ export class PersonalAccount extends DurableObject<Env> {
           action === "wechat.delete",
         );
       } else throw new AppError("not_found", "没有这个操作", 404);
+      this.personalRuns.prune();
       return JSON.stringify({ ok: true, data });
     } catch (error) {
       if (error instanceof AppError)
@@ -1270,7 +2111,7 @@ export class PersonalAccount extends DurableObject<Env> {
   ): Promise<StoredChannel> {
     this.busy();
     const previous = id ? this.channel(id) : undefined;
-    const baseUrl = validateBaseUrl(input.baseUrl, this.env.LLM_ALLOWED_HOSTS);
+    const baseUrl = validateModelBaseUrl(this.env, input.baseUrl);
     if (!previous && !input.apiKey?.trim()) throw new AppError("key_required", "请输入 API Key");
     const channelId = id ?? crypto.randomUUID();
     const { apiKey, ...fields } = input;
@@ -1287,6 +2128,9 @@ export class PersonalAccount extends DurableObject<Env> {
       throw new AppError("channel_limit", "已达到当前会员的渠道数量上限", 403);
     return {
       ...fields,
+      ...(previous?.integration && baseUrl === previous.baseUrl && !apiKey?.trim()
+        ? { integration: previous.integration }
+        : {}),
       baseUrl,
       id: channelId,
       createdAt: previous?.createdAt ?? Date.now(),
@@ -1331,34 +2175,64 @@ export class PersonalAccount extends DurableObject<Env> {
     // External I/O allows other requests to edit/delete channels or add models.
     if (JSON.stringify(this.channel(id)) !== JSON.stringify(channel))
       throw new AppError("channel_changed", "渠道已被更新，请重新获取模型", 409);
-    return this.ctx.storage.transactionSync(() => {
-      const existing = new Set(
-        this.assistants()
-          .filter((a) => a.channelId === id)
-          .map((a) => a.model),
+    return this.ctx.storage.transactionSync(() =>
+      this.importCatalog(channel, catalog.models, catalog.invalid),
+    );
+  }
+  private importCatalog(
+    channel: StoredChannel,
+    catalog: AvailableModel[],
+    invalid: number,
+  ): ModelImportResult {
+    const id = channel.id;
+    // Backfill legacy classifications, while preserving the user's explicit choice.
+    for (const model of this.assistants().filter((a) => a.channelId === id && !a.kind)) {
+      const available = catalog.find((m) => m.id === model.model);
+      if (!available) continue;
+      const stored = JSON.parse(
+        this.sql.exec<{ data: string }>("SELECT data FROM assistants WHERE id=?", model.id).one()
+          .data,
+      ) as StoredModel;
+      this.sql.exec(
+        "UPDATE assistants SET data=? WHERE id=?",
+        JSON.stringify({ ...stored, kind: available.kind }),
+        model.id,
       );
-      const pending = catalog.models.filter((m) => !existing.has(m.id));
-      const available = Math.max(0, this.limits().modelsPerChannel - existing.size);
-      const importing = pending.slice(0, available);
-      for (const model of importing)
-        this.saveModel(
-          undefined,
-          modelSchema.parse({
-            channelId: id,
-            model: model.id,
-            name: model.name,
-            color: channel.color,
-            ...(model.contextTokens ? { contextTokens: model.contextTokens } : {}),
-          }),
-        );
-      return {
-        total: catalog.models.length,
-        imported: importing.length,
-        existing: catalog.models.length - pending.length,
-        invalid: catalog.invalid,
-        limited: pending.length - importing.length,
-      };
-    });
+    }
+    const existing = new Set(
+      this.assistants()
+        .filter((a) => a.channelId === id)
+        .map((a) => a.model),
+    );
+    const pending = catalog
+      .filter((m) => !existing.has(m.id))
+      .sort((a, b) => Number(a.kind !== "text") - Number(b.kind !== "text"));
+    const available = Math.max(0, this.limits().modelsPerChannel - existing.size);
+    const importing = pending.slice(0, available);
+    for (const model of importing)
+      this.saveModel(
+        undefined,
+        modelSchema.parse({
+          channelId: id,
+          model: model.id,
+          name: model.name,
+          kind: model.kind,
+          color: channel.color,
+          // Small-context models must retain space for input after import.
+          maxOutputTokens: Math.min(
+            DEFAULT_OUTPUT_TOKENS,
+            model.contextTokens ? Math.floor(model.contextTokens / 2) : DEFAULT_OUTPUT_TOKENS,
+          ),
+          ...(model.contextTokens ? { contextTokens: model.contextTokens } : {}),
+        }),
+      );
+    return {
+      total: catalog.length,
+      imported: importing.length,
+      existing: catalog.length - pending.length,
+      invalid,
+      limited: pending.length - importing.length,
+    };
   }
   private saveModel(id: string | undefined, input: ModelInput) {
     this.busy();
@@ -1388,6 +2262,7 @@ export class PersonalAccount extends DurableObject<Env> {
       throw new AppError("shortcut_exists", "这个快捷名称已经被使用");
     const model: StoredModel = {
       ...input,
+      ...(input.kind === undefined && previous?.kind ? { kind: previous.kind } : {}),
       id: id ?? crypto.randomUUID(),
       createdAt: previous?.createdAt ?? Date.now(),
     };
@@ -1396,11 +2271,15 @@ export class PersonalAccount extends DurableObject<Env> {
       model.id,
       JSON.stringify(model),
     );
-    if (!this.linkSetting(this.selectedLink(), "current", "")) this.createSession(model.id);
+    if (!this.linkSetting(this.selectedLink(), "current", "") && modelKind(model) === "text")
+      this.createSession(model.id);
     return this.publicAssistant(resolveModel(model, channel));
   }
   private deleteModels(ids: string[]) {
-    for (const p of this.plugins().filter((p) => "modelId" in p && ids.includes(p.modelId)))
+    for (const p of this.plugins().filter(
+      (p) =>
+        p.pluginId !== "wechatai/personal-assistant" && "modelId" in p && ids.includes(p.modelId),
+    ))
       this.sql.exec("DELETE FROM plugins WHERE id = ?", p.id);
     const related = this.sessions().filter(
       (s) => s.assistantId !== null && ids.includes(s.assistantId),
@@ -1422,13 +2301,16 @@ export class PersonalAccount extends DurableObject<Env> {
     for (const connectionId of linkIds) {
       if (!related.some((s) => s.id === this.linkSetting(connectionId, "current", ""))) continue;
       this.setLinkSetting(connectionId, "current", "");
-      const next = this.sessions(connectionId).find((s) => !s.archived);
+      const models = this.assistants().filter((a) => modelKind(a) === "text");
+      const next = this.sessions(connectionId).find(
+        (s) => !s.archived && (s.pluginInstanceId || models.some((a) => a.id === s.assistantId)),
+      );
       if (next) this.selectSession(next);
-      else if (this.assistants()[0])
-        this.createSession(this.assistants()[0].id, "新的对话", true, connectionId);
+      else if (models[0]) this.createSession(models[0].id, "新的对话", true, connectionId);
     }
   }
   private selectSession(session: StoredSession) {
+    if (!session.pluginInstanceId) this.textAssistant(session.assistantId);
     const model = session.assistantId ? this.assistant(session.assistantId) : null;
     const connectionId = session.connectionId ?? DEFAULT_WECHAT_LINK;
     if (this.linkSetting(connectionId, "current", "") !== session.id)
@@ -1447,10 +2329,14 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private activateChannel(id: string, connectionId = this.selectedLink()) {
     this.channel(id);
-    const models = this.assistants().filter((a) => a.channelId === id);
+    const models = this.assistants().filter((a) => a.channelId === id && modelKind(a) === "text");
     const last = this.linkSetting(connectionId, `lastModel:${id}`, "");
     const model = models.find((a) => a.id === last) ?? models[0];
-    if (!model) throw new AppError("channel_empty", "这个渠道还没有模型，请先在网页添加模型");
+    if (!model)
+      throw new AppError(
+        "channel_empty",
+        "这个渠道还没有文本模型，请先添加；生图模型请在 AI 生图插件中使用",
+      );
     return this.activateAssistant(model.id, connectionId);
   }
   private createSession(
@@ -1460,8 +2346,13 @@ export class PersonalAccount extends DurableObject<Env> {
     connectionId = this.selectedLink(),
     pluginInstanceId?: string,
   ) {
-    if (assistantId) this.assistant(assistantId);
     const plugin = pluginInstanceId ? this.plugin(pluginInstanceId, true) : undefined;
+    if (plugin?.pluginId === "wechatai/notification")
+      throw new AppError("receive_only", "消息提醒不创建聊天会话");
+    if (assistantId) {
+      if (plugin?.pluginId === "wechatai/image-generation") this.assistant(assistantId);
+      else this.textAssistant(assistantId);
+    }
     if (!assistantId && !isRemoteAgent(plugin))
       throw new AppError("assistant_missing", "请先选择模型或远程 Agent 插件");
     if (!replacingDeleted && this.links().length) this.requireLink(connectionId, true);
@@ -1480,13 +2371,29 @@ export class PersonalAccount extends DurableObject<Env> {
       messageCount: 0,
       contextStart: 0,
     };
+    if (plugin?.pluginId === "wechatai/roleplay" && plugin.firstMessage) {
+      this.sql.exec(
+        "INSERT INTO messages (sessionId,role,content,createdAt,model) VALUES (?, 'assistant', ?, ?, ?)",
+        s.id,
+        roleVariables(plugin.firstMessage, plugin),
+        Date.now(),
+        "角色开场白",
+      );
+      s.messageCount = 1;
+    }
     this.saveSession(s);
     this.selectSession(s);
     return s;
   }
+  private roleGreeting(s: StoredSession) {
+    const role = this.plugins().find((p) => p.id === s.pluginInstanceId);
+    return role?.pluginId === "wechatai/roleplay" && role.firstMessage
+      ? "\n\n---\n\n" + roleVariables(role.firstMessage, role)
+      : "";
+  }
   private activateAssistant(id: string, connectionId = this.selectedLink()) {
     if (this.links().length) this.requireLink(connectionId, true);
-    this.assistant(id);
+    this.textAssistant(id);
     const s = this.sessions(connectionId).find(
       (s) => s.assistantId === id && !s.pluginInstanceId && !s.archived,
     );
@@ -1520,7 +2427,7 @@ export class PersonalAccount extends DurableObject<Env> {
         .one();
       s.contextStart = r.id;
       this.sql.exec("DELETE FROM context_summaries WHERE sessionId = ?", id);
-      s.resetAt = Date.now();
+      s.resetAt = Math.max(Date.now(), s.resetAt + 1);
     } else if (action === "clear" || action === "delete") {
       this.revokeMedia(s.id);
       this.ctx.storage.transactionSync(() => {
@@ -1534,7 +2441,7 @@ export class PersonalAccount extends DurableObject<Env> {
       });
       s.messageCount = 0;
       s.contextStart = 0;
-      s.resetAt = Date.now();
+      s.resetAt = Math.max(Date.now(), s.resetAt + 1);
     } else if (action === "archive") {
       if (
         current &&
@@ -1557,25 +2464,29 @@ export class PersonalAccount extends DurableObject<Env> {
     if (action === "delete") this.sql.exec("DELETE FROM sessions WHERE id = ?", id);
     else this.saveSession(s);
     if (current && (action === "archive" || action === "delete")) {
+      const replacementPlugin =
+        this.plan() === "plus"
+          ? this.plugins().find((p) => p.id === s.pluginInstanceId && p.enabled)
+          : undefined;
+      const textModels = this.assistants().filter((a) => modelKind(a) === "text");
+      const replacementModel = replacementPlugin
+        ? s.assistantId
+        : (textModels.find((a) => a.id === s.assistantId)?.id ?? textModels[0]?.id ?? null);
       if (
         (this.linkEnabled(connectionId) ||
           (!this.links().length && !this.getSetting("legacyLinkDeleted", false))) &&
-        (s.assistantId ||
-          (this.plan() === "plus" &&
-            this.plugins().some((p) => p.id === s.pluginInstanceId && p.enabled)))
+        (replacementModel || isRemoteAgent(replacementPlugin))
       )
         this.createSession(
-          s.assistantId,
+          replacementModel,
           "新的对话",
           action === "delete",
           connectionId,
-          this.plan() === "plus" &&
-            this.plugins().some((p) => p.id === s.pluginInstanceId && p.enabled)
-            ? s.pluginInstanceId
-            : undefined,
+          replacementPlugin?.id,
         );
       else this.setLinkSetting(connectionId, "current", "");
     }
+    this.personalRuns.prune();
     return this.snapshot();
   }
   private async runModel(
@@ -1588,6 +2499,7 @@ export class PersonalAccount extends DurableObject<Env> {
     pluginInstanceId: string | null | undefined = s?.pluginInstanceId,
     attachmentBatch?: { connectionId: string; token: string },
     onImagePending?: (text: string) => Promise<void>,
+    recovery?: PersonalRun,
   ) {
     const existing = this.sql
       .exec<{ status: string; response: string }>(
@@ -1596,12 +2508,26 @@ export class PersonalAccount extends DurableObject<Env> {
       )
       .toArray()[0];
     if (existing) {
-      if (existing.status === "complete")
+      if (existing.status === "complete") {
+        if (
+          this.plugins().some(
+            (p) => p.id === pluginInstanceId && p.pluginId === "wechatai/personal-assistant",
+          )
+        )
+          await this.requireReminderSchedule();
         return JSON.parse(existing.response) as { text: string; cost: number };
-      throw new AppError("interrupted_request", "上一条请求未完成，请重新发送", 409);
+      }
+      if (!recovery || existing.status !== "interrupted")
+        throw new AppError(
+          "interrupted_request",
+          "这条请求因处理进程中断而未完成，本次未扣 credits，请重新发送。",
+          409,
+        );
     }
     this.busy();
     const plugin = pluginInstanceId ? this.plugin(pluginInstanceId, true) : undefined;
+    if (plugin?.pluginId === "wechatai/notification")
+      throw new AppError("receive_only", "消息提醒不创建聊天会话");
     if (isRemoteAgent(plugin)) throw new AppError("plugin_type", "远程 Agent 使用异步渠道");
     if (plugin?.pluginId === "wechatai/image-generation")
       return this.runImage(
@@ -1614,6 +2540,66 @@ export class PersonalAccount extends DurableObject<Env> {
         attachmentBatch,
         onImagePending,
       );
+    this.textAssistant(a.id);
+    const personalDraft =
+      plugin?.pluginId === "wechatai/personal-assistant"
+        ? this.personalRecords.draft(
+            plugin.id,
+            !!this.personalReminderTarget(plugin),
+            plugin.currency,
+          )
+        : undefined;
+    const startedAt = recovery?.startedAt ?? Date.now();
+    const originalMessages = messages;
+    let savedRun = recovery;
+    if (
+      !savedRun &&
+      personalDraft &&
+      plugin?.pluginId === "wechatai/personal-assistant" &&
+      s &&
+      this.sql.exec("SELECT id FROM inbox WHERE id=? AND state='pending'", id).toArray().length
+    )
+      savedRun = {
+        version: 1,
+        modelId: a.id,
+        pluginId: plugin.id,
+        modelConfig: JSON.stringify(a),
+        pluginConfig: JSON.stringify(plugin),
+        sessionId: s.id,
+        connectionId: s.connectionId ?? DEFAULT_WECHAT_LINK,
+        generation: this.connection(s.connectionId ?? DEFAULT_WECHAT_LINK).generation,
+        contextStart: s.contextStart,
+        resetAt: s.resetAt,
+        startedAt,
+        deadline,
+        resumes: 0,
+        outputLimit,
+        reminderTarget: this.personalReminderTarget(plugin),
+        attachmentBatch,
+      };
+    if (plugin?.pluginId === "wechatai/personal-assistant")
+      a = { ...a, systemPrompt: personalAssistantPrompt({ ...plugin, hasKey: true }, startedAt) };
+    let roleRecent: ModelMessage[] = [];
+    if (plugin?.pluginId === "wechatai/roleplay") {
+      const recent = s
+        ? this.sql
+            .exec<HistoryMessage>(
+              "SELECT id,role,content FROM messages WHERE sessionId = ? AND id > ? AND role IN ('user','assistant') ORDER BY id DESC LIMIT 3",
+              s.id,
+              s.contextStart,
+            )
+            .toArray()
+            .reverse()
+        : [];
+      const current = messages[messages.length - 1];
+      roleRecent = [...recent, current];
+      const prepared = roleplayPrompt(
+        plugin,
+        roleRecent,
+        Math.max(0, modelInputBudget(a, outputLimit) - inputTokens("", [current]) - 256),
+      );
+      a = { ...a, systemPrompt: prepared.systemPrompt };
+    }
     // Validate the saved limits even when a test uses a smaller temporary output.
     // Legacy invalid configurations must fail before context preparation or billing.
     assertModelContext(a);
@@ -1626,7 +2612,7 @@ export class PersonalAccount extends DurableObject<Env> {
       );
     const cap = a.maxCredits > 0 ? Math.floor(a.maxCredits * 1000) : Number.MAX_SAFE_INTEGER;
     let summaryCalls = 0;
-    let omitted = false;
+    let omitted = recovery?.omitted ?? false;
     const prompt = messages[messages.length - 1];
     const originalStart = s?.contextStart;
     const assertCurrent = () => {
@@ -1635,17 +2621,27 @@ export class PersonalAccount extends DurableObject<Env> {
         throw new AppError("context_changed", "会话已变更，请重新发送消息", 409);
     };
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec(
-        "INSERT INTO runs (id,sessionId,status,createdAt) VALUES (?, ?, ?, ?)",
-        id,
-        s?.id ?? null,
-        "running",
-        Date.now(),
-      );
+      if (recovery) {
+        this.sql.exec("UPDATE runs SET status='running' WHERE id=? AND status='interrupted'", id);
+        savedRun = { ...recovery, resumes: recovery.resumes + 1 };
+        this.personalRuns.save(id, savedRun);
+      } else {
+        this.sql.exec(
+          "INSERT INTO runs (id,sessionId,status,createdAt) VALUES (?, ?, 'running', ?)",
+          id,
+          s?.id ?? null,
+          startedAt,
+        );
+        if (savedRun) {
+          this.personalRuns.save(id, savedRun);
+          this.personalRuns.write(id, "input", { original: originalMessages });
+        }
+      }
+      if (s) this.sql.exec("UPDATE inbox SET sessionId=? WHERE id=?", s.id, id);
       this.setSetting("busy", { id, time: Date.now() });
     });
     try {
-      await this.ctx.storage.setAlarm(Date.now() + MODEL_RUN_LOCK_MS + 5000);
+      await this.scheduleRecovery();
       const apiKey = await decrypt(this.env, a.encryptedKey, `${this.ctx.id}:${a.keyContext}`);
       const searchKey = plugin?.encryptedKey
         ? await decrypt(this.env, plugin.encryptedKey, `${this.ctx.id}:plugin:${plugin.id}`)
@@ -1654,7 +2650,7 @@ export class PersonalAccount extends DurableObject<Env> {
         assertCurrent();
         if (plugin) this.plugin(plugin.id, true);
         this.setSetting("busy", { id, time: Date.now() });
-        await this.ctx.storage.setAlarm(Date.now() + MODEL_RUN_LOCK_MS + 5000);
+        await this.scheduleRecovery();
       };
       const invoke = async (
         model: StoredAssistant,
@@ -1680,10 +2676,10 @@ export class PersonalAccount extends DurableObject<Env> {
           );
         // Renew the lease before each bounded upstream call, including compaction.
         this.setSetting("busy", { id, time: Date.now() });
-        await this.ctx.storage.setAlarm(Date.now() + MODEL_RUN_LOCK_MS + 5000);
+        await this.scheduleRecovery();
         const result =
-          plugin && !internal
-            ? await invokeWebResearch(
+          plugin?.pluginId === "wechatai/personal-assistant" && !internal
+            ? await invokePersonalAssistant(
                 this.env,
                 model,
                 apiKey,
@@ -1693,25 +2689,68 @@ export class PersonalAccount extends DurableObject<Env> {
                 id,
                 s?.id ?? null,
                 a.maxCredits === 0 ? null : cap,
-                { ...plugin, hasKey: Boolean(plugin.encryptedKey) },
-                searchKey,
+                { ...plugin, hasKey: true },
+                personalDraft!,
                 checkpoint,
+                savedRun
+                  ? {
+                      load: () => this.personalRuns.read<PersonalAssistantProgress>(id, "progress"),
+                      save: (progress) => this.personalRuns.write(id, "progress", progress),
+                    }
+                  : undefined,
               )
-            : await invokeLlmChat(
-                this.env,
-                model,
-                apiKey,
-                input,
-                output,
-                remaining,
-                internal ? `${id}:summary:${summaryCalls}` : id,
-                s?.id ?? null,
-                internal || a.maxCredits === 0 ? null : cap,
-              );
+            : plugin?.pluginId === "wechatai/web-research" && !internal
+              ? await invokeWebResearch(
+                  this.env,
+                  model,
+                  apiKey,
+                  input,
+                  output,
+                  deadline,
+                  id,
+                  s?.id ?? null,
+                  a.maxCredits === 0 ? null : cap,
+                  { ...plugin, hasKey: Boolean(plugin.encryptedKey) },
+                  searchKey,
+                  checkpoint,
+                )
+              : await invokeLlmChat(
+                  this.env,
+                  model,
+                  apiKey,
+                  input,
+                  output,
+                  remaining,
+                  internal ? `${id}:summary:${summaryCalls}` : id,
+                  s?.id ?? null,
+                  internal || a.maxCredits === 0 ? null : cap,
+                  !internal && plugin?.pluginId === "wechatai/roleplay"
+                    ? {
+                        instanceId: plugin.id,
+                        pluginId: roleplayManifest.id,
+                        pluginVersion: roleplayManifest.version,
+                      }
+                    : undefined,
+                );
         assertCurrent();
         return result;
       };
       const prepare = async (budget?: number, force = false) => {
+        if (plugin?.pluginId === "wechatai/roleplay" && budget !== undefined) {
+          a = {
+            ...a,
+            ...roleplayPrompt(
+              plugin,
+              roleRecent,
+              Math.max(
+                0,
+                Math.min(budget, modelInputBudget(a, outputLimit)) -
+                  inputTokens("", [prompt]) -
+                  256,
+              ),
+            ),
+          };
+        }
         if (!s) return messages;
         const summary = this.sql
           .exec<SessionSummary>(
@@ -1736,25 +2775,36 @@ export class PersonalAccount extends DurableObject<Env> {
             );
           history.push(row);
         }
+        // One-off @ calls use the current story, not the target role's session.
+        // Summarization follows the owner of that story, even when another plugin is invoked.
+        const owner = this.plugins().find((p) => p.id === s.pluginInstanceId);
+        const summaryPrompt =
+          owner?.pluginId === "wechatai/roleplay" ? ROLEPLAY_SUMMARY_PROMPT : SUMMARY_PROMPT;
         const prepared = await prepareContext({
           assistant: a,
           history,
           summary,
           current: prompt,
-          budget: plugin
-            ? Math.min(budget ?? Infinity, Math.max(64, modelInputBudget(a, outputLimit) - 2048))
+          budget: ["wechatai/web-research", "wechatai/personal-assistant"].includes(
+            plugin?.pluginId ?? "",
+          )
+            ? Math.min(
+                budget ?? Infinity,
+                Math.max(
+                  64,
+                  modelInputBudget(a, outputLimit) -
+                    2048 -
+                    (personalDraft ? PERSONAL_CONTEXT_TOKENS : 0),
+                ),
+              )
             : budget,
           force,
+          summaryPrompt,
           summarize: async (input, output, throughId) => {
             if (summaryCalls >= 4)
               throw new AppError("summary_limit", "本次上下文整理已达到处理上限");
             summaryCalls++;
-            const result = await invoke(
-              { ...a, systemPrompt: SUMMARY_PROMPT },
-              input,
-              output,
-              true,
-            );
+            const result = await invoke({ ...a, systemPrompt: summaryPrompt }, input, output, true);
             // Compaction is internal work, not a billable plugin result. Persist its
             // cursor even if a later answer fails so successful work is reusable.
             const saved = { text: result.text, throughId, updatedAt: Date.now() };
@@ -1771,12 +2821,30 @@ export class PersonalAccount extends DurableObject<Env> {
         omitted ||= prepared.omitted;
         return prepared.messages;
       };
-      messages = await prepare();
+      const prepareStartedAt = Date.now();
+      const savedInput = recovery
+        ? this.personalRuns.read<PersonalRunInput>(id, "input")
+        : undefined;
+      messages =
+        savedInput?.prepared ??
+        (await prepare(savedRun?.retryBudget, savedRun?.retryBudget !== undefined));
+      const savePrepared = () => {
+        if (!savedRun) return;
+        this.ctx.storage.transactionSync(() => {
+          this.personalRuns.save(id, { ...savedRun!, omitted });
+          this.personalRuns.write(id, "input", { original: originalMessages, prepared: messages });
+        });
+      };
+      savePrepared();
+      const preparedAt = Date.now();
       let result: Awaited<ReturnType<typeof invokeLlmChat>>;
       try {
         result = await invoke(a, messages, outputLimit);
       } catch (error) {
-        if (!(error instanceof ContextLimitError) || !s) throw error;
+        if (!(error instanceof ContextLimitError) || !s || savedRun?.retryBudget !== undefined)
+          throw error;
+        personalDraft?.resetForRetry();
+        this.personalRuns.clearProgress(id);
         // Only a recognized context validation failure gets one answer retry.
         const retryBudget = Math.min(
           inputBudget(a.contextTokens, outputLimit),
@@ -1784,10 +2852,28 @@ export class PersonalAccount extends DurableObject<Env> {
             ? inputBudget(error.window, outputLimit)
             : Math.floor(inputTokens(a.systemPrompt, messages) * 0.5),
         );
+        if (savedRun) {
+          savedRun = { ...savedRun, retryBudget };
+          this.ctx.storage.transactionSync(() => {
+            this.personalRuns.save(id, savedRun!);
+            this.personalRuns.write(id, "input", { original: originalMessages });
+          });
+        }
         messages = await prepare(retryBudget, true);
+        savePrepared();
         result = await invoke(a, messages, outputLimit);
       }
-      return this.ctx.storage.transactionSync(() => {
+      const answeredAt = Date.now();
+      const reply = this.ctx.storage.transactionSync(() => {
+        personalDraft?.assertCurrent();
+        if (plugin?.pluginId === "wechatai/personal-assistant" && personalDraft && s) {
+          this.plugin(plugin.id, true);
+          this.personalRecords.commit(
+            plugin.id,
+            personalDraft.changes,
+            this.personalReminderTarget(plugin),
+          );
+        }
         const units = this.wallet.charge(id, result.units, cap);
         if (attachmentBatch)
           this.attachments.clear(attachmentBatch.connectionId, attachmentBatch.token);
@@ -1802,8 +2888,20 @@ export class PersonalAccount extends DurableObject<Env> {
         this.sql.exec(
           "INSERT INTO platform_metering VALUES (?, ?, ?, ?, ?, ?)",
           id,
-          plugin ? webResearchManifest.id : llmChatManifest.id,
-          plugin ? webResearchManifest.version : llmChatManifest.version,
+          plugin?.pluginId === "wechatai/personal-assistant"
+            ? personalAssistantManifest.id
+            : plugin?.pluginId === "wechatai/roleplay"
+              ? roleplayManifest.id
+              : plugin
+                ? webResearchManifest.id
+                : llmChatManifest.id,
+          plugin?.pluginId === "wechatai/personal-assistant"
+            ? personalAssistantManifest.version
+            : plugin?.pluginId === "wechatai/roleplay"
+              ? roleplayManifest.version
+              : plugin
+                ? webResearchManifest.version
+                : llmChatManifest.version,
           plugin?.id ?? a.id,
           JSON.stringify(meter),
           Date.now(),
@@ -1813,7 +2911,9 @@ export class PersonalAccount extends DurableObject<Env> {
           (result.truncated
             ? "\n\n提示：回复已达到你设置的输出或 credits 上限，已截取可用部分。"
             : "");
-        const reply = { text: result.text + note, cost: units / 1000 };
+        const preview =
+          personalDraft && !s ? "\n\n测试模式：笔记、账目与提醒未保存，也不会发送提醒。" : "";
+        const reply = { text: result.text + note + preview, cost: units / 1000 };
         if (s) {
           this.sql.exec("UPDATE inbox SET sessionId = ? WHERE id = ?", s.id, id);
           this.sql.exec(
@@ -1854,10 +2954,29 @@ export class PersonalAccount extends DurableObject<Env> {
           JSON.stringify(reply),
           id,
         );
+        this.personalRuns.remove(id);
         return reply;
       });
+      const committedAt = Date.now();
+      if (personalDraft?.changes.size && s) await this.requireReminderSchedule();
+      console.info(
+        JSON.stringify({
+          event: "chat.completed",
+          plugin: plugin?.pluginId ?? llmChatManifest.id,
+          protocol: a.protocol,
+          prepareMs: preparedAt - prepareStartedAt,
+          answerMs: answeredAt - preparedAt,
+          commitMs: committedAt - answeredAt,
+          reminderSyncMs: Date.now() - committedAt,
+          summaryCalls,
+        }),
+      );
+      return reply;
     } catch (error) {
-      this.sql.exec("UPDATE runs SET status = 'failed' WHERE id = ?", id);
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec("UPDATE runs SET status = 'failed' WHERE id = ? AND status = 'running'", id);
+        this.personalRuns.remove(id);
+      });
       throw error;
     } finally {
       if (this.getSetting<{ id: string } | null>("busy", null)?.id === id)
@@ -1924,7 +3043,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.setSetting("busy", { id, time: Date.now() });
     });
     try {
-      await this.ctx.storage.setAlarm(Date.now() + MODEL_RUN_LOCK_MS + 5000);
+      await this.scheduleRecovery();
       const key = await decrypt(this.env, model.encryptedKey, `${this.ctx.id}:${model.keyContext}`);
       checkpoint();
       const result = await invokeImageGeneration(
@@ -2096,6 +3215,84 @@ export class PersonalAccount extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(Date.now() + 1000);
     return this.snapshot();
   }
+  private async resumePersonalRun(
+    id: string,
+    connectionId: string,
+    deadline = Date.now() + MODEL_TURN_TIMEOUT_MS,
+  ): Promise<string> {
+    this.busy();
+    try {
+      const saved = this.personalRuns.get(id);
+      if (!saved || saved.version !== 1)
+        throw new AppError(
+          "interrupted_request",
+          "这条请求因处理进程中断而未完成，本次未扣 credits，请重新发送。",
+          409,
+        );
+      if (saved.resumes >= 3 || Date.now() >= saved.deadline - 1000)
+        throw new AppError(
+          "personal_recovery_expired",
+          "个人助理多次中断或等待过久，本轮记录未保存、未扣 credits，请重新发送。",
+          409,
+        );
+      const session = this.session(saved.sessionId);
+      const plugin = this.plugin(saved.pluginId, true);
+      const model = this.assistant(saved.modelId);
+      if (
+        plugin.pluginId !== "wechatai/personal-assistant" ||
+        JSON.stringify(plugin) !== saved.pluginConfig ||
+        JSON.stringify(model) !== saved.modelConfig ||
+        session.archived ||
+        (session.connectionId ?? DEFAULT_WECHAT_LINK) !== connectionId ||
+        saved.connectionId !== connectionId ||
+        session.resetAt !== saved.resetAt ||
+        session.contextStart !== saved.contextStart ||
+        this.linkSetting(connectionId, "current", "") !== session.id ||
+        this.connection(connectionId).generation !== saved.generation ||
+        this.connection(connectionId).status !== "connected" ||
+        JSON.stringify(this.personalReminderTarget(plugin)) !== JSON.stringify(saved.reminderTarget)
+      )
+        throw new AppError(
+          "personal_recovery_changed",
+          "处理中断后，会话、微信链接或助理配置已变更，本轮记录未保存、未扣 credits，请重新发送。",
+          409,
+        );
+      const input = this.personalRuns.read<PersonalRunInput>(id, "input");
+      if (!input)
+        throw new AppError(
+          "personal_recovery_missing",
+          "未找到完整的处理进度，本轮记录未保存、未扣 credits，请重新发送。",
+          409,
+        );
+      console.info(
+        JSON.stringify({
+          event: "personal.run_resumed",
+          attempt: saved.resumes + 1,
+          elapsedMs: Date.now() - saved.startedAt,
+        }),
+      );
+      return (
+        await this.runModel(
+          id,
+          model,
+          input.original,
+          session,
+          saved.outputLimit,
+          Math.min(deadline, saved.deadline),
+          saved.pluginId,
+          saved.attachmentBatch,
+          undefined,
+          saved,
+        )
+      ).text;
+    } catch (error) {
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec("UPDATE runs SET status='failed' WHERE id=? AND status='interrupted'", id);
+        this.personalRuns.remove(id);
+      });
+      throw error;
+    }
+  }
   private async processWechat(
     id: string,
     message: WxMessage,
@@ -2111,14 +3308,35 @@ export class PersonalAccount extends DurableObject<Env> {
         id,
       )
       .toArray()[0];
-    if (completed) return (JSON.parse(completed.response) as { text: string }).text;
-    if (!this.linkSetting(connectionId, "current", "") && this.assistants()[0])
-      this.createSession(this.assistants()[0].id, "新的对话", false, connectionId);
+    if (completed) {
+      // A restart can happen after the commit but before scheduler registration.
+      // Never send a saved success until its reminder outbox is acknowledged.
+      await this.requireReminderSchedule();
+      return (JSON.parse(completed.response) as { text: string }).text;
+    }
+    const interrupted = this.sql
+      .exec<{ status: string }>("SELECT status FROM runs WHERE id=?", id)
+      .toArray()[0];
+    if (interrupted?.status === "interrupted")
+      return this.resumePersonalRun(id, connectionId, deadline);
+    const defaultModel = this.assistants().find((a) => modelKind(a) === "text");
+    if (!this.linkSetting(connectionId, "current", "") && defaultModel)
+      this.createSession(defaultModel.id, "新的对话", false, connectionId);
     const text = extractText(message);
-    const command = text.trim().split(/\s+/);
     const assistants = this.assistants();
     const currentId = this.linkSetting(connectionId, "current", "");
-    if (text.startsWith("/"))
+    const currentSession = this.sessions(connectionId).find((s) => s.id === currentId);
+    const currentPlugin = currentSession?.pluginInstanceId
+      ? this.plugins().find((p) => p.id === currentSession.pluginInstanceId)
+      : undefined;
+    const hostText = platformCommand(
+      text,
+      isRemoteAgent(currentPlugin) &&
+        remoteAgentManifest(currentPlugin.pluginId).capabilities.commands === "native",
+    );
+    const command = (hostText ?? "").trim().split(/\s+/);
+    command[0] = command[0].toLowerCase();
+    if (hostText !== null)
       return this.ctx.storage.transactionSync(() => {
         const previous = this.sql
           .exec<{ response: string }>(
@@ -2129,7 +3347,7 @@ export class PersonalAccount extends DurableObject<Env> {
         if (previous) return (JSON.parse(previous.response) as { text: string }).text;
         const reply = (() => {
           this.busy();
-          if (command[0] === "/help") return wechatHelp(publicSiteUrl(this.env));
+          if (command[0] === "/help") return wechatHelp(publicSiteUrl(this.env), this.plan());
           if (command[0] === "/status") {
             const session = this.sessions(connectionId).find((s) => s.id === currentId);
             if (session?.pluginInstanceId) {
@@ -2168,7 +3386,7 @@ export class PersonalAccount extends DurableObject<Env> {
               (s) => s.id === currentId,
             )?.pluginInstanceId;
             return plugins.length
-              ? `**我的插件**\n\n${plugins.map((p, i) => `${i + 1}. ${p.name} · @${p.shortcut}${p.enabled ? "" : "（已停用）"}${activePlugin === p.id ? " [当前默认]" : ""}`).join("\n")}\n\n- /use 名称或编号：进入或直接切换插件，无需先 /exit\n- /exit：退出插件，返回普通模型\n- @快捷名 问题：在任何模式下仅本次调用，不改变默认模型或插件`
+              ? `**我的插件**\n\n${plugins.map((p, i) => `${i + 1}. ${p.name} · ${p.pluginId === "wechatai/notification" ? "HTTP 推送（无需进入）" : `@${p.shortcut}`}${p.enabled ? "" : "（已停用）"}${activePlugin === p.id ? " [当前默认]" : ""}`).join("\n")}\n\n- /use 名称或编号：进入或直接切换插件，无需先 /exit\n- /exit：退出插件，返回普通模型\n- @快捷名 问题：在任何模式下仅本次调用，不改变默认模型或插件`
               : `还没有配置插件。\n\n[配置插件](${new URL("/app/plugins", publicSiteUrl(this.env))})`;
           }
           if (command[0] === "/use") {
@@ -2179,7 +3397,8 @@ export class PersonalAccount extends DurableObject<Env> {
             const matches = aliases.length
               ? aliases
               : plugins.filter((p) => p.name.toLowerCase() === name.toLowerCase());
-            if (matches.length > 1) return "有多个同名插件，请发送 /plugins，再用 /use 编号 选择。";
+            if (matches.length > 1)
+              return "有多个同名插件，请发送 /wx plugins，再用 /use 编号 选择。";
             const ids = this.linkSetting<string[]>(
               connectionId,
               "pluginList",
@@ -2191,19 +3410,26 @@ export class PersonalAccount extends DurableObject<Env> {
                 ? plugins.find((p) => p.id === ids[Number(name) - 1])
                 : undefined);
             if (!p)
-              return "没有找到这个插件。发送 /plugins 查看名称与编号；切换普通模型请用 /models 和 /model 编号。";
+              return "没有找到这个插件。发送 /wx plugins 查看名称与编号；切换普通模型请用 /wx models 和 /wx model 编号。";
             const previousPlugin = this.sessions(connectionId).find(
               (s) => s.id === currentId,
             )?.pluginInstanceId;
-            this.activatePlugin(p.id, connectionId);
+            const hadStory = this.sessions(connectionId).some(
+              (s) => s.pluginInstanceId === p.id && !s.archived,
+            );
+            const story = this.activatePlugin(p.id, connectionId);
             const action = previousPlugin && previousPlugin !== p.id ? "已切换到" : "已进入";
             const usage =
               p.pluginId === "wechatai/image-generation"
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
-                  ? `之后的消息会交给你的 ${remoteAgentName(p.pluginId)} Agent，完成后回复微信。`
-                  : "之后直接发送问题即可，模型会按需联网。";
-            return `${action}「${p.name}」。${usage}\n\n- @其他快捷名 内容：仅本次调用，不改变当前默认插件\n- /use 其他插件：直接切换，无需先退出\n- /exit：返回进入插件前的普通模型会话`;
+                  ? `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
+                  : p.pluginId === "wechatai/roleplay"
+                    ? "直接聊天即可继续剧情，/new 开始新的故事。"
+                    : p.pluginId === "wechatai/personal-assistant"
+                      ? "之后直接告诉我想记下的事情、收支或待办，也可以单独设置提醒。提醒按北京时间设置；/wx new 新建聊天，已保存的记录会保留。"
+                      : "之后直接发送问题即可，模型会按需联网。";
+            return `${action}「${p.name}」。${usage}\n\n- @其他快捷名 内容：仅本次调用，不改变当前默认插件\n- /use 其他插件：直接切换，无需先退出\n- /exit：返回进入插件前的普通模型会话${hadStory ? "" : this.roleGreeting(story)}`;
           }
           if (command[0] === "/balance") {
             const balance = this.wallet.balance() / 1000;
@@ -2223,7 +3449,7 @@ export class PersonalAccount extends DurableObject<Env> {
               channels.map((c) => c.id),
             );
             return channels.length
-              ? `**我的渠道**\n\n${channels.map((c, i) => `${i + 1}. ${c.name} · ${assistants.filter((a) => a.channelId === c.id).length} 个模型${currentModel?.channelId === c.id ? " [当前]" : ""}`).join("\n")}\n\n发送 /channel 编号 切换渠道，再用 /models 查看模型。`
+              ? `**我的渠道**\n\n${channels.map((c, i) => `${i + 1}. ${c.name} · ${assistants.filter((a) => a.channelId === c.id).length} 个模型${currentModel?.channelId === c.id ? " [当前]" : ""}`).join("\n")}\n\n发送 /wx channel 编号 切换渠道，再用 /wx models 查看模型。`
               : "请先在网页添加渠道和模型。";
           }
           if (command[0] === "/channel") {
@@ -2233,21 +3459,23 @@ export class PersonalAccount extends DurableObject<Env> {
               this.channels().map((c) => c.id),
             );
             const channel = this.channels().find((c) => c.id === ids[Number(command[1]) - 1]);
-            if (!channel) return "渠道编号无效，请发送 /channels 查看。";
+            if (!channel) return "渠道编号无效，请发送 /wx channels 查看。";
             const s = this.activateChannel(channel.id, connectionId);
             const a = this.assistant(s.assistantId);
-            return `已切换到渠道「${channel.name}」｜${a.name}（${a.model}）\n发送 /models 查看该渠道下的模型。`;
+            return `已切换到渠道「${channel.name}」｜${a.name}（${a.model}）\n发送 /wx models 查看该渠道下的模型。`;
           }
           const channelId = currentModel?.channelId ?? this.channels()[0]?.id;
-          const available = assistants.filter((a) => a.channelId === channelId);
+          const available = assistants.filter(
+            (a) => a.channelId === channelId && modelKind(a) === "text",
+          );
           if (command[0] === "/models") {
             this.setLinkSetting(connectionId, "modelList", {
               channelId,
               ids: available.map((a) => a.id),
             });
             return available.length
-              ? `**${available[0].channelName} · 模型**\n\n${available.map((a, i) => `${i + 1}. ${a.name} · ${a.model}${a.id === currentModel?.id ? " [当前]" : ""}`).join("\n")}\n\n发送 /model 编号 切换普通模型；/channels 查看其他渠道。/use 用于进入插件。`
-              : "当前渠道还没有模型，请在网页添加模型。";
+              ? `**${available[0].channelName} · 模型**\n\n${available.map((a, i) => `${i + 1}. ${a.name} · ${a.model}${a.id === currentModel?.id ? " [当前]" : ""}`).join("\n")}\n\n发送 /wx model 编号 切换普通模型；/wx channels 查看其他渠道。/use 用于进入插件。`
+              : "当前渠道还没有文本模型，请在网页添加；生图模型请在 AI 生图插件中使用。";
           }
           if (command[0] === "/model") {
             const list = this.linkSetting<{ channelId: string; ids: string[] } | null>(
@@ -2257,7 +3485,7 @@ export class PersonalAccount extends DurableObject<Env> {
             );
             const ids = list?.channelId === channelId ? list.ids : available.map((a) => a.id);
             const a = available.find((a) => a.id === ids[Number(command[1]) - 1]);
-            if (!a) return "模型编号无效，请发送 /models 查看当前渠道的模型。";
+            if (!a) return "模型编号无效，请发送 /wx models 查看当前渠道的模型。";
             const s = this.activateAssistant(a.id, connectionId);
             return `已切换到「${s.title}」｜${a.channelName} / ${a.name}（${a.model}）`;
           }
@@ -2280,9 +3508,9 @@ export class PersonalAccount extends DurableObject<Env> {
           if (command[0] === "/switch") {
             const ids = this.linkSetting<string[]>(connectionId, "sessionList", []);
             const id = ids[Number(command[1]) - 1];
-            if (!id) return "请先发送 /sessions，再使用 /switch 编号。";
+            if (!id) return "请先发送 /wx sessions，再使用 /wx switch 编号。";
             const s = this.session(id);
-            if (s.connectionId !== connectionId) return "会话编号无效，请重新发送 /sessions。";
+            if (s.connectionId !== connectionId) return "会话编号无效，请重新发送 /wx sessions。";
             if (s.archived) this.changeSession(id, "restore");
             this.changeSession(id, "switch");
             return `已切换到「${s.title}」｜${s.assistantId ? this.assistant(s.assistantId).channelName + " / " + this.assistant(s.assistantId).name : (s.pluginName ?? "OpenClaw")}`;
@@ -2290,8 +3518,14 @@ export class PersonalAccount extends DurableObject<Env> {
           if (!currentId) return "请先在网页添加模型。";
           const s = this.session(currentId);
           if (command[0] === "/new") {
-            this.createSession(s.assistantId, "新的对话", false, connectionId, s.pluginInstanceId);
-            return "已开始新的会话，原会话已保留。";
+            const story = this.createSession(
+              s.assistantId,
+              "新的对话",
+              false,
+              connectionId,
+              s.pluginInstanceId,
+            );
+            return "已开始新的会话，原会话已保留。" + this.roleGreeting(story);
           }
           if (command[0] === "/reset") {
             this.changeSession(s.id, "reset");
@@ -2299,7 +3533,11 @@ export class PersonalAccount extends DurableObject<Env> {
           }
           if (command[0] === "/archive") {
             this.changeSession(s.id, "archive");
-            return "会话已归档，并开始新的会话。";
+            const next = this.linkSetting(connectionId, "current", "");
+            return (
+              "会话已归档，并开始新的会话。" +
+              (next && next !== s.id ? this.roleGreeting(this.session(next)) : "")
+            );
           }
           if (command[0] === "/clear" || command[0] === "/delete") {
             const operation = command[0] === "/delete" ? "delete" : "clear";
@@ -2329,9 +3567,9 @@ export class PersonalAccount extends DurableObject<Env> {
               operation,
               expires: Date.now() + 60000,
             });
-            return `这会永久删除当前会话的平台记录。60 秒内发送 ${command[0]} ${token} 确认。`;
+            return `这会永久删除当前会话的平台记录。60 秒内发送 /wx ${command[0].slice(1)} ${token} 确认。`;
           }
-          return "暂不支持这条指令。发送 /help 查看可用指令。";
+          return "微伴暂不支持这条指令。发送 /wx help 查看平台命令。";
         })();
         this.sql.exec(
           "INSERT OR IGNORE INTO runs (id, sessionId, status, response, createdAt) VALUES (?, NULL, 'complete', ?, ?)",
@@ -2343,25 +3581,45 @@ export class PersonalAccount extends DurableObject<Env> {
       });
     let content = text;
     let once: { modelId: string | null; pluginId: string | null } | undefined;
-    if (text.startsWith("@")) {
+    const mention = leadingMention(text);
+    if (mention) {
       this.busy();
       if (this.plan() !== "plus") this.requirePluginPlus();
-      const handle = text.split(/\s+/)[0].slice(1);
-      const a = assistants.find((a) => a.shortcut === handle);
-      const plugin = this.plugins().find((p) => p.shortcut === handle);
+      const { handle } = mention;
+      const a = handle ? assistants.find((a) => a.shortcut === handle) : undefined;
+      const plugin = handle ? this.plugins().find((p) => p.shortcut === handle) : undefined;
       if (plugin) {
         this.plugin(plugin.id, true);
+        if (plugin.pluginId === "wechatai/notification")
+          return "消息提醒只接收 HTTP 推送，不支持对话，也不会改变当前聊天模式。请在网页插件页面查看调用示例。";
         once = {
           modelId: isRemoteAgent(plugin) ? null : plugin.modelId,
           pluginId: plugin.id,
         };
-      } else if (a) once = { modelId: a.id, pluginId: null };
-      else return "没有找到对应的模型或插件，请在网页检查快捷名称；/plugins 查看插件。";
-      content = text.slice(handle.length + 1).trim();
+      } else if (a) {
+        this.textAssistant(a.id);
+        once = { modelId: a.id, pluginId: null };
+      } else {
+        const available = [
+          ...this.plugins().filter((p) => p.enabled && p.pluginId !== "wechatai/notification"),
+          ...assistants.filter((a) => a.shortcut && modelKind(a) === "text"),
+        ];
+        return `没有找到快捷名「${handle.slice(0, 40)}」。请使用 @快捷名 内容，名称后可用空格、逗号或冒号分隔。${
+          available.length
+            ? `\n\n当前可用：\n${available
+                .slice(0, 12)
+                .map((p) => `- @${p.shortcut}：${p.name}`)
+                .join(
+                  "\n",
+                )}\n\n例如：@${available.find((p) => "pluginId" in p && p.pluginId === "wechatai/personal-assistant")?.shortcut ?? available[0].shortcut} 你好`
+            : "\n\n还没有配置快捷名称，请先在网页添加插件或设置模型快捷名。"
+        }\n\n/wx plugins 查看插件；/use 快捷名 进入默认插件。`;
+      }
+      content = mention.content;
       if (!content && !message.item_list?.some((i) => i.type === 2 || i.type === 4))
         return plugin
           ? `@${handle} 只用于单次调用，请在后面加上问题。\n\n如需默认使用此插件，发送 /use ${plugin.shortcut}；发送 /exit 退出。`
-          : `请发送 @${handle} 问题 进行单次对话。切换默认模型请用 /models 和 /model 编号。`;
+          : `请发送 @${handle} 问题 进行单次对话。切换默认模型请用 /wx models 和 /wx model 编号。`;
     }
     const active = this.linkSetting(connectionId, "current", "");
     if (!active && once?.pluginId && isRemoteAgent(this.plugin(once.pluginId))) {
@@ -2369,6 +3627,31 @@ export class PersonalAccount extends DurableObject<Env> {
       const session = this.activatePlugin(once.pluginId, connectionId);
       this.setLinkSetting(connectionId, "current", "");
       return this.enqueueClaw(id, once.pluginId, session, content, message);
+    }
+    if (
+      !active &&
+      once?.pluginId &&
+      this.plugin(once.pluginId).pluginId === "wechatai/image-generation"
+    ) {
+      // An image-only account can still use @画图 without making it the default mode.
+      if (message.item_list?.some((item) => item.type === 2 || item.type === 4))
+        throw new AppError("image_text_only", "AI 生图当前支持文字描述，暂不支持参考图或文件", 422);
+      const session = this.activatePlugin(once.pluginId, connectionId);
+      this.setLinkSetting(connectionId, "current", "");
+      const model = this.assistant(once.modelId);
+      return (
+        await this.runModel(
+          id,
+          model,
+          [{ role: "user", content }],
+          session,
+          model.maxOutputTokens,
+          deadline,
+          once.pluginId,
+          undefined,
+          onImagePending,
+        )
+      ).text;
     }
     if (!active) return "欢迎来到微伴！请先在网页添加一个模型，再开始聊天。";
     const incoming = message.item_list?.filter((i) => i.type === 2 || i.type === 4) ?? [];
@@ -2538,6 +3821,8 @@ export class PersonalAccount extends DurableObject<Env> {
     return true;
   }
   async alarm() {
+    await this.scheduleRecovery();
+    this.personalRuns.prune();
     const wakeVersion = this.wechatWakeVersion;
     this.attachments.expire();
     await this.media
@@ -2545,21 +3830,22 @@ export class PersonalAccount extends DurableObject<Env> {
       .catch(() => console.error(JSON.stringify({ event: "media.cleanup_failed" })));
     const deadline = Date.now() + MODEL_TURN_TIMEOUT_MS;
     this.refreshWallet();
-    await this.ctx.storage.setAlarm(Date.now() + MODEL_RUN_LOCK_MS + 5000);
     try {
+      await this.flushReminderSchedule();
+      await this.flushNotificationSchedule();
       if (this.referralPending()) await this.retryReferral();
       // Bound outbound concurrency; one idle connection must not occupy every fetch slot.
-      const ready = new Set(
+      const priority = new Map(
         this.sql
-          .exec<{ connectionId: string }>(
-            "SELECT DISTINCT connectionId FROM inbox WHERE state = 'reply'",
+          .exec<{ connectionId: string; priority: number }>(
+            "SELECT connectionId, MAX(CASE WHEN state = 'reply' THEN 2 ELSE 1 END) AS priority FROM inbox WHERE state IN ('pending','reply') GROUP BY connectionId",
           )
           .toArray()
-          .map((row) => row.connectionId),
+          .map((row) => [row.connectionId, row.priority]),
       );
       const links = this.links()
         .slice(0, this.limits().connections)
-        .sort((a, b) => Number(ready.has(b.id)) - Number(ready.has(a.id)));
+        .sort((a, b) => (priority.get(b.id) ?? 0) - (priority.get(a.id) ?? 0));
       let next = 0;
       await Promise.all(
         Array.from({ length: Math.min(3, links.length) }, async () => {
@@ -2577,7 +3863,11 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.scheduleWechat();
     }
   }
-  private async pollWechat(connectionId: string, deadline = Date.now() + MODEL_TURN_TIMEOUT_MS) {
+  private async pollWechat(
+    connectionId: string,
+    deadline = Date.now() + MODEL_TURN_TIMEOUT_MS,
+    remainingSteps = 2,
+  ): Promise<void> {
     const link = this.connection(connectionId);
     if (
       !this.linkEnabled(connectionId) ||
@@ -2720,6 +4010,8 @@ export class PersonalAccount extends DurableObject<Env> {
         if (pending) {
           const message = JSON.parse(pending.payload) as WxMessage;
           if (pending.state === "pending") {
+            const startedAt = Date.now();
+            let code: string | undefined;
             let reply: string;
             try {
               reply = await this.processWechat(
@@ -2750,11 +4042,21 @@ export class PersonalAccount extends DurableObject<Env> {
                 },
               );
             } catch (error) {
+              code = error instanceof AppError ? error.code : "processing_failed";
               if (error instanceof AppError && error.code === "conversation_busy") return;
               reply =
                 error instanceof AppError
                   ? error.message
                   : "处理失败，本次未扣除 credits。请稍后重新发送。";
+            } finally {
+              console.info(
+                JSON.stringify({
+                  event: "wechat.processed",
+                  queueMs: Math.max(0, startedAt - pending.createdAt),
+                  durationMs: Date.now() - startedAt,
+                  outcome: code ?? "ok",
+                }),
+              );
             }
             if (
               this.connection(connectionId).generation !== link.generation ||
@@ -2774,6 +4076,10 @@ export class PersonalAccount extends DurableObject<Env> {
                 "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id = ?",
                 pending.id,
               );
+            // Persist before sending, but do not wait for another alarm (or other
+            // links' idle polls) merely to advance pending -> reply -> delivered.
+            if (reply.trim() && remainingSteps > 0 && Date.now() < deadline - 1000)
+              await this.pollWechat(connectionId, deadline, remainingSteps - 1);
           } else {
             const completedRun = this.sql
               .exec<{ response: string }>(
@@ -2790,6 +4096,7 @@ export class PersonalAccount extends DurableObject<Env> {
               return p;
             }, []);
             const token = this.connection(connectionId).contextToken || message.context_token;
+            const sendStartedAt = Date.now();
             try {
               if (!token) throw new AppError("context_missing", "请先在微信发送一条新消息");
               if (images.length)
@@ -2808,6 +4115,15 @@ export class PersonalAccount extends DurableObject<Env> {
                   `${pending.id}:${pending.part}`,
                   parts[pending.part] || "处理完成",
                 );
+              console.info(
+                JSON.stringify({
+                  event: "wechat.reply_sent",
+                  durationMs: Date.now() - sendStartedAt,
+                  sinceReceivedMs: Math.max(0, Date.now() - pending.createdAt),
+                  part: pending.part,
+                  attempts: pending.attempts,
+                }),
+              );
             } catch (error) {
               this.sql.exec("UPDATE inbox SET attempts = attempts + 1 WHERE id = ?", pending.id);
               if (pending.attempts >= 4)
@@ -2920,6 +4236,19 @@ export class PersonalAccount extends DurableObject<Env> {
               error: undefined,
             });
           });
+          // The next phase may process one message and send its reply. An empty
+          // poll never recursively polls again, and a batch remains FIFO in SQLite.
+          if (
+            remainingSteps > 0 &&
+            Date.now() < deadline - 1000 &&
+            this.sql
+              .exec(
+                "SELECT id FROM inbox WHERE connectionId = ? AND state IN ('pending','reply') LIMIT 1",
+                connectionId,
+              )
+              .toArray().length
+          )
+            await this.pollWechat(connectionId, deadline, remainingSteps - 1);
         }
       }
     } catch (error) {
@@ -2937,14 +4266,26 @@ export class PersonalAccount extends DurableObject<Env> {
     }
   }
   // Internal-only RPC, called exclusively after a verified Stripe webhook.
-  applyPayment(event: {
-    id: string;
-    kind: "purchase" | "subscription";
-    units: number;
-    expires: number;
-    subscriptionId?: string;
-  }) {
-    if (!Number.isSafeInteger(event.units) || event.units < 0 || !Number.isFinite(event.expires))
+  applyPayment(
+    event:
+      | {
+          id: string;
+          kind: "membership";
+          months: 1 | 12;
+        }
+      | {
+          id: string;
+          kind: "purchase" | "subscription";
+          units: number;
+          expires: number;
+          subscriptionId?: string;
+        },
+  ) {
+    if (
+      event.kind === "membership"
+        ? event.months !== 1 && event.months !== 12
+        : !Number.isSafeInteger(event.units) || event.units < 0 || !Number.isFinite(event.expires)
+    )
       throw new Error("Invalid payment");
     this.ctx.storage.transactionSync(() => {
       if (this.sql.exec("SELECT id FROM payments WHERE id = ?", event.id).toArray().length) return;
@@ -2956,6 +4297,13 @@ export class PersonalAccount extends DurableObject<Env> {
           event.expires,
           "Credits 充值",
         );
+      } else if (event.kind === "membership") {
+        // Extend and deduplicate inside one transaction so concurrent purchases cannot lose time.
+        this.setSetting(
+          "planUntil",
+          extendMembership(Math.max(Date.now(), this.getSetting("planUntil", 0)), event.months),
+        );
+        this.refreshWallet();
       } else {
         // Subscription invoices extend membership, never mint a monthly credit bucket.
         // Ignore legacy invoice credit amounts and reconcile today's allowance once.

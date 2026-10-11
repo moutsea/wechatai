@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { assistantSchema, estimateTokens } from "../src/server/llm";
 import {
   buildToolRequest,
+  callModelWithTools,
   fitToolRequest,
   parseToolReply,
   type ModelTool,
@@ -43,6 +45,59 @@ const call = {
   name: "web_search",
   arguments: '{"query":"test"}',
 };
+afterEach(() => vi.unstubAllGlobals());
+describe("tool model endpoint validation", () => {
+  it.each(["chat-completions", "responses", "anthropic"] as const)(
+    "allows the configured local KimiSeek endpoint for %s, without allowing other private URLs",
+    async (protocol) => {
+      const local: Env = { ...env, KIMISEEK_API_URL: "http://localhost:3000" };
+      const localModel: Assistant = { ...model, protocol, baseUrl: local.KIMISEEK_API_URL };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json(
+            protocol === "chat-completions"
+              ? { choices: [{ message: { content: "Hello" } }] }
+              : protocol === "anthropic"
+                ? { content: [{ type: "text", text: "Hello" }] }
+                : {
+                    status: "completed",
+                    output: [
+                      { type: "message", content: [{ type: "output_text", text: "Hello" }] },
+                    ],
+                  },
+          ),
+        ),
+      );
+      const invoke = (target = localModel, settings = local) =>
+        callModelWithTools(
+          settings,
+          target,
+          "test-only-key",
+          [{ role: "user", content: "Hi" }],
+          tools,
+          [],
+          128,
+          1000,
+        );
+      await expect(invoke()).resolves.toMatchObject({ text: "Hello" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      for (const baseUrl of [
+        "http://localhost:3001",
+        "http://localhost:3000/private",
+        "http://127.0.0.1:3000",
+        "https://127.0.0.1",
+      ])
+        await expect(invoke({ ...localModel, baseUrl })).rejects.toMatchObject({
+          code: "unsafe_url",
+        });
+      await expect(
+        invoke(localModel, { ...local, APP_URL: "https://wechatai.app" }),
+      ).rejects.toMatchObject({ code: "unsafe_url" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+});
 describe("native tool protocol boundaries", () => {
   it("preserves Responses encrypted reasoning and call IDs in stateless continuation", () => {
     const reasoning = {

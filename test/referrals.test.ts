@@ -309,9 +309,9 @@ describe("permanent bilateral invitation rewards", () => {
     const { stub, wxId } = await connect(invitee);
     const net = network(wxId);
     net.send();
+    net.control.sendFails = true;
     await tick(stub, 2);
     expect((await stub.snapshot()).wallet.referral).toBe(0);
-    net.control.sendFails = true;
     await tick(stub);
     expect((await stub.snapshot()).wallet.referral).toBe(0);
     net.control.sendFails = false;

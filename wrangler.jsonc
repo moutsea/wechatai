@@ -1,3 +1,4 @@
+// Local defaults and a production template. See docs/deployment.md.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "wechatai",
@@ -14,6 +15,7 @@
       "/developers/plugins.md",
       "/developers/openclaw.md",
       "/developers/hermes.md",
+      "/developers/notifications.md",
       "/llms.txt",
     ],
   },
@@ -26,8 +28,14 @@
       "migrations_dir": "migrations",
     },
   ],
-  "durable_objects": { "bindings": [{ "name": "ACCOUNTS", "class_name": "PersonalAccount" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PersonalAccount"] }],
+  "durable_objects": { "bindings": [
+    { "name": "ACCOUNTS", "class_name": "PersonalAccount" },
+    { "name": "REMINDERS", "class_name": "ReminderScheduler" }
+  ] },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["PersonalAccount"] },
+    { "tag": "v2-local-reminders", "new_sqlite_classes": ["ReminderScheduler"] }
+  ],
   "ratelimits": [
     { "name": "AUTH_LIMIT", "namespace_id": "12001", "simple": { "limit": 20, "period": 60 } },
     { "name": "API_LIMIT", "namespace_id": "12002", "simple": { "limit": 120, "period": 60 } },
@@ -43,32 +51,38 @@
     "FREE_SESSIONS": "10",
     "PLUS_SESSIONS": "200",
     "LLM_ALLOWED_HOSTS": "",
+    "KIMISEEK_URL": "http://localhost:3000",
+    "KIMISEEK_API_URL": "http://localhost:3000",
   },
   "env": {
     "production": {
       "name": "wechatai",
-      "account_id": "72379006f8869d6bc3ccc4e7615773bc",
       "workers_dev": false,
       "preview_urls": false,
-      "routes": [{ "pattern": "wechatai.app", "custom_domain": true }],
+      "routes": [{ "pattern": "example.com", "custom_domain": true }],
+      "triggers": { "crons": ["* * * * *"] },
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "wechatai-media" }],
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "wechatai-db",
-          "database_id": "9b522c7f-e687-4bad-9507-c7831ec7e471",
+          "database_id": "00000000-0000-0000-0000-000000000000",
           "migrations_dir": "migrations",
         },
       ],
-      "durable_objects": { "bindings": [{ "name": "ACCOUNTS", "class_name": "PersonalAccount" }] },
+      "durable_objects": { "bindings": [
+        { "name": "ACCOUNTS", "class_name": "PersonalAccount" },
+        { "name": "REMINDERS", "class_name": "ReminderScheduler", "script_name": "wechatai-reminders" }
+      ] },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PersonalAccount"] }],
       "ratelimits": [
         { "name": "AUTH_LIMIT", "namespace_id": "12001", "simple": { "limit": 20, "period": 60 } },
         { "name": "API_LIMIT", "namespace_id": "12002", "simple": { "limit": 120, "period": 60 } },
       ],
       "vars": {
         "APP_NAME": "微伴",
-        "APP_URL": "https://wechatai.app",
-        "PUBLIC_SITE_URL": "https://wechatai.app",
+        "APP_URL": "https://example.com",
+        "PUBLIC_SITE_URL": "https://example.com",
         "FREE_DAILY_CREDITS": "100",
         "PLUS_DAILY_CREDITS": "1000",
         "FREE_ASSISTANTS": "3",
@@ -76,6 +90,8 @@
         "FREE_SESSIONS": "10",
         "PLUS_SESSIONS": "200",
         "LLM_ALLOWED_HOSTS": "",
+        "KIMISEEK_URL": "https://kimiseek.app",
+        "KIMISEEK_API_URL": "https://api.kimiseek.app",
       },
     },
   },

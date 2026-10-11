@@ -18,6 +18,7 @@ type AppState = {
   refresh: () => Promise<void>;
   request: typeof api;
   demo: boolean;
+  isAdmin: boolean;
   base: string;
   user: { name: string; email: string };
   notify: (message: string, error?: boolean) => void;
@@ -31,6 +32,7 @@ export function useApp() {
 export function AppProvider({ demo, children }: { demo: boolean; children: ReactNode }) {
   const request = useMemo(() => (demo ? createDemo() : api), [demo]);
   const [data, setData] = useState<Snapshot | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { data: session, refetch: refreshSession } = useAuth();
   const user = demo
     ? { name: "体验用户", email: "仅示例数据 · 不连接真实服务" }
@@ -38,6 +40,17 @@ export function AppProvider({ demo, children }: { demo: boolean; children: React
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const [failure, setFailure] = useState("");
   const navigate = useNavigate();
+  useEffect(() => {
+    setIsAdmin(false);
+    if (demo || !session?.user.id) return;
+    const controller = new AbortController();
+    void api<{ isAdmin: boolean }>("/admin/access", { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setIsAdmin(result.isAdmin);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [demo, session?.user.id]);
   const notify = useCallback((text: string, error = false) => setNotice({ text, error }), []);
   const refresh = useCallback(async () => {
     try {
@@ -76,7 +89,7 @@ export function AppProvider({ demo, children }: { demo: boolean; children: React
   }, [data?.connections.map((l) => `${l.id}:${l.status}:${l.paused}`).join(","), demo, refresh]);
   return (
     <State.Provider
-      value={{ data, request, refresh, demo, base: demo ? "/demo" : "/app", user, notify }}
+      value={{ data, request, refresh, demo, isAdmin, base: demo ? "/demo" : "/app", user, notify }}
     >
       {failure ? (
         <div className="full-state">

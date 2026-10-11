@@ -12,9 +12,12 @@ import {
   Link2,
   Check,
   LockKeyhole,
+  Crown,
 } from "lucide-react";
 import { useApp } from "../context";
-import { AssistantIcon, Empty, relativeTime, SectionTitle } from "../ui";
+import { Empty, relativeTime, SectionTitle } from "../ui";
+import { ChannelIcon } from "../channel-icon";
+import { membershipExpiry } from "../membership";
 import { formatCredits, type ChatSession } from "../../shared/types";
 export function Dashboard() {
   const { data, user, base, request, demo } = useApp();
@@ -81,7 +84,40 @@ export function Dashboard() {
           </div>
         </div>
       </section>
-      <div className="stats-grid">
+      <div className="stats-grid dashboard-stats">
+        <article className={`stat-card membership-stat ${data.plan === "plus" ? "is-plus" : ""}`}>
+          <div>
+            <span>我的会员</span>
+            <Crown size={18} aria-hidden="true" />
+          </div>
+          <strong>
+            {data.plan === "plus" ? "Plus" : "Free"}
+            <small>{data.plan === "plus" ? "会员" : "免费账户"}</small>
+          </strong>
+          <p>
+            <span>
+              {data.plan === "plus" ? (
+                <>
+                  <time
+                    dateTime={new Date(data.planUntil).toISOString()}
+                      title={`${membershipExpiry(data.planUntil, true)} 到期（北京时间）`}
+                  >
+                    {membershipExpiry(data.planUntil)}
+                  </time>{" "}
+                  到期
+                </>
+              ) : data.planUntil > 0 ? (
+                "Plus 会员已到期"
+              ) : (
+                `每日赠送 ${formatCredits(data.wallet.dailyGrant)} credits`
+              )}
+            </span>
+            <Link to={`${base}/billing`}>
+              {data.plan === "plus" ? "续费会员" : "升级会员"}
+              <ArrowUpRight size={12} aria-hidden="true" />
+            </Link>
+          </p>
+        </article>
         <article className="stat-card">
           <div>
             <span>可用 Credits</span>
@@ -161,7 +197,7 @@ export function Dashboard() {
                 to={`${base}/channels?channel=${a.id}`}
                 key={a.id}
               >
-                <AssistantIcon color={a.color} />
+                <ChannelIcon channel={a} />
                 <h3>{a.name}</h3>
                 <p>{a.description || a.baseUrl}</p>
                 <div>
@@ -203,7 +239,9 @@ export function Dashboard() {
                   const a = data.assistants.find((a) => a.id === s.assistantId);
                   return (
                     <Link key={s.id} to={`${base}/sessions?id=${s.id}`} className="recent-row">
-                      <AssistantIcon small color={a?.color} />
+                      <span className={`assistant-icon ${a?.color ?? "sage"} small`}>
+                        <MessageCircle size={18} aria-hidden="true" />
+                      </span>
                       <span>
                         <strong>{s.title}</strong>
                         <small>

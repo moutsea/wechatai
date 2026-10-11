@@ -1,6 +1,6 @@
 {
   "name": "@wechatai/openclaw-channel",
-  "version": "1.0.1",
+  "version": "1.1.2",
   "description": "Personal WeChat channel through the Wechatai relay",
   "files": [
     "index.js",
@@ -26,5 +26,6 @@
       "docsPath": "https://wechatai.app/developers/openclaw",
       "blurb": "Connect your own Wechatai account; supports scheduled and background replies."
     }
-  }
+  },
+  "license": "MIT"
 }

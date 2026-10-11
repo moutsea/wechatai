@@ -738,7 +738,7 @@ describe("Plus plugin configuration, routing and settlement", () => {
     const savedModel = (await stub.snapshot()).assistants.find((m) => m.id === modelId)!;
     await api(stub, "model.save", { ...savedModel, shortcut: "普通" });
     mockFetch(() => Response.json({ choices: [{ message: { content: "普通回答" } }] }));
-    expect(await send(stub, "@普通 你好")).toBe("普通回答");
+    expect(await send(stub, "@普通：你好")).toBe("普通回答");
     expect((await stub.snapshot()).currentSession?.id).toBe(sessionA);
     expect(await send(stub, "/use 研究 B")).toContain("已切换到");
     expect((await stub.snapshot()).currentSession?.pluginInstanceId).toBe(b.data.id);

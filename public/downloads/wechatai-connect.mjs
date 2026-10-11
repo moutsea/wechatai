@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 
 // Filled by the release packager. The installer and archive come from the same site.
-const ARCHIVE_SHA256 = "fb367aa866a538b15366224a8edcd6f69ef832e1a5399dc64ec7d6daa46dddc6";
+const ARCHIVE_SHA256 = "1d2e50ed0857fa9f57018af501a93d996b54371688697b71f9308c11c282dd29";
 export function normalizeAgents(value) {
   if (!Array.isArray(value) || !value.length || value.length > 100)
     throw new Error("没有找到可用助手，请先完成 OpenClaw 初始化。");
@@ -126,7 +126,7 @@ export async function connect({ endpoint, code }) {
   try {
     console.log("1/3 正在安装微伴渠道…");
     const archive = await boundedBody(
-      await fetch(`${endpoint}/downloads/wechatai-openclaw-1.0.1.tgz`, {
+      await fetch(`${endpoint}/downloads/wechatai-openclaw-1.1.2.tgz`, {
         redirect: "error",
         signal: AbortSignal.timeout(60000),
       }),

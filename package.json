@@ -12,18 +12,23 @@
     "format": "oxfmt --write .",
     "test": "vitest run",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "cf-typegen": "wrangler types env.d.ts",
+    "cf-typegen": "wrangler types env.d.ts --strict-vars false",
     "db:migrate:local": "wrangler d1 migrations apply wechatai-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply wechatai-db --env production --remote",
+    "db:migrate:remote": "node scripts/production.mjs d1 migrations apply wechatai-db --remote",
     "build:production": "CLOUDFLARE_ENV=production pnpm build",
-    "deploy": "pnpm build:production && wrangler deploy",
+    "deploy": "pnpm build:production && wrangler deploy --config dist/wechatai/wrangler.json",
+    "deploy:reminders": "node scripts/production.mjs reminders",
+    "reminders:reconcile": "node scripts/reconcile-reminders.mjs",
     "stripe:setup": "node scripts/setup-stripe.mjs",
     "stripe:listen": "node scripts/stripe-listen.mjs",
     "setup:local": "node scripts/setup-local.mjs && pnpm cf-typegen && pnpm db:migrate:local",
     "test:seo": "node scripts/verify-seo.mjs",
     "prebuild": "node scripts/package-openclaw.mjs && node scripts/package-hermes.mjs",
     "test:openclaw": "node --experimental-transform-types --test integrations/openclaw/transport.node-test.ts",
-    "test:hermes": "node scripts/test-hermes.mjs"
+    "test:openclaw:runtime": "node scripts/test-openclaw-runtime.mjs",
+    "test:hermes": "node scripts/test-hermes.mjs",
+    "cf:production": "node scripts/production.mjs",
+    "check:public": "node scripts/check-public.mjs"
   },
   "dependencies": {
     "@better-auth/core": "1.6.26",
@@ -66,7 +71,17 @@
     "wrangler": "^4.119.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.19.0"
   },
-  "packageManager": "pnpm@10.15.0"
+  "packageManager": "pnpm@10.15.0",
+  "description": "Bring your own AI models and agents into WeChat.",
+  "homepage": "https://wechatai.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moutsea/wechatai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/moutsea/wechatai/issues"
+  },
+  "license": "MIT"
 }

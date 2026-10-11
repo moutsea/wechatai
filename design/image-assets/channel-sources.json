@@ -1,0 +1,51 @@
+{
+  "retrieved": "2026-10-10",
+  "purpose": "Official provider icons for channel cards; copied without redrawing",
+  "references": [
+    {
+      "file": "public/images/channels/anthropic.png",
+      "page": "https://www.anthropic.com",
+      "source": "https://cdn.prod.website-files.com/67ce28cfec624e2b733f8a52/67d31dd7aa394792257596c5_webclip.png"
+    },
+    {
+      "file": "public/images/channels/qwen.png",
+      "page": "https://qwen.ai",
+      "source": "https://img.alicdn.com/imgextra/i4/O1CN01OXv3EM1FN8t9W4P79_!!6000000000474-2-tps-80-80.png"
+    },
+    {
+      "file": "public/images/channels/gemini.png",
+      "page": "https://gemini.google.com",
+      "source": "https://www.gstatic.com/lamda/images/gemini_sparkle_4g_512_lt_f94943af3be039176192d.png"
+    },
+    {
+      "file": "public/images/channels/kimi.png",
+      "page": "https://www.kimi.com",
+      "source": "https://www.kimi.com/pwa-192.png"
+    },
+    {
+      "file": "public/images/channels/openai.png",
+      "page": "https://github.com/openai",
+      "source": "https://avatars.githubusercontent.com/u/14957082?v=4&s=128"
+    },
+    {
+      "file": "public/images/channels/xai.png",
+      "page": "https://github.com/xai-org",
+      "source": "https://avatars.githubusercontent.com/u/130314967?v=4&s=128"
+    },
+    {
+      "file": "public/images/channels/siliconflow.png",
+      "page": "https://github.com/siliconflow",
+      "source": "https://avatars.githubusercontent.com/u/143005960?v=4&s=128"
+    },
+    {
+      "file": "public/images/channels/deepseek.png",
+      "page": "https://github.com/deepseek-ai",
+      "source": "Official GitHub organization avatar, copied from design/image-assets/brand-references/deepseek-official.png"
+    },
+    {
+      "file": "public/images/channels/kimiseek.svg",
+      "page": "https://kimiseek.app",
+      "source": "Original icon from the user-owned KimiSeek project: src/app/icon.svg"
+    }
+  ]
+}

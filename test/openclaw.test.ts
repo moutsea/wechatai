@@ -80,6 +80,88 @@ async function ready() {
   return { ...ctx, call: ctx.call, id, text, job, event };
 }
 describe("OpenClaw native relay", () => {
+  it("requires a capable connector and keeps native /new separate from platform history", async () => {
+    const ctx = await setup();
+    if (!ctx.call) throw new Error("setup");
+    await send(ctx.stub, "/use claw");
+    await expect(send(ctx.stub, "/new")).rejects.toThrow("升级连接器");
+    await ctx.call("heartbeat", { nativeCommands: true });
+    const before = (await api(ctx.stub, "snapshot")).data.currentSession;
+    const id = crypto.randomUUID();
+    expect(await send(ctx.stub, "/new", id)).toBe("");
+    expect((await ctx.call("poll")).data.jobs).toEqual([]); // Old runners cannot claim native commands.
+    const job = (await ctx.call("poll", { nativeCommands: true })).data.jobs[0];
+    expect(job).toMatchObject({ id, text: "/new", command: "new" });
+    expect((await ctx.call("claim", { id })).error).toBe("connector_upgrade_required");
+    await ctx.call("claim", { id, nativeCommands: true });
+    const event = {
+      eventId: crypto.randomUUID(),
+      routeId: job.routeId,
+      jobId: id,
+      text: "新会话已开始",
+    };
+    expect((await ctx.call("event", event)).ok).toBe(true);
+    expect((await ctx.call("event", event)).ok).toBe(true);
+    const after = (await api(ctx.stub, "snapshot")).data.currentSession;
+    expect(after.id).toBe(before.id);
+    await runInDurableObject(ctx.stub, (_, state) => {
+      const rows = state.storage.sql
+        .exec<{ role: string; content: string }>(
+          "SELECT role,content FROM messages WHERE sessionId = ?",
+          before.id,
+        )
+        .toArray();
+      expect(rows.filter((r) => r.role === "system")).toHaveLength(1);
+      expect(rows.some((r) => r.content === "/new")).toBe(true);
+    });
+    await send(ctx.stub, "/wx new");
+    expect((await api(ctx.stub, "snapshot")).data.currentSession.id).not.toBe(before.id);
+  });
+
+  it.each(["@claw /exit", "@claw，/exit"])(
+    "explicit command %s never triggers a second platform parse or changes the selected mode",
+    async (input) => {
+      const ctx = await setup();
+      if (!ctx.call) throw new Error("setup");
+      await ctx.call("heartbeat", { nativeCommands: true });
+      await send(ctx.stub, "/use claw");
+      const before = (await api(ctx.stub, "snapshot")).data.currentSession.id;
+      await send(ctx.stub, input);
+      const job = (await ctx.call("poll", { nativeCommands: true })).data.jobs[0];
+      expect(job).toMatchObject({ text: "/exit", command: "exit" });
+      expect((await api(ctx.stub, "snapshot")).data.currentSession.id).toBe(before);
+      expect(await send(ctx.stub, "/wx help")).toContain("/wx status");
+      expect(await send(ctx.stub, "/wx status")).toContain("我的 Agent");
+      await send(ctx.stub, "/exit");
+      expect(await send(ctx.stub, "/help")).toContain("微信命令速查");
+    },
+  );
+
+  it("delivers /stop on a separate lane while a normal job is claimed, even at zero credits", async () => {
+    const ctx = await ready();
+    await ctx.call("heartbeat", { nativeCommands: true });
+    await runInDurableObject(ctx.stub, (_, state) => {
+      state.storage.sql.exec("UPDATE credit_buckets SET remaining = 0");
+    });
+    const id = crypto.randomUUID();
+    await expect(send(ctx.stub, "/stop write a story")).rejects.toThrow("Credits 不足");
+    await send(ctx.stub, "/stop", id);
+    expect((await ctx.call("poll", { nativeCommands: true })).data.jobs[0].id).toBe(ctx.id);
+    const stop = (await ctx.call("poll", { nativeCommands: true, lane: "control" })).data.jobs[0];
+    expect(stop).toMatchObject({ id, command: "stop", routeId: ctx.job.routeId });
+    await ctx.call("claim", { id, nativeCommands: true });
+    const receipt = await ctx.call("event", {
+      eventId: crypto.randomUUID(),
+      jobId: id,
+      routeId: stop.routeId,
+      text: "已停止",
+    });
+    expect(receipt.data.cost).toBe(0);
+    expect((await ctx.call("poll", { nativeCommands: true, lane: "control" })).data.jobs).toEqual(
+      [],
+    );
+  });
+
   it("wakes a long poll as soon as a task is queued and retains single-run claims", async () => {
     const ctx = await setup();
     if (!ctx.call) throw new Error("setup");
@@ -296,7 +378,7 @@ describe("OpenClaw native relay", () => {
             .exec<{ state: string }>("SELECT state FROM inbox WHERE id = ?", id)
             .one().state,
       );
-      expect(state).toBe(enabled ? "reply" : "done");
+      expect(state).toBe("done");
       await runInDurableObject(ctx.stub, (instance) => instance.alarm());
       expect(delivered).toEqual(enabled ? [notice] : []);
       expect((await api(ctx.stub, "snapshot")).data.wallet.balance).toBe(before);
@@ -453,7 +535,7 @@ describe("OpenClaw native relay", () => {
                 message_id: 1,
                 from_user_id: "owner",
                 context_token: "fresh",
-                item_list: [{ type: 1, text_item: { text: "/help" } }],
+                item_list: [{ type: 1, text_item: { text: "/wx help" } }],
               },
             ],
           });
@@ -471,8 +553,6 @@ describe("OpenClaw native relay", () => {
       );
     expect(await status()).toBe("waiting_context");
     failed = false;
-    await runInDurableObject(ctx.stub, (instance) => instance.alarm());
-    expect(await status()).toBe("reply");
     await runInDurableObject(ctx.stub, (instance) => instance.alarm());
     expect(await status()).toBe("done");
     expect(delivered[0].context_token).toBe("fresh");

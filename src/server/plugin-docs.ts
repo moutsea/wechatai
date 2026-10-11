@@ -1,3 +1,7 @@
+import { personalAssistantManifest } from "../shared/personal-assistant";
+import { notificationManifest, notificationMessageSchema } from "../shared/notification";
+import { notificationGuide } from "../shared/notification-docs";
+import { roleplayManifest } from "../shared/roleplay";
 import { hermesGuide } from "../shared/hermes-docs";
 import { hermesManifest } from "../shared/hermes";
 import { openClawGuide } from "../shared/openclaw-docs";
@@ -67,6 +71,9 @@ export const protocolIndex = {
       imageGenerationManifest.id,
       openClawManifest.id,
       hermesManifest.id,
+      roleplayManifest.id,
+      personalAssistantManifest.id,
+      notificationManifest.id,
     ],
     thirdPartyRegistration: false,
     publicInvocationApi: false,
@@ -86,6 +93,9 @@ export const protocolIndex = {
     imageGenerationManifest,
     openClawManifest,
     hermesManifest,
+    roleplayManifest,
+    personalAssistantManifest,
+    notificationManifest,
   ],
   billing: {
     authority: "platform",
@@ -97,6 +107,7 @@ export const protocolIndex = {
     unitsPerCredit: 1000,
     unitFormula: `ceil((inputTokens + ${OUTPUT_TOKEN_WEIGHT} * outputTokens) * 1000 / ${TOKENS_PER_CREDIT}) + outputImages * ${IMAGE_CREDITS * 1000}`,
     trustsPluginUsage: false,
+    exemptPlugins: [notificationManifest.id],
     input:
       "Concatenate text blocks within each message, tokenize each message, then sum. Count the platform boundary snapshot, including supplied history and system text.",
     output:
@@ -125,6 +136,22 @@ export const protocolIndex = {
 // Keep these read-only routes separate from account auth and account rate limits.
 // No cookies, secrets, database access or user-specific data belong in this router.
 export const publicPluginDocs = new Hono();
+publicPluginDocs.get("/api/plugins/notifications", (c) =>
+  c.json({
+    manifest: notificationManifest,
+    documentation: "/developers/notifications.md",
+    page: "/docs/notifications",
+    transport: {
+      send: "POST /api/notify",
+      status: "GET /api/notify/:id",
+      auth: "Authorization: Bearer <token>",
+      idempotency: "Idempotency-Key (optional, retained for 7 days)",
+    },
+    billing: { requiresPlus: true, credits: 0 },
+    limits: { perMinute: 30, per24Hours: 1000, pending: 100, bodyBytes: 32768 },
+    messageSchema: z.toJSONSchema(notificationMessageSchema, { io: "input" }),
+  }),
+);
 publicPluginDocs.get("/developers/openclaw.md", (c) => {
   c.header("Content-Type", "text/markdown; charset=utf-8");
   c.header("Access-Control-Allow-Origin", "*");
@@ -183,6 +210,7 @@ publicPluginDocs.route(PLUGIN_API_PATH, protocolApi);
 
 for (const [path, content, contentType] of [
   [PLUGIN_MARKDOWN_PATH, protocolMarkdown, "text/markdown; charset=utf-8"],
+  ["/developers/notifications.md", notificationGuide, "text/markdown; charset=utf-8"],
   ["/llms.txt", llmsText, "text/plain; charset=utf-8"],
 ] as const) {
   publicPluginDocs.use(path, publicCors);

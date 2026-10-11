@@ -22,6 +22,7 @@ export async function invokeLlmChat(
   runId: string,
   sessionId: string | null,
   creditCap: number | null,
+  identity?: { instanceId: string; pluginId: string; pluginVersion: string },
 ) {
   const request: PluginInvocation = {
     protocolVersion: PLUGIN_PROTOCOL_VERSION,
@@ -30,6 +31,7 @@ export async function invokeLlmChat(
     instanceId: model.id,
     pluginId: llmChatManifest.id,
     pluginVersion: llmChatManifest.version,
+    ...identity,
     messages: [
       { role: "system", content: [{ type: "text", text: model.systemPrompt }] },
       ...messages.map((m, i) => ({

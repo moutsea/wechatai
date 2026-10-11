@@ -139,6 +139,7 @@ function network() {
     invalid: false,
     external: false,
     failSend: false,
+    failImageSend: false,
     uploads: 0,
   };
   let key = "";
@@ -216,8 +217,10 @@ function network() {
       }
       if (u.pathname.endsWith("sendmessage")) {
         events.push("send");
-        sends.push(await request.json());
-        return controls.failSend ? new Response(null, { status: 503 }) : Response.json({ ret: 0 });
+        const body = await request.json<{ msg: { item_list: { type: number }[] } }>();
+        sends.push(body);
+        return controls.failSend || (controls.failImageSend && body.msg.item_list[0].type === 2)
+          ? new Response(null, { status: 503 }) : Response.json({ ret: 0 });
       }
       if (u.pathname.endsWith("getupdates")) return Response.json({ msgs: [] });
       throw new Error(`Unexpected endpoint: ${u.origin}${u.pathname}`);
@@ -233,6 +236,7 @@ describe("AI image plugin", () => {
     expect(p.ok).toBe(true);
     expect(p.data).not.toHaveProperty("size");
     const before = await s.snapshot();
+    expect(before.currentSession).toBeNull();
     const prompt = "画一只橘猫";
     const text = await send(s, "@画图 " + prompt, "image-turn");
     const id = /\/api\/assets\/([0-9a-f-]+)/.exec(text)![1];
@@ -245,6 +249,7 @@ describe("AI image plugin", () => {
     });
     expect(n.requests[0].headers.get("authorization")).toBe("Bearer model-key");
     const after = await s.snapshot();
+    expect(after.currentSession).toBeNull();
     expect(before.wallet.balance - after.wallet.balance).toBeCloseTo(
       5 + creditUnits(countTextTokens(prompt), 0) / 1000,
       6,
@@ -320,7 +325,7 @@ describe("AI image plugin", () => {
       { s } = await setup();
     const prompt = "城市街景，3:4";
     const before = (await s.snapshot()).wallet.balance;
-    await send(s, "@画图 " + prompt);
+    await send(s, "@画图，" + prompt);
     expect(n.requests[0].body).toEqual({ model: "qwen-image-3.0", prompt, n: 1, size: "960x1280" });
     expect(before - (await s.snapshot()).wallet.balance).toBeCloseTo(
       5 + creditUnits(countTextTokens(prompt), 0) / 1000,
@@ -337,7 +342,7 @@ describe("AI image plugin", () => {
     expect(n.requests.map((r) => r.body.prompt)).toEqual(["第一张猫", "第二张狗"]);
     expect((await s.snapshot()).currentSession?.pluginInstanceId).toBe(p.data.id);
     await send(s, "/exit");
-    expect((await s.snapshot()).currentSession?.pluginInstanceId).toBeUndefined();
+    expect((await s.snapshot()).currentSession).toBeNull();
     const assets = await runInDurableObject(s, (_, state) =>
       state.storage.sql
         .exec<{ id: string }>("SELECT id FROM output_assets WHERE sessionId = ?", session)
@@ -531,8 +536,9 @@ describe("AI image plugin", () => {
     const n = network(),
       { s } = await setup();
     await queueWechat(s, "@画图 一个花园");
+    n.controls.failImageSend = true;
     await runDurableObjectAlarm(s);
-    expect(n.events).toEqual(["send", "generate"]);
+    expect(n.events).toEqual(["send", "generate", "send"]);
     expect(n.sends[0].msg).toMatchObject({
       client_id: "wx-turn:image-progress",
       context_token: "context",
@@ -549,12 +555,10 @@ describe("AI image plugin", () => {
           .toArray().length,
       })),
     ).toEqual({ messages: 2, metering: 1, referrals: 0 });
-    n.controls.failSend = true;
-    await runDurableObjectAlarm(s);
     expect(n.controls.uploads).toBe(1);
     expect(n.sends).toHaveLength(2);
     await abortAllDurableObjects();
-    n.controls.failSend = false;
+    n.controls.failImageSend = false;
     const restored = env.ACCOUNTS.get(s.id);
     await runDurableObjectAlarm(restored);
     expect(n.controls.uploads).toBe(1);
@@ -591,8 +595,7 @@ describe("AI image plugin", () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     await queueWechat(s, "一只猫");
     await runDurableObjectAlarm(s);
-    expect(n.events).toEqual(["send", "generate"]);
-    await runDurableObjectAlarm(s);
+    expect(n.events).toEqual(["send", "generate", "send"]);
     expect(n.sends).toHaveLength(2);
     expect(n.sends[1].msg).toMatchObject({
       item_list: [
@@ -629,12 +632,13 @@ describe("AI image plugin", () => {
     n.controls.failSend = true;
     await queueWechat(s, "@画图 花园");
     await runDurableObjectAlarm(s);
-    expect(n.events).toEqual(["send", "generate"]);
+    expect(n.events).toEqual(["send", "generate", "send"]);
     n.controls.failSend = false;
     await runDurableObjectAlarm(s);
     expect(n.requests).toHaveLength(1);
-    expect(n.sends).toHaveLength(2);
-    expect(n.sends[1].msg).toMatchObject({ item_list: [{ type: 2 }] });
+    expect(n.sends).toHaveLength(3);
+    expect(n.sends[2]).toEqual(n.sends[1]);
+    expect(n.sends[2].msg).toMatchObject({ item_list: [{ type: 2 }] });
   });
 
   it.each([true, false])(
@@ -661,7 +665,7 @@ describe("AI image plugin", () => {
       const before = (await restored.snapshot()).wallet.balance;
       await queueWechat(restored, "@画图 城市街景");
       await runDurableObjectAlarm(restored);
-      expect(n.events).toEqual(enabled ? ["send", "generate"] : ["generate"]);
+      expect(n.events).toEqual(enabled ? ["send", "generate", "send"] : ["generate", "send"]);
       if (enabled)
         expect(n.sends[0].msg).toMatchObject({
           item_list: [{ type: 1, text_item: { text: notice } }],
@@ -685,8 +689,6 @@ describe("AI image plugin", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     await queueWechat(s, "@画图 花园");
     await runDurableObjectAlarm(s);
-    expect(n.sends).toHaveLength(0);
-    await runDurableObjectAlarm(s);
     expect(n.sends).toHaveLength(1);
     expect(n.sends[0].msg).toMatchObject({
       item_list: [
@@ -704,8 +706,7 @@ describe("AI image plugin", () => {
       { s } = await setup(true, 5);
     await queueWechat(s, "@画图 花园");
     await runDurableObjectAlarm(s);
-    expect(n.events).toEqual([]);
-    await runDurableObjectAlarm(s);
+    expect(n.events).toEqual(["send"]);
     expect(n.sends).toHaveLength(1);
     expect(n.sends[0].msg).toMatchObject({
       item_list: [

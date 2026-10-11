@@ -2,6 +2,9 @@ import { env } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
+import prepaidMigration from "../migrations/0004_prepaid_membership.sql?raw";
+import notificationMigration from "../migrations/0006_billing_notifications.sql?raw";
+import { dispatchPaymentNotices } from "../src/server/billing-notifications";
 import {
   webhook,
   catalog,
@@ -10,7 +13,7 @@ import {
   portal,
   subscriptionInfo,
 } from "../src/server/billing";
-import { BILLING_OFFERS, type BillingOfferId } from "../src/shared/billing";
+import { BILLING_OFFERS, extendMembership, type BillingOfferId } from "../src/shared/billing";
 const testEnv = {
   ...env,
   STRIPE_SECRET_KEY: "sk_test_fake_not_live",
@@ -21,7 +24,7 @@ const testEnv = {
 beforeAll(async () => {
   await env.DB.exec(authMigration);
   await env.DB.batch(
-    billingMigration
+    (billingMigration + "\n" + prepaidMigration + "\n" + notificationMigration)
       .split(";")
       .filter((s) => s.trim())
       .map((s) => env.DB.prepare(s)),
@@ -136,7 +139,7 @@ function invoice(o: Order, end: number, id = `in_${o.id}`) {
     },
   };
 }
-async function send(type: string, object: object, livemode = false) {
+async function send(type: string, object: object, livemode = false, bindings: Env = testEnv) {
   const body = JSON.stringify({
     id: crypto.randomUUID(),
     object: "event",
@@ -157,7 +160,7 @@ async function send(type: string, object: object, livemode = false) {
     key,
     new TextEncoder().encode(`${time}.${body}`),
   );
-  return webhook(testEnv, body, `t=${time},v1=${Buffer.from(signature).toString("hex")}`);
+  return webhook(bindings, body, `t=${time},v1=${Buffer.from(signature).toString("hex")}`);
 }
 function items(o: Order, price = `price_${o.offer.id}`) {
   return {
@@ -168,6 +171,87 @@ function items(o: Order, price = `price_${o.offer.id}`) {
 }
 
 describe("isolated Stripe fulfillment", () => {
+  it.each([
+    ["2027-01-31T10:00:00+08:00", 1, "2027-02-28T10:00:00+08:00"],
+    ["2028-01-31T00:30:00+08:00", 1, "2028-02-29T00:30:00+08:00"],
+    ["2028-02-29T23:00:00+08:00", 12, "2029-02-28T23:00:00+08:00"],
+  ] as const)("extends calendar months with month-end clamping: %s", (from, months, to) => {
+    expect(extendMembership(Date.parse(from), months)).toBe(Date.parse(to));
+  });
+  it.each(["plus_monthly", "plus_yearly"] as const)(
+    "fulfills prepaid %s once and extends existing membership",
+    async (offerId) => {
+      const o = await seed(offerId);
+      const months = offerId === "plus_yearly" ? 12 : 1;
+      await env.DB.prepare(
+        "UPDATE billing_order SET checkout_mode = 'payment', membership_months = ? WHERE id = ?",
+      )
+        .bind(months, o.id)
+        .run();
+      const account = env.ACCOUNTS.getByName(o.userId);
+      const until = Date.now() + 10 * 86400000;
+      await account.applyPayment({
+        id: "existing",
+        kind: "subscription",
+        units: 0,
+        expires: until,
+      });
+      const session = {
+        ...paidSession(o),
+        mode: "payment",
+        metadata: { ...metadata(o), membershipMonths: "999" },
+      };
+      vi.mocked(fetch).mockImplementation(async (url) =>
+        Response.json(String(url).includes("line_items") ? items(o) : session),
+      );
+      // Wallets can complete asynchronously; unpaid completion must not grant time.
+      await send("checkout.session.completed", { ...session, payment_status: "unpaid" });
+      expect((await account.snapshot()).planUntil).toBe(until);
+      await send("checkout.session.async_payment_succeeded", session);
+      await send("checkout.session.completed", session);
+      expect((await checkoutStatus(testEnv, o.userId, o.session)).status).toBe("paid");
+      const snap = await account.snapshot();
+      expect(snap.planUntil).toBe(extendMembership(until, months));
+      expect(snap.wallet.daily).toBe(1000);
+      expect(snap.wallet.subscription).toBe(0);
+      expect(snap.wallet.purchased).toBe(0);
+      expect(snap.ledger.filter((l) => l.kind === "daily")).toHaveLength(1);
+    },
+  );
+  it("activates a new prepaid member and serializes simultaneous renewals", async () => {
+    const account = env.ACCOUNTS.getByName(crypto.randomUUID());
+    const before = Date.now();
+    await account.applyPayment({ id: "first", kind: "membership", months: 1 });
+    const first = await account.snapshot();
+    expect(first.plan).toBe("plus");
+    expect(first.planUntil).toBeGreaterThanOrEqual(extendMembership(before, 1));
+    expect(first.planUntil).toBeLessThanOrEqual(extendMembership(Date.now(), 1));
+    await Promise.all(
+      [1, 2, 1].map((id) =>
+        account.applyPayment({ id: `renewal-${id}`, kind: "membership", months: 1 }),
+      ),
+    );
+    expect((await account.snapshot()).planUntil).toBe(
+      extendMembership(extendMembership(first.planUntil, 1), 1),
+    );
+  });
+  it.each(["mode", "months", "amount", "intent"])(
+    "rejects mismatched prepaid %s",
+    async (field) => {
+      const o = await seed("plus_monthly");
+      await env.DB.prepare(
+        "UPDATE billing_order SET checkout_mode = 'payment', membership_months = ? WHERE id = ?",
+      )
+        .bind(field === "months" ? 12 : 1, o.id)
+        .run();
+      const session = { ...paidSession(o), mode: field === "mode" ? "subscription" : "payment" };
+      if (field === "amount") session.amount_total = 1;
+      if (field === "intent") session.payment_intent = "";
+      vi.mocked(fetch).mockImplementation(async () => Response.json(items(o)));
+      await expect(send("checkout.session.completed", session)).rejects.toThrow("校验未通过");
+      expect((await env.ACCOUNTS.getByName(o.userId).snapshot()).plan).toBe("free");
+    },
+  );
   it("shows the agreed catalog but disables unconfigured billing", async () => {
     const disabledEnv = { ...env, STRIPE_SECRET_KEY: "" };
     const result = await catalog(disabledEnv);
@@ -202,8 +286,7 @@ describe("isolated Stripe fulfillment", () => {
             livemode: false,
             currency: "cny",
             unit_amount: 990,
-            type: "recurring",
-            recurring: { interval: "month", interval_count: 1 },
+            type: "one_time",
             metadata: { service: "wechatai", environment: "test", offerId: "plus_monthly" },
             product: {
               id: "prod_plus",
@@ -290,6 +373,115 @@ describe("isolated Stripe fulfillment", () => {
   it("rejects forged signatures", async () => {
     await expect(webhook(testEnv, "{}", "forged")).rejects.toThrow("签名无效");
     expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each([false, true])(
+    "requires canceling legacy automatic renewal before prepaid checkout (cancelled: %s)",
+    async (cancelled) => {
+      const o = await seed("plus_monthly");
+      let created = 0;
+      vi.mocked(fetch).mockImplementation(async (url, init) => {
+        const path = new URL(String(url)).pathname;
+        if (path.includes("/prices/"))
+          return Response.json({
+            id: `price_${o.offer.id}`,
+            active: true,
+            livemode: false,
+            currency: "cny",
+            unit_amount: 990,
+            type: "one_time",
+            metadata: { service: "wechatai", environment: "test", offerId: o.offer.id },
+            product: {
+              id: "prod_plus",
+              active: true,
+              metadata: { service: "wechatai", environment: "test" },
+            },
+          });
+        if (path.includes("/customers/"))
+          return Response.json({
+            id: o.customer,
+            metadata: { service: "wechatai", environment: "test", userId: o.userId },
+          });
+        if (path === "/v1/subscriptions")
+          return Response.json({
+            data: [
+              {
+                ...subscription(o, Math.floor(Date.now() / 1000) + 86400),
+                cancel_at_period_end: cancelled,
+              },
+            ],
+            has_more: false,
+          });
+        if (init?.method === "POST" && path === "/v1/checkout/sessions") {
+          created++;
+          return Response.json({
+            id: `cs_new_${o.id}`,
+            url: "https://checkout.stripe.com/new-session",
+          });
+        }
+        throw new Error("Unexpected request");
+      });
+      const result = checkout(
+        testEnv,
+        { id: o.userId, email: "test@example.test" },
+        "plus_monthly",
+      );
+      if (cancelled) {
+        await expect(result).resolves.toHaveProperty("url");
+        expect(created).toBe(1);
+      } else {
+        await expect(result).rejects.toThrow("先通过「管理订阅」取消自动续费");
+        expect(created).toBe(0);
+      }
+    },
+  );
+  it("replaces a card-only pending credits checkout when wallets are enabled", async () => {
+    const o = await seed();
+    await env.DB.prepare("UPDATE billing_order SET pending_key = ? WHERE id = ?")
+      .bind(`test:${o.userId}:credits_5000`, o.id)
+      .run();
+    let expired = false;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path.includes("/prices/"))
+        return Response.json({
+          id: `price_${o.offer.id}`,
+          active: true,
+          livemode: false,
+          currency: "cny",
+          unit_amount: 990,
+          type: "one_time",
+          metadata: { service: "wechatai", environment: "test", offerId: o.offer.id },
+          product: {
+            id: "prod_credits",
+            active: true,
+            metadata: { service: "wechatai", environment: "test" },
+          },
+        });
+      if (path.includes("/customers/"))
+        return Response.json({
+          id: o.customer,
+          metadata: { service: "wechatai", environment: "test", userId: o.userId },
+        });
+      if (path.endsWith("/expire")) {
+        expired = true;
+        return Response.json({ id: o.session, status: "expired" });
+      }
+      if (path.endsWith(o.session))
+        return Response.json({
+          id: o.session,
+          mode: "payment",
+          payment_method_types: ["card"],
+          status: "open",
+          url: "https://checkout.stripe.com/old",
+        });
+      if (init?.method === "POST")
+        return Response.json({ id: `cs_new_${o.id}`, url: "https://checkout.stripe.com/new" });
+      throw new Error("Unexpected request");
+    });
+    expect(
+      (await checkout(testEnv, { id: o.userId, email: "test@example.test" }, "credits_5000")).url,
+    ).toBe("https://checkout.stripe.com/new");
+    expect(expired).toBe(true);
   });
   it.each(["kimiseek", "koinote", ""])(
     "ignores %s events before contacting Stripe or the database",
@@ -434,10 +626,21 @@ describe("isolated Stripe fulfillment", () => {
     );
     expect(fetch).toHaveBeenCalledTimes(1);
   });
-  it.each([false, true])(
-    "creates scoped checkout and reuses pending orders (abandoned creation: %s)",
-    async (abandoned) => {
-      const o = await seed();
+  it.each([
+    [false, "credits_5000"],
+    [true, "credits_5000"],
+    [false, "plus_monthly"],
+    [false, "plus_yearly"],
+  ] as const)(
+    "creates wallet checkout and reuses pending orders (abandoned: %s, offer: %s)",
+    async (abandoned, offerId) => {
+      const o = await seed(offerId);
+      if (o.offer.kind === "plus")
+        await env.ACCOUNTS.getByName(o.userId).applyPayment({
+          id: "prepaid-existing",
+          kind: "membership",
+          months: 1,
+        });
       if (abandoned) {
         await env.DB.prepare(
           "UPDATE billing_order SET session_id = NULL, status = 'created', pending_key = ?, created_at = ? WHERE id = ?",
@@ -455,7 +658,7 @@ describe("isolated Stripe fulfillment", () => {
             active: true,
             livemode: false,
             currency: "cny",
-            unit_amount: 990,
+            unit_amount: o.offer.amount,
             type: "one_time",
             metadata: { service: "wechatai", environment: "test", offerId: o.offer.id },
             product: {
@@ -464,6 +667,7 @@ describe("isolated Stripe fulfillment", () => {
               metadata: { service: "wechatai", environment: "test" },
             },
           });
+        if (target.includes("/subscriptions")) return Response.json({ data: [], has_more: false });
         if (target.includes("/customers/"))
           return Response.json({
             id: o.customer,
@@ -475,14 +679,24 @@ describe("isolated Stripe fulfillment", () => {
         }
         return Response.json({
           id: `cs_new_${o.id}`,
+          mode: "payment",
+          payment_method_types: ["card", "alipay", "wechat_pay"],
           status: "open",
           url: "https://checkout.stripe.com/test-session",
         });
       });
       const user = { id: o.userId, email: "tester@example.test" };
-      await checkout(testEnv, user, "credits_5000");
-      await checkout(testEnv, user, "credits_5000");
+      await checkout(testEnv, user, offerId);
+      await checkout(testEnv, user, offerId);
       expect(created).toBe(1);
+      expect(body!.get("mode")).toBe("payment");
+      expect([0, 1, 2].map((i) => body!.get(`payment_method_types[${i}]`))).toEqual([
+        "card",
+        "alipay",
+        "wechat_pay",
+      ]);
+      expect(body!.get("payment_method_options[wechat_pay][client]")).toBe("web");
+      expect(body!.has("subscription_data[metadata][service]")).toBe(false);
       expect(body!.get("metadata[service]")).toBe("wechatai");
       expect(body!.get("payment_intent_data[metadata][service]")).toBe("wechatai");
       expect(body!.get("metadata[environment]")).toBe("test");
@@ -498,4 +712,247 @@ describe("isolated Stripe fulfillment", () => {
       }
     },
   );
+});
+
+describe("durable administrator payment notices", () => {
+  const liveEnv = {
+    ...testEnv,
+    APP_URL: "https://wechatai.app" as const,
+    STRIPE_SECRET_KEY: "sk_live_fixture_not_real",
+    BILLING_NOTIFY_TOKEN: "fixture-notification-token",
+  };
+  async function liveOrder(offerId: BillingOfferId = "credits_5000") {
+    const o = await seed(offerId);
+    await env.DB.prepare(
+      "UPDATE billing_order SET mode='live',checkout_mode='payment',membership_months=? WHERE id=?",
+    )
+      .bind(o.offer.kind === "plus" ? (o.offer.interval === "year" ? 12 : 1) : 0, o.id)
+      .run();
+    return o;
+  }
+  function session(o: Order) {
+    return {
+      ...paidSession(o),
+      livemode: true,
+      mode: "payment",
+      metadata: { ...metadata(o), environment: "live" },
+    };
+  }
+  async function notice(id: string) {
+    return env.DB.prepare("SELECT * FROM billing_notification WHERE payment_id=?").bind(id).first<{
+      state: string;
+      data: string;
+      attempts: number;
+      next_at: number;
+      error: string;
+      delivery_id: string;
+    }>();
+  }
+  function upstream(
+    o: Order,
+    receive: (init: RequestInit) => Response | Promise<Response> = () =>
+      Response.json({ id: crypto.randomUUID(), status: "pending" }, { status: 202 }),
+  ) {
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path === "/api/notify") return receive(init!);
+      if (path.endsWith("/line_items")) return Response.json(items(o));
+      if (path.endsWith(o.session)) return Response.json(session(o));
+      throw new Error(`Unexpected fixture path: ${path}`);
+    });
+  }
+  const posts = () =>
+    vi.mocked(fetch).mock.calls.filter(([url]) => new URL(String(url)).pathname === "/api/notify");
+
+  it.each(["plus_monthly", "plus_yearly", "credits_5000"] as const)(
+    "queues %s only after verified fulfillment, and deduplicates callbacks",
+    async (offerId) => {
+      const o = await liveOrder(offerId);
+      upstream(o);
+      await send("checkout.session.completed", session(o), true, liveEnv);
+      expect(await notice(o.session)).toMatchObject({ state: "pending", attempts: 0 });
+      expect(posts()).toHaveLength(0);
+      await dispatchPaymentNotices(liveEnv);
+      expect(await notice(o.session)).toMatchObject({ state: "accepted", data: "", attempts: 1 });
+      const request = posts()[0][1]!;
+      expect(new Headers(request.headers).get("authorization")).toBe(
+        "Bearer fixture-notification-token",
+      );
+      expect(new Headers(request.headers).get("idempotency-key")).toBe(
+        `wechatai:payment:${o.session}`,
+      );
+      const body = JSON.parse(String(request.body));
+      expect(body.title).toBe("微伴收款成功");
+      expect(body.text).toContain(`实付：¥${(o.offer.amount / 100).toFixed(2)}`);
+      expect(body.text).toContain("首次付款");
+      expect(body.text).toContain(o.id);
+      await send("checkout.session.async_payment_succeeded", session(o), true, liveEnv);
+      expect((await checkoutStatus(liveEnv, o.userId, o.session)).status).toBe("paid");
+      await dispatchPaymentNotices(liveEnv);
+      expect(posts()).toHaveLength(1);
+    },
+  );
+  it("ignores unpaid, failed, foreign-business and test events; rejects mismatches", async () => {
+    const o = await liveOrder();
+    upstream(o);
+    await send(
+      "checkout.session.completed",
+      { ...session(o), payment_status: "unpaid" },
+      true,
+      liveEnv,
+    );
+    await send("checkout.session.async_payment_failed", session(o), true, liveEnv);
+    await send(
+      "checkout.session.completed",
+      { ...session(o), metadata: { ...session(o).metadata, service: "kimiseek", app: "kimiseek" } },
+      true,
+      liveEnv,
+    );
+    await send("checkout.session.completed", session(o), false, liveEnv);
+    await expect(
+      send("checkout.session.completed", { ...session(o), amount_total: 1 }, true, liveEnv),
+    ).rejects.toThrow();
+    await expect(webhook(liveEnv, "{}", "invalid")).rejects.toThrow("签名无效");
+    expect(await notice(o.session)).toBeNull();
+    expect(posts()).toHaveLength(0);
+    const test = await seed();
+    upstream(test);
+    await send("checkout.session.completed", paidSession(test), false, {
+      ...testEnv,
+      BILLING_NOTIFY_TOKEN: "fixture",
+    } as Env);
+    expect(await notice(test.session)).toBeNull();
+  });
+  it("recovers through checkout status and retries with the same frozen content and key", async () => {
+    const o = await liveOrder();
+    upstream(o, () => new Response("unavailable", { status: 503 }));
+    expect((await checkoutStatus(liveEnv, o.userId, o.session)).status).toBe("paid");
+    await dispatchPaymentNotices(liveEnv);
+    expect(await notice(o.session)).toMatchObject({
+      state: "pending",
+      attempts: 1,
+      error: "http_503",
+    });
+    const original = posts()[0][1]!;
+    await env.DB.prepare("UPDATE user SET name='Changed' WHERE id=?").bind(o.userId).run();
+    await send("checkout.session.completed", session(o), true, liveEnv);
+    await dispatchPaymentNotices(liveEnv);
+    expect(posts()).toHaveLength(1); // Backoff is respected.
+    await env.DB.prepare("UPDATE billing_notification SET next_at=0 WHERE payment_id=?")
+      .bind(o.session)
+      .run();
+    upstream(o);
+    await dispatchPaymentNotices(liveEnv);
+    expect(await notice(o.session)).toMatchObject({ state: "accepted", attempts: 2 });
+    const retried = posts()[1][1]!;
+    expect(retried.body).toBe(original.body);
+    expect(retried.headers).toEqual(original.headers);
+    expect((await env.ACCOUNTS.getByName(o.userId).snapshot()).wallet.purchased).toBe(
+      o.offer.credits,
+    );
+  });
+  it("leases jobs across concurrent dispatchers and recovers an interrupted delivery", async () => {
+    const o = await liveOrder();
+    upstream(o);
+    await send("checkout.session.completed", session(o), true, liveEnv);
+    await env.DB.prepare(
+      "UPDATE billing_notification SET state='sending',attempts=1,next_at=? WHERE payment_id=?",
+    )
+      .bind(Date.now() + 60_000, o.session)
+      .run();
+    await dispatchPaymentNotices(liveEnv);
+    expect(posts()).toHaveLength(0);
+    await env.DB.prepare("UPDATE billing_notification SET next_at=0 WHERE payment_id=?")
+      .bind(o.session)
+      .run();
+    await Promise.all([dispatchPaymentNotices(liveEnv), dispatchPaymentNotices(liveEnv)]);
+    expect(posts()).toHaveLength(1);
+    expect(await notice(o.session)).toMatchObject({ state: "accepted", attempts: 2 });
+  });
+  it("expires unavailable notices after 24 hours while retaining their deduplication ids", async () => {
+    const o = await liveOrder();
+    upstream(o);
+    await send("checkout.session.completed", session(o), true, liveEnv);
+    await env.DB.prepare("UPDATE billing_notification SET created_at=? WHERE payment_id=?")
+      .bind(Date.now() - 25 * 3600000, o.session)
+      .run();
+    await dispatchPaymentNotices(liveEnv);
+    await send("checkout.session.completed", session(o), true, liveEnv);
+    expect(await notice(o.session)).toMatchObject({
+      state: "failed",
+      data: "",
+      error: "delivery_expired",
+    });
+    expect(posts()).toHaveLength(0);
+  });
+  it("supports first-payment-only scope without sending repeat purchases", async () => {
+    const first = await liveOrder();
+    const scoped = { ...liveEnv, BILLING_NOTIFY_SCOPE: "first_payment" };
+    upstream(first);
+    await send("checkout.session.completed", session(first), true, scoped);
+    const next = await liveOrder();
+    await env.DB.prepare("UPDATE billing_order SET user_id=? WHERE id=?")
+      .bind(first.userId, next.id)
+      .run();
+    next.userId = first.userId;
+    upstream(next);
+    await send("checkout.session.completed", session(next), true, scoped);
+    expect(await notice(first.session)).toMatchObject({ state: "pending" });
+    expect(await notice(next.session)).toBeNull();
+    expect((await checkoutStatus(scoped, next.userId, next.session)).status).toBe("paid");
+  });
+  it("queues each legacy subscription invoice exactly once", async () => {
+    const o = await liveOrder("plus_monthly");
+    await env.DB.prepare("UPDATE billing_order SET checkout_mode=NULL WHERE id=?").bind(o.id).run();
+    const end = Math.floor(Date.now() / 1000) + 30 * 86400;
+    const sub = { ...subscription(o, end), livemode: true, metadata: session(o).metadata };
+    vi.mocked(fetch).mockImplementation(async () => Response.json(sub));
+    for (const n of [1, 2, 2]) {
+      const paid = invoice(o, end + n * 30 * 86400, `in_${o.id}_${n}`);
+      await send(
+        "invoice.paid",
+        {
+          ...paid,
+          livemode: true,
+          parent: { subscription_details: { subscription: sub.id, metadata: sub.metadata } },
+        },
+        true,
+        liveEnv,
+      );
+    }
+    expect(JSON.parse((await notice(`in_${o.id}_1`))!.data).firstPayment).toBe(1);
+    expect(JSON.parse((await notice(`in_${o.id}_2`))!.data)).toMatchObject({
+      firstPayment: 0,
+      renewal: 1,
+    });
+    const count = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM billing_notification WHERE order_id=?",
+    )
+      .bind(o.id)
+      .first<{ n: number }>();
+    expect(count!.n).toBe(2);
+  });
+  it("commits notice and paid status together and safely resumes after a database failure", async () => {
+    const o = await liveOrder();
+    upstream(o);
+    await env.DB.exec(
+      "CREATE TRIGGER reject_notice BEFORE INSERT ON billing_notification BEGIN SELECT RAISE(ABORT, 'fixture_failure'); END;",
+    );
+    try {
+      await expect(send("checkout.session.completed", session(o), true, liveEnv)).rejects.toThrow(
+        "fixture_failure",
+      );
+      expect(await notice(o.session)).toBeNull();
+      expect(
+        await env.DB.prepare("SELECT status FROM billing_order WHERE id=?").bind(o.id).first(),
+      ).toMatchObject({ status: "open" });
+    } finally {
+      await env.DB.exec("DROP TRIGGER reject_notice");
+    }
+    await send("checkout.session.completed", session(o), true, liveEnv);
+    expect(await notice(o.session)).toMatchObject({ state: "pending" });
+    expect((await env.ACCOUNTS.getByName(o.userId).snapshot()).wallet.purchased).toBe(
+      o.offer.credits,
+    );
+  });
 });

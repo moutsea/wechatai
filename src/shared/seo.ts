@@ -1,15 +1,31 @@
+import { INFO_PAGES, POLICY_UPDATED_AT } from "./site-info";
+import {
+  DOC_ARTICLES,
+  DOCS_TITLE,
+  DOCS_DESCRIPTION,
+  DOCS_UPDATED_AT,
+  docPath,
+  findDocArticle,
+} from "./docs";
+
 // Public search URLs always use the production domain, including local builds.
 export const SITE_URL = "https://wechatai.app";
 export const SITE_NAME = "微伴 Wechatai";
+// Update only when the actual homepage content changes, never on every build.
+const HOME_UPDATED_AT = "2026-10-10";
 export const SOCIAL_IMAGE = `${SITE_URL}/og-image.png`;
 export const PUBLIC_PATHS = [
   "/",
-  "/guide",
+  "/docs",
+  ...DOC_ARTICLES.map((article) => docPath(article.slug)),
   "/developers/plugins",
   "/developers/openclaw",
   "/developers/hermes",
+  ...Object.values(INFO_PAGES).map((page) => page.path),
 ] as const;
+export const LEGACY_PATHS = ["/guide"] as const;
 export const PRIVATE_PATHS = [
+  "/app/admin",
   "/login",
   "/register",
   ...["/app", "/demo"].flatMap((base) =>
@@ -32,11 +48,96 @@ export interface PageSeo {
   description: string;
   indexable: boolean;
   canonical?: string;
+  ogType?: "website" | "article";
   structuredData?: Record<string, unknown>;
 }
 
 export function getPageSeo(pathname: string): PageSeo {
   const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, "") || "/";
+  // Production redirects this route at the edge. The fallback HTML has the
+  // destination canonical without a conflicting noindex instruction.
+  if (path === "/guide") return getPageSeo("/docs/getting-started");
+  const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
+  if (path === "/docs" || article) {
+    const canonical = `${SITE_URL}${path}`;
+    const title = article?.title ?? DOCS_TITLE;
+    const description = article?.description ?? DOCS_DESCRIPTION;
+    const breadcrumbs = [
+      { "@type": "ListItem", position: 1, name: "首页", item: `${SITE_URL}/` },
+      { "@type": "ListItem", position: 2, name: "文档", item: `${SITE_URL}/docs` },
+      ...(article ? [{ "@type": "ListItem", position: 3, name: title, item: canonical }] : []),
+    ];
+    return {
+      title: `${article?.seoTitle ?? title} | ${SITE_NAME}`,
+      description,
+      indexable: true,
+      canonical,
+      ogType: article ? "article" : "website",
+      structuredData: {
+        "@context": "https://schema.org",
+        "@graph": [
+          article
+            ? {
+                "@type": "Article",
+                "@id": `${canonical}#article`,
+                url: canonical,
+                mainEntityOfPage: canonical,
+                headline: title,
+                description,
+                inLanguage: "zh-CN",
+                image: SOCIAL_IMAGE,
+                datePublished: DOCS_UPDATED_AT,
+                dateModified: DOCS_UPDATED_AT,
+                author: { "@type": "Organization", name: "微伴团队", url: `${SITE_URL}/` },
+                publisher: {
+                  "@type": "Organization",
+                  "@id": `${SITE_URL}/#organization`,
+                  name: SITE_NAME,
+                  url: `${SITE_URL}/`,
+                },
+                articleSection: article.category,
+                isPartOf: { "@id": `${SITE_URL}/docs` },
+              }
+            : {
+                "@type": "CollectionPage",
+                "@id": canonical,
+                url: canonical,
+                name: title,
+                description,
+                inLanguage: "zh-CN",
+                mainEntity: {
+                  "@type": "ItemList",
+                  itemListElement: DOC_ARTICLES.map((item, index) => ({
+                    "@type": "ListItem",
+                    position: index + 1,
+                    name: item.title,
+                    url: `${SITE_URL}${docPath(item.slug)}`,
+                  })),
+                },
+              },
+          { "@type": "BreadcrumbList", itemListElement: breadcrumbs },
+        ],
+      },
+    };
+  }
+  const info = Object.values(INFO_PAGES).find((page) => page.path === path);
+  if (info) {
+    const canonical = `${SITE_URL}${path}`;
+    return {
+      title: `${info.title} | ${SITE_NAME}`,
+      description: info.description,
+      indexable: true,
+      canonical,
+      structuredData: {
+        "@context": "https://schema.org",
+        "@type": path === "/contact" ? "ContactPage" : "WebPage",
+        name: info.title,
+        description: info.description,
+        url: canonical,
+        inLanguage: "zh-CN",
+      },
+    };
+  }
   if (path === "/developers/openclaw" || path === "/developers/hermes") {
     const agent = path.endsWith("hermes") ? "Hermes" : "OpenClaw";
     return {
@@ -52,20 +153,15 @@ export function getPageSeo(pathname: string): PageSeo {
       },
     };
   }
-  if (path === "/" || path === "/guide" || path === "/developers/plugins") {
+  if (path === "/" || path === "/developers/plugins") {
     const isHome = path === "/";
-    const isPluginDocs = path === "/developers/plugins";
     const canonical = `${SITE_URL}${isHome ? "/" : path}`;
     const title = isHome
-      ? "WeChat AI · 微信 AI 自定义大模型聊天 | 微伴 Wechatai"
-      : isPluginDocs
-        ? "插件协议与开发文档：API、JSON Schema 与接入示例 | Wechatai"
-        : "微信 AI 使用指南：连接模型与聊天命令 | Wechatai";
+      ? "WeChat AI · 微信 AI：把你的 AI 接入微信 | 微伴 Wechatai"
+      : "插件协议与开发文档：API、JSON Schema 与接入示例 | Wechatai";
     const description = isHome
-      ? "微伴 Wechatai，让你在微信里使用自定义大模型。自带 API Key 和服务地址，支持 OpenAI Chat Completions、Responses 与 Anthropic Messages，切换模型、管理会话，每日赠送 credits。AI in WeChat，从自己的模型开始。"
-      : isPluginDocs
-        ? "Wechatai 插件协议 V1：调用与结果格式、平台计量、权限边界和适配器示例。提供公开 Markdown、JSON API 与 JSON Schema，方便 AI agent 辅助开发。第三方执行与代码上传尚未开放。"
-        : "如何在微信里使用 AI？微伴 WeChat AI 使用指南：配置 API Key 与大模型渠道、扫码连接微信、切换模型、新建和管理聊天会话，查看微信命令速查及 credits 说明。";
+      ? "微伴 Wechatai，把你的 AI 接入微信。用自己的 API Key 连接 DeepSeek、Claude、GPT 等模型，也可接入 OpenClaw 与 Hermes。微信内切换模型、管理会话，每日赠送 credits，支持免费开始。"
+      : "Wechatai 插件协议 V1：调用与结果格式、平台计量、权限边界和适配器示例。提供公开 Markdown、JSON API 与 JSON Schema，方便 AI agent 辅助开发。第三方执行与代码上传尚未开放。";
     return {
       title,
       description,
@@ -95,6 +191,13 @@ export function getPageSeo(pathname: string): PageSeo {
           ...(isHome
             ? [
                 {
+                  "@type": "Organization",
+                  "@id": `${SITE_URL}/#organization`,
+                  name: SITE_NAME,
+                  alternateName: ["Wechatai", "微伴"],
+                  url: `${SITE_URL}/`,
+                },
+                {
                   "@type": "SoftwareApplication",
                   "@id": `${SITE_URL}/#application`,
                   name: SITE_NAME,
@@ -107,6 +210,7 @@ export function getPageSeo(pathname: string): PageSeo {
                     "使用自己的 API Key 与模型服务地址",
                     "在微信中切换大模型并管理聊天会话",
                     "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
+                    "连接自己的 OpenClaw 和 Hermes Agent",
                   ],
                 },
               ]
@@ -156,7 +260,7 @@ export function renderSeoHead(seo: PageSeo) {
       : []),
     ...(seo.indexable
       ? [
-          meta("og:type", "website", true),
+          meta("og:type", seo.ogType ?? "website", true),
           meta("og:site_name", SITE_NAME, true),
           meta("og:locale", "zh_CN", true),
           meta("og:title", seo.title, true),
@@ -190,6 +294,19 @@ export function replaceSeoHead(html: string, seo: PageSeo) {
   );
 }
 
+export function pageLastModified(path: string): string | undefined {
+  if (path === "/") return HOME_UPDATED_AT;
+  if (path === "/docs" || DOC_ARTICLES.some((article) => docPath(article.slug) === path))
+    return DOCS_UPDATED_AT;
+  if (Object.values(INFO_PAGES).some((page) => page.path === path)) return POLICY_UPDATED_AT;
+  // Omit unknown dates rather than presenting the build time as a content update.
+  return undefined;
+}
+
 export function renderSitemap() {
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${PUBLIC_PATHS.map((path) => `  <url><loc>${SITE_URL}${path}</loc></url>`).join("\n")}\n</urlset>\n`;
+  const entries = PUBLIC_PATHS.map((path) => {
+    const modified = pageLastModified(path);
+    return `  <url><loc>${SITE_URL}${path}</loc>${modified ? `<lastmod>${modified}</lastmod>` : ""}</url>`;
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join("\n")}\n</urlset>\n`;
 }

@@ -1,3 +1,4 @@
+import { nativeCommand, nativeCommandLane } from "../shared/command-routing";
 import { remoteAgentName, type RemoteAgentPlugin } from "../shared/remote-agent";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
@@ -24,6 +25,8 @@ type Job = {
   inputTokens: number;
   outputLimit: number;
   runnerId: string;
+  command: string;
+  lane: "message" | "control";
 };
 type Hooks = {
   plugin: (id: string) => RemoteAgentPlugin;
@@ -39,6 +42,7 @@ type Hooks = {
     units: number;
     failed: boolean;
     proactive: boolean;
+    command: string;
   }) => void;
 };
 const eventSchema = z.object({
@@ -51,6 +55,8 @@ const eventSchema = z.object({
 });
 const pollSchema = z.object({
   runnerId: z.string().uuid(),
+  nativeCommands: z.boolean().default(false),
+  lane: z.enum(["message", "control"]).default("message"),
   waitMs: z.number().int().min(0).max(15000).default(0),
 });
 export const clawPairExchangeSchema = z.object({
@@ -87,11 +93,25 @@ export class OpenClawRelay {
         .some((c) => c.name === "runnerId")
     )
       this.sql.exec("ALTER TABLE claw_jobs ADD COLUMN runnerId TEXT NOT NULL DEFAULT ''");
+    for (const [table, column, definition] of [
+      ["claw_jobs", "command", "TEXT NOT NULL DEFAULT ''"],
+      ["claw_jobs", "lane", "TEXT NOT NULL DEFAULT 'message'"],
+      ["claw_connectors", "nativeCommands", "INTEGER NOT NULL DEFAULT 0"],
+    ]) {
+      if (
+        !this.sql
+          .exec<{ name: string }>(`PRAGMA table_info(${table})`)
+          .toArray()
+          .some((c) => c.name === column)
+      )
+        this.sql.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
+
   status(pluginId: string) {
     const row = this.sql
-      .exec<{ lastSeen: number }>(
-        "SELECT lastSeen FROM claw_connectors WHERE pluginId = ?",
+      .exec<{ lastSeen: number; nativeCommands: number }>(
+        "SELECT lastSeen,nativeCommands FROM claw_connectors WHERE pluginId = ?",
         pluginId,
       )
       .toArray()[0];
@@ -107,6 +127,7 @@ export class OpenClawRelay {
     return {
       pairingClaimed: Boolean(pairing?.claimHash),
       hasKey: Boolean(row),
+      nativeCommands: Boolean(row?.nativeCommands),
       lastSeen: row?.lastSeen ?? 0,
       agents: agents ? (JSON.parse(agents.agents) as OpenClawAgent[]) : [],
     };
@@ -116,7 +137,11 @@ export class OpenClawRelay {
     const secret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
     this.storage.transactionSync(() => {
       this.revoke(pluginId);
-      this.sql.exec("INSERT INTO claw_connectors VALUES (?,?,0)", pluginId, hash(secret));
+      this.sql.exec(
+        "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0)",
+        pluginId,
+        hash(secret),
+      );
     });
     return `${accountId}.${pluginId}.${secret}`;
   }
@@ -161,7 +186,7 @@ export class OpenClawRelay {
       const agentId = (selected || agents.find((a) => a.isDefault) || agents[0]).id;
       this.clearRoutes(pluginId);
       this.sql.exec(
-        "INSERT INTO claw_connectors VALUES (?,?,0) ON CONFLICT(pluginId) DO UPDATE SET tokenHash=excluded.tokenHash,lastSeen=0",
+        "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0) ON CONFLICT(pluginId) DO UPDATE SET tokenHash=excluded.tokenHash,lastSeen=0,nativeCommands=0",
         pluginId,
         hash(connectorSecret),
       );
@@ -206,7 +231,8 @@ export class OpenClawRelay {
       "UPDATE claw_jobs SET state = 'cancelled', text = '' WHERE pluginId = ? AND state IN ('pending','claimed')",
       pluginId,
     );
-    this.pollWaiters.get(pluginId)?.();
+    this.pollWaiters.get(`${pluginId}:message`)?.();
+    this.pollWaiters.get(`${pluginId}:control`)?.();
   }
   cancelSession(sessionId: string) {
     this.sql.exec(
@@ -235,7 +261,16 @@ export class OpenClawRelay {
       );
     const previous = this.sql.exec<Job>("SELECT * FROM claw_jobs WHERE id = ?", id).toArray()[0];
     if (previous) return previous;
-    if (this.hooks.balance() <= 0)
+    const command = nativeCommand(text) ?? "";
+    if (command && !this.status(pluginId).nativeCommands)
+      throw new AppError(
+        "connector_upgrade_required",
+        `请在网页的 ${remoteAgentName(plugin.pluginId)} 配置中重新生成并执行连接命令，升级连接器后即可使用 Agent 原生命令`,
+        409,
+      );
+    const lane = nativeCommandLane(text);
+    const control = lane === "control";
+    if (!control && this.hooks.balance() <= 0)
       throw new AppError("insufficient_credits", "Credits 不足，请补充后再使用", 402);
     const inputTokens = countTextTokens(text);
     if (inputTokens > plugin.maxInputTokens)
@@ -247,10 +282,11 @@ export class OpenClawRelay {
     if (
       this.sql
         .exec<{ n: number }>(
-          "SELECT count(*) n FROM claw_jobs WHERE pluginId = ? AND state IN ('pending','claimed')",
+          "SELECT count(*) n FROM claw_jobs WHERE pluginId = ? AND lane = ? AND state IN ('pending','claimed')",
           pluginId,
+          lane,
         )
-        .one().n >= 20
+        .one().n >= (control ? 2 : 20)
     )
       throw new AppError(
         "claw_queue_full",
@@ -279,7 +315,7 @@ export class OpenClawRelay {
       route.epoch,
     );
     this.sql.exec(
-      "INSERT INTO claw_jobs (id,routeId,pluginId,text,state,createdAt,inputTokens,outputLimit) VALUES (?,?,?,?, 'pending',?,?,?)",
+      "INSERT INTO claw_jobs (id,routeId,pluginId,text,state,createdAt,inputTokens,outputLimit,command,lane) VALUES (?,?,?,?, 'pending',?,?,?,?,?)",
       id,
       target.id,
       pluginId,
@@ -287,24 +323,28 @@ export class OpenClawRelay {
       Date.now(),
       inputTokens,
       plugin.maxOutputTokens,
+      command,
+      lane,
     );
-    this.pollWaiters.get(pluginId)?.();
+    this.pollWaiters.get(`${pluginId}:message`)?.();
+    this.pollWaiters.get(`${pluginId}:control`)?.();
     return { id, routeId: target.id };
   }
   async poll(pluginId: string, secret: string, raw: unknown) {
     const input = pollSchema.parse(raw);
     const first = this.handle(pluginId, secret, "poll", input);
     if (first.jobs.length || !input.waitMs) return first;
+    const waiterKey = `${pluginId}:${input.lane}`;
     await new Promise<void>((resolve) => {
-      // Bound concurrent waits to one per connector. Claims still arbitrate runners.
-      this.pollWaiters.get(pluginId)?.();
+      // One wait per lane; /stop can arrive while a normal task is running.
+      this.pollWaiters.get(waiterKey)?.();
       const finish = () => {
         clearTimeout(timer);
-        if (this.pollWaiters.get(pluginId) === finish) this.pollWaiters.delete(pluginId);
+        if (this.pollWaiters.get(waiterKey) === finish) this.pollWaiters.delete(waiterKey);
         resolve();
       };
       const timer = setTimeout(finish, input.waitMs);
-      this.pollWaiters.set(pluginId, finish);
+      this.pollWaiters.set(waiterKey, finish);
     });
     // Re-authenticate after waking; revoked or disabled connectors must not receive jobs.
     return this.handle(pluginId, secret, "poll", input);
@@ -318,7 +358,7 @@ export class OpenClawRelay {
         pluginId,
       );
       if (action === "poll") {
-        const { runnerId, waitMs } = pollSchema.parse(raw);
+        const { runnerId, waitMs, nativeCommands, lane } = pollSchema.parse(raw);
         // Expired jobs cannot execute later, but retain the tombstone for dedupe.
         this.sql.exec(
           "UPDATE claw_jobs SET state = 'expired', text = '' WHERE pluginId = ? AND state IN ('pending','claimed') AND createdAt < ?",
@@ -327,8 +367,10 @@ export class OpenClawRelay {
         );
         const jobs = this.sql
           .exec<Job>(
-            "SELECT * FROM claw_jobs WHERE pluginId = ? AND state IN ('pending','claimed') ORDER BY createdAt,rowid LIMIT 1",
+            "SELECT * FROM claw_jobs WHERE pluginId = ? AND lane = ? AND (? OR command = '') AND state IN ('pending','claimed') ORDER BY createdAt,rowid LIMIT 1",
             pluginId,
+            lane,
+            nativeCommands ? 1 : 0,
           )
           .toArray();
         return {
@@ -354,6 +396,8 @@ export class OpenClawRelay {
                 text: j.text,
                 agentId: plugin.agentId,
                 state: j.state,
+                command: j.command || undefined,
+                lane: j.lane,
               },
             ];
           }),
@@ -361,14 +405,20 @@ export class OpenClawRelay {
         };
       }
       if (action === "claim") {
-        const { id, runnerId } = z
-          .object({ id: z.string().max(300), runnerId: z.string().uuid() })
+        const { id, runnerId, nativeCommands } = z
+          .object({
+            id: z.string().max(300),
+            runnerId: z.string().uuid(),
+            nativeCommands: z.boolean().default(false),
+          })
           .parse(raw);
         const job = this.sql
           .exec<Job>("SELECT * FROM claw_jobs WHERE id = ? AND pluginId = ?", id, pluginId)
           .toArray()[0];
         if (!job || !["pending", "claimed"].includes(job.state))
           throw new AppError("claw_job_gone", "任务已结束或取消", 409);
+        if (job.command && !nativeCommands)
+          throw new AppError("connector_upgrade_required", "连接器需要升级才能执行原生命令", 409);
         const route = this.sql
           .exec<ClawRoute>("SELECT * FROM claw_routes WHERE id = ?", job.routeId)
           .toArray()[0];
@@ -390,7 +440,17 @@ export class OpenClawRelay {
         return { claimed: job.state === "pending" };
       }
       if (action === "heartbeat") {
-        const { agents } = z.object({ agents: openClawAgentsSchema.optional() }).parse(raw);
+        const { agents, nativeCommands } = z
+          .object({
+            agents: openClawAgentsSchema.optional(),
+            nativeCommands: z.boolean().default(false),
+          })
+          .parse(raw);
+        this.sql.exec(
+          "UPDATE claw_connectors SET nativeCommands = ? WHERE pluginId = ?",
+          nativeCommands ? 1 : 0,
+          pluginId,
+        );
         if (agents) this.recordAgents(pluginId, agents, true);
         return { ok: true };
       }
@@ -439,11 +499,15 @@ export class OpenClawRelay {
         ? `${remoteAgentName(plugin.pluginId)} 未完成这次任务，本次未扣费。请检查本机运行状态后重新发送；为避免重复执行工具，中断的任务不会自动重跑。`
         : limitTextTokens(
             event.text.trim(),
-            Math.min(plugin.maxOutputTokens, job?.outputLimit ?? plugin.maxOutputTokens),
+            Math.min(
+              plugin.maxOutputTokens,
+              job?.outputLimit ?? plugin.maxOutputTokens,
+              job?.lane === "control" ? 256 : Infinity,
+            ),
           );
       const inputTokens = failed ? 0 : (job?.inputTokens ?? 0);
       const outputTokens = failed ? 0 : countTextTokens(text);
-      const units = creditUnits(inputTokens, outputTokens);
+      const units = job?.lane === "control" ? 0 : creditUnits(inputTokens, outputTokens);
       const id = `claw:${receiptId}`;
       this.hooks.deliver({
         id,
@@ -454,6 +518,7 @@ export class OpenClawRelay {
         units,
         failed,
         proactive: !job,
+        command: job?.command ?? "",
       });
       if (job)
         this.sql.exec(

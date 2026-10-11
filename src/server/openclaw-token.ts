@@ -69,6 +69,6 @@ export function openClawConnectCommand(endpoint: string, code: string) {
 export function hermesConnectCommand(endpoint: string, code: string) {
   const origin = new URL(endpoint).origin;
   const options = JSON.stringify({ endpoint: origin, code });
-  const script = `import urllib.request; u=${JSON.stringify(origin + "/downloads/wechatai-hermes-connect.py")}; h=type("NoRedirect",(urllib.request.HTTPRedirectHandler,),{"redirect_request":lambda *args:None})(); r=urllib.request.build_opener(h).open(u,timeout=30); b=r.read(262145); r.close(); assert len(b)<=262144,"安装脚本过大"; exec(compile(b,u,"exec")); connect(${options})`;
+  const script = `import urllib.request; u=${JSON.stringify(origin + "/downloads/wechatai-hermes-connect.py")}; h=type("NoRedirect",(urllib.request.HTTPRedirectHandler,),{"redirect_request":lambda *args:None})(); q=urllib.request.Request(u,headers={"User-Agent":"Wechatai-Hermes/1.1.1"}); r=urllib.request.build_opener(h).open(q,timeout=30); b=r.read(262145); r.close(); assert len(b)<=262144,"安装脚本过大"; exec(compile(b,u,"exec")); connect(${options})`;
   return `python3 -c '${script.replace(/'/g, `'"'"'`)}'`;
 }

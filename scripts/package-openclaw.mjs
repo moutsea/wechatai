@@ -21,11 +21,11 @@ const result = JSON.parse(
     encoding: "utf8",
   }),
 );
-await rename(resolve(output, result[0].filename), resolve(output, "wechatai-openclaw-1.0.1.tgz"));
+await rename(resolve(output, result[0].filename), resolve(output, "wechatai-openclaw-1.1.2.tgz"));
 console.log("Built OpenClaw channel download (compiled runtime and manifest).");
 
 const checksum = createHash("sha256")
-  .update(await readFile(resolve(output, "wechatai-openclaw-1.0.1.tgz")))
+  .update(await readFile(resolve(output, "wechatai-openclaw-1.1.2.tgz")))
   .digest("hex");
 const installer = (await readFile("integrations/openclaw/connect.mjs", "utf8")).replace(
   "__WECHATAI_ARCHIVE_SHA256__",

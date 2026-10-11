@@ -75,7 +75,7 @@ export function Billing() {
           setPaymentState("paid");
           setPaymentMessage(
             result.kind === "plus"
-              ? "Plus 会员已开通，今日额度已补足至会员标准。"
+              ? "支付成功，Plus 会员有效期已更新。"
               : `${formatCredits(result.credits)} credits 已到账。`,
           );
         } else if (result.status === "pending" && ++attempts < 10)
@@ -103,6 +103,12 @@ export function Billing() {
   }, [checkoutResult, sessionId, retry, request, refresh, demo]);
   if (!data) return null;
   const plus = offers.find((o) => o.kind === "plus" && o.interval === interval);
+  const hasRecurringSubscription =
+    subscription &&
+    !subscription.cancelAtPeriodEnd &&
+    ["active", "trialing", "past_due", "unpaid", "paused", "incomplete"].includes(
+      subscription.status,
+    );
   const topup = offers.find((o) => o.id === packId);
   const price = (offer?: BillingOffer) =>
     offer?.price !== null && offer?.price !== undefined
@@ -160,7 +166,7 @@ export function Billing() {
         }
       />
       {mode === "test" && offers.some((o) => o.enabled) && (
-        <div className="billing-notice">测试模式 · 使用 Stripe 测试卡，不会产生真实扣款。</div>
+        <div className="billing-notice">测试模式 · 支付仅用于测试，不会产生真实扣款。</div>
       )}
       {paymentState && (
         <div className={`billing-notice ${paymentState === "paid" ? "success" : ""}`} role="status">
@@ -186,7 +192,7 @@ export function Billing() {
       )}
       {subscription && (
         <p className="billing-subscription-note">
-          {subscription.offerId === "plus_yearly" ? "年付会员" : "月付会员"} ·
+          原有{subscription.offerId === "plus_yearly" ? "年付订阅" : "月付订阅"} ·
           {subscription.status === "canceled"
             ? "订阅已结束"
             : subscription.cancelAtPeriodEnd
@@ -195,6 +201,19 @@ export function Billing() {
                 ? "续费未完成，请管理订阅更新支付方式"
                 : "自动续费中"}{" "}
           · 当前周期至 {new Date(subscription.periodEnd).toLocaleDateString("zh-CN")}
+        </p>
+      )}
+      {data.plan === "plus" && (
+        <p className="billing-subscription-note">
+          Plus 有效期至{" "}
+          {new Date(data.planUntil).toLocaleString("zh-CN", {
+            timeZone: "Asia/Shanghai",
+            hour12: false,
+          })}
+          （北京时间）。
+          {hasRecurringSubscription
+            ? "如需改为单次购买，请先在「管理订阅」中取消自动续费，剩余有效期会保留。"
+            : "到期手动续费，提前购买会顺延有效期。"}
         </p>
       )}
       <div className="billing-summary">
@@ -313,7 +332,7 @@ export function Billing() {
           </div>
           <p className="billing-renewal-note">
             {interval === "year" ? "约 ¥7.33 / 月，按年付费" : "按月付费"}
-            ，到期自动续费，可随时取消续费。
+            ，单次购买，不自动续费。支持微信支付、支付宝和银行卡。
           </p>
           <ul>
             <li>
@@ -344,18 +363,20 @@ export function Billing() {
           <div className="plan-card-bottom">
             <button
               className="button full"
-              disabled={!plus?.enabled || data.plan === "plus" || Boolean(busy)}
-              onClick={() => plus && void buy(plus.id)}
+              disabled={!plus?.enabled || Boolean(busy)}
+              onClick={() => plus && void buy(hasRecurringSubscription ? "portal" : plus.id)}
             >
               {busy === plus?.id
                 ? "正在跳转…"
-                : data.plan === "plus"
-                  ? "当前方案"
-                  : plus?.enabled
-                    ? "升级 Plus"
-                    : demo
-                      ? "注册后购买"
-                      : "暂未开放购买"}
+                : plus?.enabled
+                  ? hasRecurringSubscription
+                    ? "管理自动续费订阅"
+                    : data.plan === "plus"
+                      ? "续费 Plus"
+                      : "升级 Plus"
+                  : demo
+                    ? "注册后购买"
+                    : "暂未开放购买"}
               {data.plan !== "plus" && <ArrowRight size={17} />}
             </button>
           </div>

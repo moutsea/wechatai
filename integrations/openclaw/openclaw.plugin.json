@@ -1,7 +1,7 @@
 {
   "id": "wechatai",
   "name": "Wechatai Channel",
-  "version": "1.0.1",
+  "version": "1.1.2",
   "description": "Outbound-only relay for personal WeChat conversations and proactive deliveries.",
   "channels": ["wechatai"],
   "configSchema": {

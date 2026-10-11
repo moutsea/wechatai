@@ -85,11 +85,11 @@ describe("model catalog import", () => {
       });
       const after = await stub.snapshot();
       expect(after.assistants.map((a) => a.model)).toEqual(["alpha", "beta", "gamma"]);
-      expect(after.assistants[0]).toEqual(before.assistants[0]);
+      expect(after.assistants[0]).toEqual({ ...before.assistants[0], kind: "text" });
       expect(after.assistants[1]).toMatchObject({
         name: "Beta 显示名",
         channelId: c.id,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 8192,
         contextTokens: 128000,
       });
       expect(after.currentSession).toEqual(before.currentSession);
@@ -116,6 +116,19 @@ describe("model catalog import", () => {
       expect((await stub.snapshot()).assistants).toEqual(after.assistants);
     },
   );
+  it("keeps smaller-context models importable with the higher default output limit", async () => {
+    const stub = account();
+    const c = await channel(stub);
+    mockCatalog(() => Response.json({ data: [{ id: "small-model", context_length: 8192 }] }));
+    expect(await api(stub, "channel.importModels", { id: c.id })).toMatchObject({
+      ok: true,
+      data: { imported: 1 },
+    });
+    expect((await stub.snapshot()).assistants[0]).toMatchObject({
+      contextTokens: 8192,
+      maxOutputTokens: 4096,
+    });
+  });
   it("retrieves paginated models from the same endpoint and does not follow upstream URLs", async () => {
     const stub = account();
     const c = await channel(stub, "anthropic");

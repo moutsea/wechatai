@@ -23,10 +23,11 @@ try {
     renderSitemap,
     PUBLIC_PATHS,
     PRIVATE_PATHS,
+    LEGACY_PATHS,
   } = await server.ssrLoadModule("/src/client/prerender.tsx");
-  for (const path of [...PUBLIC_PATHS, ...PRIVATE_PATHS, "/404"]) {
+  for (const path of [...PUBLIC_PATHS, ...LEGACY_PATHS, ...PRIVATE_PATHS, "/404"]) {
     const body =
-      PUBLIC_PATHS.includes(path) || path === "/404"
+      PUBLIC_PATHS.includes(path) || LEGACY_PATHS.includes(path) || path === "/404"
         ? renderPublicPage(path)
         : '<main aria-busy="true">正在加载微伴工作台…</main>';
     const html = replaceSeoHead(template, getPageSeo(path)).replace(

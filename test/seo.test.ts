@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  DOC_ARTICLES,
+  docPath,
+  legacyGuideDestination,
+  guideSectionRedirect,
+} from "../src/shared/docs";
+import {
   getPageSeo,
   PRIVATE_PATHS,
   PUBLIC_PATHS,
   renderSeoHead,
   renderSitemap,
+  pageLastModified,
   replaceSeoHead,
 } from "../src/shared/seo";
 
@@ -14,9 +21,54 @@ describe("search indexing boundaries", () => {
     expect(getPageSeo("/guide").title).not.toBe(getPageSeo("/").title);
     expect(getPageSeo("/?utm_source=wechat").canonical).toBe("https://wechatai.app/");
     expect(getPageSeo("/guide/?utm_source=wechat#commands").canonical).toBe(
-      "https://wechatai.app/guide",
+      "https://wechatai.app/docs/getting-started",
     );
     for (const path of PUBLIC_PATHS) expect(getPageSeo(path).indexable).toBe(true);
+  });
+
+  it("preserves old guide sections while removing the duplicate page from search", () => {
+    expect(getPageSeo("/guide").canonical).toBe("https://wechatai.app/docs/getting-started");
+    expect(getPageSeo("/guide").indexable).toBe(true);
+    expect(renderSitemap()).not.toContain("https://wechatai.app/guide");
+    for (const [hash, path] of [
+      ["", "getting-started"],
+      ["#start", "getting-started"],
+      ["#models", "channels-models"],
+      ["#plugins", "ds-chat"],
+      ["#roleplay", "roleplay"],
+      ["#personal", "personal-assistant"],
+      ["#commands", "commands"],
+      ["#sessions", "sessions"],
+      ["#credits", "credits"],
+      ["#faq", "faq"],
+      ["#unknown", "getting-started"],
+      ["#toString", "getting-started"],
+    ])
+      expect(legacyGuideDestination(hash)).toBe(`/docs/${path}`);
+  });
+
+  it("resolves fragments preserved by the guide 301 without hijacking new anchors", () => {
+    expect(guideSectionRedirect("/docs/getting-started", "#commands")).toBe("/docs/commands");
+    expect(guideSectionRedirect("/docs/getting-started/", "#models")).toBe("/docs/channels-models");
+    for (const hash of ["", "#start", "#prepare", "#next", "#unknown", "#toString"]) {
+      expect(guideSectionRedirect("/docs/getting-started", hash)).toBeNull();
+    }
+    expect(guideSectionRedirect("/docs/roleplay", "#credits")).toBeNull();
+    expect(guideSectionRedirect("/docs/deepseek-in-wechat", "#sessions")).toBeNull();
+  });
+
+  it("uses documented content dates and omits unknown dates", () => {
+    const sitemap = renderSitemap();
+    expect(sitemap).toContain(
+      `<loc>https://wechatai.app/docs</loc><lastmod>${pageLastModified("/docs")}</lastmod>`,
+    );
+    expect(sitemap).toContain(
+      `<loc>https://wechatai.app/privacy</loc><lastmod>${pageLastModified("/privacy")}</lastmod>`,
+    );
+    expect(pageLastModified("/developers/plugins")).toBeUndefined();
+    expect(pageLastModified("/not-a-page")).toBeUndefined();
+    expect(sitemap).not.toContain("<priority>");
+    expect(sitemap).not.toContain("<changefreq>");
   });
 
   it("never indexes account, demo, auth callback or unknown pages", () => {
@@ -25,6 +77,8 @@ describe("search indexing boundaries", () => {
       "/app/sessions/private-id",
       "/api/auth/callback/google",
       "/not-a-page",
+      "/docs/not-a-real-article",
+      "/docs/deepseek-in-wechat/extra",
     ]) {
       const page = getPageSeo(path);
       expect(page.indexable).toBe(false);
@@ -46,11 +100,41 @@ describe("search indexing boundaries", () => {
     const sitemap = renderSitemap();
     expect([...sitemap.matchAll(/<loc>(.*?)<\/loc>/g)].map((match) => match[1])).toEqual([
       "https://wechatai.app/",
-      "https://wechatai.app/guide",
+      "https://wechatai.app/docs",
+      ...DOC_ARTICLES.map((article) => `https://wechatai.app${docPath(article.slug)}`),
       "https://wechatai.app/developers/plugins",
       "https://wechatai.app/developers/openclaw",
       "https://wechatai.app/developers/hermes",
+      "https://wechatai.app/terms",
+      "https://wechatai.app/privacy",
+      "https://wechatai.app/contact",
     ]);
+  });
+
+  it("provides article metadata and breadcrumbs for each tutorial, without query parameters", () => {
+    for (const article of DOC_ARTICLES) {
+      const canonical = `https://wechatai.app${docPath(article.slug)}`;
+      const seo = getPageSeo(`${docPath(article.slug)}/?utm_source=wechat#faq`);
+      expect(seo.canonical).toBe(canonical);
+      expect(seo.title).toContain(article.title);
+      expect(renderSeoHead(seo)).toContain('property="og:type" content="article"');
+      const graph = seo.structuredData?.["@graph"] as Array<Record<string, unknown>>;
+      expect(graph.find((item) => item["@type"] === "Article")).toMatchObject({
+        headline: article.title,
+        mainEntityOfPage: canonical,
+        description: article.description,
+      });
+      expect(graph.find((item) => item["@type"] === "BreadcrumbList")?.itemListElement).toEqual([
+        { "@type": "ListItem", position: 1, name: "首页", item: "https://wechatai.app/" },
+        { "@type": "ListItem", position: 2, name: "文档", item: "https://wechatai.app/docs" },
+        { "@type": "ListItem", position: 3, name: article.title, item: canonical },
+      ]);
+    }
+    const index = getPageSeo("/docs");
+    expect(index.ogType).toBe("website");
+    expect(index.structuredData?.["@graph"]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ "@type": "CollectionPage" })]),
+    );
   });
 
   it("replaces head metadata without changing scripts or body", () => {

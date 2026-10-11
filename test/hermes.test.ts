@@ -99,7 +99,11 @@ describe("Hermes native channel", () => {
     const ctx = await setup();
     await send(ctx.stub, "/use hermes");
     const before = (await api(ctx.stub, "snapshot")).data;
-    expect(await send(ctx.stub, "/status")).toBe(
+    const plusHelp = await send(ctx.stub, "/wx help");
+    expect(plusHelp).toContain("`/wx plugins`：查看已配置插件");
+    expect(plusHelp).toContain("`/use DS Chat`：按插件名称");
+    expect(plusHelp).not.toContain("Plus：");
+    expect(await send(ctx.stub, "/wx status")).toBe(
       "**当前插件**\n\n- 名称：我的 Hermes\n- 快捷名：@hermes",
     );
     const after = (await api(ctx.stub, "snapshot")).data;
@@ -109,9 +113,12 @@ describe("Hermes native channel", () => {
     await runInDurableObject(ctx.stub, (_, state) =>
       state.storage.sql.exec("UPDATE settings SET value = '0' WHERE key = 'planUntil'"),
     );
-    expect(await send(ctx.stub, "/status")).toBe(
+    expect(await send(ctx.stub, "/wx status")).toBe(
       "**当前插件**\n\n- 名称：我的 Hermes（已停用）\n- 快捷名：@hermes",
     );
+    const expiredHelp = await send(ctx.stub, "/wx help");
+    expect(expiredHelp).not.toContain("`/wx plugins`");
+    expect(expiredHelp).not.toContain("`/use DS Chat`");
   });
   it("is Plus-only and does not require a platform LLM channel", async () => {
     const free = await setup(false);
@@ -207,7 +214,7 @@ describe("Hermes native channel", () => {
       if (mode === "delayed") await send(ctx.stub, "/use claw");
       const before = (await api(ctx.stub, "snapshot")).data;
       expect(before.currentSession.pluginInstanceId).toBe(claw.data.id);
-      expect(await send(ctx.stub, "/status")).toBe(
+      expect(await send(ctx.stub, "/wx status")).toBe(
         "**当前插件**\n\n- 名称：Claw\n- 快捷名：@claw",
       );
       const event = {
@@ -252,7 +259,7 @@ describe("Hermes native channel", () => {
     const otherLink = await api(ctx.stub, "wechat.create", { name: "另一个微信" });
     expect(otherLink.ok).toBe(true);
     expect(otherLink.data.selectedConnectionId).not.toBe("default");
-    expect(await send(ctx.stub, "/status")).toContain("我的 Hermes");
+    expect(await send(ctx.stub, "/wx status")).toContain("我的 Hermes");
     const result = await ctx.call("event", ctx.event);
     expect(result.ok).toBe(true);
     const stored = await runInDurableObject(ctx.stub, (_, state) =>
@@ -280,7 +287,7 @@ describe("Hermes native channel", () => {
     await api(ctx.stub, "plugin.clawToken", { id: claw.data.id });
     expect(await send(ctx.stub, "/use claw")).toContain("Claw");
     expect(await send(ctx.stub, "/use hermes")).toContain("Hermes");
-    await send(ctx.stub, "/reset");
+    await send(ctx.stub, "/wx reset");
     expect(
       (await ctx.call("event", { ...ctx.event, jobId: undefined, eventId: crypto.randomUUID() }))
         .ok,

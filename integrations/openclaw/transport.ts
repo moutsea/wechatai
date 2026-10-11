@@ -16,6 +16,8 @@ export type Job = {
   agentId: string;
   text: string;
   state: "pending" | "claimed";
+  command?: string;
+  lane?: "message" | "control";
 };
 export type Event = {
   eventId: string;
@@ -179,7 +181,7 @@ export async function executeJob(
       const claim = await relay<{ claimed: boolean }>(
         account,
         "claim",
-        { id: job.id, runnerId: journal.runnerId },
+        { id: job.id, runnerId: journal.runnerId, nativeCommands: true },
         signal,
       );
       if (!claim.claimed) return;
@@ -198,7 +200,7 @@ export async function executeJob(
   const result = await relay<{ claimed: boolean }>(
     account,
     "claim",
-    { id: job.id, runnerId: journal.runnerId },
+    { id: job.id, runnerId: journal.runnerId, nativeCommands: true },
     signal,
   );
   if (!result.claimed) return;

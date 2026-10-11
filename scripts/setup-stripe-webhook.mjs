@@ -1,12 +1,13 @@
 import { readFile, writeFile } from "node:fs/promises";
 import Stripe from "stripe";
+import { productionOrigin } from "./site-origin.mjs";
 
 const file = ".stripe-live.local";
 const config = JSON.parse(await readFile(file, "utf8"));
 if (!config.STRIPE_SECRET_KEY.startsWith("sk_live_"))
   throw new Error("Live configuration required");
 const stripe = new Stripe(config.STRIPE_SECRET_KEY, { timeout: 15000, maxNetworkRetries: 2 });
-const url = "https://wechatai.app/api/billing/webhook";
+const url = `${productionOrigin()}/api/billing/webhook`;
 const events = [
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",

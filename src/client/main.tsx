@@ -13,12 +13,16 @@ import { Billing } from "./pages/billing";
 import { Credits } from "./pages/credits";
 import { Invite } from "./pages/invite";
 import { Guide } from "./pages/guide";
+import { SiteInfoPage } from "./pages/site-info";
+import { DocsIndex, DocArticlePage } from "./pages/docs";
 import { PageMetadata } from "./seo";
 import { NotFound } from "./not-found";
 import "./styles.css";
 import "./pages/sessions.css";
 // Included in initial HTML so the prerendered public docs also work without JavaScript.
 import "./pages/plugin-protocol.css";
+import "./pages/site-info.css";
+import "./pages/docs.css";
 const PluginProtocol = lazy(() =>
   import("./pages/plugin-protocol").then((module) => ({ default: module.PluginProtocol })),
 );
@@ -28,6 +32,7 @@ const Sessions = lazy(() =>
 const Plugins = lazy(() =>
   import("./pages/plugins").then((module) => ({ default: module.Plugins })),
 );
+const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: module.Admin })));
 function ScrollReset() {
   const { pathname } = useLocation();
   useEffect(() => {
@@ -75,6 +80,16 @@ function Workspace({ demo = false }: { demo?: boolean }) {
           <Route path="billing" element={<Billing />} />
           <Route path="credits" element={<Credits />} />
           <Route path="invite" element={<Invite />} />
+          {!demo && (
+            <Route
+              path="admin"
+              element={
+                <Suspense fallback={<div className="full-state">正在加载管理后台…</div>}>
+                  <Admin />
+                </Suspense>
+              }
+            />
+          )}
           <Route path="*" element={<Navigate to={demo ? "/demo" : "/app"} replace />} />
         </Routes>
       </Shell>
@@ -95,6 +110,11 @@ root.render(
           <Route path="/login" element={<AuthPage />} />
           <Route path="/register" element={<AuthPage register />} />
           <Route path="/guide" element={<Guide />} />
+          <Route path="/docs" element={<DocsIndex />} />
+          <Route path="/docs/:slug" element={<DocArticlePage />} />
+          <Route path="/terms" element={<SiteInfoPage kind="terms" />} />
+          <Route path="/privacy" element={<SiteInfoPage kind="privacy" />} />
+          <Route path="/contact" element={<SiteInfoPage kind="contact" />} />
           <Route path="/developers/hermes" element={<OpenClawGuide kind="hermes" />} />
           <Route path="/developers/openclaw" element={<OpenClawGuide />} />
           <Route

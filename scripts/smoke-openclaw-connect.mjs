@@ -26,7 +26,7 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
   if (req.url.startsWith("/downloads/")) {
-    const file = req.url.endsWith(".tgz") ? "wechatai-openclaw-1.0.1.tgz" : "wechatai-connect.mjs";
+    const file = req.url.endsWith(".tgz") ? "wechatai-openclaw-1.1.2.tgz" : "wechatai-connect.mjs";
     res.end(await readFile(resolve("public/downloads", file)));
     return;
   }

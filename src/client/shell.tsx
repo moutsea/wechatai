@@ -33,14 +33,17 @@ const items = [
   { path: "/invite", label: "邀请好友", en: "Invite friends", icon: Gift },
 ];
 export function Shell({ children }: { children: ReactNode }) {
-  const { data, base, demo, user, request, refresh, notify } = useApp();
+  const { data, base, demo, isAdmin, user, request, refresh, notify } = useApp();
+  const navigation = isAdmin
+    ? [...items, { path: "/admin", label: "管理后台", en: "Admin", icon: ShieldCheck }]
+    : items;
   const [mobile, setMobile] = useState(false);
   const [settings, setSettings] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const page = items.find((i) => location.pathname === base + i.path) || items[0];
+  const page = navigation.find((i) => location.pathname === base + i.path) || items[0];
   const clear = async () => {
     setBusy(true);
     try {
@@ -72,7 +75,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="tiny-dot" /> 个人工作台<span>PERSONAL</span>
         </div>
         <nav aria-label="主导航">
-          {items.map((item) => (
+          {navigation.map((item) => (
             <NavLink
               key={item.path}
               to={base + item.path}
@@ -101,9 +104,9 @@ export function Shell({ children }: { children: ReactNode }) {
               <ArrowUpRight size={15} />
             </Link>
           </div>
-          <Link className="sidebar-help" to="/guide" onClick={() => setMobile(false)}>
+          <Link className="sidebar-help" to="/docs" onClick={() => setMobile(false)}>
             <CircleHelp size={17} />
-            使用指南
+            文档
             <ArrowUpRight size={14} />
           </Link>
           <button className="user-row" onClick={() => setSettings(true)}>

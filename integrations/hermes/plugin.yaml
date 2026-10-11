@@ -1,7 +1,7 @@
 name: wechatai
 label: Wechatai 微信
 kind: platform
-version: 1.0.0
+version: 1.1.2
 description: Personal WeChat channel through Wechatai, with durable replies and scheduled delivery.
 author: Wechatai
 optional_env:

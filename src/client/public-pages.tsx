@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { Brand } from "./ui";
 import { LandingSteps } from "./landing-steps";
+import { SiteFooter } from "./site-footer";
+import { UserMenu } from "./user-menu";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
 import { authReturnPath } from "../shared/auth";
@@ -98,18 +100,18 @@ export function Landing() {
         </Link>
         <div>
           <a href="#how">如何使用</a>
-          <Link to="/guide">使用指南</Link>
+          <Link to="/docs">文档</Link>
           {session ? (
-            <span className="landing-account" title={session.user.name}>
-              你好，{session.user.name}
-            </span>
-          ) : !isPending ? (
-            <Link to="/login">登录</Link>
-          ) : null}
-          <StartLink className="button small">
-            {session ? "进入工作台" : "免费开始"}
-            <ArrowUpRight size={15} />
-          </StartLink>
+            <UserMenu key={session.user.id} user={session.user} />
+          ) : (
+            <>
+              {!isPending && <Link to="/login">登录</Link>}
+              <StartLink className="button small">
+                免费开始
+                <ArrowUpRight size={15} />
+              </StartLink>
+            </>
+          )}
         </div>
       </nav>
       <main>
@@ -119,9 +121,7 @@ export function Landing() {
               <span className="tiny-dot" /> WECHAT AI · YOUR MODELS, IN WECHAT
             </span>
             <h1>
-              在微信里，
-              <br />
-              <span>与自选大模型对话。</span>
+              把你的 AI <span>接入微信</span>
             </h1>
             <p>
               用自己的 API Key 和服务地址，开启微信 AI 对话。
@@ -236,12 +236,7 @@ export function Landing() {
           <p>模型调用费用由你的 API 供应商另行收取。</p>
         </section>
       </main>
-      <footer className="landing-footer">
-        <Brand />
-        <p>独立开发产品，与微信、腾讯及模型供应商无官方关联。</p>
-        <Link to="/developers/plugins">插件开发文档</Link>
-        <span>© {new Date().getFullYear()} Wechatai</span>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
@@ -368,6 +363,10 @@ function AuthForm({ register }: { register: boolean }) {
           <span className="eyebrow">YOUR PERSONAL AI SPACE</span>
           <h1>{register ? "从这里，开启微伴。" : "欢迎回来。"}</h1>
           <p>{register ? "创建账户，连接你的第一个模型。" : "你的模型和未完的对话，都在这里。"}</p>
+          <p className="auth-policies">
+            注册或使用前，请阅读<Link to="/terms">服务协议</Link>和
+            <Link to="/privacy">隐私政策</Link>。
+          </p>
           {invited && (
             <div className="auth-invitation">
               你已接受好友邀请。新用户注册后，完成首次微信 AI 对话，你和好友各得{" "}

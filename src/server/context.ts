@@ -35,6 +35,7 @@ function turns(history: HistoryMessage[]) {
   for (const message of history) {
     if (message.role === "user") result.push([message]);
     else if (result.length) result[result.length - 1].push(message);
+    else result.push([message]);
   }
   return result;
 }
@@ -63,6 +64,7 @@ type PrepareOptions = {
   current: ModelMessage;
   budget?: number;
   force?: boolean;
+  summaryPrompt?: string;
   summarize: (
     messages: ModelMessage[],
     output: number,
@@ -119,7 +121,7 @@ export async function prepareContext(options: PrepareOptions) {
       ];
       let count = 0;
       // Use an additive estimate to avoid repeatedly serializing a large prefix.
-      let used = inputTokens(SUMMARY_PROMPT, payload([]));
+      let used = inputTokens(options.summaryPrompt ?? SUMMARY_PROMPT, payload([]));
       for (const turn of older) {
         const serialized = JSON.stringify(turn.map(({ role, content }) => ({ role, content })));
         const size = Math.max(estimateTokens(serialized), countTextTokens(serialized));
@@ -133,7 +135,7 @@ export async function prepareContext(options: PrepareOptions) {
       }
       const part = older.slice(0, count);
       const messages = payload(part);
-      if (inputTokens(SUMMARY_PROMPT, messages) > summaryBudget) {
+      if (inputTokens(options.summaryPrompt ?? SUMMARY_PROMPT, messages) > summaryBudget) {
         summaryFailed = true;
         break;
       }

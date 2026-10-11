@@ -25,3 +25,13 @@ Pending inbound jobs expire after 24 hours. Interrupted jobs fail without automa
 Latency: the connector uses a bounded 15-second long poll that wakes as soon as a job arrives. Replies and proactive messages flush immediately after local persistence, independently of heartbeat and Agent execution. The server interrupts idle WeChat receive polls when a reply arrives and prioritizes queued replies. Legacy connectors may continue short polling. Structured server timing events (`openclaw.claimed`, `openclaw.result`, `openclaw.delivered`) report queue and delivery delays without recording prompts, replies or credentials.
 
 Full guide and agent-readable transport documentation: https://wechatai.app/developers/openclaw and https://wechatai.app/developers/openclaw.md
+
+## Command routing (1.1.0+)
+
+`/wx help` and other `/wx` commands belong to Wechatai. `/use` and `/exit` are global mode shortcuts. Other leading slash commands go to the active Agent; `@shortcut /command` sends a one-off native command without changing mode. Original text is retained. Native `/new` preserves Wechatai history. Agent authorization and command settings still apply.
+
+Heartbeat, poll and claim advertise `nativeCommands: true`. Two poll lanes (`message`, `control`) allow `/stop` during a running task; other messages remain serial. `/stop` is free and bypasses the credits balance gate; other commands are metered at the gateway boundary. Old connectors cannot claim command jobs: update using a fresh website pairing command.
+
+## License
+
+MIT; see [LICENSE](LICENSE). Connector 1.1.2 adds license metadata to the downloadable package; the wire protocol remains compatible with 1.1.x.

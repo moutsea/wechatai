@@ -79,7 +79,7 @@ export function PluginProtocol() {
           <Brand />
         </Link>
         <div>
-          <Link to="/guide">使用指南</Link>
+          <Link to="/docs">文档</Link>
           <Link className="button small" to={session ? "/app" : "/register"}>
             {session ? "进入工作台" : "开始使用"}
             <ArrowUpRight size={15} />
@@ -202,8 +202,8 @@ export function PluginProtocol() {
       <footer className="guide-footer">
         <Brand />
         <span>独立产品 · 非微信官方服务</span>
-        <Link to="/guide">
-          阅读使用指南 <ArrowUpRight size={14} />
+        <Link to="/docs">
+          阅读使用文档 <ArrowUpRight size={14} />
         </Link>
       </footer>
     </div>

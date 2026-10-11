@@ -110,8 +110,8 @@ describe("durable WeChat delivery", () => {
         ).cursor,
       ).toBe("cursor-2");
     });
-    await runDurableObjectAlarm(stub);
-    // Simulate interruption after inference was committed but before the reply state was observed.
+    // The first alarm now also infers and attempts delivery. Replay the committed
+    // inference after that failed send, before any successful acknowledgement.
     await runInDurableObject(stub, (_instance, state) => {
       state.storage.sql.exec("UPDATE inbox SET state = 'pending'");
     });
@@ -153,7 +153,8 @@ describe("durable WeChat delivery", () => {
     });
     await runDurableObjectAlarm(stub);
     expect((await stub.snapshot()).stats.sessions).toBe(first);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(fetch).mock.calls.every(([url]) => String(url).endsWith("sendmessage"))).toBe(true);
     await runInDurableObject(stub, async (_instance, state) => {
       await state.storage.deleteAlarm();
     });

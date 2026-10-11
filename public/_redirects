@@ -1,0 +1,5 @@
+# Keep fragments out of Location so browsers retain old /guide#commands links.
+# The getting-started page maps those legacy fragments to the new document pages.
+/guide /docs/getting-started 301
+/guide/ /docs/getting-started 301
+/guide.html /docs/getting-started 301

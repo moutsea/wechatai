@@ -50,11 +50,110 @@ beforeEach(() =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("channels and their models", () => {
+  it("keeps non-text models out of WeChat selection and rejects direct chat and text-plugin entry points", async () => {
+    const stub = account();
+    await stub.applyPayment({
+      id: "plus-model-kinds",
+      kind: "subscription",
+      units: 0,
+      expires: Date.now() + 86400000,
+    });
+    const c = await channel(stub);
+    const text = await model(stub, c.id, "text-model");
+    const image = await model(stub, c.id, "qwen-image-3.0", { kind: "image", shortcut: "paint" });
+    const embedding = await model(stub, c.id, "text-embedding-3-large", { kind: "other" });
+    const listed = await command(stub, "/wx models");
+    expect(listed).toContain("text-model");
+    expect(listed).not.toContain("qwen-image");
+    expect(listed).not.toContain("text-embedding");
+    expect(await command(stub, "/wx model 2")).toContain("编号无效");
+    for (const nonText of [image, embedding]) {
+      for (const action of ["assistant.activate", "assistant.test"])
+        expect(await api(stub, action, { id: nonText.id })).toMatchObject({
+          ok: false,
+          error: "model_type",
+        });
+      expect(await api(stub, "session.create", { assistantId: nonText.id })).toMatchObject({
+        ok: false,
+        error: "model_type",
+      });
+      for (const pluginId of [
+        "wechatai/personal-assistant",
+        "wechatai/roleplay",
+        "wechatai/web-research",
+      ])
+        expect(
+          await api(stub, "plugin.save", {
+            pluginId,
+            modelId: nonText.id,
+            name: "Test",
+            shortcut: "test",
+            description: "Test role",
+            searchProvider: "searxng",
+            searchEndpoint: "https://search.example.com/search",
+          }),
+        ).toMatchObject({ ok: false, error: "model_type" });
+    }
+    await expect(command(stub, "@paint hello")).rejects.toMatchObject({ code: "model_type" });
+    expect((await stub.snapshot()).currentSession?.assistantId).toBe(text.id);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("does not auto-select an image model when no text model remains", async () => {
+    const stub = account();
+    const c = await channel(stub);
+    await model(stub, c.id, "qwen-image-3.0", { kind: "image" });
+    expect(await command(stub, "/wx models")).toContain("没有文本模型");
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    const text = await model(stub, c.id, "text-model");
+    expect((await stub.snapshot()).currentSession?.assistantId).toBe(text.id);
+    expect((await api(stub, "assistant.delete", { id: text.id })).ok).toBe(true);
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    expect(await command(stub, "/exit")).toContain("请先");
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("rechecks model classification for cached command lists, existing sessions and plugins", async () => {
+    const stub = account();
+    await stub.applyPayment({
+      id: "plus-reclassified",
+      kind: "subscription",
+      units: 0,
+      expires: Date.now() + 86400000,
+    });
+    const c = await channel(stub);
+    const a = await model(stub, c.id, "first-text");
+    const b = await model(stub, c.id, "custom-model");
+    const plugin = await api(stub, "plugin.save", {
+      pluginId: "wechatai/personal-assistant",
+      modelId: b.id,
+    });
+    expect(plugin.ok).toBe(true);
+    await command(stub, "/wx models");
+    await command(stub, "/wx model 2");
+    const session = (await stub.snapshot()).currentSession!;
+    expect((await api(stub, "model.save", { ...b, kind: "image" })).ok).toBe(true);
+    expect(await command(stub, "/wx model 2")).toContain("编号无效");
+    await expect(command(stub, "hello")).rejects.toMatchObject({ code: "model_type" });
+    expect(await api(stub, "plugin.activate", { id: plugin.data.id })).toMatchObject({
+      ok: false,
+      error: "model_type",
+    });
+    expect(await api(stub, "session.action", { id: session.id, action: "switch" })).toMatchObject({
+      ok: false,
+      error: "model_type",
+    });
+    await command(stub, "/exit");
+    expect((await stub.snapshot()).currentSession?.assistantId).toBe(a.id);
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("reports no current plugin or model on an unconfigured Free account", async () => {
     const stub = account();
     expect(await command(stub, "/status")).toContain("当前未使用插件或模型");
     expect((await stub.snapshot()).currentSession).toBeNull();
-    expect(await command(stub, "/help")).toContain("`/status`");
+    const help = await command(stub, "/help");
+    expect(help).toContain("`/wx status`");
+    expect(help).not.toContain("`/wx plugins`");
+    expect(help).not.toContain("`/use DS Chat`");
     expect(fetch).not.toHaveBeenCalled();
   });
   it("shares one encrypted key across models, propagates channel edits, and exposes no credentials", async () => {

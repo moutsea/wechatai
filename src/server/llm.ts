@@ -2,10 +2,11 @@ import { z } from "zod";
 import type { Assistant, Protocol } from "../shared/types";
 import { modelEndpoint } from "../shared/model-endpoint";
 import { AppError, MODEL_REQUEST_TIMEOUT_MS } from "./config";
-import { readJson, validateBaseUrl, validatePublicDNS } from "./security";
+import { readJson, validateModelBaseUrl, validateModelDNS } from "./security";
 import {
   DEFAULT_CONTEXT_TOKENS,
   DEFAULT_INPUT_TOKENS,
+  DEFAULT_OUTPUT_TOKENS,
   MAX_CONTEXT_TOKENS,
 } from "../shared/context";
 export type ModelMessage = {
@@ -16,6 +17,7 @@ export type ModelMessage = {
 };
 export const modelImages = (m: ModelMessage) => m.images ?? (m.image ? [m.image] : []);
 export const assistantSchema = z.object({
+  kind: z.enum(["text", "image", "other"]).optional(),
   name: z.string().trim().min(1).max(40),
   description: z.string().max(160).default(""),
   protocol: z.enum(["chat-completions", "responses", "anthropic"]),
@@ -30,7 +32,7 @@ export const assistantSchema = z.object({
     .default(""),
   apiKey: z.string().max(2000).optional(),
   maxInputTokens: z.number().int().min(512).max(MAX_CONTEXT_TOKENS).default(DEFAULT_INPUT_TOKENS),
-  maxOutputTokens: z.number().int().min(64).max(8192).default(1024),
+  maxOutputTokens: z.number().int().min(64).max(8192).default(DEFAULT_OUTPUT_TOKENS),
   contextTokens: z.number().int().min(512).max(MAX_CONTEXT_TOKENS).default(DEFAULT_CONTEXT_TOKENS),
   // Zero disables the optional per-turn spending limit. Existing saved limits are retained.
   maxCredits: z.number().min(0).max(1000).default(0),
@@ -219,7 +221,7 @@ export async function callModel(
   maxOutput = assistant.maxOutputTokens,
   timeoutMs = MODEL_REQUEST_TIMEOUT_MS,
 ) {
-  validateBaseUrl(assistant.baseUrl, env.LLM_ALLOWED_HOSTS);
+  validateModelBaseUrl(env, assistant.baseUrl);
   const request = buildRequest(assistant, messages, maxOutput);
   return parseReply(
     assistant.protocol,
@@ -238,9 +240,12 @@ export async function requestModel(
   timeoutMs: number,
   toolRequest = false,
 ) {
+  const startedAt = Date.now();
   const signal = AbortSignal.timeout(Math.max(1, Math.min(MODEL_REQUEST_TIMEOUT_MS, timeoutMs)));
-  validateBaseUrl(assistant.baseUrl, env.LLM_ALLOWED_HOSTS);
-  await validatePublicDNS(assistant.baseUrl);
+  validateModelBaseUrl(env, assistant.baseUrl);
+  await validateModelDNS(env, assistant.baseUrl);
+  const validatedAt = Date.now();
+  let attempts = 1;
   signal.throwIfAborted();
   const url = modelEndpoint(assistant.baseUrl, assistant.protocol);
   const headers: Record<string, string> = { "content-type": "application/json" };
@@ -270,6 +275,7 @@ export async function requestModel(
     ) {
       const legacyBody: Record<string, unknown> = { ...body, max_tokens: maxOutput };
       delete legacyBody.max_completion_tokens;
+      attempts++;
       response = await send(legacyBody);
       failure = undefined;
     }
@@ -295,5 +301,16 @@ export async function requestModel(
     );
   }
   // Untrusted upstream usage is deliberately never passed into the billing path.
-  return readJson(response);
+  const result = await readJson(response);
+  // Timings only: prompts, keys, provider URLs and user/model identifiers stay private.
+  console.info(JSON.stringify({
+    event: "llm.request_completed",
+    protocol: assistant.protocol,
+    toolRequest,
+    dnsMs: validatedAt - startedAt,
+    upstreamMs: Date.now() - validatedAt,
+    durationMs: Date.now() - startedAt,
+    attempts,
+  }));
+  return result;
 }

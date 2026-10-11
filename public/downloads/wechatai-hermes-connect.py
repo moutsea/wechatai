@@ -15,7 +15,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ARCHIVE_SHA256 = "12856166977dd233f2a402f691d0bb3a9d0743b1ef9d45363834855d2507315e"
+ARCHIVE_SHA256 = "99bf09b3123ac3996205ab257cfb4b0977f7244ec0baf86ba062c843d2d2c775"
+USER_AGENT = "Wechatai-Hermes/1.1.2"
 FILES = {"__init__.py", "adapter.py", "transport.py", "plugin.yaml", "README.md"}
 
 
@@ -25,7 +26,8 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def fetch(url, body=None, token=None):
-    headers = {"Content-Type": "application/json"}
+    # Identify the connector; generic Python urllib signatures can be blocked at the edge.
+    headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
     if token:
         headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, headers=headers)
@@ -37,6 +39,8 @@ def fetch(url, body=None, token=None):
             return data
     except urllib.error.HTTPError as error:
         error.close()
+        if error.code == 403:
+            raise RuntimeError("微伴连接被拒绝（HTTP 403），请刷新网页重新复制连接命令；如仍失败，请联系微伴支持") from None
         raise RuntimeError(f"微伴连接失败（HTTP {error.code}），请检查命令是否过期或重新生成") from None
 
 
@@ -92,7 +96,7 @@ def connect(options):
         raise RuntimeError("本地重试凭证无效，请重新生成连接命令")
 
     print("1/3 正在安装微伴 Hermes 渠道…", flush=True)
-    archive = fetch(endpoint + "/downloads/wechatai-hermes-1.0.0.tgz")
+    archive = fetch(endpoint + "/downloads/wechatai-hermes-1.1.2.tgz")
     if hashlib.sha256(archive).hexdigest() != ARCHIVE_SHA256:
         raise RuntimeError("渠道包校验失败，请重新生成连接命令")
     contents = {}

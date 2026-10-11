@@ -61,9 +61,10 @@ class WechataiAdapter(BasePlatformAdapter):
                 lock = open(path, "a")
                 self.locks.append(lock)
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                await relay(account, "heartbeat", {"agents": AGENTS})
+                await relay(account, "heartbeat", {"agents": AGENTS, "nativeCommands": True})
                 self.workers.extend([
-                    asyncio.create_task(self._poll(account_id, account, journal)),
+                    asyncio.create_task(self._poll(account_id, account, journal, "message")),
+                    asyncio.create_task(self._poll(account_id, account, journal, "control")),
                     asyncio.create_task(self._outbox(account, journal)),
                     asyncio.create_task(self._heartbeat(account)),
                 ])
@@ -92,17 +93,18 @@ class WechataiAdapter(BasePlatformAdapter):
         self.locks.clear()
         self._mark_disconnected()
 
-    async def _poll(self, account_id, account, journal):
+    async def _poll(self, account_id, account, journal, lane):
         while True:
             try:
                 await journal.flush(account)
                 started = time.monotonic()
-                result = await relay(account, "poll", {"runnerId": journal.runner_id, "waitMs": 15000})
-                for job in result["jobs"]:
+                result = await relay(account, "poll", {"runnerId": journal.runner_id, "waitMs": 15000, "nativeCommands": True, "lane": lane})
+                jobs = [job for job in result["jobs"] if job.get("lane", "message") == lane]
+                for job in jobs:
                     await journal.execute(account, job, lambda item: self._run(account_id, item))
                 await journal.flush(account)
                 delay = min(30, result.get("retryAfterMs", 0) / 1000)
-                if not result["jobs"]:
+                if not jobs:
                     delay = max(delay, 1 - (time.monotonic() - started))
                 if delay > 0:
                     await asyncio.sleep(delay)
@@ -116,7 +118,7 @@ class WechataiAdapter(BasePlatformAdapter):
         while True:
             await asyncio.sleep(20)
             try:
-                await relay(account, "heartbeat", {"agents": AGENTS})
+                await relay(account, "heartbeat", {"agents": AGENTS, "nativeCommands": True})
             except Exception:
                 log.warning("Wechatai heartbeat unavailable")
 
@@ -149,11 +151,15 @@ class WechataiAdapter(BasePlatformAdapter):
         try:
             event = MessageEvent(
                 text=job["text"], message_type=MessageType.TEXT, message_id=job["id"],
-                user_id=account_id, user_name="微信用户", allow_gateway_control=False,
+                user_id=account_id, user_name="微信用户", allow_gateway_control=bool(job.get("command")),
                 source=SessionSource(platform=Platform("wechatai"), chat_id=chat_id,
                                      chat_name="微伴微信", user_id=account_id, chat_type="dm"),
             )
             await self.handle_message(event)
+            if not event._gateway_accepted and job.get("command") and turn["chunks"]:
+                # Active-session /stop bypasses the background lifecycle: its
+                # inline final reply is already complete when handle_message returns.
+                return "\n\n".join(turn["chunks"])
             if not event._gateway_accepted:
                 raise RuntimeError("Hermes did not accept the message")
             return await turn["done"]
@@ -234,6 +240,6 @@ def register(ctx):
         parse_target_ref_fn=parse_target,
         validate_target_ref_fn=lambda raw: parse_target(raw) is not None,
         cron_deliver_env_var="WECHATAI_HERMES_HOME_CHANNEL",
-        platform_hint="Personal WeChat via Wechatai. Reply in text/Markdown. Gateway control commands and tool approvals are unavailable on this channel.",
+        platform_hint="Personal WeChat via Wechatai. Reply in text/Markdown. Slash commands address Hermes; /wx addresses Wechatai. Tool approvals are unavailable on this channel.",
         emoji="💬",
     )

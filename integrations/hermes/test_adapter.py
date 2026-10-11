@@ -57,6 +57,38 @@ class ChannelTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(events[0]["status"], "completed")
         self.assertIsNone(turn_context.get())
 
+    async def test_native_command_uses_hermes_parser(self):
+        self.job.update(text="/new", command="new")
+        async def handler(event):
+            self.assertTrue(event.allow_gateway_control)
+            self.assertEqual(event.get_command(), "new")
+            return "新会话已开始"
+        events = await self.execute(handler)
+        self.assertEqual(events[0]["text"], "新会话已开始")
+        self.assertEqual(events[0]["status"], "completed")
+
+    async def test_stop_bypasses_running_task_and_returns_inline_reply(self):
+        started = asyncio.Event()
+        async def handler(event):
+            if event.get_command() == "stop":
+                self.assertTrue(event.allow_gateway_control)
+                return "已停止"
+            started.set()
+            await asyncio.Event().wait()
+        self.adapter.set_message_handler(handler)
+        task = asyncio.create_task(self.adapter._run(self.account_id, self.job))
+        await asyncio.wait_for(started.wait(), 2)
+        stop = {**self.job, "id": str(uuid.uuid4()), "text": "/stop", "command": "stop"}
+        try:
+            reply = await asyncio.wait_for(self.adapter._run(self.account_id, stop), 8)
+            self.assertEqual(reply, "已停止")
+            with self.assertRaises(RuntimeError):
+                await asyncio.wait_for(task, 2)
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
     async def test_startup_restore_waits_before_dispatch(self):
         from types import SimpleNamespace
         self.adapter.gateway_runner = SimpleNamespace(_startup_restore_in_progress=True)

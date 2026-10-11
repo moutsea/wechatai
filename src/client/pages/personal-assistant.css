@@ -1,0 +1,401 @@
+.personal-workspace {
+  padding: 20px 24px 24px;
+}
+.personal-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+}
+.personal-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+.personal-tabs button.active {
+  background: var(--accent-soft, #e6f5ec);
+  color: var(--accent, #087b48);
+}
+.personal-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.personal-toolbar form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0 12px;
+}
+.personal-toolbar form input {
+  border: 0;
+  background: transparent;
+  min-width: 0;
+  flex: 1;
+  padding: 11px 0;
+}
+.personal-toolbar form svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.personal-dates {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+.personal-dates label {
+  flex-direction: row;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.personal-dates input {
+  padding: 6px 8px;
+  width: 145px;
+}
+.personal-dates > span:last-child {
+  margin-left: auto;
+}
+.personal-totals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  padding: 18px;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  margin-bottom: 18px;
+  font-size: 12px;
+  color: var(--muted);
+  gap: 8px;
+}
+.personal-totals strong {
+  display: block;
+  font-size: 20px;
+  margin-top: 5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.personal-totals small {
+  display: block;
+  margin-top: 7px;
+}
+.personal-totals .income,
+.personal-amount.income {
+  color: var(--accent, #087b48);
+}
+.personal-record-list {
+  display: flex;
+  flex-direction: column;
+}
+.personal-record-list article {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.personal-record-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.personal-record-heading h3 {
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.personal-record-actions {
+  display: flex;
+  gap: 2px;
+}
+.personal-record-meta {
+  display: flex;
+  gap: 9px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.personal-record-content {
+  margin-top: 10px;
+  font-size: 13px;
+  max-height: 180px;
+  overflow: auto;
+}
+.personal-amount {
+  font-size: 18px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.personal-amount small {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.personal-reminder {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.personal-reminder svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.personal-check {
+  width: 21px;
+  height: 21px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.personal-check.checked {
+  background: var(--accent, #087b48);
+  color: white;
+  border-color: transparent;
+}
+.is-complete .personal-record-heading h3 {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.personal-empty {
+  padding: 45px 10px;
+  text-align: center;
+  color: var(--muted);
+}
+.personal-empty svg {
+  margin: 0 auto;
+}
+.personal-empty h3 {
+  color: var(--ink);
+  font-size: 17px;
+}
+.personal-empty p {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.personal-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 22px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.personal-record-form {
+  display: grid;
+  gap: 15px;
+}
+.personal-record-form h3 {
+  margin: 0;
+}
+.personal-money-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  gap: 12px;
+}
+.personal-examples {
+  padding: 16px 18px;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.personal-examples > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.personal-examples p {
+  margin: 5px 0;
+}
+.personal-delete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #fff3ed;
+  border-radius: 10px;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.personal-delete span {
+  flex: 1;
+}
+@media (max-width: 640px) {
+  .personal-record-form .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .personal-record-form input[type="datetime-local"] {
+    min-width: 0;
+    width: 100%;
+  }
+  .personal-workspace {
+    padding: 16px 16px 20px;
+  }
+  .personal-toolbar {
+    flex-wrap: wrap;
+  }
+  .personal-toolbar form {
+    flex-basis: 100%;
+  }
+  .personal-dates {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .personal-dates input {
+    width: 130px;
+  }
+  .personal-totals {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+  .personal-record-heading {
+    flex-wrap: wrap;
+  }
+  .personal-amount {
+    font-size: 16px;
+  }
+  .personal-money-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+  .personal-money-fields label:last-child {
+    grid-column: 1/-1;
+  }
+  .personal-delete {
+    flex-wrap: wrap;
+  }
+}
+
+.personal-enabled {
+  flex-direction: row;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.personal-enabled input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.personal-toolbar form button {
+  border: 0;
+  background: transparent;
+  padding: 8px 0 8px 8px;
+  color: var(--green);
+  font-size: 12px;
+}
+
+.personal-note-types {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+.personal-note-types button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 7px 13px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.personal-note-types button[aria-pressed="true"] {
+  background: var(--surface, white);
+  color: var(--ink);
+  box-shadow: 0 1px 3px #0000000a;
+  font-weight: 600;
+}
+.personal-section-hint {
+  margin: 12px 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.personal-daily-reminder {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.personal-daily-heading,
+.personal-daily-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.personal-daily-heading {
+  font-size: 14px;
+}
+.personal-daily-reminder p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 8px 0 12px;
+}
+.personal-daily-controls {
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.personal-daily-controls label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.personal-daily-controls input[type="time"] {
+  width: 115px;
+  padding: 7px 9px;
+}
+.personal-daily-controls button {
+  margin-left: auto;
+}
+.personal-task-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  flex-wrap: wrap;
+}
+.personal-task-filter button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.personal-task-filter button[aria-pressed="true"] {
+  color: var(--green);
+  border-color: var(--green);
+  background: var(--accent-soft);
+}
+.personal-task-filter span {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: auto;
+}

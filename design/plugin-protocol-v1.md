@@ -1,6 +1,6 @@
 # Wechatai 插件协议 V1
 
-状态：内置 LLM、DS Chat 插件适配器及平台计量已实现。协议版本 `1.0`，计费政策 `gateway-v1`。
+状态：内置 LLM、DS Chat、AI 生图、OpenClaw、Hermes、角色扮演适配器及平台计量已实现。协议版本 `1.0`，计费政策 `gateway-v1`。
 此文是后续第三方接入的契约基础。当前内置 AI 生图已支持图片生成与媒体交付。没有开放插件市场、远程插件注册、用户上传代码、第三方回调或第三方图片生成与媒体交付接口。
 
 ## 责任与身份
@@ -16,7 +16,7 @@
 
 Manifest 包括 `protocolVersion`、`id`、`version`、`name`、`author`、`runtime`、`capabilities`、`configSchema`、`permissions`。
 
-- `runtime` 可声明 `builtin`、`remote`、`sandbox`。当前执行器仅注册内置 LLM 与 DS Chat 插件；声明一个运行时不授予执行权限。
+- `runtime` 可声明 `builtin`、`remote`、`sandbox`。当前执行器仅注册平台内置插件；声明一个运行时不授予执行权限。
 - 能力声明包含输入/输出的 `text`、`image`、`file`，会话所有者 `none`、`platform`、`remote`，以及流式、取消、审批支持。
 - `configSchema` 使用 JSON Schema 描述表单。密钥字段由宿主管理，运行时按授权注入或提供受限代理，不放入普通配置、事件与日志。
 - `permissions` 声明模型访问、允许的网络源与存储需求。宿主必须实施权限，不能只做 UI 提示；用户授权不足或执行器不支持的能力直接拒绝。
@@ -143,3 +143,42 @@ Chat Completions 保留 assistant 的 tool_calls / reasoning_content，并用 ro
 AI 生图与 OpenClaw 的配置支持 `waitingMessageEnabled`（默认 `true`）和 `waitingMessage`（最多 300 字，开启时不可为空）。缺少这两个字段的旧配置保留原默认提示；编辑已有配置时省略字段会保留已保存的设置。默认文案分别为「已提交 AI 生图，等待上游返回...」和「已成功转发，等待回复...」。关闭后不发送等待提示，只发送最终结果或错误；提示由平台发送，不进入插件输入、对话历史或计量。
 
 支持 data.url 或 data.b64_json；下载 URL/每次跳转只允许公网 HTTPS，不能携带模型密钥。图片最大 8 MB、2500 万像素。结果保存在账号隔离的私有 R2，网页仅本人登录并有 Plus 权限可读，保留 30 天。删除会话或清空历史立即撤销访问并清理图片，归档保留；微信已收到的图片由用户自行管理。网页测试结果同样保存 30 天，测试不会主动发微信。
+
+## 角色扮演插件 1.0
+
+内置 ID 为 `wechatai/roleplay`，版本 `1.0.0`，仅 Plus 可创建和调用。配置 JSON Schema 随 `/api/plugins/protocol` 的 `builtinManifests` 提供。配置没有额外 API Key，引用账户已有的 `modelId`；支持 Chat Completions、Responses、Anthropic Messages。角色替代模型系统提示词，继承该模型的所有输入、输出、上下文窗口和单轮 credits 限制。
+
+- 基础配置：`name`（40 字符）、`shortcut`（24 字符）、`modelId`、`enabled`、`description`（16,000 字符）。高级字段：`personality`、`userName`、`userPersona`、`scenario`、`firstMessage`、`examples`、`instructions`、`postHistoryInstructions`。完整限制以 Manifest 为准；配置序列化后最多 120,000 UTF-8 字节。
+- 固定角色指令、设定、性格、用户角色、场景和示例放在 system 中。`postHistoryInstructions` 兼容为 system 末尾的回复要求，不模拟 SillyTavern 的历史后插入位置。只展开 `{{char}}`、`{{user}}`；脚本、其他宏与外部资源不执行或加载。
+- V2 `chara_card_v2` / `2.0` JSON、PNG `tEXt/chara` Base64 元数据在浏览器中读取，文件不超过 5 MB，角色文字不超过 64 KB。映射 V2 核心文字和 character_book，原始 JSON 存在不参与 prompt 的 `sourceCard`。PNG 封面不保存，备用开场白和扩展仅保留在原始 JSON 中；正则条目默认停用。可导出编辑后的核心 V2 JSON，也可下载原始 JSON 保留全部源扩展。当前不支持 V3、CHARX 或完整 SillyTavern 运行行为。
+- `lore` 最多 50 条，支持 `keys`、`secondaryKeys`（启用后与主关键词同时命中）、`constant`、`caseSensitive`、`enabled`、`priority`。在当前输入和最近 3 条原文的末尾 32,000 字符中进行直接子串匹配，不递归扫描注入内容。按 priority 降序、原始顺序选取完整条目。`loreTokenBudget` 默认 1,000、最大 4,000，0 禁用；还受当前输入空间约束。超预算整条跳过，不截断角色设定或用户问题。
+- 角色实例和微信链接分别隔离会话；`/use` 恢复该角色最近的未归档故事，`/new` 新故事，`/exit` 普通模型。`@` 用当前会话上下文执行单次调用并存回当前会话，不修改目标角色独立故事。固定开场白在故事创建时写入记录；微信 `/use` 首次创建、`/new`、归档后新建时显示一次，恢复旧故事不重复。网页创建只写会话记录，不主动推送微信。
+- 角色会话压缩使用剧情摘要提示，保留时间地点、关系变化、物品状态、约定和未完成线索；原始记录保留。Plus 在自己的网页会话中查看和修正摘要，编辑保持原压缩游标，校验摘要版本和上下文版本，重置/清空/删除依照既有机制清理。摘要跟随会话所有者，单次调用其他角色不会改变其摘要类型。
+- 网关计量使用完成组装的角色提示、命中的世界书、摘要、历史、当前输入及最终回复，插件身份记录为 `wechatai/roleplay`。不信任上游 usage；内部摘要和超限失败不重复计费。开场白直接展示不收费，后续作为输入时计费。
+
+本实现参考 Character Card V2 的公开格式，自行实现协议映射，不包含 SillyTavern 或 RisuAI 运行时代码。参考：https://github.com/malfoyslastname/character-card-spec-v2
+
+## 命令路由
+
+Manifest.capabilities.commands 可选值为 "platform"（默认，兼容旧 manifest）或 "native"。内置 OpenClaw / Hermes 声明 "native"。该声明描述命令归属，不赋予额外执行权限。
+
+- /wx <command> 始终调用微伴命令；/use 与 /exit 保留为全局切换快捷命令。
+- 当前插件支持 native 时，其余以 / 开头的输入原样交给插件；platform 插件沿用微伴短命令。
+- @快捷名 /command 显式单次调用插件，不再进行第二次微伴命令解析，也不改变默认插件。
+- 仅识别消息开头的 `@`（兼容全角 `＠`）；快捷名后可用空白、中英文逗号或冒号分隔，如 `@助理，5 分钟后提醒我喝水`。移除快捷名与分隔符后保留正文中的标点，按快捷名精确匹配，不猜测没有分隔符的名称。
+- Agent 原生 /new 或 /reset 保留平台历史与路由；/wx new 新建平台会话，/wx reset 失效旧返回路由。
+- Relay 连接器通过 heartbeat.nativeCommands=true 声明命令支持；poll 和 claim 同样必须携带 nativeCommands=true。poll.lane 为 message（默认）或 control；目前 control 仅包含无参数的 /stop，可与普通任务并行。普通任务仍串行，已领取任务不会重跑。旧连接器不会领取原生命令。
+- Relay 返回的任务包含 lane（message 或 control）与可选 command（小写命令名），text 保留原文。连接器只为命令任务开启原生命令处理，仍遵守 Agent 的权限设置。/stop 免费，确认回复最多 256 tokens；带参数的 /stop 作为普通命令处理。其他原生命令沿用网关输入与最终输出计费。
+
+
+## 个人助理插件 1.0
+
+内置 `wechatai/personal-assistant@1.0.0`，仅 Plus 可创建和调用。Manifest 的配置 schema 通过 `/api/plugins/protocol` 公开。配置 `name`、`shortcut`、`modelId`、`enabled`、`currency`（默认 CNY）、`reminderConnectionId`（可留空）。复用用户模型与渠道，需原生工具调用支持，兼容 Chat Completions、Responses、Anthropic Messages；不对不支持工具的模型自动降级。助理提示替换普通模型系统提示，继承模型输入/输出、上下文与单轮 credits 限制。
+
+- 数据按账户及插件实例隔离；记录类型 `note`、`entry`、`task`，独立于聊天会话和摘要。每份配置最多 10,000 条，每条内容最多 6,000 字符。清空/删除聊天、删除回答模型不会删除记录；删除插件配置同时删除全部记录及提醒。
+- `personal_query` 返回分页记录、ID/revision、总数及按币种区分的收支汇总；默认 20、最多 50 条。日期按北京时间，金额以正数十进制字符串输入、整数分存储；汇总由数据库计算，不信任模型加总。
+- `personal_create`、`personal_update`、`personal_delete` 在本轮草稿操作。编辑/删除前必须取得查询结果中的 ID/revision。工具调用仅暂存，最终模型回复成功后，记录变更、提醒计划、平台账单及运行回执在同步事务中一并保存。上游失败、超时、上下文重试、并发版本冲突均不留下半轮写入。重复消息由平台运行 ID 去重；同轮相同写入参数也去重。每轮最多 9 次模型请求、24 次工具调用。
+- 提醒仅用于 task；`remindAt` 为含时区 ISO 时间，创建时要求未来两年内、所选微信链接已连接；`repeat` 为 none/daily/weekly。以固定 UTC+08:00 解释自然语言时间。平台账户 DO 的持久化 alarm 调度，慢模型请求期间并行推进提醒；数据库保存发送状态，发送重试复用每次提醒的稳定 client_id，不保证上游网络的绝对一次交付。
+- Plus 到期、插件停用或连接不可用时暂停；缺少微信 context token 等待下一条微信消息，临时失败退避重试。重新扫码导致连接 generation 变化，或修改目标链接后，不将旧提醒转发到新身份，需重新设置提醒。过期超过 24 小时的单次提醒标记 expired，重复提醒跳至下一次，避免集中补发。完成/删除待办取消后续提醒。主动消息使用平台插件来源提示及分隔符。
+- 网关仅对输入快照（助理 system、实际上下文、当前输入）和最终回复计量一次；内部记录、工具回执与模型调用不重复计收。到期提醒为固定模板，不调用模型、不扣 credits。配置测试仍计输入/最终输出，但不提交草稿或发送提醒。
+- 同源登录 API：`POST /api/plugins/:id/records/query` 查询，`POST /api/plugins/:id/records` 保存 `{record,recordId?,revision?}`，`DELETE /api/plugins/:id/records/:recordId` 接收 `{revision}`。账户来自登录态，插件和记录 ID 均校验归属；这不是第三方插件公共调用接口。Plus 到期可读、导出和删除，新增编辑需有效 Plus 且启用。网页 CSV 每次最多 1,000 条，可分日期导出，单元格防公式注入。

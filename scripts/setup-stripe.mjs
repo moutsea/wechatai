@@ -1,5 +1,6 @@
 import { readFile, writeFile, chmod } from "node:fs/promises";
 import Stripe from "stripe";
+import { productionOrigin } from "./site-origin.mjs";
 // Explicitly scoped: never edit another service's products, prices, portal or webhooks.
 const keys = JSON.parse(await readFile(".stripe.local", "utf8"));
 const offers = [
@@ -9,7 +10,13 @@ const offers = [
   ["credits_20000", "Credits 20,000", 2900, null, 20000, "STRIPE_CREDITS_20000_PRICE_ID"],
   ["credits_50000", "Credits 50,000", 5900, null, 50000, "STRIPE_CREDITS_50000_PRICE_ID"],
 ];
-for (const mode of ["test", "live"]) {
+const at = process.argv.indexOf("--mode");
+const mode = at < 0 ? "test" : process.argv[at + 1];
+if (!["test", "live"].includes(mode)) throw new Error("Use --mode test or --mode live");
+if (typeof keys[mode] !== "string" || !keys[mode].startsWith(`sk_${mode}_`))
+  throw new Error("Missing Stripe key for the selected environment");
+const origin = mode === "live" ? productionOrigin() : "http://localhost:5173";
+{
   const stripe = new Stripe(keys[mode], { timeout: 15000, maxNetworkRetries: 2 });
   const metadata = { service: "wechatai", environment: mode };
   const products = await stripe.products.list({ limit: 100 });
@@ -45,7 +52,7 @@ for (const mode of ["test", "live"]) {
   const config = { ...previous, STRIPE_SECRET_KEY: keys[mode] };
   const summary = [];
   for (const [id, name, amount, interval, credits, envName] of offers) {
-    const key = `wechatai_${id}_cny_${amount}_v1`;
+    const key = `wechatai_${id}${interval ? "_prepaid" : ""}_cny_${amount}_v1`;
     const prices = await stripe.prices.list({ lookup_keys: [key], active: true, limit: 10 });
     const price =
       prices.data[0] ||
@@ -56,15 +63,23 @@ for (const mode of ["test", "live"]) {
           unit_amount: amount,
           nickname: `Wechatai ${name}`,
           lookup_key: key,
-          ...(interval ? { recurring: { interval } } : {}),
-          metadata: { ...metadata, offerId: id, credits: String(credits) },
+          metadata: {
+            ...metadata,
+            offerId: id,
+            credits: String(credits),
+            ...(interval ? { membershipMonths: interval === "year" ? "12" : "1" } : {}),
+          },
         },
         { idempotencyKey: `wechatai:price:${mode}:${key}` },
       ));
     if (
       price.metadata.service !== "wechatai" ||
       price.metadata.environment !== mode ||
-      price.unit_amount !== amount
+      price.unit_amount !== amount ||
+      price.currency !== "cny" ||
+      price.type !== "one_time" ||
+      price.metadata.offerId !== id ||
+      price.product !== groups[interval ? "plus" : "credits"].id
     )
       throw new Error("Existing price conflicts with Wechatai catalog");
     config[envName] = price.id;
@@ -78,7 +93,7 @@ for (const mode of ["test", "live"]) {
     (await stripe.billingPortal.configurations.create(
       {
         business_profile: { headline: "管理你的微伴 Wechatai 订阅" },
-        default_return_url: "https://wechatai.app/app/billing",
+        default_return_url: `${origin}/app/billing`,
         features: {
           invoice_history: { enabled: true },
           payment_method_update: { enabled: true },

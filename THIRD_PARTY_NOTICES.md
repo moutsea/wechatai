@@ -16,7 +16,7 @@
 - SDK license: MIT; original text in [licenses/openilink.txt](licenses/openilink.txt).
 - WeChat wire formats, API conventions and image decryption behavior were adapted from the SDK. The Hub was reviewed for product and implementation reference; its complete application was not copied.
 
-Other dependencies retain their own package licenses. This notice does not assign an open-source license to the original application code. The product is independently developed and is not affiliated with Tencent, WeChat or model providers.
+Other dependencies retain their own package licenses. Original application code is licensed under the root MIT LICENSE. This license does not replace third-party licenses or grant rights to third-party trademarks. The product is independently developed and is not affiliated with Tencent, WeChat or model providers.
 
 ## gpt-tokenizer
 
@@ -41,3 +41,10 @@ Other dependencies retain their own package licenses. This notice does not assig
 
 - Tencent openclaw-weixin: https://github.com/Tencent/openclaw-weixin (MIT). Reviewed upload wire format and encrypted image message fields for the independently implemented Workers image delivery path.
 - image-size: https://github.com/image-size/image-size (MIT). Used to check generated raster image dimensions and format. Original license retained in the installed package.
+
+## Images and brand assets
+
+- Original character avatars and illustrative plugin assets were generated with AI tools. Prompts are recorded in `design/image-assets/prompts.json` and `brand-prompts.json`; local source paths and high-resolution working files are not distributed.
+- Provider icons identify the corresponding API services. Sources are recorded in `design/image-assets/channel-sources.json`; integration brand references are listed in `design/image-assets/brand-references/sources.json`.
+- DeepSeek, OpenClaw, Hermes and other third-party names and marks remain the property of their owners. The source-code MIT license does not grant a trademark license or imply sponsorship. Operators changing the product branding should review or replace these assets for their use.
+- Documentation screenshots use demonstration configuration, with no live API keys or pairing credentials.
