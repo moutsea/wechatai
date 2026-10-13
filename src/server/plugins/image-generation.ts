@@ -10,6 +10,7 @@ import { publicPageUrl } from "./web-tools";
 import { countPluginInput, invokePlugin } from "./gateway";
 import { creditUnits } from "../wallet";
 import { imageSizeFromPrompt } from "./image-size";
+import { upstreamPaymentError } from "../upstream-error";
 
 const imageResponse = z.object({
   data: z
@@ -75,7 +76,7 @@ async function imageUpstreamError(response: Response, startedAt: number): Promis
         : {}),
     }),
   );
-  return new AppError("image_upstream", `${message}；本次未扣 credits`, 502);
+  return new AppError("image_upstream", `${message}；本次未扣 credits`, 502, response.status);
 }
 
 export async function fetchGeneratedBytes(url: string, signal: AbortSignal): Promise<Uint8Array> {
@@ -181,7 +182,14 @@ export async function invokeImageGeneration(
         redirect: "manual",
         signal,
       });
-      if (!r.ok) throw await imageUpstreamError(r, startedAt);
+      if (!r.ok) {
+        const paymentError = upstreamPaymentError(env, model.baseUrl, r.status);
+        if (paymentError) {
+          await r.body?.cancel();
+          throw paymentError;
+        }
+        throw await imageUpstreamError(r, startedAt);
+      }
       const parsed = imageResponse.safeParse(await readJson(r, 12_000_000));
       if (!parsed.success)
         throw new AppError(

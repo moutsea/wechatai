@@ -1,3 +1,4 @@
+import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import { env, runInDurableObject, createExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHmac } from "node:crypto";
@@ -179,6 +180,7 @@ describe("browser flow boundary", () => {
   beforeAll(async () => {
     await env.DB.exec(migration);
     await env.DB.exec(referrals);
+    await env.DB.exec(authEmailMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   });
   const request = (path: string, init?: RequestInit) =>
     worker.fetch(new Request(`${env.APP_URL}${path}`, init), env, createExecutionContext());
@@ -207,10 +209,8 @@ describe("browser flow boundary", () => {
       }),
     });
     expect(registered.status).toBe(200);
-    const cookie = registered.headers
-      .getSetCookie()
-      .map((c) => c.split(";")[0])
-      .join("; ");
+    const { user } = await registered.json<{ user: { id: string } }>();
+    const cookie = await verifiedFixtureCookie(user.id, "test-password-long");
     expect(
       (
         await request("/api/kimiseek/start", {

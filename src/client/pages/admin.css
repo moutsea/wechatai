@@ -2,6 +2,70 @@
   max-width: 1360px;
   margin: 0 auto;
 }
+.admin-gift-form {
+  display: grid;
+  gap: 18px;
+}
+.admin-gift-summary {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 18px;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+.admin-gift-summary svg {
+  flex-shrink: 0;
+}
+.admin-gift-summary p,
+.admin-gift-note {
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 6px 0 0;
+}
+.admin-gift-form .admin-facts {
+  margin: 0;
+}
+.admin-gift-history {
+  font-size: 13px;
+  color: var(--muted);
+}
+.admin-gift-history summary {
+  cursor: pointer;
+}
+.admin-gift-history ul {
+  list-style: none;
+  padding: 0;
+  max-height: 200px;
+  overflow: auto;
+}
+.admin-gift-history li {
+  display: grid;
+  gap: 5px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.admin-gift-history strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+.admin-gift-result {
+  text-align: center;
+  padding-top: 12px;
+}
+.admin-gift-result p {
+  color: var(--muted);
+  font-size: 14px;
+}
+.admin-gift-symbol {
+  display: inline-flex;
+  padding: 14px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+}
 .admin-heading {
   display: flex;
   justify-content: space-between;
@@ -124,7 +188,7 @@
 }
 .admin-today {
   display: grid;
-  grid-template-columns: 0.8fr repeat(4, 1fr);
+  grid-template-columns: 0.8fr repeat(5, 1fr);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 20px 24px;
@@ -488,6 +552,15 @@
 .admin-page tbody tr:last-child td {
   border-bottom: 0;
 }
+.admin-page td .admin-failure-count {
+  color: #a4512c;
+}
+.admin-page td.admin-failure-cell {
+  min-width: 160px;
+  max-width: 240px;
+  white-space: normal;
+  line-height: 1.6;
+}
 .admin-user-identity {
   display: flex;
   align-items: center;
@@ -508,6 +581,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 130px;
+  max-width: 200px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .admin-user-identity strong {
   font-weight: 500;

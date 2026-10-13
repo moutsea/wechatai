@@ -81,6 +81,18 @@ function message(text = "/help", from = "owner", id = 1): WxMessage {
   };
 }
 async function bind(stub: Account) {
+  if (!(await stub.snapshot()).assistants.length)
+    expect(
+      JSON.parse(
+        await stub.api("assistant.save", {
+          name: "test",
+          protocol: "responses",
+          baseUrl: "https://llm.example.com",
+          model: "test",
+          apiKey: "test-key",
+        }),
+      ).ok,
+    ).toBe(true);
   expect(JSON.parse(await stub.api("wechat.bind")).ok).toBe(true);
   await runDurableObjectAlarm(stub);
   expect((await stub.snapshot()).connection.status).toBe("connected");

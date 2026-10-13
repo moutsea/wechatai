@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Coins,
   Crown,
+  Gift,
   LayoutDashboard,
   Link2,
   MessageCircle,
@@ -20,13 +21,22 @@ import {
 } from "lucide-react";
 import { api, ApiError, json } from "../api";
 import { formatCredits } from "../../shared/types";
+import { callFailureReason } from "../../shared/call-failures";
 import {
   adminPluginNames,
   type AdminDay,
   type AdminOverview,
   type AdminSync,
   type AdminUsers,
+  type AdminUser,
+  type AdminMembership,
+  type AdminGiftInput,
+  type AdminGiftResult,
+  adminGiftInputSchema,
 } from "../../shared/admin";
+import { extendMembership } from "../../shared/billing";
+import { useAuth } from "../auth";
+import { Modal } from "../ui";
 import { pluginIconSource } from "../../shared/plugin-visuals";
 import "./admin.css";
 
@@ -47,7 +57,8 @@ const date = (n: number | null, time = true) =>
       }).format(n)
     : "—";
 const metrics = [
-  { key: "requests", name: "已结算调用", format: number },
+  { key: "requests", name: "成功调用", format: number },
+  { key: "failedRequests", name: "失败调用", format: number },
   { key: "revenue", name: "收入", format: money },
   { key: "newUsers", name: "新增用户", format: number },
   { key: "credits", name: "Credits 消耗", format: formatCredits },
@@ -115,7 +126,8 @@ function Trends({ daily }: { daily: AdminDay[] }) {
                 <th>日期</th>
                 <th>新增用户</th>
                 <th>活跃用户</th>
-                <th>调用</th>
+                <th>成功</th>
+                <th>失败</th>
                 <th>Credits</th>
                 <th>收入</th>
               </tr>
@@ -127,6 +139,7 @@ function Trends({ daily }: { daily: AdminDay[] }) {
                   <td>{number(d.newUsers)}</td>
                   <td>{number(d.activeUsers)}</td>
                   <td>{number(d.requests)}</td>
+                  <td>{number(d.failedRequests)}</td>
                   <td>{formatCredits(d.credits)}</td>
                   <td>{money(d.revenue)}</td>
                 </tr>
@@ -163,9 +176,9 @@ function Overview({ data }: { data: AdminOverview }) {
       icon: Wallet,
     },
     {
-      label: "累计调用",
+      label: "成功调用",
       value: hasStats ? compact(s.requests) : "—",
-      detail: `${compact(s.tokens)} tokens · 已结算`,
+      detail: `累计失败 ${number(s.failedRequests)} 次 · ${compact(s.tokens)} tokens 已结算`,
       icon: MessageCircle,
     },
   ];
@@ -191,7 +204,8 @@ function Overview({ data }: { data: AdminOverview }) {
         </div>
         {[
           ["活跃用户", number(today.activeUsers)],
-          ["已结算调用", number(today.requests)],
+          ["成功调用", number(today.requests)],
+          ["失败调用", number(today.failedRequests)],
           ["Credits 消耗", formatCredits(today.credits)],
           ["收入", money(today.revenue)],
         ].map(([label, val]) => (
@@ -328,10 +342,193 @@ function Overview({ data }: { data: AdminOverview }) {
       </div>
       <p className="admin-footnote">
         收入为本站当前支付环境的人民币已付款订单金额，未扣支付手续费、未计退款调整，不包含上游模型或
-        KimiSeek
-        的充值。活跃用户指当天有已结算调用的用户；调用包含远程插件主动推送。打开管理后台会自动同步账户统计，页面可见时每分钟更新一次；也可点击「同步最新数据」手动更新。
+        KimiSeek 的充值。活跃用户指当天有成功结算调用的用户；调用包含模型测试和远程插件主动推送。
+        失败统计记录已开始处理但未完成的调用，不扣 credits；不含指令和发送前的校验拦截。
+        历史失败仅补录仍保留的记录，具体原因可能缺失。
+        打开管理后台会自动同步账户统计，页面可见时每分钟更新一次；也可点击「同步最新数据」手动更新。
       </p>
     </>
+  );
+}
+
+function GiftMembership({
+  user,
+  onClose,
+  onGranted,
+}: {
+  user: AdminUser;
+  onClose: () => void;
+  onGranted: () => void;
+}) {
+  const { data } = useAuth();
+  const storageKey = `wechatai:plus-gift:${data?.user.id}:${user.id}`;
+  const [pending, setPending] = useState<AdminGiftInput | null>(() => {
+    try {
+      const saved = adminGiftInputSchema.safeParse(
+        JSON.parse(sessionStorage.getItem(storageKey) || "null"),
+      );
+      return saved.success ? saved.data : null;
+    } catch {
+      return null;
+    }
+  });
+  const [reason, setReason] = useState(pending?.reason || "");
+  const [membership, setMembership] = useState<AdminMembership | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<AdminGiftResult | null>(null);
+  const [reload, setReload] = useState(0);
+  const submitting = useRef(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError("");
+    void api<AdminMembership>(`/admin/users/${encodeURIComponent(user.id)}/membership`, {
+      signal: controller.signal,
+    })
+      .then((value) => {
+        if (!controller.signal.aborted) setMembership(value);
+      })
+      .catch((e) => {
+        if (!controller.signal.aborted) setError(e.message);
+      });
+    return () => controller.abort();
+  }, [user.id, reload]);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (submitting.current || !membership || result) return;
+    submitting.current = true;
+    setBusy(true);
+    setError("");
+    const input = pending || { id: crypto.randomUUID(), reason: reason.trim() };
+    try {
+      // Keep the same operation through timeouts, closing the dialog and page reloads.
+      sessionStorage.setItem(storageKey, JSON.stringify(input));
+      setPending(input);
+      const receipt = await api<AdminGiftResult>(
+        `/admin/users/${encodeURIComponent(user.id)}/gift-plus`,
+        {
+          ...json(input),
+          signal: AbortSignal.timeout(20000),
+        },
+      );
+      setResult(receipt);
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch {
+        /* The successful receipt is still shown. */
+      }
+      onGranted();
+    } catch (e) {
+      setError(`${(e as Error).message}。可重试核对同一次赠送，不会重复发放。`);
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title="赠送一个月 Plus"
+      description={user.email}
+      onClose={() => {
+        if (!submitting.current) onClose();
+      }}
+    >
+      {result ? (
+        <div className="admin-gift-result" role="status">
+          <span className="admin-gift-symbol">
+            <Check size={28} />
+          </span>
+          <h3>已赠送一个月 Plus 会员</h3>
+          <p>本次赠送后的到期时间：{date(result.gift.planUntil)}</p>
+          <div className="modal-actions">
+            <button className="button" onClick={onClose}>
+              完成
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form className="admin-gift-form" onSubmit={(e) => void submit(e)}>
+          {membership ? (
+            <>
+              <div className="admin-gift-summary">
+                <Gift size={24} />
+                <div>
+                  <strong>Plus 会员 · 1 个月</strong>
+                  <p>免费赠送，立即生效。已有会员从当前到期时间顺延。</p>
+                </div>
+              </div>
+              <dl className="admin-facts">
+                <div>
+                  <dt>当前会员</dt>
+                  <dd>
+                    {membership.planUntil > Date.now()
+                      ? `Plus · ${date(membership.planUntil)} 到期`
+                      : "Free"}
+                  </dd>
+                </div>
+                {!pending && (
+                  <div>
+                    <dt>赠送后到期</dt>
+                    <dd>{date(extendMembership(Math.max(Date.now(), membership.planUntil), 1))}</dd>
+                  </div>
+                )}
+              </dl>
+              {pending && (
+                <p className="admin-gift-note">
+                  上次赠送结果尚未确认。点击重试会核对原操作，不会重复赠送。
+                </p>
+              )}
+              <label className="field">
+                赠送原因（选填）
+                <textarea
+                  value={reason}
+                  maxLength={200}
+                  rows={2}
+                  disabled={busy || Boolean(pending)}
+                  placeholder="例如：注册问题补偿"
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+              {membership.gifts.length > 0 && (
+                <details className="admin-gift-history">
+                  <summary>最近赠送记录（{membership.gifts.length}）</summary>
+                  <ul>
+                    {membership.gifts.map((gift) => (
+                      <li key={gift.id}>
+                        <strong>{date(gift.createdAt)} · 赠送 1 个月</strong>
+                        <span>{gift.reason || "未填写原因"}</span>
+                        <small>赠送后到期：{date(gift.planUntil)}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
+          ) : (
+            !error && <p role="status">正在读取会员信息…</p>
+          )}
+          {error && (
+            <div className="admin-error" role="alert">
+              {error}
+              {!membership && (
+                <button type="button" onClick={() => setReload((v) => v + 1)}>
+                  重新加载
+                </button>
+              )}
+            </div>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="button secondary" disabled={busy} onClick={onClose}>
+              取消
+            </button>
+            <button className="button" disabled={busy || !membership}>
+              <Gift size={16} />
+              {busy ? "正在处理…" : pending ? "重试赠送" : "确认赠送"}
+            </button>
+          </div>
+        </form>
+      )}
+    </Modal>
   );
 }
 
@@ -351,6 +548,7 @@ export function Admin() {
   const [refresh, setRefresh] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [progress, setProgress] = useState("");
+  const [giftTarget, setGiftTarget] = useState<AdminUser | null>(null);
   const syncController = useRef<AbortController | null>(null);
   const loadedView = useRef("");
   useEffect(() => setSearch(query), [query]);
@@ -594,10 +792,12 @@ export function Admin() {
                     <th>用户</th>
                     <th>会员</th>
                     <th>微信链接</th>
-                    <th>累计调用</th>
+                    <th>调用统计</th>
+                    <th>最近失败</th>
                     <th>Credits 消耗</th>
                     <th>付款总额</th>
-                    <th>最近调用</th>
+                    <th>最近成功</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -640,20 +840,45 @@ export function Admin() {
                           </>
                         )}
                       </td>
-                      <td>{u.requests === null ? pendingStats : number(u.requests)}</td>
+                      <td>
+                        {u.requests === null ? pendingStats : `成功 ${number(u.requests)}`}
+                        <small className={u.failedRequests ? "admin-failure-count" : ""}>
+                          {u.failedRequests == null
+                            ? `失败：${pendingStats}`
+                            : `失败 ${number(u.failedRequests)}`}
+                        </small>
+                      </td>
+                      <td className="admin-failure-cell">
+                        {u.failedRequests == null ? (
+                          pendingStats
+                        ) : u.lastFailureAt ? (
+                          <>
+                            <span>{callFailureReason(u.lastFailureCode, u.lastFailureStatus)}</span>
+                            <small>{date(u.lastFailureAt)}</small>
+                          </>
+                        ) : (
+                          <span className="admin-muted">暂无失败记录</span>
+                        )}
+                      </td>
                       <td>{u.credits === null ? pendingStats : formatCredits(u.credits)}</td>
                       <td>{money(u.paidAmount)}</td>
                       <td>
                         {u.syncedAt
                           ? u.lastActiveAt
                             ? date(u.lastActiveAt)
-                            : "暂无调用"
+                            : "暂无成功调用"
                           : pendingStats}
                         {u.syncedAt && (
                           <small title={`统计时间：${date(u.syncedAt)}`}>
                             统计于 {date(u.syncedAt)}
                           </small>
                         )}
+                      </td>
+                      <td>
+                        <button className="button small secondary" onClick={() => setGiftTarget(u)}>
+                          <Gift size={14} />
+                          赠送会员
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -693,6 +918,14 @@ export function Admin() {
           </nav>
         </section>
       ) : null}
+      {giftTarget && (
+        <GiftMembership
+          key={giftTarget.id}
+          user={giftTarget}
+          onClose={() => setGiftTarget(null)}
+          onGranted={() => setRefresh((v) => v + 1)}
+        />
+      )}
     </div>
   );
 }

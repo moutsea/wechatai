@@ -1,3 +1,4 @@
+import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import { env, createExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import migration from "../migrations/0001_auth.sql?raw";
@@ -64,6 +65,7 @@ function mockGitHub(email: string, id: number) {
 beforeAll(async () => {
   await env.DB.exec(migration);
   await env.DB.exec(referralMigration);
+  await env.DB.exec(authEmailMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
 let testIp = 20;
 beforeEach(() => {
@@ -96,7 +98,8 @@ describe("application origin validation", () => {
       createExecutionContext(),
     );
     expect(response.status).toBe(200);
-    return { email, password, cookie: cookieHeader(response) };
+    const { user } = await response.json<{ user: { id: string } }>();
+    return { email, password, cookie: await verifiedFixtureCookie(user.id, password, origin) };
   }
   it.each(localOrigins)("allows email login and authenticated writes from %s", async (origin) => {
     const { email, password } = await signUp(origin);

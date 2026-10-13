@@ -18,16 +18,16 @@ export function SiteFooter() {
         <nav className="landing-footer-column" aria-label="产品">
           <h2>产品</h2>
           <Link to="/app">我的工作台</Link>
-          <Link to="/app/channels">渠道与模型</Link>
-          <Link to="/app/plugins">插件</Link>
-          <Link to="/app/billing">会员与 credits</Link>
+          <Link to="/docs/channels-models">渠道与模型</Link>
+          <Link to="/docs/wechat-connection">连接微信</Link>
+          <Link to="/docs/credits">会员与 credits</Link>
         </nav>
         <nav className="landing-footer-column" aria-label="使用帮助">
           <h2>使用帮助</h2>
           <Link to="/docs">文档与教程</Link>
-          <Link to="/docs/getting-started">快速开始</Link>
-          <Link to="/docs/commands">微信命令速查</Link>
-          <Link to="/docs/sessions">会话与上下文</Link>
+          <Link to="/docs/deepseek-in-wechat">在微信里使用 DeepSeek</Link>
+          <Link to="/docs/multiple-openclaw-in-wechat">连接多个 OpenClaw</Link>
+          <Link to="/docs/hermes-in-wechat">在微信里使用 Hermes</Link>
           <Link to="/docs/faq">常见问题</Link>
         </nav>
         <nav className="landing-footer-column" aria-label="开发者">

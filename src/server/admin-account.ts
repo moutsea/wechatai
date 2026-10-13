@@ -50,13 +50,30 @@ export function readAdminAccountStats(sql: SqlStorage, now = Date.now()): AdminA
       now,
     )
     .one();
+  const failedRequests = sql
+    .exec<{ total: number }>(
+      "SELECT COUNT(*) total FROM call_failures f WHERE NOT EXISTS(SELECT 1 FROM usage u WHERE u.id=f.id)",
+    )
+    .one().total;
+  const lastFailure = sql
+    .exec<{
+      lastFailureAt: number;
+      lastFailureCode: string;
+      lastFailureStatus: number | null;
+    }>(`SELECT createdAt lastFailureAt,code lastFailureCode,upstreamStatus lastFailureStatus
+    FROM call_failures f WHERE NOT EXISTS(SELECT 1 FROM usage u WHERE u.id=f.id)
+    ORDER BY createdAt DESC,id DESC LIMIT 1`)
+    .toArray()[0];
   const start = dayWindow(now).start - 29 * 86400000;
   const daily = sql
-    .exec<AdminUsage & { day: string }>(
+    .exec<AdminUsage & { day: string; failedRequests: number }>(
       `
     SELECT strftime('%Y-%m-%d',createdAt/1000,'unixepoch','+8 hours') day,
-      COUNT(*) requests, SUM(tokens) tokens, SUM(units)/1000.0 credits
-    FROM usage WHERE createdAt>=? AND createdAt<=? GROUP BY day ORDER BY day`,
+      SUM(succeeded) requests, SUM(1-succeeded) failedRequests, SUM(tokens) tokens, SUM(units)/1000.0 credits
+    FROM (SELECT createdAt,tokens,units,1 succeeded FROM usage
+      UNION ALL SELECT createdAt,0,0,0 FROM call_failures f
+      WHERE NOT EXISTS(SELECT 1 FROM usage u WHERE u.id=f.id))
+    WHERE createdAt>=? AND createdAt<=? GROUP BY day ORDER BY day`,
       start,
       now,
     )
@@ -78,6 +95,10 @@ export function readAdminAccountStats(sql: SqlStorage, now = Date.now()): AdminA
   return {
     ...totals,
     ...counts,
+    failedRequests,
+    lastFailureAt: lastFailure?.lastFailureAt ?? null,
+    lastFailureCode: lastFailure?.lastFailureCode ?? null,
+    lastFailureStatus: lastFailure?.lastFailureStatus ?? null,
     sampledAt: now,
     planUntil,
     links: links.length,

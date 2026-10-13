@@ -36,6 +36,7 @@ export class AppError extends Error {
     public code: string,
     message: string,
     public status = 400,
+    public upstreamStatus?: number,
   ) {
     super(message);
   }

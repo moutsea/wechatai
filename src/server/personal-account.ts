@@ -7,6 +7,8 @@ import {
 import { NotificationStore } from "./notification-store";
 import { createNotificationToken } from "./notification-token";
 import { readAdminAccountStats } from "./admin-account";
+import { initCallFailures, recordCallFailure } from "./call-failures";
+import { adminGiftInputSchema, type AdminMembershipGift } from "../shared/admin";
 import {
   personalAssistantInputSchema,
   personalAssistantManifest,
@@ -142,6 +144,7 @@ import {
 import { AttachmentQueue, extractFileText, safeFileName, MAX_BATCH_BYTES } from "./attachments";
 
 import { DEFAULT_WECHAT_LINK, WECHAT_LINK_LIMITS, wechatLinkKey } from "../shared/wechat-links";
+import { wechatSetupIssue } from "../shared/wechat-readiness";
 import {
   OPENCLAW_WAITING_MESSAGE,
   IMAGE_WAITING_MESSAGE,
@@ -224,6 +227,7 @@ export class PersonalAccount extends DurableObject<Env> {
         const { id, route, text, units, inputTokens, outputTokens, failed, proactive } = event;
         this.refreshWallet();
         if (!failed) this.wallet.charge(id, units, units);
+        else recordCallFailure(this.sql, id, new AppError("remote_agent_failed", ""));
         this.sql.exec(
           "INSERT INTO runs VALUES (?,?, 'complete',?,?)",
           id,
@@ -306,6 +310,9 @@ export class PersonalAccount extends DurableObject<Env> {
         CREATE TABLE IF NOT EXISTS inbox (id TEXT PRIMARY KEY, payload TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', reply TEXT NOT NULL DEFAULT '', part INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0, createdAt INTEGER NOT NULL, sessionId TEXT);
         CREATE TABLE IF NOT EXISTS wechat_links (id TEXT PRIMARY KEY, name TEXT NOT NULL, createdAt INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, createdAt INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS membership_gifts (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+        CREATE TRIGGER IF NOT EXISTS membership_gifts_no_update BEFORE UPDATE ON membership_gifts BEGIN SELECT RAISE(ABORT, 'immutable membership gift'); END;
+        CREATE TRIGGER IF NOT EXISTS membership_gifts_no_delete BEFORE DELETE ON membership_gifts BEGIN SELECT RAISE(ABORT, 'immutable membership gift'); END;
         CREATE TABLE IF NOT EXISTS usage (id TEXT PRIMARY KEY, createdAt INTEGER NOT NULL, tokens INTEGER NOT NULL, units INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS usage_created ON usage(createdAt);`);
       migrateChannels(ctx.storage);
@@ -336,6 +343,7 @@ export class PersonalAccount extends DurableObject<Env> {
       }
       this.wallet.init();
       this.claw.init();
+      ctx.storage.transactionSync(() => initCallFailures(this.sql));
       if (
         !ctx.storage.sql
           .exec<{ name: string }>("PRAGMA table_info(inbox)")
@@ -519,6 +527,46 @@ export class PersonalAccount extends DurableObject<Env> {
   // Server binding RPC; deliberately not exposed by the account api(action) dispatcher.
   adminStats() {
     return readAdminAccountStats(this.sql);
+  }
+  // These RPCs are only available to the server binding, never the user action dispatcher.
+  adminMembership() {
+    return {
+      planUntil: this.getSetting("planUntil", 0),
+      gifts: this.sql
+        .exec<{ data: string }>("SELECT data FROM membership_gifts ORDER BY rowid DESC LIMIT 20")
+        .toArray()
+        .map((row) => JSON.parse(row.data) as AdminMembershipGift),
+    };
+  }
+  async adminGiftPlus(actorId: string, payload: unknown) {
+    const input = adminGiftInputSchema.parse(payload);
+    if (!actorId || actorId.length > 128) throw new Error("Invalid gift actor");
+    const result = this.ctx.storage.transactionSync(() => {
+      const saved = this.sql
+        .exec<{ data: string }>("SELECT data FROM membership_gifts WHERE id=?", input.id)
+        .toArray()[0];
+      if (saved) {
+        const gift = JSON.parse(saved.data) as AdminMembershipGift;
+        if (gift.actorId !== actorId || gift.reason !== input.reason) return { ok: false as const };
+        return { ok: true as const, gift, planUntil: this.getSetting("planUntil", 0) };
+      }
+      const now = Date.now();
+      const previousPlanUntil = this.getSetting("planUntil", 0);
+      const planUntil = extendMembership(Math.max(now, previousPlanUntil), 1);
+      const gift: AdminMembershipGift = {
+        ...input,
+        actorId,
+        createdAt: now,
+        previousPlanUntil,
+        planUntil,
+      };
+      this.setSetting("planUntil", planUntil);
+      this.refreshWallet();
+      this.sql.exec("INSERT INTO membership_gifts VALUES (?,?)", input.id, JSON.stringify(gift));
+      return { ok: true as const, gift, planUntil };
+    });
+    if (result.ok) await this.scheduleWechat();
+    return result;
   }
   async referralWechatIdentity(): Promise<string | null> {
     const used = this.getSetting<ReferralUse | null>("referralUse", null);
@@ -1650,6 +1698,7 @@ export class PersonalAccount extends DurableObject<Env> {
     }));
     return {
       plan: this.plan(),
+      onboardingDismissedAt: this.getSetting("dashboardOnboardingDismissedAt", 0),
       plugins: this.plugins().map((p) => this.publicPlugin(p)),
       planUntil: this.getSetting("planUntil", 0),
       channels: this.channels().map((c) => this.publicChannel(c)),
@@ -1739,7 +1788,11 @@ export class PersonalAccount extends DurableObject<Env> {
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
         throw new AppError("plugin_type", "插件类型不匹配", 403);
       if (action === "snapshot") data = this.snapshot();
-      else if (action === "plugin.list") data = this.plugins().map((p) => this.publicPlugin(p));
+      else if (action === "onboarding.dismiss") {
+        const dismissedAt = this.getSetting("dashboardOnboardingDismissedAt", 0) || Date.now();
+        this.setSetting("dashboardOnboardingDismissedAt", dismissedAt);
+        data = { dismissedAt };
+      } else if (action === "plugin.list") data = this.plugins().map((p) => this.publicPlugin(p));
       else if (
         ["notification.status", "notification.token", "notification.revoke"].includes(action)
       ) {
@@ -2975,6 +3028,7 @@ export class PersonalAccount extends DurableObject<Env> {
     } catch (error) {
       this.ctx.storage.transactionSync(() => {
         this.sql.exec("UPDATE runs SET status = 'failed' WHERE id = ? AND status = 'running'", id);
+        recordCallFailure(this.sql, id, error);
         this.personalRuns.remove(id);
       });
       throw error;
@@ -3118,6 +3172,7 @@ export class PersonalAccount extends DurableObject<Env> {
       });
     } catch (error) {
       this.sql.exec("UPDATE runs SET status = 'failed' WHERE id = ?", id);
+      recordCallFailure(this.sql, id, error);
       this.sql.exec(
         "UPDATE output_assets SET committed = -1, expiresAt = 0 WHERE runId = ? AND committed = 0",
         id,
@@ -3179,9 +3234,14 @@ export class PersonalAccount extends DurableObject<Env> {
 
   private async bind(connectionId = this.selectedLink()) {
     this.busy();
-    if (!this.links().length && connectionId === DEFAULT_WECHAT_LINK)
-      connectionId = this.createLink("我的微信");
-    this.requireLink(connectionId, true);
+    const needsLink = !this.links().length && connectionId === DEFAULT_WECHAT_LINK;
+    if (!needsLink) this.requireLink(connectionId, true);
+    const issue = wechatSetupIssue({
+      channels: this.channels().map((c) => ({ ...c, hasKey: Boolean(c.encryptedKey) })),
+      assistants: this.assistants(),
+    });
+    if (issue) throw new AppError(issue.code, issue.message, 422);
+    if (needsLink) connectionId = this.createLink("我的微信");
     const generation = crypto.randomUUID();
     this.setLinkSetting(connectionId, "connection", { status: "waiting", generation });
     this.attachments.clear(connectionId);
@@ -3288,6 +3348,7 @@ export class PersonalAccount extends DurableObject<Env> {
     } catch (error) {
       this.ctx.storage.transactionSync(() => {
         this.sql.exec("UPDATE runs SET status='failed' WHERE id=? AND status='interrupted'", id);
+        recordCallFailure(this.sql, id, error);
         this.personalRuns.remove(id);
       });
       throw error;

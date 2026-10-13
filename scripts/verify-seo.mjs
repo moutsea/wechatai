@@ -142,6 +142,14 @@ for (const path of ["/guide", "/guide/", "/guide.html"]) {
     `${path}: permanent guide redirect without overriding fragment`,
   );
 }
+for (const [, canonical] of publicPages) {
+  const path = new URL(canonical).pathname;
+  for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`])
+    assert(
+      redirectRules.includes(`${alias} ${path} 301`),
+      `${alias}: permanent redirect to canonical URL`,
+    );
+}
 const docsIndex = await read("docs.html");
 for (const [file] of publicPages.filter(([file]) => file.startsWith("docs/"))) {
   assert(
@@ -153,9 +161,17 @@ assert(
   (await read("index.html")).match(/<nav class="landing-nav">[\s\S]*?href="\/docs"[\s\S]*?<\/nav>/),
   "homepage navigation includes docs",
 );
+for (const slug of ["deepseek-in-wechat", "multiple-openclaw-in-wechat", "hermes-in-wechat"])
+  assert(
+    (await read("index.html")).includes(`href="/docs/${slug}"`),
+    "homepage links to tutorials",
+  );
 for (const file of [
   "login.html",
   "register.html",
+  "verify-email.html",
+  "forgot-password.html",
+  "reset-password.html",
   "app.html",
   "app/sessions.html",
   "app/plugins.html",
@@ -219,9 +235,17 @@ if (process.argv[2]) {
       assert(html.includes('content="noindex, follow"'), `${path}: noindex HTML`);
     }
   }
-  for (const path of ["/index.html", "/docs/", "/docs/hermes-in-wechat.html"]) {
-    const response = await fetch(new URL(path, origin), { redirect: "manual" });
-    assert.equal(response.status, 307, `${path}: canonical redirect`);
+  for (const [, canonical] of publicPages) {
+    const path = new URL(canonical).pathname;
+    for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`]) {
+      const response = await fetch(new URL(alias, origin), { redirect: "manual" });
+      assert.equal(response.status, 301, `${alias}: permanent canonical redirect`);
+      assert.equal(
+        new URL(response.headers.get("location"), origin).href,
+        new URL(path, origin).href,
+      );
+      await response.body?.cancel();
+    }
   }
   for (const path of ["/guide", "/guide/", "/guide.html", "/guide?utm_source=wechat"]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });

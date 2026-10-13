@@ -1,3 +1,4 @@
+import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import { env, runInDurableObject, createExecutionContext } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
@@ -9,7 +10,8 @@ import worker from "../src/server/index";
 import { adminOverview, adminUsers, saveAdminStats, syncAdminStats } from "../src/server/admin";
 import { readAdminAccountStats } from "../src/server/admin-account";
 import { dayWindow } from "../src/server/wallet";
-import type { AdminAccountStats } from "../src/shared/admin";
+import { extendMembership } from "../src/shared/billing";
+import type { AdminAccountStats, AdminGiftResult, AdminMembership } from "../src/shared/admin";
 
 beforeAll(async () => {
   for (const migration of [
@@ -18,6 +20,7 @@ beforeAll(async () => {
     referralMigration,
     prepaidMigration,
     adminMigration,
+    authEmailMigration,
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
@@ -68,6 +71,10 @@ const blankStats = (extra: Partial<AdminAccountStats> = {}): AdminAccountStats =
   purchasedCredits: 0,
   debt: 0,
   lastActiveAt: null,
+  failedRequests: 0,
+  lastFailureAt: null,
+  lastFailureCode: null,
+  lastFailureStatus: null,
   daily: [],
   pluginUsage: [],
   ...extra,
@@ -89,13 +96,14 @@ async function order(
 }
 const request = (path: string, options?: RequestInit) =>
   worker.fetch(new Request(`${env.APP_URL}${path}`, options), env, createExecutionContext());
+let authTestIp = 170;
 async function login() {
   const response = await request("/api/auth/sign-up/email", {
     method: "POST",
     headers: {
       origin: env.APP_URL,
       "content-type": "application/json",
-      "cf-connecting-ip": "198.51.100.220",
+      "cf-connecting-ip": `198.51.100.${++authTestIp}`,
     },
     body: JSON.stringify({
       name: "Admin test",
@@ -109,10 +117,7 @@ async function login() {
   const { user: account } = await response.json<{ user: { id: string } }>();
   return {
     id: account.id,
-    cookie: response.headers
-      .getSetCookie()
-      .map((c) => c.split(";")[0])
-      .join("; "),
+    cookie: await verifiedFixtureCookie(account.id, "test-password-only"),
   };
 }
 
@@ -160,7 +165,202 @@ describe("admin authorization", () => {
   });
 });
 
+describe("admin membership gifts", () => {
+  async function setup() {
+    const admin = await login();
+    await env.DB.prepare("INSERT INTO admin_user VALUES (?,?)").bind(admin.id, Date.now()).run();
+    const target = await user();
+    const headers = {
+      cookie: admin.cookie,
+      origin: env.APP_URL,
+      "content-type": "application/json",
+    };
+    const gift = (body: unknown, recipient = target, extra: Record<string, string> = {}) =>
+      request(`/api/admin/users/${recipient}/gift-plus`, {
+        method: "POST",
+        headers: { ...headers, ...extra },
+        body: JSON.stringify(body),
+      });
+    return { admin, target, headers, gift, account: env.ACCOUNTS.getByName(target) };
+  }
+  it("requires a current admin role and same-origin session, including for Plus users", async () => {
+    const { admin, target, headers, gift, account } = await setup();
+    const input = { id: crypto.randomUUID(), reason: "Test" };
+    expect(
+      (
+        await request(`/api/admin/users/${target}/gift-plus`, {
+          method: "POST",
+          headers: { origin: env.APP_URL },
+          body: JSON.stringify(input),
+        })
+      ).status,
+    ).toBe(401);
+    expect((await gift(input, target, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await gift(input, target, { origin: "" })).status).toBe(403);
+    await env.ACCOUNTS.getByName(admin.id).applyPayment({
+      id: "test-paid",
+      kind: "membership",
+      months: 1,
+    });
+    await env.DB.prepare("DELETE FROM admin_user WHERE user_id=?").bind(admin.id).run();
+    expect((await gift(input)).status).toBe(403);
+    expect((await request(`/api/admin/users/${target}/membership`, { headers })).status).toBe(403);
+    expect((await account.adminMembership()).gifts).toHaveLength(0);
+    expect(JSON.parse(await account.api("adminGiftPlus", input)).ok).toBe(false);
+  });
+  it("grants exactly one calendar month, tops up today's allowance once and leaves revenue unchanged", async () => {
+    const { admin, target, headers, gift, account } = await setup();
+    const other = env.ACCOUNTS.getByName(await user());
+    const free = await account.snapshot();
+    const input = { id: crypto.randomUUID(), reason: " 注册问题补偿 " };
+    const before = Date.now();
+    const first = await gift(input);
+    expect(first.status).toBe(200);
+    const receipt = await first.json<AdminGiftResult>();
+    expect(receipt.gift).toMatchObject({
+      id: input.id,
+      actorId: admin.id,
+      reason: "注册问题补偿",
+      previousPlanUntil: 0,
+    });
+    expect(receipt.planUntil).toBeGreaterThanOrEqual(extendMembership(before, 1));
+    expect(receipt.planUntil).toBeLessThanOrEqual(extendMembership(Date.now(), 1));
+    const plus = await account.snapshot();
+    expect(plus.plan).toBe("plus");
+    expect(plus.wallet.dailyGrant).toBe(1000);
+    expect(plus.wallet.balance - free.wallet.balance).toBe(1000 - free.wallet.dailyGrant);
+    const retry = await gift(input);
+    expect(await retry.json()).toEqual(receipt);
+    expect((await account.snapshot()).wallet).toEqual(plus.wallet);
+    const membership = await request(`/api/admin/users/${target}/membership`, { headers });
+    expect(await membership.json<AdminMembership>()).toEqual({
+      planUntil: receipt.planUntil,
+      gifts: [receipt.gift],
+    });
+    expect((await adminUsers(env, { q: target })).items[0].planUntil).toBe(receipt.planUntil);
+    const summary = (await adminOverview(env)).summary;
+    expect(summary).toMatchObject({ plus: 1, revenue: 0, paidOrders: 0, payingUsers: 0 });
+    expect((await other.adminMembership()).planUntil).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("rejects invalid data, missing recipients and conflicting retries without granting time", async () => {
+    const { target, gift, account } = await setup();
+    for (const input of [
+      null,
+      {},
+      { id: "invalid" },
+      { id: crypto.randomUUID(), months: 12 },
+      { id: crypto.randomUUID(), reason: "x".repeat(201) },
+      { id: crypto.randomUUID(), actorId: "forged" },
+    ])
+      expect((await gift(input)).status).toBe(400);
+    expect((await gift({ id: crypto.randomUUID() }, "missing-user")).status).toBe(404);
+    expect((await account.adminMembership()).gifts).toHaveLength(0);
+    const id = crypto.randomUUID();
+    expect((await gift({ id, reason: "original" })).status).toBe(200);
+    const previous = await account.adminMembership();
+    expect((await gift({ id, reason: "changed" }, target)).status).toBe(409);
+    expect(await account.adminMembership()).toEqual(previous);
+  });
+  it("serializes concurrent gifts and payments, deduplicates repeated submissions, and handles month end", async () => {
+    const { admin, account } = await setup();
+    const previous = Date.parse("2028-01-31T02:00:00Z");
+    await runInDurableObject(account, (_, state) => {
+      state.storage.sql.exec(
+        "INSERT INTO settings VALUES ('planUntil',?)",
+        JSON.stringify(previous),
+      );
+    });
+    const input = { id: crypto.randomUUID(), reason: "Concurrent gift" };
+    const responses = await Promise.all(
+      Array.from({ length: 3 }, () => account.adminGiftPlus(admin.id, input)),
+    );
+    expect(responses[0]).toMatchObject({ ok: true, planUntil: Date.parse("2028-02-29T02:00:00Z") });
+    expect(responses[1]).toEqual(responses[0]);
+    expect(responses[2]).toEqual(responses[0]);
+    const until = extendMembership(previous, 1);
+    await Promise.all([
+      account.adminGiftPlus(admin.id, { id: crypto.randomUUID() }),
+      account.applyPayment({ id: "concurrent-paid", kind: "membership", months: 1 }),
+    ]);
+    expect((await account.adminMembership()).planUntil).toBe(
+      extendMembership(extendMembership(until, 1), 1),
+    );
+    expect((await account.adminMembership()).gifts).toHaveLength(2);
+  });
+  it("starts expired membership from now and atomically rolls back if the audit write fails", async () => {
+    const { admin, account } = await setup();
+    await runInDurableObject(account, (_, state) => {
+      state.storage.sql.exec("INSERT INTO settings VALUES ('planUntil',1)");
+      state.storage.sql.exec(
+        "CREATE TRIGGER gift_fail BEFORE INSERT ON membership_gifts BEGIN SELECT RAISE(ABORT, 'test audit failure'); END",
+      );
+    });
+    const before = await account.snapshot();
+    const input = { id: crypto.randomUUID(), reason: "Atomic gift" };
+    await runInDurableObject(account, async (instance) => {
+      await expect(instance.adminGiftPlus(admin.id, input)).rejects.toThrow("test audit failure");
+    });
+    expect((await account.snapshot()).wallet).toEqual(before.wallet);
+    expect(await account.adminMembership()).toEqual({ planUntil: 1, gifts: [] });
+    await runInDurableObject(account, (_, state) => {
+      state.storage.sql.exec("DROP TRIGGER gift_fail");
+    });
+    const start = Date.now();
+    await account.adminGiftPlus(admin.id, input);
+    expect((await account.adminMembership()).planUntil).toBeGreaterThanOrEqual(
+      extendMembership(start, 1),
+    );
+    await runInDurableObject(account, (_, state) => {
+      expect(() => state.storage.sql.exec("DELETE FROM membership_gifts")).toThrow(
+        "immutable membership gift",
+      );
+    });
+  });
+});
+
 describe("admin aggregates", () => {
+  it("separates failed attempts from settled usage and active users, preserving unknown legacy snapshots", async () => {
+    const now = Date.now();
+    const day = dayWindow(now).day;
+    const failed = await user("failed-only");
+    await saveAdminStats(
+      env,
+      failed,
+      blankStats({
+        sampledAt: now,
+        failedRequests: 3,
+        lastFailureAt: now,
+        lastFailureCode: "kimiseek_insufficient_balance",
+        lastFailureStatus: 402,
+        daily: [{ day, requests: 0, failedRequests: 3, tokens: 0, credits: 0 }],
+      }),
+    );
+    const legacy = await user("old-snapshot");
+    await env.DB.prepare("INSERT INTO admin_account_stats VALUES (?,?,?)")
+      .bind(legacy, now, JSON.stringify({ requests: 0, credits: 0, daily: [] }))
+      .run();
+    const summary = await adminOverview(env, now);
+    expect(summary.summary).toMatchObject({
+      requests: 0,
+      failedRequests: 3,
+      tokens: 0,
+      credits: 0,
+    });
+    expect(summary.daily.at(-1)).toMatchObject({ activeUsers: 0, failedRequests: 3, requests: 0 });
+    const list = await adminUsers(env, {});
+    expect(list.items.find((u) => u.id === failed)).toMatchObject({
+      failedRequests: 3,
+      lastFailureAt: now,
+      lastFailureCode: "kimiseek_insufficient_balance",
+      lastFailureStatus: 402,
+      requests: 0,
+      credits: 0,
+      lastActiveAt: null,
+    });
+    expect(list.items.find((u) => u.id === legacy)?.failedRequests).toBeNull();
+  });
+
   it("uses Beijing days, ignores unpaid/other currencies, separates test payments, and counts distinct active users", async () => {
     const now = Date.parse("2026-10-10T01:00:00Z");
     const beforeMidnight = Date.parse("2026-10-09T15:59:59Z");
@@ -177,7 +377,7 @@ describe("admin aggregates", () => {
         credits: 1.234,
         requests: 2,
         tokens: 300,
-        daily: [{ day: "2026-10-10", requests: 2, tokens: 300, credits: 1.234 }],
+        daily: [{ day: "2026-10-10", requests: 2, failedRequests: 0, tokens: 300, credits: 1.234 }],
         pluginUsage: [
           {
             pluginId: "wechatai/llm-chat",
@@ -198,7 +398,7 @@ describe("admin aggregates", () => {
         requests: 1,
         tokens: 100,
         credits: 0.2,
-        daily: [{ day: "2026-10-10", requests: 1, tokens: 100, credits: 0.2 }],
+        daily: [{ day: "2026-10-10", requests: 1, failedRequests: 0, tokens: 100, credits: 0.2 }],
         pluginUsage: [
           {
             pluginId: "wechatai/llm-chat",
@@ -336,7 +536,9 @@ describe("read-only per-account statistics", () => {
     }));
     const stats = await stub.adminStats();
     expect(stats).toMatchObject({ requests: 2, tokens: 300, credits: 2, links: 1, connected: 1 });
-    expect(stats.daily).toEqual([{ day: today, requests: 2, tokens: 300, credits: 2 }]);
+    expect(stats.daily).toEqual([
+      { day: today, requests: 2, failedRequests: 0, tokens: 300, credits: 2 },
+    ]);
     expect(stats.pluginUsage.find((p) => p.pluginId === "wechatai/hermes")).toMatchObject({
       requests: 1,
       credits: 0.75,

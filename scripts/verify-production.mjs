@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
 import Stripe from "stripe";
 import { productionOrigin } from "./site-origin.mjs";
+import { verifyHttpsRedirects } from "./verify-https.mjs";
 
 const origin = productionOrigin();
 const secrets = JSON.parse(await readFile(".production-secrets.local", "utf8"));
@@ -9,33 +9,40 @@ const stripe = new Stripe(secrets.STRIPE_SECRET_KEY, { timeout: 15000, maxNetwor
 if (!secrets.STRIPE_SECRET_KEY.startsWith("sk_live_"))
   throw new Error("Expected live configuration");
 try {
+  // Catch HTTP entry points before submitting any authentication credentials.
+  await verifyHttpsRedirects(origin);
   let account;
   try {
     account = JSON.parse(await readFile(".production-smoke.local", "utf8"));
   } catch {
-    account = {
-      email: `deployment-check-${Date.now()}@example.test`,
-      password: randomBytes(24).toString("base64url"),
-    };
-    const r = await fetch(`${origin}/api/auth/sign-up/email`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/json" },
-      body: JSON.stringify({ ...account, name: "部署验证" }),
-    });
-    if (!r.ok) throw new Error(`Production signup HTTP ${r.status}`);
-    account.userId = (await r.json()).user.id;
-    account.cookie = r.headers
-      .getSetCookie()
-      .map((s) => s.split(";")[0])
-      .join("; ");
-    await writeFile(".production-smoke.local", JSON.stringify(account), { mode: 0o600 });
+    throw new Error(
+      "Create a dedicated Free test account and verify its real mailbox first, then save email and password in .production-smoke.local (chmod 600). This script does not create accounts or send email.",
+    );
   }
+  if (
+    typeof account.email !== "string" ||
+    !account.email ||
+    typeof account.password !== "string" ||
+    !account.password
+  )
+    throw new Error(
+      ".production-smoke.local must contain the verified test account's email and password.",
+    );
   const login = await fetch(`${origin}/api/auth/sign-in/email`, {
     method: "POST",
     headers: { origin, "content-type": "application/json" },
     body: JSON.stringify({ email: account.email, password: account.password }),
   });
-  if (!login.ok) throw new Error(`Production sign-in HTTP ${login.status}`);
+  const loginResult = await login.json();
+  if (!login.ok) {
+    if (loginResult.code === "EMAIL_NOT_VERIFIED")
+      throw new Error(
+        "The smoke-test account must complete email verification before running this script.",
+      );
+    throw new Error(`Production sign-in HTTP ${login.status}`);
+  }
+  if (!loginResult.user?.id) throw new Error("Production sign-in did not return an account.");
+  account.userId = loginResult.user.id;
   account.cookie = login.headers
     .getSetCookie()
     .map((s) => s.split(";")[0])

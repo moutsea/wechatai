@@ -8,6 +8,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type { WxMessage } from "../src/server/wechat";
 import { encrypt } from "../src/server/security";
 import { wechatLinkKey } from "../src/shared/wechat-links";
+import { wechatSetupIssue } from "../src/shared/wechat-readiness";
 
 const accounts: ReturnType<typeof env.ACCOUNTS.getByName>[] = [];
 function account() {
@@ -35,7 +36,8 @@ function network() {
   let qr = 0;
   const queues = new Map<string, WxMessage[]>();
   const polls: string[] = [];
-  const sends: { token: string; to: string; text: string; context: string; clientId: string }[] = [];
+  const sends: { token: string; to: string; text: string; context: string; clientId: string }[] =
+    [];
   const modelInputs: string[] = [];
   const control = { duplicateBot: false, failedSends: 0 };
   vi.stubGlobal(
@@ -131,7 +133,10 @@ async function cycles(stub: Account, count: number) {
 }
 async function skipWelcome(stub: Account, id: string) {
   await runInDurableObject(stub, (_, state) => {
-    state.storage.sql.exec("DELETE FROM settings WHERE key = ?", wechatLinkKey(id, "guideDelivery"));
+    state.storage.sql.exec(
+      "DELETE FROM settings WHERE key = ?",
+      wechatLinkKey(id, "guideDelivery"),
+    );
   });
 }
 beforeEach(() => network());
@@ -141,6 +146,167 @@ afterEach(async () => {
       await state.storage.deleteAlarm();
     });
   vi.unstubAllGlobals();
+});
+
+describe("WeChat QR configuration preflight", () => {
+  it.each([false, true])(
+    "rejects an empty account before creating a link or requesting a QR (Plus=%s)",
+    async (isPlus) => {
+      const stub = account();
+      if (isPlus) await plus(stub);
+      vi.mocked(fetch).mockClear();
+      const result = await api(stub, "wechat.bind");
+      expect(result).toMatchObject({ ok: false, status: 422, error: "wechat_channel_required" });
+      expect(result.message).toContain("渠道与模型");
+      expect(wechatSetupIssue(await stub.snapshot())?.code).toBe(result.error);
+      expect((await stub.snapshot()).connections).toHaveLength(0);
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("requires a text model, even when an image plugin is configured", async () => {
+    const stub = account();
+    await plus(stub);
+    const channel = await api(stub, "channel.save", {
+      name: "渠道",
+      protocol: "chat-completions",
+      baseUrl: "https://llm.example.com",
+      apiKey: "test-key",
+    });
+    expect(channel.ok).toBe(true);
+    const id = await create(stub, "日常");
+    expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_model_required");
+    const image = await api(stub, "model.save", {
+      name: "生图模型",
+      channelId: channel.data.id,
+      model: "qwen-image-3.0",
+    });
+    expect(image.ok).toBe(true);
+    expect(
+      (
+        await api(stub, "plugin.save", {
+          pluginId: "wechatai/image-generation",
+          name: "生图",
+          shortcut: "画图",
+          modelId: image.data.id,
+        })
+      ).ok,
+    ).toBe(true);
+    expect(wechatSetupIssue(await stub.snapshot())?.code).toBe("wechat_model_required");
+    expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_model_required");
+    expect((await stub.snapshot()).connection.status).toBe("disconnected");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(["chat-completions", "responses", "anthropic"])(
+    "accepts a configured %s text model without calling or charging the LLM",
+    async (protocol) => {
+      const stub = account();
+      const saved = await api(stub, "assistant.save", {
+        name: "聊天",
+        protocol,
+        baseUrl: "https://llm.example.com",
+        apiKey: "test-key",
+        model: "chat-model",
+      });
+      expect(saved.ok).toBe(true);
+      const before = await stub.snapshot();
+      expect(wechatSetupIssue(before)).toBeNull();
+      vi.mocked(fetch).mockClear();
+      expect((await api(stub, "wechat.bind")).ok).toBe(true);
+      const after = await stub.snapshot();
+      expect(after.connection.status).toBe("waiting");
+      expect(after.connection.qrUrl).toBeTruthy();
+      expect(after.wallet.balance).toBe(before.wallet.balance);
+      expect(after.ledger).toEqual(before.ledger);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [url, init] = vi.mocked(fetch).mock.calls[0];
+      expect(new Request(url, init).url).toContain("get_bot_qrcode");
+    },
+  );
+
+  it.each(["baseUrl", "encryptedKey"])("rejects a legacy channel missing %s", async (field) => {
+    const stub = account();
+    await model(stub);
+    await runInDurableObject(stub, (_, state) => {
+      const row = state.storage.sql
+        .exec<{ id: string; data: string }>("SELECT * FROM channels")
+        .one();
+      state.storage.sql.exec(
+        "UPDATE channels SET data=? WHERE id=?",
+        JSON.stringify({ ...JSON.parse(row.data), [field]: "" }),
+        row.id,
+      );
+    });
+    expect((await api(stub, "wechat.bind")).error).toBe("wechat_channel_incomplete");
+    expect((await stub.snapshot()).connections).toHaveLength(0);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves an existing connection and pending messages when rebind validation fails", async () => {
+    const stub = account();
+    const modelId = await model(stub);
+    const id = await create(stub, "日常");
+    expect((await api(stub, "wechat.bind", { id })).ok).toBe(true);
+    await cycles(stub, 1);
+    expect((await api(stub, "assistant.delete", { id: modelId })).ok).toBe(true);
+    const previous = await stub.snapshot();
+    await runInDurableObject(stub, async (_, state) => {
+      await state.storage.deleteAlarm();
+      state.storage.sql.exec(
+        "INSERT INTO inbox(id,payload,createdAt,connectionId) VALUES ('pending-preflight','{}',1,?)",
+        id,
+      );
+    });
+    vi.mocked(fetch).mockClear();
+    expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_model_required");
+    expect((await stub.snapshot()).connection).toEqual(previous.connection);
+    expect(fetch).not.toHaveBeenCalled();
+    await runInDurableObject(stub, (_, state) => {
+      expect(
+        state.storage.sql
+          .exec<{ state: string }>("SELECT state FROM inbox WHERE id='pending-preflight'")
+          .one().state,
+      ).toBe("pending");
+    });
+  });
+
+  it.each(["openclaw", "hermes", "notification"])(
+    "does not exempt a configured %s plugin from the channel requirement",
+    async (kind) => {
+      const stub = account();
+      await plus(stub);
+      const id = await create(stub, "日常");
+      const saved = await api(stub, "plugin.save", {
+        pluginId: `wechatai/${kind}`,
+        name: kind,
+        shortcut: kind,
+        connectionId: id,
+      });
+      expect(saved.ok).toBe(true);
+      const tokenAction =
+        kind === "notification"
+          ? "notification.token"
+          : `plugin.${kind === "openclaw" ? "claw" : "hermes"}Token`;
+      expect((await api(stub, tokenAction, { id: saved.data.id })).ok).toBe(true);
+      expect((await stub.snapshot()).plugins?.[0].hasKey).toBe(true);
+      expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_channel_required");
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not combine a model from one channel with another channel's key", () => {
+    const setup = {
+      channels: [
+        { id: "with-model", baseUrl: "https://llm.example.com", hasKey: false },
+        { id: "with-key", baseUrl: "https://llm.example.com", hasKey: true },
+      ],
+      assistants: [{ channelId: "with-model", model: "chat-model" }],
+    };
+    expect(wechatSetupIssue(setup)).not.toBeNull();
+    setup.assistants.push({ channelId: "with-key", model: "chat-model" });
+    expect(wechatSetupIssue(setup)).toBeNull();
+  });
 });
 
 describe("personal WeChat link limits and isolation", () => {
@@ -175,13 +341,18 @@ describe("personal WeChat link limits and isolation", () => {
     for (const link of (await stub.snapshot()).connections) await skipWelcome(stub, link.id);
     const original = vi.mocked(fetch).getMockImplementation()!;
     let release!: () => void;
-    const held = new Promise<void>((resolve) => { release = resolve; });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     let polling = false;
     let deliveredWhilePolling = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     vi.mocked(fetch).mockImplementation(async (url, init) => {
       const request = new Request(url, init);
-      if (request.url.endsWith("getupdates") && request.headers.get("Authorization") === "Bearer token-2") {
+      if (
+        request.url.endsWith("getupdates") &&
+        request.headers.get("Authorization") === "Bearer token-2"
+      ) {
         polling = true;
         timeout = setTimeout(release, 1000);
         await held;
@@ -231,6 +402,7 @@ describe("personal WeChat link limits and isolation", () => {
 
   it("atomically permits one Free link, rebinds in place, and releases a deleted slot", async () => {
     const stub = account();
+    await model(stub);
     const results = await Promise.all(
       [1, 2, 3].map((i) => api(stub, "wechat.create", { name: `链接${i}` })),
     );
@@ -381,6 +553,7 @@ describe("personal WeChat link limits and isolation", () => {
     const net = network();
     const stub = account();
     await plus(stub);
+    await model(stub);
     const a = await create(stub, "保留链接");
     await api(stub, "wechat.bind", { id: a });
     const b = await create(stub, "暂停链接");
@@ -416,6 +589,7 @@ describe("personal WeChat link limits and isolation", () => {
     net.control.duplicateBot = true;
     const stub = account();
     await plus(stub);
+    await model(stub);
     const a = await create(stub, "一");
     const b = await create(stub, "二");
     await api(stub, "wechat.bind", { id: a });

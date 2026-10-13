@@ -19,6 +19,8 @@ import { Empty, relativeTime, SectionTitle } from "../ui";
 import { ChannelIcon } from "../channel-icon";
 import { membershipExpiry } from "../membership";
 import { formatCredits, type ChatSession } from "../../shared/types";
+import { DashboardOnboarding } from "./dashboard-onboarding";
+import { dashboardSetupProgress } from "../../shared/onboarding";
 export function Dashboard() {
   const { data, user, base, request, demo } = useApp();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -31,6 +33,7 @@ export function Dashboard() {
   if (!data) return null;
   const selectedLink = data.connections.find((l) => l.id === data.selectedConnectionId);
   const connected = data.connection.status === "connected" && !selectedLink?.paused;
+  const setup = dashboardSetupProgress(data);
   const maximum = Math.max(...data.activity.map((a) => a.credits), 1);
   const activity = Array.from({ length: 7 }, (_, i) => {
     const date = new Date(Date.now() + 8 * 3600000 - (6 - i) * 86400000);
@@ -48,10 +51,13 @@ export function Dashboard() {
           </h1>
           <p>让喜欢的 AI，陪你聊聊日常里的大小事。</p>
         </div>
-        <Link className="button secondary" to={`${base}/channels?new=1`}>
-          <Plus size={16} />
-          添加渠道
-        </Link>
+        <div className="dashboard-actions">
+          <DashboardOnboarding data={data} />
+          <Link className="button secondary" to={`${base}/channels?new=1`}>
+            <Plus size={16} />
+            添加渠道
+          </Link>
+        </div>
       </div>
       <section className="welcome-banner">
         <div>
@@ -170,12 +176,16 @@ export function Dashboard() {
           </p>
         </article>
       </div>
-      {!data.assistants.length && (
+      {(!setup.model || !setup.wechat || !setup.message) && (
         <div className="onboarding-strip">
           {[
-            [Boolean(data.assistants.length), "添加渠道和模型", "/channels?new=1"],
-            [connected, "扫码连接微信", "/wechat"],
-            [Boolean(data.stats.messages), "发送第一条消息", "/wechat"],
+            [
+              setup.model,
+              "添加渠道和模型",
+              data.channels.length ? "/channels" : "/channels?new=1",
+            ],
+            [setup.wechat, "扫码连接微信", "/wechat"],
+            [setup.message, "发送第一条消息", "/wechat"],
           ].map(([done, label, path], i) => (
             <Link key={String(label)} to={base + path}>
               <span className={done ? "step-done" : ""}>

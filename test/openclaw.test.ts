@@ -772,6 +772,14 @@ describe("OpenClaw native relay", () => {
     expect(reply).not.toContain("/use claw");
     expect(reply).not.toContain("secret upstream error");
     expect((await api(other.stub, "snapshot")).data.wallet.balance).toBe(before);
+    expect(await other.stub.adminStats()).toMatchObject({
+      requests: 0,
+      failedRequests: 1,
+      credits: 0,
+      lastFailureCode: "remote_agent_failed",
+    });
+    await other.call("event", { ...other.event, status: "failed", text: "duplicate" });
+    expect((await other.stub.adminStats()).failedRequests).toBe(1);
   });
   it("keeps @ calls temporary and lets /use switch directly", async () => {
     const ctx = await ready();

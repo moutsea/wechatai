@@ -86,7 +86,11 @@ export function Channels() {
     if (params.get("new")) {
       setError("");
       setChannelEditor("new");
-      setChannelForm(newChannel);
+      setChannelForm(
+        params.get("provider") === "deepseek"
+          ? { ...newChannel, name: "DeepSeek", baseUrl: "https://api.deepseek.com" }
+          : newChannel,
+      );
       setParams({}, { replace: true });
     }
   }, [params, setParams]);

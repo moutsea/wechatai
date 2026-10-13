@@ -22,12 +22,15 @@ pnpm exec wrangler r2 bucket create wechatai-media
 - 将 `routes`、`APP_URL`、`PUBLIC_SITE_URL` 改成自己的 HTTPS 域名。
 - 保留账户对象的 `v1` 迁移；不要把顶层的本地 `v2-local-reminders` 迁移复制进生产环境。
 - 确认 `REMINDERS.script_name` 对应提醒 Worker 名称。
+- 配置 `AUTH_EMAIL` 发信绑定、`AUTH_EMAIL_MODE=cloudflare` 和 `AUTH_EMAIL_FROM`；先完成发信域名验证，见[邮箱注册配置](configuration.md#邮箱注册与找回密码)。不要将本地 `preview` 模式复制进生产。
 
 编辑 `wrangler.reminders.local.jsonc`：使用相同 Cloudflare 账户，确认 `ACCOUNTS.script_name` 是主 Worker 名称。若改名，两个配置须成对修改。通常保留 `wechatai` / `wechatai-reminders` 即可。
 
 `pnpm build:production` 优先读取私有主配置；没有私有配置时仅用公共模板构建，不表示模板可以直接上线。`pnpm cf:production`、远程迁移和提醒部署要求私有配置存在。CI 可通过 `WECHATAI_WRANGLER_CONFIG` / `WECHATAI_REMINDERS_CONFIG` 指定其他路径。
 
 同时按[配置文档](configuration.md#品牌与自部署域名)更新公开页面的域名、联系信息和政策。
+
+在 Cloudflare 域名的 **SSL/TLS → Edge Certificates** 中开启 **Always Use HTTPS**，让 HTTP 请求先跳转到相同路径的 HTTPS 地址。仅将 `APP_URL` 写成 HTTPS 不会自动开启跳转，静态注册页仍可能通过 HTTP 打开，提交时会因来源不匹配报 `Invalid origin`。不要为此把 HTTP 地址加入认证白名单或关闭来源校验。如果同一域名下还有必须使用 HTTP 的其他服务，请用仅匹配本站主机名的 HTTPS 重定向规则。
 
 ## 2. 密钥和数据库
 
@@ -39,6 +42,8 @@ pnpm db:migrate:remote
 ```
 
 本地数据不会自动迁移到生产。D1 迁移和账户 SQLite 升级是两套机制，均需保持兼容。
+
+邮箱验证升级包含 `0007_auth_email_limits.sql`，发布前先执行远程迁移。不要批量把已有用户的 `emailVerified` 改成已验证；原会话继续有效，未验证的邮箱账号在下次登录时完成验证。
 
 ## 3. 首次部署顺序
 
@@ -64,9 +69,7 @@ pnpm db:migrate:remote
      "compatibility_date": "2026-10-10",
      "workers_dev": false,
      "preview_urls": false,
-     "durable_objects": { "bindings": [
-       { "name": "ACCOUNTS", "class_name": "PersonalAccount" }
-     ] },
+     "durable_objects": { "bindings": [{ "name": "ACCOUNTS", "class_name": "PersonalAccount" }] },
      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PersonalAccount"] }]
    }
    ```
@@ -120,6 +123,16 @@ SELECT id,unixepoch()*1000 FROM user WHERE id='VERIFIED_USER_ID';
 可通过 `pnpm cf:production d1 execute wechatai-db --remote --file path/to/private.sql` 执行，临时 SQL 不要提交。管理员入口为 `/app/admin`。撤销对应 `admin_user` 行会立即阻止后续管理请求，Plus 会员不自动拥有管理员权限。
 
 ## 6. 验证与备份
+
+每次上线后先检查 HTTP 入口是否跳转，并保留路径和查询参数：
+
+```sh
+node scripts/verify-https.mjs
+```
+
+此检查也已加入 `scripts/verify-production.mjs`，跳转缺失时会在登录和支付检查之前停止。
+
+运行完整支付验收脚本前，先用自己持有的真实邮箱注册专用 Free 测试账号并完成验证，将 `email` 和 `password` 保存在被 Git 忽略的 `.production-smoke.local` JSON 文件中，权限设为 `600`。脚本会登录此账号，不会自动注册、发送邮件或跳过邮箱验证；不要使用管理员或已有付费权益的账号。
 
 确认 `/api/health`、登录、模型连接测试、微信扫码和提醒交付都正常，再启用正式支付回调。支付检查脚本会查询真实 Stripe 配置，请阅读脚本和[支付说明](billing.md)后在自己的站点运行。
 

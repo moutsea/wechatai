@@ -29,7 +29,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-async function setup(plus = true, cap = 0) {
+async function setup(plus = true, cap = 0, baseUrl = "https://image.example.com/v1/messages") {
   const s = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(s);
   if (plus)
@@ -43,7 +43,7 @@ async function setup(plus = true, cap = 0) {
     name: "生图模型",
     model: "qwen-image-3.0",
     protocol: "anthropic",
-    baseUrl: "https://image.example.com/v1/messages",
+    baseUrl,
     apiKey: "model-key",
     maxCredits: cap,
   });
@@ -171,7 +171,10 @@ function network() {
           ],
         });
       }
-      if (u.hostname === "image.example.com") {
+      if (
+        u.hostname === "image.example.com" ||
+        u.hostname === new URL(env.KIMISEEK_API_URL).hostname
+      ) {
         events.push("generate");
         requests.push({ url: request.url, headers: request.headers, body: await request.json() });
         if (controls.failure)
@@ -220,7 +223,8 @@ function network() {
         const body = await request.json<{ msg: { item_list: { type: number }[] } }>();
         sends.push(body);
         return controls.failSend || (controls.failImageSend && body.msg.item_list[0].type === 2)
-          ? new Response(null, { status: 503 }) : Response.json({ ret: 0 });
+          ? new Response(null, { status: 503 })
+          : Response.json({ ret: 0 });
       }
       if (u.pathname.endsWith("getupdates")) return Response.json({ msgs: [] });
       throw new Error(`Unexpected endpoint: ${u.origin}${u.pathname}`);
@@ -719,6 +723,24 @@ describe("AI image plugin", () => {
     });
   });
 
+  it("provides the KimiSeek recharge entry for image payment failures without charging", async () => {
+    const n = network();
+    const { s, p } = await setup(true, 0, env.KIMISEEK_API_URL);
+    n.controls.failure = 402;
+    n.controls.failureBody = '{"error":{"message":"private upstream text"}}';
+    const result = await api(s, "plugin.test", { id: p.data.id, query: "cat" });
+    expect(result).toMatchObject({ ok: false, error: "kimiseek_insufficient_balance" });
+    expect(result.message).toContain("/app/channels");
+    expect(result.message).not.toContain("private upstream text");
+    expect(await s.adminStats()).toMatchObject({
+      requests: 0,
+      failedRequests: 1,
+      credits: 0,
+      lastFailureCode: "kimiseek_insufficient_balance",
+      lastFailureStatus: 402,
+    });
+  });
+
   it.each([
     [502, "<html>Bad Gateway</html>", "上游生图服务暂时异常（502）"],
     [502, "x".repeat(20_000), "上游生图服务暂时异常（502）"],
@@ -738,5 +760,6 @@ describe("AI image plugin", () => {
     });
     expect(n.requests).toHaveLength(1);
     expect(n.sends).toHaveLength(0);
+    expect(await s.adminStats()).toMatchObject({ failedRequests: 1, credits: 0 });
   });
 });

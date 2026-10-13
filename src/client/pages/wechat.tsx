@@ -18,6 +18,7 @@ import { useApp } from "../context";
 import { Modal, PageHead, relativeTime } from "../ui";
 import { json } from "../api";
 import { COMMANDS_GUIDE_PATH } from "../../shared/guide";
+import { wechatSetupIssue } from "../../shared/wechat-readiness";
 export function Wechat() {
   const { data, base, request, refresh, notify, demo } = useApp();
   const [busy, setBusy] = useState(false);
@@ -31,12 +32,17 @@ export function Wechat() {
   const atLimit = data.connections.length >= data.limits.connections;
   const connected = connection.status === "connected" && !paused;
   const waiting = ["waiting", "scanned"].includes(connection.status) && !paused;
+  const setupIssue = wechatSetupIssue(data);
   const action = async (
     type: "bind" | "disconnect" | "select" | "create" | "rename" | "delete",
     id = data.selectedConnectionId,
   ) => {
     if (demo) {
       notify("演示页面仅供预览，注册后即可管理自己的微信链接");
+      return;
+    }
+    if (type === "bind" && setupIssue) {
+      notify(setupIssue.message, true);
       return;
     }
     setBusy(true);
@@ -144,6 +150,19 @@ export function Wechat() {
           </div>
         </div>
       )}
+      {setupIssue && !paused && (
+        <div className="gentle-tip wechat-link-note" role="status">
+          <ShieldCheck size={20} />
+          <div>
+            <h3>{connected ? "请补全渠道配置" : "连接微信前，先完成配置"}</h3>
+            <p>{setupIssue.message}</p>
+            <Link className="text-link" to={`${base}/channels`}>
+              配置渠道与模型
+              <ArrowUpRight size={14} />
+            </Link>
+          </div>
+        </div>
+      )}
       <div className="connection-page-grid">
         <section className="panel binding-card">
           <div className="binding-card-top">
@@ -174,7 +193,7 @@ export function Wechat() {
           {demo && <div className="demo-inline">预览连接状态，仅用于展示界面。</div>}
           {!connected && !paused && (
             <div className="qr-area">
-              {waiting && connection.qrUrl ? (
+              {waiting && connection.qrUrl && !setupIssue ? (
                 <>
                   <QRCodeSVG value={connection.qrUrl} size={192} marginSize={3} fgColor="#294c3d" />
                   <span>
@@ -187,11 +206,17 @@ export function Wechat() {
                 <>
                   <QrCode size={110} strokeWidth={0.8} />
                   <p>
-                    {connection.status === "expired"
-                      ? "二维码已过期，请重新获取"
-                      : "生成你的专属连接二维码"}
+                    {setupIssue
+                      ? "完成配置后即可获取二维码"
+                      : connection.status === "expired"
+                        ? "二维码已过期，请重新获取"
+                        : "生成你的专属连接二维码"}
                   </p>
-                  <button className="button" disabled={busy} onClick={() => void action("bind")}>
+                  <button
+                    className="button"
+                    disabled={busy || Boolean(setupIssue)}
+                    onClick={() => void action("bind")}
+                  >
                     {busy ? "正在获取…" : "获取二维码"}
                     <ArrowUpRight size={16} />
                   </button>
@@ -266,7 +291,7 @@ export function Wechat() {
             ) : waiting ? (
               <button
                 className="button secondary"
-                disabled={busy}
+                disabled={busy || Boolean(setupIssue)}
                 onClick={() => void action("bind")}
               >
                 <RefreshCw size={15} />

@@ -2,6 +2,18 @@
   X-Robots-Tag: noindex
 /register
   X-Robots-Tag: noindex
+/verify-email
+  X-Robots-Tag: noindex
+  Referrer-Policy: no-referrer
+  Cache-Control: no-store
+/forgot-password
+  X-Robots-Tag: noindex
+  Referrer-Policy: no-referrer
+  Cache-Control: no-store
+/reset-password
+  X-Robots-Tag: noindex
+  Referrer-Policy: no-referrer
+  Cache-Control: no-store
 /app
   X-Robots-Tag: noindex
 /app/*

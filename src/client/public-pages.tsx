@@ -23,7 +23,15 @@ import { SiteFooter } from "./site-footer";
 import { UserMenu } from "./user-menu";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
-import { authReturnPath } from "../shared/auth";
+import {
+  authReturnPath,
+  authErrorMessage,
+  passwordValidationError,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+} from "../shared/auth";
+import { AuthLayout } from "./auth-layout";
+import { AuthEmailNotice, verificationCallback } from "./pages/auth-recovery";
 type LoginProvider = "google" | "github";
 const providerNames = { google: "Google", github: "GitHub" };
 function oauthError(code: string | null) {
@@ -262,12 +270,13 @@ export function AuthPage({ register = false }: { register?: boolean }) {
       </div>
     );
   if (session) return <Navigate to={returnTo} replace />;
-  return <AuthForm register={register} />;
+  return <AuthForm key={register ? "register" : "login"} register={register} />;
 }
 function AuthForm({ register }: { register: boolean }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [providers, setProviders] = useState<LoginProvider[] | null>(null);
   const [socialBusy, setSocialBusy] = useState<LoginProvider | null>(null);
@@ -316,13 +325,46 @@ function AuthForm({ register }: { register: boolean }) {
   };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (busy || socialBusy) return;
+    if (register) {
+      const message = passwordValidationError(password, confirmation);
+      if (message) {
+        setError(message);
+        return;
+      }
+      if (!name.trim()) {
+        setError("请输入你的名字。");
+        return;
+      }
+    }
     setBusy(true);
     setError("");
     try {
       const response = register
-        ? await authClient.signUp.email({ name, email, password })
-        : await authClient.signIn.email({ email, password });
-      if (response.error) throw new Error(response.error.message || "登录失败，请检查邮箱与密码");
+        ? await authClient.signUp.email({
+            name: name.trim(),
+            email: email.trim(),
+            password,
+            callbackURL: verificationCallback(returnTo),
+          })
+        : await authClient.signIn.email({ email: email.trim(), password });
+      if (response.error) {
+        if (response.error.code === "EMAIL_NOT_VERIFIED") {
+          navigate(`/verify-email?returnTo=${encodeURIComponent(returnTo)}`, {
+            state: { email: email.trim() },
+          });
+          return;
+        }
+        throw new Error(authErrorMessage(response.error));
+      }
+      if (register) {
+        setPassword("");
+        setConfirmation("");
+        navigate(`/verify-email?returnTo=${encodeURIComponent(returnTo)}`, {
+          state: { email: email.trim(), sent: true },
+        });
+        return;
+      }
       navigate(returnTo, { replace: true });
     } catch (e) {
       setError((e as Error).message);
@@ -331,142 +373,134 @@ function AuthForm({ register }: { register: boolean }) {
     }
   };
   return (
-    <div className="auth-layout">
-      <aside className="auth-story">
-        <Link to="/">
-          <Brand light />
-        </Link>
-        <div>
-          <div className="eyebrow">A LITTLE CLOSER, EVERY DAY</div>
-          <h1>
-            好用的 AI，
-            <br />
-            就在你的聊天框里。
-          </h1>
-          <p>
-            把问题交给 AI，
-            <br />
-            把时间留给生活。
-          </p>
-          <div className="auth-art">
-            <Sprout size={130} strokeWidth={0.8} />
-            <div className="auth-art-circle" />
+    <AuthLayout>
+      <form className="auth-form" onSubmit={(e) => void submit(e)}>
+        <span className="eyebrow">YOUR PERSONAL AI SPACE</span>
+        <h1>{register ? "从这里，开启微伴。" : "欢迎回来。"}</h1>
+        <p>{register ? "创建账户，连接你的第一个模型。" : "你的模型和未完的对话，都在这里。"}</p>
+        <p className="auth-policies">
+          注册或使用前，请阅读<Link to="/terms">服务协议</Link>和<Link to="/privacy">隐私政策</Link>
+          。
+        </p>
+        {invited && (
+          <div className="auth-invitation">
+            你已接受好友邀请。新用户注册后，完成首次微信 AI 对话，你和好友各得{" "}
+            <strong>500 credits</strong>，永久有效。
           </div>
+        )}
+        {error && (
+          <div className="form-error" role="alert">
+            {error}
+          </div>
+        )}
+        <div className="social-logins" aria-label="快捷登录">
+          {(["google", "github"] as const).map((provider) => (
+            <button
+              className="button secondary social-login"
+              type="button"
+              key={provider}
+              disabled={!providers?.includes(provider) || busy || socialBusy !== null}
+              onClick={() => void startSocial(provider)}
+            >
+              <ProviderIcon provider={provider} />
+              <span>
+                {socialBusy === provider ? "正在前往授权…" : `使用 ${providerNames[provider]} 继续`}
+              </span>
+              {!providers?.includes(provider) && (
+                <small className="social-login-status">
+                  {providerFailure ? "暂不可用" : providers === null ? "正在检查…" : "暂未开放"}
+                </small>
+              )}
+            </button>
+          ))}
         </div>
-        <small>独立开发产品 · 非微信官方服务</small>
-      </aside>
-      <div className="auth-form-wrap">
-        <Link to="/" className="back-link">
-          ← 返回首页
-        </Link>
-        <form className="auth-form" onSubmit={(e) => void submit(e)}>
-          <span className="eyebrow">YOUR PERSONAL AI SPACE</span>
-          <h1>{register ? "从这里，开启微伴。" : "欢迎回来。"}</h1>
-          <p>{register ? "创建账户，连接你的第一个模型。" : "你的模型和未完的对话，都在这里。"}</p>
-          <p className="auth-policies">
-            注册或使用前，请阅读<Link to="/terms">服务协议</Link>和
-            <Link to="/privacy">隐私政策</Link>。
+        {(providerFailure || providers?.length === 0) && (
+          <p className="auth-provider-notice" role="status">
+            {providerFailure
+              ? "快捷登录暂时不可用，可以继续使用邮箱。"
+              : "第三方登录暂未开放，可以先使用邮箱。"}
           </p>
-          {invited && (
-            <div className="auth-invitation">
-              你已接受好友邀请。新用户注册后，完成首次微信 AI 对话，你和好友各得{" "}
-              <strong>500 credits</strong>，永久有效。
-            </div>
-          )}
-          {error && (
-            <div className="form-error" role="alert">
-              {error}
-            </div>
-          )}
-          <div className="social-logins" aria-label="快捷登录">
-            {(["google", "github"] as const).map((provider) => (
-              <button
-                className="button secondary social-login"
-                type="button"
-                key={provider}
-                disabled={!providers?.includes(provider) || busy || socialBusy !== null}
-                onClick={() => void startSocial(provider)}
-              >
-                <ProviderIcon provider={provider} />
-                <span>
-                  {socialBusy === provider
-                    ? "正在前往授权…"
-                    : `使用 ${providerNames[provider]} 继续`}
-                </span>
-                {!providers?.includes(provider) && (
-                  <small className="social-login-status">
-                    {providerFailure ? "暂不可用" : providers === null ? "正在检查…" : "暂未开放"}
-                  </small>
-                )}
-              </button>
-            ))}
-          </div>
-          {(providerFailure || providers?.length === 0) && (
-            <p className="auth-provider-notice" role="status">
-              {providerFailure
-                ? "快捷登录暂时不可用，可以继续使用邮箱。"
-                : "第三方登录暂未开放，可以先使用邮箱。"}
-            </p>
-          )}
-          <div className="auth-divider">
-            <span>或使用邮箱{register ? "注册" : "登录"}</span>
-          </div>
-          {register && (
-            <label>
-              怎么称呼你
-              <input
-                autoComplete="name"
-                required
-                maxLength={40}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="你的名字"
-              />
-            </label>
-          )}
+        )}
+        <div className="auth-divider">
+          <span>或使用邮箱{register ? "注册" : "登录"}</span>
+        </div>
+        {register && (
           <label>
-            邮箱地址
+            怎么称呼你
             <input
-              type="email"
-              autoComplete="email"
+              autoComplete="name"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              maxLength={40}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="你的名字"
             />
           </label>
+        )}
+        <label>
+          邮箱地址
+          <input
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
+        </label>
+        <label>
+          密码
+          <input
+            type="password"
+            minLength={register ? PASSWORD_MIN_LENGTH : undefined}
+            maxLength={register ? PASSWORD_MAX_LENGTH : undefined}
+            required
+            autoComplete={register ? "new-password" : "current-password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={register ? "至少 10 个字符" : "输入你的密码"}
+          />
+        </label>
+        {register && (
           <label>
-            密码
+            确认密码
             <input
               type="password"
-              minLength={register ? 10 : undefined}
               required
-              autoComplete={register ? "new-password" : "current-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={register ? "至少 10 个字符" : "输入你的密码"}
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
+              autoComplete="new-password"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+              placeholder="再次输入密码"
             />
           </label>
-          <button className="button full" disabled={busy || socialBusy !== null}>
-            {busy ? "请稍候…" : register ? "创建我的账户" : "登录工作台"}
-            <ArrowRight size={17} />
-          </button>
-          <p className="auth-switch">
-            {register ? "已经有账户了？" : "第一次来到微伴？"}
-            <Link to={`${register ? "/login" : "/register"}${returnQuery}`}>
-              {register ? "去登录" : "免费注册"}
-            </Link>
-          </p>
-          <div className="auth-note">
-            <ShieldCheck size={16} />
-            <span>API Key 加密保存在服务端，仅在调用你的模型时使用。</span>
+        )}
+        {!register && (
+          <div className="auth-forgot">
+            <Link to={`/forgot-password${returnQuery}`}>忘记密码？</Link>
           </div>
-          <Link className="demo-link" to="/demo">
-            暂不注册，先浏览界面预览
-            <ArrowUpRight size={14} />
+        )}
+        <button className="button full" disabled={busy || socialBusy !== null}>
+          {busy ? "请稍候…" : register ? "注册并验证邮箱" : "登录工作台"}
+          <ArrowRight size={17} />
+        </button>
+        {register && <AuthEmailNotice />}
+        <p className="auth-switch">
+          {register ? "已经有账户了？" : "第一次来到微伴？"}
+          <Link to={`${register ? "/login" : "/register"}${returnQuery}`}>
+            {register ? "去登录" : "免费注册"}
           </Link>
-        </form>
-      </div>
-    </div>
+        </p>
+        <div className="auth-note">
+          <ShieldCheck size={16} />
+          <span>API Key 加密保存在服务端，仅在调用你的模型时使用。</span>
+        </div>
+        <Link className="demo-link" to="/demo">
+          暂不注册，先浏览界面预览
+          <ArrowUpRight size={14} />
+        </Link>
+      </form>
+    </AuthLayout>
   );
 }

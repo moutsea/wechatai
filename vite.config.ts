@@ -32,5 +32,5 @@ export default defineConfig(({ command, isPreview }) => ({
       },
     },
   ],
-  server: { port: 5173, strictPort: true },
+  server: { port: 5173, strictPort: true, headers: { "Referrer-Policy": "no-referrer" } },
 }));

@@ -39,6 +39,16 @@ try {
     await writeFile(target, html);
   }
   await writeFile(resolve(output, "sitemap.xml"), renderSitemap());
+  // Asset HTML normalization defaults to 307. These aliases are permanent;
+  // generate exact rules from public routes without redirecting unknown URLs.
+  const redirects = await readFile(resolve("public/_redirects"), "utf8");
+  const canonicalRedirects = PUBLIC_PATHS.flatMap((path) =>
+    path === "/" ? ["/index.html / 301"] : [`${path}/ ${path} 301`, `${path}.html ${path} 301`],
+  );
+  await writeFile(
+    resolve(output, "_redirects"),
+    `${redirects.trimEnd()}\n\n# Generated canonical public URLs\n${canonicalRedirects.join("\n")}\n`,
+  );
   console.log(
     `Prerendered ${PUBLIC_PATHS.length} public pages, private route shells and a 404 page.`,
   );

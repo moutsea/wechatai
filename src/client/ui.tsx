@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X, ArrowUpRight, Sprout, Feather, Code2, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 export function Brand({ light = false }: { light?: boolean }) {
@@ -50,6 +50,8 @@ export function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   useEffect(() => {
@@ -69,14 +71,16 @@ export function Modal({
     <dialog
       ref={ref}
       className={`modal ${wide ? "wide" : ""}`}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
     >
       <div className="modal-head">
         <div>
-          <h2>{title}</h2>
-          {description && <p>{description}</p>}
+          <h2 id={titleId}>{title}</h2>
+          {description && <p id={descriptionId}>{description}</p>}
         </div>
         <button className="icon-button" aria-label="关闭" onClick={onClose}>
           <X size={20} />

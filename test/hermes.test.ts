@@ -313,6 +313,11 @@ describe("Hermes native channel", () => {
       text: "",
     });
     expect((await api(ctx.stub, "snapshot")).data.wallet.balance).toBe(before);
+    expect(await ctx.stub.adminStats()).toMatchObject({
+      failedRequests: 1,
+      lastFailureCode: "remote_agent_failed",
+      credits: 0,
+    });
   });
   it("exposes read-only machine-readable documentation", async () => {
     const doc = await SELF.fetch("https://wechatai.app/developers/hermes.md");

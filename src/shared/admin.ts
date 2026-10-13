@@ -1,5 +1,24 @@
+import { z } from "zod";
+
+export const adminGiftInputSchema = z
+  .object({
+    id: z.uuid(),
+    reason: z.string().trim().max(200).default(""),
+  })
+  .strict();
+export type AdminGiftInput = z.infer<typeof adminGiftInputSchema>;
+export type AdminMembershipGift = AdminGiftInput & {
+  actorId: string;
+  createdAt: number;
+  previousPlanUntil: number;
+  planUntil: number;
+};
+export type AdminMembership = { planUntil: number; gifts: AdminMembershipGift[] };
+export type AdminGiftResult = { gift: AdminMembershipGift; planUntil: number };
+
 export type AdminUsage = { requests: number; tokens: number; credits: number };
 export type AdminDay = AdminUsage & {
+  failedRequests: number;
   day: string;
   activeUsers: number;
   newUsers: number;
@@ -19,7 +38,11 @@ export type AdminAccountStats = AdminUsage & {
   purchasedCredits: number;
   debt: number;
   lastActiveAt: number | null;
-  daily: (AdminUsage & { day: string })[];
+  failedRequests: number;
+  lastFailureAt: number | null;
+  lastFailureCode: string | null;
+  lastFailureStatus: number | null;
+  daily: (AdminUsage & { day: string; failedRequests: number })[];
   pluginUsage: (AdminUsage & { pluginId: string; day: string })[];
 };
 export type AdminOverview = {
@@ -27,6 +50,7 @@ export type AdminOverview = {
   generatedAt: number;
   coverage: { synced: number; oldest: number | null; newest: number | null };
   summary: AdminUsage & {
+    failedRequests: number;
     users: number;
     plus: number;
     links: number;
@@ -58,6 +82,10 @@ export type AdminUser = {
   links: number | null;
   connected: number | null;
   requests: number | null;
+  failedRequests: number | null;
+  lastFailureAt: number | null;
+  lastFailureCode: string | null;
+  lastFailureStatus: number | null;
   credits: number | null;
   lastActiveAt: number | null;
   paidAmount: number;

@@ -1,0 +1,44 @@
+.auth-recovery-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--green-pale, #e5f8ec);
+  color: var(--green);
+  margin-bottom: 24px;
+}
+.auth-success {
+  padding: 14px 16px;
+  background: #effaf3;
+  border: 1px solid #d6ebdc;
+  color: #285c3d;
+  font-size: 12px;
+  line-height: 1.8;
+  border-radius: 10px;
+  margin-top: 18px;
+}
+.auth-form .auth-delivery-note {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 16px 0 0;
+}
+.auth-recovery > p {
+  line-height: 1.9;
+}
+.auth-recovery .auth-switch {
+  margin-bottom: 0;
+}
+.auth-forgot {
+  text-align: right;
+  margin: 12px 0 -8px;
+  font-size: 12px;
+  color: var(--green);
+}
+.auth-field-error {
+  color: #a93732;
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 8px;
+}

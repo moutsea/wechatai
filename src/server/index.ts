@@ -1,11 +1,20 @@
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
 import { Hono } from "hono";
-import { isAdmin, adminOverview, adminUsers, syncAdminStats } from "./admin";
+import {
+  isAdmin,
+  adminOverview,
+  adminUsers,
+  syncAdminStats,
+  adminMembership,
+  giftAdminMembership,
+} from "./admin";
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { availableAuthProviders, createAuth } from "./auth";
+import { authEmailDelivery, reserveAuthEmail } from "./auth-email";
+import { z } from "zod";
 import { AppError, trustedAppOrigins } from "./config";
 import { catalog, checkout, checkoutStatus, subscriptionInfo, portal, webhook } from "./billing";
 import { dispatchPaymentNotices } from "./billing-notifications";
@@ -38,13 +47,51 @@ app.get("/api/health", (c) => c.json({ ok: true, service: "wechatai" }));
 app.route("/", publicPluginDocs);
 app.get("/invite/:code", (c) => acceptReferral(c.env, c.req.param("code"), c.req.raw));
 app.use("/api/auth/*", async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  c.header("Referrer-Policy", "no-referrer");
   if (
     c.req.method === "POST" &&
     !(await c.env.AUTH_LIMIT.limit({ key: c.req.header("cf-connecting-ip") || "local" })).success
   )
     return c.json({ message: "尝试过于频繁，请稍后再试" }, 429);
+  const mailPaths = [
+    "/api/auth/sign-up/email",
+    "/api/auth/send-verification-email",
+    "/api/auth/request-password-reset",
+  ];
+  if (c.req.method === "POST" && mailPaths.includes(c.req.path.replace(/\/+$/, ""))) {
+    if (!trustedAppOrigins(c.env).includes(c.req.header("origin") || ""))
+      return c.json({ code: "INVALID_ORIGIN", message: "请求来源无效" }, 403);
+    // Match the format parsed below so Better Auth cannot accept a body that bypasses the limit.
+    const mediaType = c.req.header("content-type")?.split(";", 1)[0].trim().toLowerCase();
+    if (mediaType !== "application/json")
+      return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "请使用 JSON 格式提交请求。" }, 415);
+    if (authEmailDelivery(c.env) === "unavailable")
+      return c.json(
+        { code: "EMAIL_SERVICE_UNAVAILABLE", message: "邮件服务暂时不可用，请稍后再试。" },
+        503,
+      );
+    const body = z.object({ email: z.string() }).safeParse(
+      await c.req.raw
+        .clone()
+        .json()
+        .catch(() => null),
+    );
+    const email = body.success ? body.data.email.trim().toLowerCase() : "";
+    if (!z.email().safeParse(email).success)
+      return c.json({ code: "INVALID_EMAIL", message: "请填写有效的邮箱地址。" }, 400);
+    // Applied before looking up an account: unknown and registered emails have the same limits.
+    if (!(await reserveAuthEmail(c.env, email))) {
+      c.header("Retry-After", "60");
+      return c.json(
+        { code: "AUTH_EMAIL_RATE_LIMITED", message: "邮件发送太频繁，请稍后再试。" },
+        429,
+      );
+    }
+  }
   return next();
 });
+app.get("/api/auth/email-config", (c) => c.json({ delivery: authEmailDelivery(c.env) }));
 app.get("/api/auth/providers", (c) => {
   c.header("Cache-Control", "no-store");
   return c.json({ providers: availableAuthProviders(c.env) });
@@ -53,7 +100,18 @@ app.get("/api/referrals/attribution", async (c) => {
   c.header("Cache-Control", "no-store");
   return c.json({ active: Boolean(await registrationReferrer(c.env, c.req.raw.headers)) });
 });
-app.on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
+app.on(["GET", "POST"], "/api/auth/*", async (c) => {
+  const response = await createAuth(c.env, c.executionCtx).handler(c.req.raw);
+  // Better Auth redirects may have immutable headers; clone before adding policies.
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store");
+  headers.set("Referrer-Policy", "no-referrer");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+});
 app.post("/api/billing/webhook", async (c) => {
   await webhook(c.env, await c.req.text(), c.req.header("stripe-signature") || "");
   c.executionCtx.waitUntil(dispatchPaymentNotices(c.env));
@@ -171,6 +229,13 @@ app.use("/api/admin/*", async (c, next) => {
 });
 app.get("/api/admin/overview", async (c) => c.json(await adminOverview(c.env)));
 app.get("/api/admin/users", async (c) => c.json(await adminUsers(c.env, c.req.query())));
+app.get("/api/admin/users/:id/membership", async (c) =>
+  c.json(await adminMembership(c.env, c.req.param("id"))),
+);
+app.post("/api/admin/users/:id/gift-plus", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  return c.json(await giftAdminMembership(c.env, c.var.user.id, c.req.param("id"), body));
+});
 app.post("/api/admin/sync", async (c) => {
   const body = await c.req.json<{ cursor?: string }>();
   return c.json(await syncAdminStats(c.env, body.cursor));
@@ -287,6 +352,7 @@ app.get("/api/assets/:id", async (c) =>
   c.env.ACCOUNTS.getByName(c.var.user.id).imageAsset(c.req.param("id")),
 );
 app.get("/api/dashboard", invoke("snapshot"));
+app.post("/api/onboarding/dismiss", invoke("onboarding.dismiss"));
 app.get("/api/plugins", invoke("plugin.list"));
 app.get(
   "/api/plugins/:id/notification",
@@ -502,6 +568,12 @@ app.onError((error, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(_controller, env) {
-    await dispatchPaymentNotices(env);
+    await Promise.all([
+      dispatchPaymentNotices(env),
+      env.DB.prepare("DELETE FROM auth_email_limit WHERE last_sent_at<?")
+        .bind(Date.now() - 2 * 86_400_000)
+        .run()
+        .catch(() => console.error(JSON.stringify({ event: "auth.email.cleanup_failed" }))),
+    ]);
   },
 } satisfies ExportedHandler<Env>;

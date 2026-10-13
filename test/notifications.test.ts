@@ -1,3 +1,4 @@
+import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import {
   env,
   runInDurableObject,
@@ -42,6 +43,7 @@ const send = (
 beforeAll(async () => {
   await env.DB.exec(authMigration);
   await env.DB.exec(referralMigration);
+  await env.DB.exec(authEmailMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
 beforeEach(() =>
   vi.stubGlobal(
@@ -153,10 +155,7 @@ describe("receive-only notification plugin", () => {
     });
     expect(signup.status).toBe(200);
     const { user } = await signup.json<{ user: { id: string } }>();
-    const cookie = signup.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
+    const cookie = await verifiedFixtureCookie(user.id, "test-only-notification-password");
     const stub = await setupAccount(false, user.id);
     const headers = { cookie, origin: env.APP_URL, "content-type": "application/json" };
     const input = {

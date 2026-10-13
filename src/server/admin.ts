@@ -1,6 +1,7 @@
 import { AppError } from "./config";
 import { billingMode } from "./billing";
 import { dayWindow } from "./wallet";
+import { adminGiftInputSchema } from "../shared/admin";
 import type {
   AdminAccountStats,
   AdminDay,
@@ -15,6 +16,54 @@ export async function isAdmin(env: Env, userId: string): Promise<boolean> {
   return Boolean(
     await env.DB.prepare("SELECT 1 FROM admin_user WHERE user_id=?").bind(userId).first(),
   );
+}
+
+async function membershipAccount(env: Env, userId: string) {
+  if (
+    !userId ||
+    userId.length > 128 ||
+    !(await env.DB.prepare("SELECT 1 FROM user WHERE id=?").bind(userId).first())
+  )
+    throw new AppError("user_not_found", "没有找到这个用户", 404);
+  return env.ACCOUNTS.getByName(userId);
+}
+
+export async function adminMembership(env: Env, userId: string) {
+  try {
+    return await (await membershipAccount(env, userId)).adminMembership();
+  } catch (error) {
+    if (!(error instanceof AppError))
+      console.error(
+        JSON.stringify({
+          event: "admin.membership_read_failed",
+          message: error instanceof Error ? error.message : "Unknown error",
+        }),
+      );
+    throw error;
+  }
+}
+
+export async function giftAdminMembership(
+  env: Env,
+  actorId: string,
+  userId: string,
+  body: unknown,
+) {
+  const input = adminGiftInputSchema.safeParse(body);
+  if (!input.success)
+    throw new AppError("invalid_gift", "请提供有效的操作编号，赠送原因最多 200 字");
+  const account = await membershipAccount(env, userId);
+  const result = await account.adminGiftPlus(actorId, input.data);
+  if (!result.ok)
+    throw new AppError("gift_conflict", "操作编号已被使用，请刷新页面核对赠送记录", 409);
+  // The entitlement and audit record already committed together in the account.
+  // A reporting cache failure must not turn a successful gift into an apparent failure.
+  try {
+    await saveAdminStats(env, userId, await account.adminStats());
+  } catch {
+    console.warn(JSON.stringify({ event: "admin.gift_stats_sync_failed" }));
+  }
+  return { gift: result.gift, planUntil: result.planUntil };
 }
 
 export async function saveAdminStats(env: Env, id: string, data: AdminAccountStats) {
@@ -65,7 +114,7 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
     db
       .prepare(`SELECT COUNT(*) users, COUNT(s.user_id) synced, MIN(s.synced_at) oldest, MAX(s.synced_at) newest,
       COALESCE(SUM(${value("planUntil")}>?),0) plus,
-      ${["links", "connected", "channels", "models", "plugins", "sessions", "requests", "tokens", "credits", "purchasedCredits", "debt"].map((k) => `COALESCE(SUM(${value(k)}),0) ${k}`).join(",")}
+      ${["links", "connected", "channels", "models", "plugins", "sessions", "requests", "failedRequests", "tokens", "credits", "purchasedCredits", "debt"].map((k) => `COALESCE(SUM(${value(k)}),0) ${k}`).join(",")}
       FROM user u LEFT JOIN admin_account_stats s ON s.user_id=u.id`)
       .bind(now),
     db
@@ -85,7 +134,9 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
       WHERE mode=? AND status='paid' AND currency='cny' AND COALESCE(paid_at,created_at)>=? AND COALESCE(paid_at,created_at)<=? GROUP BY day`)
       .bind(mode, start, now),
     db
-      .prepare(`SELECT json_extract(d.value,'$.day') day, COUNT(DISTINCT s.user_id) activeUsers,
+      .prepare(`SELECT json_extract(d.value,'$.day') day,
+      COUNT(DISTINCT CASE WHEN json_extract(d.value,'$.requests')>0 THEN s.user_id END) activeUsers,
+      COALESCE(SUM(json_extract(d.value,'$.failedRequests')),0) failedRequests,
       SUM(json_extract(d.value,'$.requests')) requests, SUM(json_extract(d.value,'$.tokens')) tokens,
       SUM(json_extract(d.value,'$.credits')) credits
       FROM admin_account_stats s JOIN user u ON u.id=s.user_id, json_each(s.data,'$.daily') d
@@ -116,6 +167,7 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
       revenue: 0,
       paidOrders: 0,
       requests: 0,
+      failedRequests: 0,
       tokens: 0,
       credits: 0,
       ...days.get(day),
@@ -167,7 +219,7 @@ export async function adminUsers(
     await db
       .prepare(`SELECT u.id,u.name,u.email,(${createdMillis}) createdAt,
       EXISTS(SELECT 1 FROM admin_user a WHERE a.user_id=u.id) isAdmin, s.synced_at syncedAt,
-      ${["planUntil", "links", "connected", "requests", "credits", "lastActiveAt"].map((k) => `${value(k)} ${k}`).join(",")},
+      ${["planUntil", "links", "connected", "requests", "failedRequests", "lastFailureAt", "lastFailureCode", "lastFailureStatus", "credits", "lastActiveAt"].map((k) => `${value(k)} ${k}`).join(",")},
       (SELECT COALESCE(SUM(amount),0)/100.0 FROM billing_order o WHERE o.user_id=u.id AND o.mode=? AND o.status='paid' AND o.currency='cny') paidAmount
       FROM user u LEFT JOIN admin_account_stats s ON s.user_id=u.id WHERE ${where}
       ORDER BY (${createdMillis}) DESC,u.id DESC LIMIT 20 OFFSET ?`)

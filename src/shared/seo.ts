@@ -12,7 +12,7 @@ import {
 export const SITE_URL = "https://wechatai.app";
 export const SITE_NAME = "微伴 Wechatai";
 // Update only when the actual homepage content changes, never on every build.
-const HOME_UPDATED_AT = "2026-10-10";
+const HOME_UPDATED_AT = "2026-10-12";
 export const SOCIAL_IMAGE = `${SITE_URL}/og-image.png`;
 export const PUBLIC_PATHS = [
   "/",
@@ -28,6 +28,9 @@ export const PRIVATE_PATHS = [
   "/app/admin",
   "/login",
   "/register",
+  "/verify-email",
+  "/forgot-password",
+  "/reset-password",
   ...["/app", "/demo"].flatMap((base) =>
     [
       "",
@@ -224,11 +227,17 @@ export function getPageSeo(pathname: string): PageSeo {
       ? "登录"
       : path === "/register"
         ? "注册"
-        : path === "/app" || path.startsWith("/app/")
-          ? "工作台"
-          : path === "/demo" || path.startsWith("/demo/")
-            ? "工作台演示"
-            : "页面未找到";
+        : path === "/verify-email"
+          ? "验证邮箱"
+          : path === "/forgot-password"
+            ? "找回密码"
+            : path === "/reset-password"
+              ? "重设密码"
+              : path === "/app" || path.startsWith("/app/")
+                ? "工作台"
+                : path === "/demo" || path.startsWith("/demo/")
+                  ? "工作台演示"
+                  : "页面未找到";
   return {
     title: `${label} | ${SITE_NAME}`,
     description: "微伴 Wechatai 个人微信 AI 工作台。",

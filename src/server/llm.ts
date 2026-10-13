@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Assistant, Protocol } from "../shared/types";
 import { modelEndpoint } from "../shared/model-endpoint";
 import { AppError, MODEL_REQUEST_TIMEOUT_MS } from "./config";
+import { upstreamPaymentError } from "./upstream-error";
 import { readJson, validateModelBaseUrl, validateModelDNS } from "./security";
 import {
   DEFAULT_CONTEXT_TOKENS,
@@ -294,23 +295,28 @@ export async function requestModel(
         "模型服务返回了跳转，请将服务地址改为供应商提供的最终 API 地址",
         502,
       );
+    const paymentError = upstreamPaymentError(env, assistant.baseUrl, response.status);
+    if (paymentError) throw paymentError;
     throw new AppError(
       "model_http_error",
       `模型服务返回 ${response.status}，请检查 Key、模型名称和余额`,
       502,
+      response.status,
     );
   }
   // Untrusted upstream usage is deliberately never passed into the billing path.
   const result = await readJson(response);
   // Timings only: prompts, keys, provider URLs and user/model identifiers stay private.
-  console.info(JSON.stringify({
-    event: "llm.request_completed",
-    protocol: assistant.protocol,
-    toolRequest,
-    dnsMs: validatedAt - startedAt,
-    upstreamMs: Date.now() - validatedAt,
-    durationMs: Date.now() - startedAt,
-    attempts,
-  }));
+  console.info(
+    JSON.stringify({
+      event: "llm.request_completed",
+      protocol: assistant.protocol,
+      toolRequest,
+      dnsMs: validatedAt - startedAt,
+      upstreamMs: Date.now() - validatedAt,
+      durationMs: Date.now() - startedAt,
+      attempts,
+    }),
+  );
   return result;
 }

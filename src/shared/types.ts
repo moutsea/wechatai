@@ -100,6 +100,7 @@ export type WechatLink = Connection & {
   currentSessionId: string;
 };
 export type Snapshot = {
+  onboardingDismissedAt?: number;
   plugins?: UserPlugin[];
   plan: "free" | "plus";
   planUntil: number;

@@ -1,3 +1,4 @@
+import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import {
   env,
   createExecutionContext,
@@ -45,6 +46,7 @@ const post = (path: string, body: unknown, cookie = "") =>
 beforeAll(async () => {
   await env.DB.exec(authMigration);
   await env.DB.exec(referralMigration);
+  await env.DB.exec(authEmailMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
 beforeEach(() =>
   vi.stubGlobal(
@@ -88,7 +90,11 @@ async function register(cookie = "", extra: Record<string, unknown> = {}) {
   const result = await response.json<{ user: { id: string; referrerId?: string } }>();
   expect(result.user.referrerId).toBeUndefined();
   accounts.add(result.user.id);
-  return { id: result.user.id, cookie: cookies(response), email };
+  return {
+    id: result.user.id,
+    cookie: await verifiedFixtureCookie(result.user.id, "test-password-123"),
+    email,
+  };
 }
 async function relationship(id: string) {
   return env.DB.prepare("SELECT * FROM referral WHERE invitee_id = ?")
