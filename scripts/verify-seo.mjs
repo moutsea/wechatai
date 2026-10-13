@@ -254,6 +254,7 @@ if (process.argv[2]) {
     assert.equal(destination.origin, origin.origin);
     assert.equal(destination.pathname, "/docs/getting-started");
     assert.equal(destination.hash, "", "Location must not replace historical section fragments");
+    await response.body?.cancel();
   }
   for (const path of ["/not-a-real-page", "/nested/not-a-real-page", "/docs/not-a-real-article"]) {
     const response = await fetch(new URL(path, origin));
@@ -263,6 +264,7 @@ if (process.argv[2]) {
   for (const path of ["/sitemap.xml", "/robots.txt", "/og-image.png", "/favicon.svg"]) {
     const response = await fetch(new URL(path, origin));
     assert.equal(response.status, 200, `${path}: asset`);
+    await response.body?.cancel();
   }
 }
 console.log("SEO checks passed: rendered pages, metadata, indexing boundaries and social image.");
