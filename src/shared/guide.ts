@@ -8,7 +8,7 @@ export const wechatCommands = [
   ["/wx channel 2", "切换到第 2 个渠道，继续上次使用的模型"],
   ["/wx models", "查看当前渠道下的模型及编号"],
   ["/wx plugins", "查看已配置插件及 @快捷名称"],
-  ["/use DS Chat", "按插件名称、快捷名或 /wx plugins 编号进入或直接切换插件，无需先退出"],
+  ["/use ds", "仅按插件别名进入或直接切换插件；/wx plugins 查看别名，无需先退出"],
   ["/exit", "退出插件，返回进入前的普通模型会话；不删除任何记录"],
   ["/wx model 2", "切换到当前渠道的第 2 个普通模型，继续它最近的活动会话"],
   ["/wx new", "使用当前模型或插件新建会话，保留旧记录"],
@@ -44,9 +44,8 @@ function guideReference(appUrl: string) {
     : "完整使用教程：打开网页工作台左下角「文档」。";
 }
 
-export function wechatHelp(appUrl: string, plan: "free" | "plus" = "free") {
+export function wechatHelp(appUrl: string) {
   const commands = wechatCommands
-    .filter(([command]) => plan === "plus" || !["/wx plugins", "/use DS Chat"].includes(command))
     .map(([command, description]) => `- \`${command}\`：${description}`)
     .join("\n");
   return `**微信命令速查**\n\n${commands}\n\n以上微伴命令不消耗 credits。\n\nOpenClaw / Hermes 模式下，/new、/help 等原生命令交给 Agent；微伴命令请加 /wx。其他模式仍支持省略 /wx。/use、/exit 始终由微伴处理。\n\n${guideReference(appUrl)}`;

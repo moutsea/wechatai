@@ -42,6 +42,7 @@ export const PRIVATE_PATHS = [
       "/billing",
       "/credits",
       "/invite",
+      "/notices",
     ].map((section) => `${base}${section}`),
   ),
 ];

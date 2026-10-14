@@ -653,7 +653,7 @@ describe("bounded web research runtime", () => {
   });
 });
 
-describe("Plus plugin configuration, routing and settlement", () => {
+describe("Plugin configuration, routing and settlement", () => {
   it("keeps each WeChat link's default plugin and return conversation independent", async () => {
     const { stub, input, modelId } = await setup();
     await api(stub, "plugin.save", input);
@@ -726,7 +726,7 @@ describe("Plus plugin configuration, routing and settlement", () => {
     const a = await api(stub, "plugin.save", input);
     const b = await api(stub, "plugin.save", { ...input, name: "研究 B", shortcut: "B" });
     await send(stub, "/plugins");
-    await send(stub, "/use 1");
+    await send(stub, "/use 搜索");
     const sessionA = (await stub.snapshot()).currentSession!.id;
     mockLoop();
     await send(stub, "@B 查资料");
@@ -740,7 +740,7 @@ describe("Plus plugin configuration, routing and settlement", () => {
     mockFetch(() => Response.json({ choices: [{ message: { content: "普通回答" } }] }));
     expect(await send(stub, "@普通：你好")).toBe("普通回答");
     expect((await stub.snapshot()).currentSession?.id).toBe(sessionA);
-    expect(await send(stub, "/use 研究 B")).toContain("已切换到");
+    expect(await send(stub, "/use B")).toContain("已切换到");
     expect((await stub.snapshot()).currentSession?.pluginInstanceId).toBe(b.data.id);
     await api(stub, "plugin.save", {
       ...input,
@@ -797,21 +797,61 @@ describe("Plus plugin configuration, routing and settlement", () => {
           ).encryptedKey,
         ).toBe(key),
       );
-      expect(await send(stub, "/use DS Chat")).toContain("已进入");
+      expect(await send(stub, "/use 搜索")).toContain("已进入");
       expect(await send(stub, "/exit")).toContain("已退出插件");
     },
   );
-  it("blocks Free, encrypts secrets, enforces unique names and requires a fresh key on destination changes", async () => {
+  it("lets Plus create, edit and activate plugins beyond twenty configurations", async () => {
+    const { stub, input } = await setup();
+    let lastId = "";
+    for (let i = 1; i <= 25; i++) {
+      const saved = await api(stub, "plugin.save", {
+        ...input,
+        name: `研究 ${i}`,
+        shortcut: `research${i}`,
+      });
+      expect(saved.ok).toBe(true);
+      lastId = saved.data.id;
+    }
+    expect((await stub.snapshot()).plugins).toHaveLength(25);
+    expect(
+      await api(stub, "plugin.save", {
+        ...input,
+        id: lastId,
+        name: "更新第 25 个配置",
+        shortcut: "research25",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await api(stub, "plugin.activate", { id: lastId })).toMatchObject({ ok: true });
+    expect((await stub.snapshot()).currentSession?.pluginInstanceId).toBe(lastId);
+  });
+  it("cannot exceed the Free slot with concurrent encrypted saves", async () => {
     const { stub, input } = await setup(false);
-    expect(await api(stub, "plugin.save", input)).toMatchObject({ ok: false, status: 403 });
+    const results = await Promise.all([
+      api(stub, "plugin.save", { ...input, shortcut: "one" }),
+      api(stub, "plugin.save", { ...input, shortcut: "two" }),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.find((r) => !r.ok)).toMatchObject({ error: "plugin_limit" });
+    expect((await stub.snapshot()).plugins).toHaveLength(1);
+  });
+  it("allows one Free plugin, encrypts secrets, enforces unique names and requires a fresh key on destination changes", async () => {
+    const { stub, input } = await setup(false);
+    const p = await api(stub, "plugin.save", input);
+    expect(p.ok).toBe(true);
+    expect(await api(stub, "plugin.save", { ...input, shortcut: "second" })).toMatchObject({
+      error: "plugin_limit",
+      status: 403,
+    });
+    expect(await api(stub, "plugin.save", { ...input, id: p.data.id, name: "更新" })).toMatchObject(
+      { ok: true },
+    );
     await stub.applyPayment({
       id: "plus",
       kind: "subscription",
       units: 0,
       expires: Date.now() + 86400000,
     });
-    const p = await api(stub, "plugin.save", input);
-    expect(p.ok).toBe(true);
     expect(JSON.stringify(await stub.snapshot())).not.toMatch(/search-key|encryptedKey|apiKey/);
     await runInDurableObject(stub, (_, state) =>
       expect(
@@ -879,11 +919,12 @@ describe("Plus plugin configuration, routing and settlement", () => {
       ).toBe("wechatai/web-research");
       state.storage.sql.exec("UPDATE settings SET value = '0' WHERE key = 'planUntil'");
     });
-    await expect(send(stub, "继续查询")).rejects.toThrow("Plus");
+    expect(await send(stub, "继续查询")).toContain("根据资料");
     expect(await api(stub, "plugin.test", { id: p.data.id, query: "test" })).toMatchObject({
-      ok: false,
-      status: 403,
+      ok: true,
     });
+    await send(stub, "/wx archive");
+    expect((await stub.snapshot()).currentSession?.pluginInstanceId).toBe(p.data.id);
     expect(await send(stub, "/exit")).toContain("已退出插件");
     expect((await stub.snapshot()).currentSession?.id).toBe(original);
     expect(await api(stub, "plugin.delete", { id: p.data.id })).toMatchObject({ ok: true });

@@ -1,3 +1,5 @@
+import { pluginShortcutForEdit } from "../shared/plugin-shortcut";
+import { type UserNotice } from "../shared/site-notices";
 import { notificationInputSchema } from "../shared/notification";
 import {
   personalAssistantInputSchema,
@@ -26,6 +28,36 @@ const defaults = {
   hasKey: true,
 };
 export function createDemo() {
+  let notices: UserNotice[] = [
+    {
+      id: "demo-welcome",
+      title: "欢迎使用微伴",
+      content:
+        "把你的 AI 接入微信，随时开始对话。\n\n- 先在 **渠道与模型** 中配置自己的 API Key\n- 再连接微信，就能开始聊天\n\n[查看入门文档](/docs/getting-started)\n\n这是一条演示通知。",
+      priority: "important",
+      status: "published",
+      revision: 1,
+      publishedRevision: 1,
+      createdAt: now,
+      updatedAt: now,
+      publishedAt: now,
+      isRead: false,
+    },
+    {
+      id: "demo-plugins",
+      title: "免费账户也可以使用插件",
+      content:
+        "Free 用户最多配置 **1 个插件**，Plus 会员插件配置数量不限。\n\n试试 DS Chat、个人助理或你自己的 OpenClaw。",
+      priority: "normal",
+      status: "published",
+      revision: 1,
+      publishedRevision: 1,
+      createdAt: now - 86400000,
+      updatedAt: now - 86400000,
+      publishedAt: now - 86400000,
+      isRead: false,
+    },
+  ];
   let plugins: UserPlugin[] = [];
   const personal = new Map<string, PersonalRecord[]>();
   const summaries = new Map<
@@ -319,6 +351,30 @@ export function createDemo() {
     const body = options?.body ? JSON.parse(String(options.body)) : {};
     const method = options?.method || "GET";
     let result: unknown;
+    if (path.startsWith("/notices")) {
+      const url = new URL(path, "https://demo.example.com");
+      const [, , id, action] = url.pathname.split("/");
+      if (method === "POST") {
+        if (id === "read-all")
+          notices = notices.map((n) =>
+            n.publishedRevision <= body.readThrough ? { ...n, isRead: true } : n,
+          );
+        else if (["read", "dismiss"].includes(action))
+          notices = notices.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+        return { ok: true } as T;
+      }
+      const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
+      const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit")) || 20));
+      return structuredClone({
+        items: notices.slice((page - 1) * limit, page * limit),
+        total: notices.length,
+        readThrough: Math.max(0, ...notices.map((n) => n.revision)),
+        page,
+        totalPages: Math.max(1, Math.ceil(notices.length / limit)),
+        unread: notices.filter((n) => !n.isRead).length,
+        important: notices.find((n) => n.priority === "important" && !n.isRead) ?? null,
+      }) as T;
+    }
     if (path === "/plugins" || path.startsWith("/plugins/")) {
       const id = path.split("/")[2];
       const previous = plugins.find((p) => p.id === id);
@@ -424,7 +480,9 @@ export function createDemo() {
         ["wechatai/openclaw", "wechatai/hermes"].includes(body.pluginId ?? previous?.pluginId)
       ) {
         const p: UserPlugin = {
-          ...openClawInputSchema.parse({ ...previous, ...body }),
+          ...openClawInputSchema
+            .safeExtend({ shortcut: pluginShortcutForEdit(previous?.shortcut) })
+            .parse({ ...previous, ...body }),
           id: id || crypto.randomUUID(),
           pluginId: body.pluginId ?? previous?.pluginId,
           version: "1.0.0",
@@ -447,7 +505,9 @@ export function createDemo() {
         result = p;
       } else if ((body.pluginId ?? previous?.pluginId) === "wechatai/personal-assistant") {
         const p: UserPlugin = {
-          ...personalAssistantInputSchema.parse({ ...previous, ...body }),
+          ...personalAssistantInputSchema
+            .safeExtend({ shortcut: pluginShortcutForEdit(previous?.shortcut).default("助理") })
+            .parse({ ...previous, ...body }),
           id: id || crypto.randomUUID(),
           pluginId: "wechatai/personal-assistant",
           version: "1.0.0",
@@ -459,7 +519,9 @@ export function createDemo() {
         plugins = [...plugins.filter((p) => p.id !== id), p];
         result = p;
       } else if ((body.pluginId ?? previous?.pluginId) === "wechatai/roleplay") {
-        const input = roleplayInputSchema.parse({ ...previous, ...body });
+        const input = roleplayInputSchema
+          .safeExtend({ shortcut: pluginShortcutForEdit(previous?.shortcut) })
+          .parse({ ...previous, ...body });
         if (
           plugins.some(
             (p) => p.id !== id && p.shortcut.toLowerCase() === input.shortcut.toLowerCase(),
@@ -481,7 +543,9 @@ export function createDemo() {
         );
         result = p;
       } else if ((body.pluginId ?? previous?.pluginId) === "wechatai/image-generation") {
-        const input = imageGenerationInputSchema.parse({ ...previous, ...body });
+        const input = imageGenerationInputSchema
+          .safeExtend({ shortcut: pluginShortcutForEdit(previous?.shortcut) })
+          .parse({ ...previous, ...body });
         if (
           plugins.some((p) => p.id !== id && p.shortcut === input.shortcut) ||
           assistants.some((a) => a.shortcut === input.shortcut)
@@ -498,7 +562,9 @@ export function createDemo() {
         plugins = [...plugins.filter((p) => p.id !== id), p];
         result = p;
       } else {
-        const { apiKey, ...input } = webResearchInputSchema.parse(body);
+        const { apiKey, ...input } = webResearchInputSchema
+          .safeExtend({ shortcut: pluginShortcutForEdit(previous?.shortcut) })
+          .parse(body);
         if (
           plugins.some((p) => p.id !== id && p.shortcut === input.shortcut) ||
           assistants.some((a) => a.shortcut === input.shortcut)

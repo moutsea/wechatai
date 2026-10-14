@@ -1,3 +1,4 @@
+import { pluginAvailable } from "../../shared/plugin-access";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Copy, RefreshCw, KeyRound } from "lucide-react";
@@ -105,8 +106,7 @@ export function NotificationEditor({
             </div>
           )}
           <p className="form-hint">
-            Plus 会员免费使用，不消耗 credits，不需要模型
-            API。停用或更换接收微信，会取消尚未发送的消息。
+            不消耗 credits，不需要模型 API。停用或更换接收微信，会取消尚未发送的消息。
           </p>
           {error && (
             <p className="form-error" role="alert">
@@ -225,7 +225,13 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
         <div className="notification-actions">
           <button
             className={`button small ${hasToken ? "secondary" : ""}`}
-            disabled={busy || demo || data?.plan !== "plus" || !status}
+            disabled={
+              busy ||
+              demo ||
+              !data ||
+              !pluginAvailable(data.plan, data.plugins ?? [], plugin.id) ||
+              !status
+            }
             onClick={() => (hasToken ? setConfirm("rotate") : void changeToken("rotate"))}
           >
             <KeyRound size={14} />
@@ -237,7 +243,7 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
             </button>
           )}
         </div>
-        {demo && <p>演示模式不生成真实 Token，请登录 Plus 会员账号使用。</p>}
+        {demo && <p>演示模式不生成真实 Token，请登录账号使用。</p>}
         {error && (
           <div className="form-error" role="alert">
             <p>{error}</p>
@@ -321,8 +327,8 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
         <p className="form-hint">暂未收到推送请求。使用上方示例发送第一条通知。</p>
       )}
       <p className="form-hint">
-        每个账户每分钟最多 30 条、滚动 24 小时最多 1000 条。失败最多重试 24 小时；Plus
-        到期会暂停接收新请求。
+        每个账户每分钟最多 30 条、滚动 24 小时最多 1000 条。失败最多重试 24
+        小时；配置超出套餐上限时会暂停接收和投递。
       </p>
     </section>
   );

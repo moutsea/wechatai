@@ -113,7 +113,6 @@ async function setup(plus = true) {
     name: "订单通知",
     connectionId: "default",
   });
-  if (!plus) return { stub, plugin: saved, token: "" };
   expect(saved.ok, JSON.stringify(saved)).toBe(true);
   const token = await api(stub, "notification.token", { id: saved.data.id });
   expect(token.ok).toBe(true);
@@ -156,7 +155,7 @@ describe("receive-only notification plugin", () => {
     expect(signup.status).toBe(200);
     const { user } = await signup.json<{ user: { id: string } }>();
     const cookie = await verifiedFixtureCookie(user.id, "test-only-notification-password");
-    const stub = await setupAccount(false, user.id);
+    await setupAccount(false, user.id);
     const headers = { cookie, origin: env.APP_URL, "content-type": "application/json" };
     const input = {
       pluginId: "wechatai/notification",
@@ -166,15 +165,9 @@ describe("receive-only notification plugin", () => {
     };
     const save = (body: unknown, path = "/api/plugins", method = "POST") =>
       request(path, { method, headers, body: JSON.stringify(body) });
-    expect((await save(input)).status).toBe(403);
-    await stub.applyPayment({
-      id: "plus-http",
-      kind: "subscription",
-      units: 0,
-      expires: Date.now() + 86400000,
-    });
     const created = await save(input);
     expect(created.status).toBe(200);
+    expect((await save(input)).status).toBe(403);
     const plugin = await created.json<{ id: string; pluginId: string }>();
     expect(plugin).toMatchObject(input);
     const path = `/api/plugins/${plugin.id}`;
@@ -198,9 +191,14 @@ describe("receive-only notification plugin", () => {
     // Neither configuration nor token creation sends a WeChat message.
     expect(fetch).not.toHaveBeenCalled();
   });
-  it("configures without a model and rejects Free accounts and foreign links", async () => {
+  it("configures on Free without a model, delivers without credits and rejects foreign links", async () => {
     const free = await setup(false);
-    expect(free.plugin).toMatchObject({ ok: false, status: 403 });
+    expect(free.plugin).toMatchObject({ pluginId: "wechatai/notification" });
+    const before = (await free.stub.snapshot()).wallet.balance;
+    expect((await send(free.token)).status).toBe(202);
+    await free.stub.dispatchNotifications();
+    expect((await status(free.stub, free.plugin.id)).deliveries[0].state).toBe("sent");
+    expect((await free.stub.snapshot()).wallet.balance).toBe(before);
     const { stub, plugin } = await setup();
     expect(plugin).toMatchObject({ pluginId: "wechatai/notification", hasKey: false });
     expect((await api(stub, "plugin.save", { id: plugin.id, connectionId: "foreign" })).ok).toBe(
@@ -516,8 +514,16 @@ describe("receive-only notification plugin", () => {
     expect((await ordinary.status()).alarmAt).toBe(future);
     expect((await scheduler(stub).status()).alarmAt).toBeNull();
   });
-  it("rejects expired membership, pauses accepted messages and expires them after 24 hours", async () => {
-    const { stub, plugin, token } = await setup();
+  it("pauses an excess plugin after downgrade and expires queued messages after 24 hours", async () => {
+    const { stub } = await setup();
+    const plugin = (
+      await api(stub, "plugin.save", {
+        pluginId: "wechatai/notification",
+        name: "第二个",
+        connectionId: "default",
+      })
+    ).data;
+    const token = (await api(stub, "notification.token", { id: plugin.id })).data.token;
     await send(token);
     await runInDurableObject(stub, (_, state) =>
       state.storage.sql.exec("UPDATE settings SET value='0' WHERE key='planUntil'"),
@@ -580,7 +586,7 @@ describe("receive-only notification plugin", () => {
     expect(await response.text()).toBe(notificationGuide);
     const protocol = await request("/api/plugins/notifications");
     expect(protocol.status).toBe(200);
-    expect(await protocol.json()).toMatchObject({ billing: { requiresPlus: true, credits: 0 } });
+    expect(await protocol.json()).toMatchObject({ billing: { requiresPlus: false, credits: 0 } });
     for (const block of notificationGuide.matchAll(/```json\n([\s\S]*?)\n```/g))
       expect(() => JSON.parse(block[1])).not.toThrow();
   });

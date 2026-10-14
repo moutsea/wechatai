@@ -152,8 +152,8 @@ describe("channels and their models", () => {
     expect((await stub.snapshot()).currentSession).toBeNull();
     const help = await command(stub, "/help");
     expect(help).toContain("`/wx status`");
-    expect(help).not.toContain("`/wx plugins`");
-    expect(help).not.toContain("`/use DS Chat`");
+    expect(help).toContain("`/wx plugins`");
+    expect(help).toContain("`/use ds`");
     expect(fetch).not.toHaveBeenCalled();
   });
   it("shares one encrypted key across models, propagates channel edits, and exposes no credentials", async () => {

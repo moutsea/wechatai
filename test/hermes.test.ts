@@ -1,10 +1,11 @@
 import { env, SELF, runInDurableObject } from "cloudflare:test";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PersonalAccount } from "../src/server/personal-account";
 import type { WxMessage } from "../src/server/wechat";
 import { parseOpenClawPairing, parseOpenClawToken } from "../src/server/openclaw-token";
 import { countTextTokens } from "../src/server/tokenizer";
 import { creditUnits } from "../src/server/wallet";
+import { deliverQueuedReplies } from "./helpers/wechat-delivery";
 
 const accounts: DurableObjectStub<PersonalAccount>[] = [];
 const api = async (
@@ -23,6 +24,7 @@ const send = (stub: DurableObjectStub<PersonalAccount>, text: string, id = crypt
 afterEach(async () => {
   for (const stub of accounts.splice(0))
     await runInDurableObject(stub, (_, state) => state.storage.deleteAlarm());
+  vi.restoreAllMocks();
 });
 async function setup(plus = true) {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
@@ -47,7 +49,6 @@ async function setup(plus = true) {
     shortcut: "hermes",
     agentId: "main",
   });
-  if (!plus) return { stub, saved };
   expect(saved.ok).toBe(true);
   const id = saved.data.id;
   const pairing = await api(stub, "plugin.hermesPair", { id });
@@ -101,7 +102,7 @@ describe("Hermes native channel", () => {
     const before = (await api(ctx.stub, "snapshot")).data;
     const plusHelp = await send(ctx.stub, "/wx help");
     expect(plusHelp).toContain("`/wx plugins`：查看已配置插件");
-    expect(plusHelp).toContain("`/use DS Chat`：按插件名称");
+    expect(plusHelp).toContain("`/use ds`：仅按插件别名");
     expect(plusHelp).not.toContain("Plus：");
     expect(await send(ctx.stub, "/wx status")).toBe(
       "**当前插件**\n\n- 名称：我的 Hermes\n- 快捷名：@hermes",
@@ -117,12 +118,16 @@ describe("Hermes native channel", () => {
       "**当前插件**\n\n- 名称：我的 Hermes（已停用）\n- 快捷名：@hermes",
     );
     const expiredHelp = await send(ctx.stub, "/wx help");
-    expect(expiredHelp).not.toContain("`/wx plugins`");
-    expect(expiredHelp).not.toContain("`/use DS Chat`");
+    expect(expiredHelp).toContain("`/wx plugins`");
+    expect(expiredHelp).toContain("`/use ds`");
   });
-  it("is Plus-only and does not require a platform LLM channel", async () => {
+  it("allows Free pairing without a platform LLM channel", async () => {
     const free = await setup(false);
-    expect(free.saved.ok).toBe(false);
+    expect(free.saved.ok).toBe(true);
+    expect(await send(free.stub, "/wx plugins")).toContain("我的 Hermes");
+    expect(await send(free.stub, "/use hermes")).toContain("已进入");
+    expect(await send(free.stub, "@hermes 你好")).toBe("已成功转发，等待回复...");
+    expect((await free.call("poll")).data.jobs).toHaveLength(1);
     const plus = await setup();
     expect(plus.saved.data).toMatchObject({
       pluginId: "wechatai/hermes",
@@ -181,14 +186,8 @@ describe("Hermes native channel", () => {
     });
     expect(result.ok).toBe(true);
     expect(result.data.cost).toBe(creditUnits(0, countTextTokens(text)) / 1000);
-    const reply = await runInDurableObject(
-      ctx.stub,
-      (_, state) =>
-        state.storage.sql
-          .exec<{ reply: string }>("SELECT reply FROM inbox WHERE id = ?", result.data.id)
-          .one().reply,
-    );
-    expect(reply).toBe(
+    const delivered = await deliverQueuedReplies(ctx.stub, 2);
+    expect(delivered[1].text).toBe(
       "消息来自 Hermes（我的 Hermes）插件。\n使用 /use hermes 进入插件，或发送 @hermes 回复内容。\n\n──────────\n\n" +
         text,
     );
@@ -247,7 +246,9 @@ describe("Hermes native channel", () => {
         return { rows, history };
       });
       expect(stored.rows).toHaveLength(1);
-      expect(stored.rows[0].reply).toBe(
+      expect(stored.rows[0].reply).toBe(event.text);
+      const delivered = await deliverQueuedReplies(ctx.stub);
+      expect(delivered[0].text).toBe(
         "消息来自 Hermes（我的 Hermes）插件。\n使用 /use hermes 进入插件，或发送 @hermes 回复内容。\n\n──────────\n\n" +
           event.text,
       );
@@ -271,6 +272,7 @@ describe("Hermes native channel", () => {
         .one(),
     );
     expect(stored).toEqual({ reply: ctx.event.text, connectionId: "default" });
+    expect((await deliverQueuedReplies(ctx.stub))[0].text).toBe(ctx.event.text);
   });
   it("supports single-use @, direct switching and session reset", async () => {
     const ctx = await ready();

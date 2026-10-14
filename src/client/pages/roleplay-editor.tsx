@@ -1,3 +1,10 @@
+import {
+  pluginShortcutForEdit,
+  pluginShortcutPatternForEdit,
+  isLegacyNumericShortcut,
+  LEGACY_NUMERIC_SHORTCUT_HINT,
+  PLUGIN_SHORTCUT_HINT,
+} from "../../shared/plugin-shortcut";
 import { modelKind } from "../../shared/model-kind";
 import { useRef, useState, type FormEvent } from "react";
 import { BookOpen, Download, LayoutGrid, Plus, Theater, Trash2, Upload } from "lucide-react";
@@ -39,10 +46,13 @@ export function RoleplayEditor({
   onSaved: (id: string) => void;
 }) {
   const { data, request, refresh, notify } = useApp();
+  const editSchema = roleplayInputSchema.safeExtend({
+    shortcut: pluginShortcutForEdit(plugin === "new" ? undefined : plugin.shortcut),
+  });
   const [form, setForm] = useState<RoleplayInput>(() =>
     plugin === "new"
       ? {
-          ...roleplayInputSchema.parse({
+          ...editSchema.parse({
             name: "新角色",
             shortcut: "角色",
             modelId: data?.assistants.find((a) => modelKind(a) === "text")?.id || "unselected",
@@ -52,7 +62,7 @@ export function RoleplayEditor({
           description: "",
           modelId: data?.assistants.find((a) => modelKind(a) === "text")?.id || "",
         }
-      : roleplayInputSchema.parse(plugin),
+      : editSchema.parse(plugin),
   );
   const [tab, setTab] = useState<"role" | "story" | "lore">("role");
   const [busy, setBusy] = useState(false);
@@ -61,6 +71,9 @@ export function RoleplayEditor({
   const [warnings, setWarnings] = useState<string[]>([]);
   const [choosingPreset, setChoosingPreset] = useState(plugin === "new");
   const file = useRef<HTMLInputElement>(null);
+  const previousShortcut = plugin === "new" ? undefined : plugin.shortcut;
+  const keepingLegacyShortcut =
+    isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
   const textModels = data.assistants.filter((a) => modelKind(a) === "text");
   const model = textModels.find((a) => a.id === form.modelId);
@@ -92,7 +105,7 @@ export function RoleplayEditor({
     setBusy(true);
     setError("");
     try {
-      const parsed = roleplayInputSchema.safeParse({
+      const parsed = editSchema.safeParse({
         ...form,
         lore: form.lore.map((e) => ({
           ...e,
@@ -114,7 +127,11 @@ export function RoleplayEditor({
       );
       await refresh();
       onSaved(saved.id);
-      notify(`角色已保存，发送 /use ${form.shortcut} 开始聊天`);
+      notify(
+        isLegacyNumericShortcut(form.shortcut)
+          ? "角色已保存；使用 /use 前请修改纯数字别名"
+          : `角色已保存，发送 /use ${form.shortcut} 开始聊天`,
+      );
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -129,9 +146,14 @@ export function RoleplayEditor({
       if (selected.size > 5 * 1024 * 1024) throw new Error("角色卡文件不能超过 5 MB");
       const result = readCharacterCard(new Uint8Array(await selected.arrayBuffer()), {
         modelId: form.modelId || "unselected",
-        shortcut: form.shortcut || "角色",
+        shortcut: keepingLegacyShortcut ? "角色" : form.shortcut || "角色",
       });
-      setForm({ ...result.input, modelId: form.modelId, enabled: form.enabled });
+      setForm({
+        ...result.input,
+        shortcut: form.shortcut || result.input.shortcut,
+        modelId: form.modelId,
+        enabled: form.enabled,
+      });
       setWarnings(result.warnings);
       setTab("role");
       setChoosingPreset(false);
@@ -143,7 +165,7 @@ export function RoleplayEditor({
     }
   }
   function exportCard() {
-    const parsed = roleplayInputSchema.safeParse({
+    const parsed = editSchema.safeParse({
       ...form,
       lore: form.lore.map((e) => ({
         ...e,
@@ -333,12 +355,17 @@ export function RoleplayEditor({
                       微信快捷名
                       <input
                         maxLength={24}
+                        pattern={pluginShortcutPatternForEdit(
+                          plugin === "new" ? undefined : plugin.shortcut,
+                        )}
+                        title={PLUGIN_SHORTCUT_HINT}
                         value={form.shortcut}
                         onChange={(e) => update("shortcut", e.target.value)}
                       />
                       <small>
-                        发送 /use {form.shortcut || "快捷名"} 进入角色；@{form.shortcut || "快捷名"}{" "}
-                        单次对话
+                        {keepingLegacyShortcut
+                          ? LEGACY_NUMERIC_SHORTCUT_HINT
+                          : `别名不能是纯数字。发送 /use ${form.shortcut || "快捷名"} 进入角色；@${form.shortcut || "快捷名"} 单次对话`}
                       </small>
                     </label>
                   </div>

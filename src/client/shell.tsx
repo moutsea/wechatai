@@ -1,3 +1,4 @@
+import { NoticeBell, ImportantNotice } from "./notices";
 import { useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -17,6 +18,7 @@ import {
   CircleHelp,
   Gift,
   Puzzle,
+  Bell,
 } from "lucide-react";
 import { authClient } from "./auth";
 import { useApp } from "./context";
@@ -30,6 +32,7 @@ const items = [
   { path: "/sessions", label: "会话记录", en: "Conversations", icon: MessagesSquare },
   { path: "/billing", label: "会员与 credits", en: "Membership", icon: Coins },
   { path: "/credits", label: "额度明细", en: "Credit history", icon: ReceiptText },
+  { path: "/notices", label: "通知", en: "Notices", icon: Bell },
   { path: "/invite", label: "邀请好友", en: "Invite friends", icon: Gift },
 ];
 export function Shell({ children }: { children: ReactNode }) {
@@ -85,9 +88,7 @@ export function Shell({ children }: { children: ReactNode }) {
             >
               <item.icon size={19} />
               <span>{item.label}</span>
-              {["/sessions", "/plugins"].includes(item.path) && (
-                <span className="nav-plus">PLUS</span>
-              )}
+              {item.path === "/sessions" && <span className="nav-plus">PLUS</span>}
             </NavLink>
           ))}
         </nav>
@@ -148,13 +149,17 @@ export function Shell({ children }: { children: ReactNode }) {
               <span className="tiny-dot" />
               {data?.connection.status === "connected" ? "微信已连接" : "微信待连接"}
             </Link>
+            <NoticeBell />
             <span className="topbar-divider" />
             <span className="plan-label">{data?.plan === "plus" ? "PLUS" : "FREE"}</span>
           </div>
         </header>
         <main className="main-content">
           {data ? (
-            children
+            <>
+              <ImportantNotice />
+              {children}
+            </>
           ) : (
             <div className="loading-state">
               <span className="spinner" />

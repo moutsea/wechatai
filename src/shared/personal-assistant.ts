@@ -1,15 +1,10 @@
+import { pluginShortcutSchema } from "./plugin-shortcut";
 import { z } from "zod";
 import { pluginManifestSchema } from "./plugins";
 
 export const personalAssistantInputSchema = z.object({
   name: z.string().trim().min(1).max(40).default("个人助理"),
-  shortcut: z
-    .string()
-    .trim()
-    .min(1)
-    .max(24)
-    .regex(/^[\p{L}\p{N}_-]+$/u)
-    .default("助理"),
+  shortcut: pluginShortcutSchema.default("助理"),
   modelId: z.string().min(1).max(200),
   enabled: z.boolean().default(true),
   currency: z.enum(["CNY", "USD", "HKD", "EUR", "GBP", "JPY"]).default("CNY"),

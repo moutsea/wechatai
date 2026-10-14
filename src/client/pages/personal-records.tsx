@@ -1,3 +1,4 @@
+import { pluginAvailable } from "../../shared/plugin-access";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Check,
@@ -98,7 +99,8 @@ export function PersonalRecords({
   useEffect(() => {
     workspace.current?.closest("dialog")?.scrollTo({ top: 0 });
   }, [editing, kind]);
-  const writable = data?.plan === "plus" && plugin.enabled;
+  const writable =
+    !!data && pluginAvailable(data.plan, data.plugins ?? [], plugin.id) && plugin.enabled;
   useEffect(() => {
     const id = ++sequence.current;
     setLoading(true);
@@ -769,7 +771,7 @@ export function PersonalRecords({
               <p className="form-hint">
                 {demo
                   ? "演示数据只在本次预览有效，不调用模型、不发送微信提醒。"
-                  : "记录仍可查看、导出或删除；启用助理并保持 Plus 会员后可继续新增、编辑和使用提醒。"}
+                  : "记录仍可查看、导出或删除；启用助理且配置未超出套餐上限时，可继续新增、编辑和使用提醒。"}
               </p>
             )}
           </>

@@ -1,3 +1,10 @@
+import {
+  pluginShortcutForEdit,
+  pluginShortcutPatternForEdit,
+  isLegacyNumericShortcut,
+  LEGACY_NUMERIC_SHORTCUT_HINT,
+  PLUGIN_SHORTCUT_HINT,
+} from "../../shared/plugin-shortcut";
 import { useState, type FormEvent } from "react";
 import { ImagePlus } from "lucide-react";
 import { useApp } from "../context";
@@ -22,7 +29,10 @@ export function ImagePluginEditor({
   onSaved?: (id: string) => void;
 }) {
   const { data, request, refresh, notify } = useApp();
-  const [form, setForm] = useState<ImageGenerationInput>(
+  const editSchema = imageGenerationInputSchema.safeExtend({
+    shortcut: pluginShortcutForEdit(plugin === "new" ? undefined : plugin.shortcut),
+  });
+  const [form, setForm] = useState<ImageGenerationInput>(() =>
     plugin === "new"
       ? {
           name: "AI 生图",
@@ -34,10 +44,13 @@ export function ImagePluginEditor({
           enabled: true,
           ...waitingMessageDefaults(IMAGE_WAITING_MESSAGE),
         }
-      : imageGenerationInputSchema.parse(plugin),
+      : editSchema.parse(plugin),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const previousShortcut = plugin === "new" ? undefined : plugin.shortcut;
+  const keepingLegacyShortcut =
+    isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
   const selected = data.assistants.find((a) => a.id === form.modelId);
   const update = <K extends keyof ImageGenerationInput>(key: K, value: ImageGenerationInput[K]) =>
@@ -56,7 +69,11 @@ export function ImagePluginEditor({
       );
       await refresh();
       onSaved?.(saved.id);
-      notify(`生图插件已保存，发送 @${form.shortcut} 画面描述 即可使用`);
+      notify(
+        isLegacyNumericShortcut(form.shortcut)
+          ? "生图插件已保存；使用 /use 前请修改纯数字别名"
+          : `生图插件已保存，发送 @${form.shortcut} 画面描述 即可使用`,
+      );
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -89,11 +106,17 @@ export function ImagePluginEditor({
               <input
                 required
                 maxLength={24}
+                pattern={pluginShortcutPatternForEdit(
+                  plugin === "new" ? undefined : plugin.shortcut,
+                )}
+                title={PLUGIN_SHORTCUT_HINT}
                 value={form.shortcut}
                 onChange={(e) => update("shortcut", e.target.value)}
               />
               <small>
-                @{form.shortcut} 描述 单次生成；/use {form.shortcut} 默认使用
+                {keepingLegacyShortcut
+                  ? LEGACY_NUMERIC_SHORTCUT_HINT
+                  : `别名不能是纯数字。@${form.shortcut} 描述 单次生成；/use ${form.shortcut} 默认使用`}
               </small>
             </label>
           </div>

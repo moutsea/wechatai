@@ -1,3 +1,4 @@
+import { pluginShortcutSchema, pluginShortcutJsonSchema } from "./plugin-shortcut";
 import { z } from "zod";
 import { pluginManifestSchema } from "./plugins";
 
@@ -16,12 +17,7 @@ export const searchEndpointHints = {
 } as const;
 export const webResearchInputSchema = z.object({
   name: z.string().trim().min(1).max(40),
-  shortcut: z
-    .string()
-    .trim()
-    .min(1)
-    .max(24)
-    .regex(/^[\p{L}\p{N}_-]+$/u),
+  shortcut: pluginShortcutSchema,
   modelId: z.string().min(1).max(200),
   enabled: z.boolean().default(true),
   searchProvider: z.enum(["tavily", "exa", "searxng", "deepseek"]),
@@ -60,11 +56,9 @@ export const webResearchManifest = pluginManifestSchema.parse({
     properties: {
       name: { type: "string", minLength: 1, maxLength: 40 },
       shortcut: {
-        type: "string",
-        minLength: 1,
-        maxLength: 24,
+        ...pluginShortcutJsonSchema,
         description:
-          "Unique across this account's model and plugin shortcuts; letters, numbers, underscores and hyphens only.",
+          "Unique across this account's model and plugin shortcuts; letters, numbers, underscores and hyphens only. Must not be entirely numeric. /use accepts only this alias, not a display name or list index.",
       },
       modelId: { type: "string" },
       enabled: { type: "boolean", default: true },

@@ -147,7 +147,7 @@ publicPluginDocs.get("/api/plugins/notifications", (c) =>
       auth: "Authorization: Bearer <token>",
       idempotency: "Idempotency-Key (optional, retained for 7 days)",
     },
-    billing: { requiresPlus: true, credits: 0 },
+    billing: { requiresPlus: false, credits: 0 },
     limits: { perMinute: 30, per24Hours: 1000, pending: 100, bodyBytes: 32768 },
     messageSchema: z.toJSONSchema(notificationMessageSchema, { io: "input" }),
   }),

@@ -1,3 +1,6 @@
+import { availablePluginIds, canAddPlugin, pluginAvailable } from "../../shared/plugin-access";
+import { PLUGIN_SHORTCUT_PATTERN, PLUGIN_SHORTCUT_HINT } from "../../shared/plugin-shortcut";
+import { useState } from "react";
 import type { PersonalAssistantPlugin } from "../../shared/personal-assistant";
 import { NotificationAccess } from "./notification-editor";
 import { isRemoteAgent, remoteAgentName } from "../../shared/remote-agent";
@@ -9,8 +12,52 @@ import type { UserPlugin } from "../../shared/image-generation";
 import { DEEPSEEK_SEARCH_DEFAULT_MODEL, searchProviderLabels } from "../../shared/web-research";
 import { pluginIconSource, roleAvatarSource } from "../../shared/plugin-visuals";
 import { remoteAgentConnection } from "../remote-agent-status";
+import { conflictingShortcuts } from "../../shared/shortcut-conflicts";
 
 export type PluginKind = UserPlugin["pluginId"];
+type PluginMaintenance = (id: string, patch: { shortcut?: string; enabled?: false }) => void;
+
+function PluginAlias({
+  plugin,
+  busy,
+  onManage,
+  paused,
+}: {
+  plugin: UserPlugin;
+  busy: boolean;
+  onManage: PluginMaintenance;
+  paused: boolean;
+}) {
+  const [shortcut, setShortcut] = useState(plugin.shortcut);
+  return (
+    <form
+      className="plugin-config-usage"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onManage(plugin.id, { shortcut: shortcut.trim() });
+      }}
+    >
+      <label>
+        {paused ? "修改暂停配置的别名" : "修改别名"}
+        <input
+          required
+          maxLength={24}
+          pattern={PLUGIN_SHORTCUT_PATTERN}
+          title={PLUGIN_SHORTCUT_HINT}
+          value={shortcut}
+          disabled={busy}
+          onChange={(event) => setShortcut(event.target.value)}
+        />
+      </label>
+      <button
+        className="button secondary small"
+        disabled={busy || shortcut.trim() === plugin.shortcut}
+      >
+        保存别名
+      </button>
+    </form>
+  );
+}
 
 const library = [
   {
@@ -18,7 +65,7 @@ const library = [
     name: "消息提醒",
     description:
       "用一个 HTTP 请求，把订单通知、服务告警和任务结果发到微信。专属 Token，随时接收你的消息。",
-    tags: ["HTTP Webhook", "无需模型", "Plus 会员免费"],
+    tags: ["HTTP Webhook", "无需模型", "不扣 credits"],
   },
   {
     id: "wechatai/personal-assistant",
@@ -70,52 +117,61 @@ export function PluginLibrary({
 }) {
   const { data, base } = useApp();
   if (!data) return null;
-  const plus = data.plan === "plus";
+  const canAdd = canAddPlugin(data.plan, data.plugins?.length ?? 0);
+  const availableIds = availablePluginIds(data.plan, data.plugins ?? []);
+  const shortcutConflicts = conflictingShortcuts([...data.assistants, ...(data.plugins ?? [])]);
   return (
     <div className="plugin-library">
       {library.map(({ id, name, description, tags }) => {
         const configs = (data.plugins ?? []).filter((p) => p.pluginId === id);
-        const active = configs.find((p) => p.id === data.currentSession?.pluginInstanceId);
-        const remote = configs.filter(isRemoteAgent);
+        const conflicts = configs.filter((p) => shortcutConflicts.has(p.shortcut.toLowerCase()));
+        const usable = configs.filter((p) => availableIds.has(p.id));
+        const allowed = usable.length > 0;
+        const active = usable.find((p) => p.id === data.currentSession?.pluginInstanceId);
+        const remote = usable.filter(isRemoteAgent);
         const available = remote.filter((p) => p.enabled);
         const online = available.filter((p) => remoteAgentConnection(p).state === "online");
-        const representative = active ?? online[0] ?? configs.find((p) => p.enabled) ?? configs[0];
-        const enabled = configs.some((p) => p.enabled);
+        const representative =
+          active ?? online[0] ?? usable.find((p) => p.enabled) ?? usable[0] ?? configs[0];
+        const enabled = usable.some((p) => p.enabled);
         const connection = isRemoteAgent(representative) && remoteAgentConnection(representative);
         const connectedBefore = available.some((p) => remoteAgentConnection(p).connectedBefore);
         const resume = configs.length === 1 && connection && !connection.connectedBefore;
-        const notificationReady = configs.some((p) => p.enabled && p.hasKey);
+        const notificationReady = usable.some((p) => p.enabled && p.hasKey);
         const statusLabel = !configs.length
           ? "未配置"
-          : id === "wechatai/notification"
-            ? !enabled
-              ? "已停用"
-              : notificationReady
-                ? "已配置"
-                : "待设置 Token"
-            : !remote.length
-              ? "已配置"
-              : !enabled
+          : !allowed
+            ? "已暂停"
+            : id === "wechatai/notification"
+              ? !enabled
                 ? "已停用"
-                : online.length
-                  ? "已连接"
-                  : connectedBefore
-                    ? "已离线"
-                    : available.some((p) => p.hasKey)
-                      ? "等待上线"
-                      : "待连接";
+                : notificationReady
+                  ? "已配置"
+                  : "待设置 Token"
+              : !remote.length
+                ? "已配置"
+                : !enabled
+                  ? "已停用"
+                  : online.length
+                    ? "已连接"
+                    : connectedBefore
+                      ? "已离线"
+                      : available.some((p) => p.hasKey)
+                        ? "等待上线"
+                        : "待连接";
         const positiveStatus =
-          id === "wechatai/notification"
+          allowed &&
+          (id === "wechatai/notification"
             ? notificationReady
             : remote.length
               ? online.length > 0
-              : configs.length > 0;
+              : configs.length > 0);
         const actionLabel =
           id === "wechatai/notification"
             ? configs.some((p) => p.hasKey)
               ? "管理 Token"
               : "设置 Token"
-            : resume && plus
+            : resume && allowed
               ? "继续连接"
               : "查看配置";
         return (
@@ -158,8 +214,8 @@ export function PluginLibrary({
                     {id === "wechatai/notification" ? "HTTP 推送" : `@${representative.shortcut}`}
                   </code>
                   <span>
-                    {!plus
-                      ? "续费 Plus 后可使用"
+                    {!allowed
+                      ? "超出当前套餐的插件上限"
                       : !enabled
                         ? "配置已停用"
                         : connection && connection.state !== "online"
@@ -174,26 +230,37 @@ export function PluginLibrary({
                   </span>
                 </div>
               )}
+              {conflicts.length > 0 && (
+                <button className="text-link shortcut-conflict" onClick={() => onView(id)}>
+                  {conflicts.length} 组配置的别名重复 · 查看并修改
+                </button>
+              )}
             </div>
             <div className="plugin-entry-action">
               {configs.length ? (
                 <button
                   className="button secondary small"
-                  onClick={() => (resume && plus ? onResume(representative) : onView(id))}
+                  onClick={() => (resume && allowed ? onResume(representative) : onView(id))}
                   aria-label={
                     id === "wechatai/notification"
                       ? `消息提醒：${actionLabel}`
-                      : resume && plus
+                      : resume && allowed
                         ? `继续连接 ${name}`
                         : `查看 ${name} 配置`
                   }
                 >
                   {actionLabel} <ArrowRight size={15} />
                 </button>
-              ) : !plus ? (
-                <Link className="button secondary small" to={`${base}/billing`}>
-                  升级 Plus <ArrowRight size={15} />
-                </Link>
+              ) : !canAdd ? (
+                data.plan === "free" ? (
+                  <Link className="button secondary small" to={`${base}/billing`}>
+                    升级以添加更多 <ArrowRight size={15} />
+                  </Link>
+                ) : (
+                  <button className="button secondary small" disabled>
+                    已达配置上限
+                  </button>
+                )
               ) : !data.assistants.length &&
                 id !== "wechatai/openclaw" &&
                 id !== "wechatai/notification" &&
@@ -229,6 +296,7 @@ export function PluginConfiguration({
   onTest,
   onDelete,
   onAction,
+  onManage,
   onRecords,
 }: {
   kind: PluginKind;
@@ -242,6 +310,7 @@ export function PluginConfiguration({
   onDelete: (plugin: UserPlugin) => void;
   onRecords: (plugin: PersonalAssistantPlugin) => void;
   onAction: (id: string, action: "activate" | "exit") => void;
+  onManage: PluginMaintenance;
 }) {
   const { data, base } = useApp();
   if (!data) return null;
@@ -251,7 +320,10 @@ export function PluginConfiguration({
     configs.find((p) => p.id === data.currentSession?.pluginInstanceId) ??
     configs[0];
   const title = library.find((p) => p.id === kind)!.name;
-  const plus = data.plan === "plus";
+  const allowed = !!selected && pluginAvailable(data.plan, data.plugins ?? [], selected.id);
+  const canAdd = canAddPlugin(data.plan, data.plugins?.length ?? 0);
+  const shortcutConflicts = conflictingShortcuts([...data.assistants, ...(data.plugins ?? [])]);
+  const aliasConflict = !!selected && shortcutConflicts.has(selected.shortcut.toLowerCase());
   const model = data.assistants.find(
     (a) => a.id === (selected && "modelId" in selected ? selected.modelId : null),
   );
@@ -296,6 +368,7 @@ export function PluginConfiguration({
                       <option key={p.id} value={p.id}>
                         {p.name}
                         {p.pluginId === "wechatai/notification" ? "" : ` · @${p.shortcut}`}
+                        {shortcutConflicts.has(p.shortcut.toLowerCase()) && " · 别名重复"}
                         {isRemoteAgent(p) && ` · ${remoteAgentConnection(p).label}`}
                       </option>
                     ))}
@@ -305,9 +378,13 @@ export function PluginConfiguration({
                 <h3>{selected.name}</h3>
               )}
               <span
-                className={`plugin-status ${plus && selected.enabled && (!connection || connection.state === "online") ? "configured" : ""}`}
+                className={`plugin-status ${allowed && selected.enabled && (!connection || connection.state === "online") ? "configured" : ""}`}
               >
-                {!plus ? "需续费" : !selected.enabled ? "已停用" : (connection?.label ?? "已启用")}
+                {!allowed
+                  ? "已暂停"
+                  : !selected.enabled
+                    ? "已停用"
+                    : (connection?.label ?? "已启用")}
               </span>
             </div>
             {selected.pluginId === "wechatai/personal-assistant" && (
@@ -327,7 +404,7 @@ export function PluginConfiguration({
                   </div>
                   <div>
                     <dt>使用费用</dt>
-                    <dd>Plus 会员权益，不扣 credits</dd>
+                    <dd>不调用模型，不扣 credits</dd>
                   </div>
                 </dl>
                 <NotificationAccess key={selected.id} plugin={selected} />
@@ -491,16 +568,43 @@ export function PluginConfiguration({
                 </div>
               </>
             )}
-            {!plus && (
+            {!allowed && (
               <p className="plugin-config-renew">
-                配置已保留，<Link to={`${base}/billing`}>续费 Plus</Link> 后可继续使用和修改。
+                Free 用户可使用最早创建的 1 个插件配置，其余配置保留但暂停使用。删除较早的配置，或
+                <Link to={`${base}/billing`}>升级 Plus</Link>
+                ，即可继续使用。暂停期间仍可停用或修改别名。
               </p>
             )}
+            {aliasConflict && (
+              <p className="form-hint" role="status">
+                别名 @{selected.shortcut} 与其他模型或插件重复，大小写不能用于区分。
+                请修改其中一方的别名后再使用 @ 调用。模型别名可在
+                <Link to={`${base}/channels`}>渠道与模型</Link>中修改。
+              </p>
+            )}
+            {(!allowed || aliasConflict) && selected.pluginId !== "wechatai/notification" && (
+              <PluginAlias
+                key={`${selected.id}:${selected.shortcut}`}
+                plugin={selected}
+                busy={busy}
+                onManage={onManage}
+                paused={!allowed}
+              />
+            )}
             <div className="plugin-config-tools">
+              {selected.enabled && (
+                <button
+                  className="button secondary small"
+                  disabled={busy}
+                  onClick={() => onManage(selected.id, { enabled: false })}
+                >
+                  停用插件
+                </button>
+              )}
               {kind !== "wechatai/notification" && (
                 <button
                   className="button secondary small"
-                  disabled={busy || !plus || !selected.enabled}
+                  disabled={busy || !allowed || !selected.enabled}
                   onClick={() => onTest(selected)}
                 >
                   <FlaskConical size={15} />
@@ -515,7 +619,7 @@ export function PluginConfiguration({
                 <Trash2 size={15} />
                 删除配置
               </button>
-              {plus &&
+              {canAdd &&
                 (kind === "wechatai/openclaw" ||
                   kind === "wechatai/notification" ||
                   kind === "wechatai/hermes" ||
@@ -530,7 +634,7 @@ export function PluginConfiguration({
         ) : (
           <div className="plugin-config-empty">
             <p>还没有配置此插件。</p>
-            {plus &&
+            {canAdd &&
               (kind === "wechatai/openclaw" ||
                 kind === "wechatai/notification" ||
                 kind === "wechatai/hermes" ||
@@ -548,7 +652,7 @@ export function PluginConfiguration({
           {kind !== "wechatai/notification" && (
             <button
               className="button secondary"
-              disabled={busy || (!active && (!plus || !selected.enabled || Boolean(incomplete)))}
+              disabled={busy || (!active && (!allowed || !selected.enabled || Boolean(incomplete)))}
               onClick={() => onAction(selected.id, active ? "exit" : "activate")}
             >
               {active ? "退出默认插件" : "设为默认插件"}
@@ -556,7 +660,7 @@ export function PluginConfiguration({
           )}
           <button
             className="button"
-            disabled={busy || !plus}
+            disabled={busy || !allowed}
             onClick={() => {
               onSelect(selected.id);
               onEdit(selected);

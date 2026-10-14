@@ -1,3 +1,4 @@
+import { AdminNotices } from "./admin-notices";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -13,6 +14,7 @@ import {
   LayoutDashboard,
   Link2,
   MessageCircle,
+  Megaphone,
   RefreshCw,
   Search,
   ShieldCheck,
@@ -534,7 +536,12 @@ function GiftMembership({
 
 export function Admin() {
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "users" ? "users" : "overview";
+  const tab =
+    params.get("tab") === "notices"
+      ? "notices"
+      : params.get("tab") === "users"
+        ? "users"
+        : "overview";
   const query = params.get("q") || "";
   const plan = params.get("plan") || "";
   const page = params.get("page") || "1";
@@ -553,6 +560,11 @@ export function Admin() {
   const loadedView = useRef("");
   useEffect(() => setSearch(query), [query]);
   useEffect(() => {
+    if (tab === "notices") {
+      setLoading(false);
+      setError("");
+      return;
+    }
     const controller = new AbortController();
     const view = JSON.stringify([tab, query, page, plan]);
     if (loadedView.current !== view) {
@@ -637,7 +649,7 @@ export function Admin() {
   }, []);
   // Start only after an authorized read succeeds. Re-renders, filters and batch
   // refreshes must not restart the loop or launch concurrent synchronizations.
-  const canSync = overview !== null && !forbidden;
+  const canSync = tab !== "notices" && overview !== null && !forbidden;
   useEffect(() => {
     if (!canSync) return;
     void sync();
@@ -680,14 +692,16 @@ export function Admin() {
           </h1>
           <p>看看微伴的用户、收入和使用情况。</p>
         </div>
-        <button
-          className="button secondary"
-          onClick={() => void sync()}
-          disabled={syncing || !overview}
-        >
-          <RefreshCw size={16} className={syncing ? "admin-spinning" : ""} />
-          {syncing ? "正在同步…" : "同步最新数据"}
-        </button>
+        {tab !== "notices" && (
+          <button
+            className="button secondary"
+            onClick={() => void sync()}
+            disabled={syncing || !overview}
+          >
+            <RefreshCw size={16} className={syncing ? "admin-spinning" : ""} />
+            {syncing ? "正在同步…" : "同步最新数据"}
+          </button>
+        )}
       </header>
       <nav className="admin-tabs" aria-label="管理后台导航">
         <button
@@ -706,6 +720,14 @@ export function Admin() {
           <Users size={16} />
           用户列表
         </button>
+        <button
+          className={tab === "notices" ? "active" : ""}
+          aria-current={tab === "notices" ? "page" : undefined}
+          onClick={() => changeParams({ tab: "notices", page: "", q: "", plan: "" })}
+        >
+          <Megaphone size={16} />
+          通知管理
+        </button>
         {overview?.mode === "test" && <span className="admin-test-badge">测试支付环境</span>}
       </nav>
       {error && (
@@ -714,7 +736,7 @@ export function Admin() {
           <button onClick={() => setRefresh((v) => v + 1)}>重新加载</button>
         </div>
       )}
-      {syncError && (
+      {tab !== "notices" && syncError && (
         <div className="admin-error" role="alert">
           {syncError}
           <button onClick={() => void sync()} disabled={syncing}>
@@ -722,7 +744,7 @@ export function Admin() {
           </button>
         </div>
       )}
-      {overview && (
+      {tab !== "notices" && overview && (
         <div
           className={`admin-sync-info ${overview.coverage.synced < overview.summary.users ? "incomplete" : ""}`}
         >
@@ -736,7 +758,9 @@ export function Admin() {
           <span role="status">{progress || "账户统计自动更新 · 注册与订单数据实时读取"}</span>
         </div>
       )}
-      {loading ? (
+      {tab === "notices" ? (
+        <AdminNotices />
+      ) : loading ? (
         <div className="admin-loading" role="status">
           <span className="spinner" />
           正在加载数据…

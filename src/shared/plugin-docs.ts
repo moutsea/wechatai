@@ -205,7 +205,7 @@ export const protocolSections = protocolMarkdown
   });
 export const llmsText = `# Wechatai · 微伴
 
-> 在微信里使用自定义 AI 的独立产品。插件协议 ${PLUGIN_PROTOCOL_VERSION} 文档公开可读，当前支持内置 LLM，以及 Plus 会员专享的 DS Chat、AI 生图、OpenClaw、Hermes、角色扮演、个人助理和消息提醒插件；模型和搜索 API 由用户自行配置。
+> 在微信里使用自定义 AI 的独立产品。插件协议 ${PLUGIN_PROTOCOL_VERSION} 文档公开可读，当前支持内置 LLM，以及 DS Chat、AI 生图、OpenClaw、Hermes、角色扮演、个人助理和消息提醒插件；Free 用户最多配置 1 个插件，Plus 会员插件配置数量不限，模型和搜索 API 由用户自行配置。
 
 ## 插件开发
 
@@ -214,7 +214,7 @@ export const llmsText = `# Wechatai · 微伴
 - [协议 JSON API](${protocolLinks.api}): 版本、Schema 地址与合法数据示例。
 - [固定版本 ${PLUGIN_PROTOCOL_VERSION}](${protocolLinks.versionedApi}): 指定协议版本的索引。
 - [JSON Schema](${protocolLinks.schema}): Draft 2020-12 的 Manifest、Invocation、Result、Event 和 Block 定义。
-- [消息提醒 HTTP 接入](${SITE_URL}/developers/notifications.md): Plus 会员的免费 Webhook，专属 Token、文字推送与投递状态；这是独立的通知接口，不是通用插件执行接口。
+- [消息提醒 HTTP 接入](${SITE_URL}/developers/notifications.md): 不扣 credits 的 Webhook，专属 Token、文字推送与投递状态；这是独立的通知接口，不是通用插件执行接口。
 
 ## 使用指南
 

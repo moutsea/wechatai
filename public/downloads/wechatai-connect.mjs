@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 
 // Filled by the release packager. The installer and archive come from the same site.
-const ARCHIVE_SHA256 = "1d2e50ed0857fa9f57018af501a93d996b54371688697b71f9308c11c282dd29";
+const ARCHIVE_SHA256 = "f90afeb5f5319cb295abcec08f9cbab033b9f95f3e1036d2a843203fbc186e5d";
 export function normalizeAgents(value) {
   if (!Array.isArray(value) || !value.length || value.length > 100)
     throw new Error("没有找到可用助手，请先完成 OpenClaw 初始化。");
@@ -166,7 +166,7 @@ export async function connect({ endpoint, code }) {
     }
     if (response.status === 403) {
       await response.body?.cancel();
-      throw new Error("请确认微伴 Plus 会员有效，且 OpenClaw 插件已启用。");
+      throw new Error("请确认 OpenClaw 插件已启用，且未超过当前套餐的插件数量上限。");
     }
     const pair = JSON.parse((await boundedBody(response, 32000)).toString());
     if (

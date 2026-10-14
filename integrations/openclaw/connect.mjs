@@ -166,7 +166,7 @@ export async function connect({ endpoint, code }) {
     }
     if (response.status === 403) {
       await response.body?.cancel();
-      throw new Error("请确认微伴 Plus 会员有效，且 OpenClaw 插件已启用。");
+      throw new Error("请确认 OpenClaw 插件已启用，且未超过当前套餐的插件数量上限。");
     }
     const pair = JSON.parse((await boundedBody(response, 32000)).toString());
     if (

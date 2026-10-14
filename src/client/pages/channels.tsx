@@ -35,6 +35,7 @@ import {
 import { TOKENS_PER_CREDIT, OUTPUT_TOKEN_WEIGHT } from "../../shared/credits";
 import { modelKind, modelKindLabels, type ModelKind } from "../../shared/model-kind";
 import { KimiseekBalance, useKimiseekConnect } from "./kimiseek-connect";
+import { conflictingShortcuts } from "../../shared/shortcut-conflicts";
 
 const newChannel: ChannelInput = {
   name: "",
@@ -99,6 +100,7 @@ export function Channels() {
     if (id && data) document.getElementById(`channel-${id}`)?.scrollIntoView({ block: "nearest" });
   }, [params, data?.channels.length]);
   if (!data) return null;
+  const shortcutConflicts = conflictingShortcuts([...data.assistants, ...(data.plugins ?? [])]);
   const openChannel = (c: Channel | "new") => {
     setError("");
     setChannelEditor(c);
@@ -338,6 +340,16 @@ export function Channels() {
                                   <div className="channel-model-name">
                                     <strong title={label}>{label}</strong>
                                     {label !== a.model && <small title={a.model}>{a.model}</small>}
+                                    {shortcutConflicts.has(a.shortcut.toLowerCase()) && (
+                                      <button
+                                        className="text-link shortcut-conflict"
+                                        disabled={Boolean(busy)}
+                                        onClick={() => openModel(channel, a)}
+                                        aria-label={`修改模型 ${a.name} 的重复别名`}
+                                      >
+                                        别名 @{a.shortcut} 重复 · 修改
+                                      </button>
+                                    )}
                                   </div>
                                   <div className="channel-model-tools">
                                     {kind === "text" &&
@@ -681,7 +693,12 @@ export function Channels() {
                   onChange={(e) => update("systemPrompt", e.target.value)}
                 />
               </label>
-              <details className="advanced-fields">
+              <details
+                className="advanced-fields"
+                open={
+                  modelEditor !== "new" && shortcutConflicts.has(modelEditor.shortcut.toLowerCase())
+                }
+              >
                 <summary>更多设置：输入、输出与消耗上限</summary>
                 <div className="form-grid">
                   <label>
@@ -744,6 +761,25 @@ export function Channels() {
                       onChange={(e) => update("shortcut", e.target.value)}
                       placeholder="例如：写作（不含 @）"
                     />
+                    {data.plan !== "plus" && form.shortcut && (
+                      <button
+                        type="button"
+                        className="text-link"
+                        disabled={Boolean(busy)}
+                        onClick={() => update("shortcut", "")}
+                      >
+                        移除旧快捷名
+                      </button>
+                    )}
+                    {shortcutConflicts.has(form.shortcut.toLowerCase()) && (
+                      <small>
+                        此别名与其他模型或插件重复，大小写不能用于区分。
+                        {data.plan === "plus"
+                          ? "请修改别名后保存，再使用 @ 调用。"
+                          : "可移除旧快捷名后保存；仍可通过渠道和模型菜单使用此模型。"}
+                        也可到 <Link to={`${base}/plugins`}>插件</Link> 修改另一方的别名。
+                      </small>
+                    )}
                   </label>
                 </div>
                 <small>

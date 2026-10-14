@@ -137,7 +137,7 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
       {
         id: "prepare",
         title: "开始前",
-        body: `你需要[注册微伴账号](/register)、开通微伴 Plus 会员，并在电脑或服务器上装好 OpenClaw。先确认 OpenClaw 本身能正常聊天，Gateway 已启动。
+        body: `你需要[注册微伴账号](/register)，并在电脑或服务器上装好 OpenClaw。Free 用户可以配置 1 个插件；本篇涉及多组配置，需要微伴 Plus 会员。先确认 OpenClaw 本身能正常聊天，Gateway 已启动。
 
 模型、API Key 和工具继续在 OpenClaw 中配置，不用在微伴重新添加。设备需要保持在线；电脑关机或休眠后，OpenClaw 就无法处理新消息。
 
@@ -237,7 +237,7 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
       {
         id: "prepare",
         title: "第一步：准备好 Hermes",
-        body: `你需要一个微伴账号、微伴 Plus 会员，以及一套能正常聊天的 Hermes。
+        body: `你需要一个微伴账号，以及一套能正常聊天的 Hermes。Free 用户最多配置 1 个插件，Plus 会员插件配置数量不限。
 
 还没安装的话，先按 [Hermes 官方安装文档](https://hermes-agent.nousresearch.com/docs/getting-started/installation)完成安装和模型配置。在本机发个问题、确认能收到回答，再继续下面的步骤。微伴的连接命令不会替你安装 Hermes 本体。
 

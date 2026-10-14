@@ -285,6 +285,10 @@ export function Billing() {
             </li>
             <li>
               <Check size={16} />
+              最多 1 个插件配置
+            </li>
+            <li>
+              <Check size={16} />
               微信中管理和切换会话
             </li>
             <li>
@@ -338,6 +342,10 @@ export function Billing() {
             <li>
               <Check size={16} />
               最多 10 个微信链接
+            </li>
+            <li>
+              <Check size={16} />
+              插件配置数量不限
             </li>
             <li>
               <Check size={16} />

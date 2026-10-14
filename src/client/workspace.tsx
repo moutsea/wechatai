@@ -1,3 +1,5 @@
+import { NoticeProvider } from "./notices";
+import { Notices } from "./pages/notices";
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppProvider } from "./context";
@@ -19,56 +21,59 @@ const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: mo
 export function Workspace({ demo = false }: { demo?: boolean }) {
   return (
     <AppProvider key={demo ? "demo" : "live"} demo={demo}>
-      <Shell>
-        <Routes>
-          <Route index element={<Dashboard />} />
-          <Route path="channels" element={<Channels />} />
-          <Route
-            path="plugins"
-            element={
-              <Suspense
-                fallback={
-                  <div className="full-state" role="status">
-                    正在加载插件…
-                  </div>
-                }
-              >
-                <Plugins />
-              </Suspense>
-            }
-          />
-          <Route path="assistants" element={<Channels />} />
-          <Route path="wechat" element={<Wechat />} />
-          <Route
-            path="sessions"
-            element={
-              <Suspense
-                fallback={
-                  <div className="full-state" role="status">
-                    正在加载会话记录…
-                  </div>
-                }
-              >
-                <Sessions />
-              </Suspense>
-            }
-          />
-          <Route path="billing" element={<Billing />} />
-          <Route path="credits" element={<Credits />} />
-          <Route path="invite" element={<Invite />} />
-          {!demo && (
+      <NoticeProvider>
+        <Shell>
+          <Routes>
+            <Route index element={<Dashboard />} />
+            <Route path="channels" element={<Channels />} />
             <Route
-              path="admin"
+              path="plugins"
               element={
-                <Suspense fallback={<div className="full-state">正在加载管理后台…</div>}>
-                  <Admin />
+                <Suspense
+                  fallback={
+                    <div className="full-state" role="status">
+                      正在加载插件…
+                    </div>
+                  }
+                >
+                  <Plugins />
                 </Suspense>
               }
             />
-          )}
-          <Route path="*" element={<Navigate to={demo ? "/demo" : "/app"} replace />} />
-        </Routes>
-      </Shell>
+            <Route path="assistants" element={<Channels />} />
+            <Route path="wechat" element={<Wechat />} />
+            <Route
+              path="sessions"
+              element={
+                <Suspense
+                  fallback={
+                    <div className="full-state" role="status">
+                      正在加载会话记录…
+                    </div>
+                  }
+                >
+                  <Sessions />
+                </Suspense>
+              }
+            />
+            <Route path="billing" element={<Billing />} />
+            <Route path="credits" element={<Credits />} />
+            <Route path="invite" element={<Invite />} />
+            <Route path="notices" element={<Notices />} />
+            {!demo && (
+              <Route
+                path="admin"
+                element={
+                  <Suspense fallback={<div className="full-state">正在加载管理后台…</div>}>
+                    <Admin />
+                  </Suspense>
+                }
+              />
+            )}
+            <Route path="*" element={<Navigate to={demo ? "/demo" : "/app"} replace />} />
+          </Routes>
+        </Shell>
+      </NoticeProvider>
     </AppProvider>
   );
 }

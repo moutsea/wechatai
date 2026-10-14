@@ -416,7 +416,7 @@ describe("AI image plugin", () => {
       { s, p } = await setup(),
       chat = await addChat(s);
     const plain = (await s.snapshot()).currentSession!.id;
-    await send(s, "/use DS Chat");
+    await send(s, "/use DS");
     const chatSession = (await s.snapshot()).currentSession!.id;
     await send(s, "你好");
     const entered = await send(s, "/use 画图", "switch-to-image");
@@ -426,7 +426,7 @@ describe("AI image plugin", () => {
     const imageSession = (await s.snapshot()).currentSession!.id;
     await send(s, "山间小屋");
     const balance = (await s.snapshot()).wallet.balance;
-    expect(await send(s, "/use DS Chat")).toContain("已切换到「DS Chat」");
+    expect(await send(s, "/use DS")).toContain("已切换到「DS Chat」");
     expect((await s.snapshot()).currentSession).toMatchObject({
       id: chatSession,
       pluginInstanceId: chat.id,
@@ -438,7 +438,7 @@ describe("AI image plugin", () => {
     await abortAllDurableObjects();
     const restored = env.ACCOUNTS.get(s.id);
     expect(await send(restored, "/plugins")).toContain("直接切换插件");
-    await send(restored, "/use 1");
+    await send(restored, "/use 画图");
     expect((await restored.snapshot()).currentSession).toMatchObject({
       id: imageSession,
       pluginInstanceId: p.data.id,
@@ -474,9 +474,18 @@ describe("AI image plugin", () => {
     expect(n.requests).toHaveLength(1);
     expect(n.chatRequests).toHaveLength(1);
   });
-  it("blocks Free, missing credits, disabled instances and too-small caps before provider calls", async () => {
+  it("lets Free users generate and view their own images", async () => {
     const n = network();
-    expect((await setup(false)).p.ok).toBe(false);
+    const { s, p } = await setup(false);
+    expect(p.ok).toBe(true);
+    const result = await api(s, "plugin.test", { id: p.data.id, query: "cat" });
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(n.requests).toHaveLength(1);
+    expect(result.data.images).toHaveLength(1);
+    expect((await s.imageAsset(result.data.images[0])).status).toBe(200);
+  });
+  it("blocks missing credits, disabled instances and too-small caps before provider calls", async () => {
+    const n = network();
     const capped = await setup(true, 5);
     expect((await api(capped.s, "plugin.test", { id: capped.p.data.id, query: "cat" })).error).toBe(
       "budget_too_small",

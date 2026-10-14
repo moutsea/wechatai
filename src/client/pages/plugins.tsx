@@ -1,3 +1,10 @@
+import {
+  pluginShortcutPatternForEdit,
+  isLegacyNumericShortcut,
+  LEGACY_NUMERIC_SHORTCUT_HINT,
+  PLUGIN_SHORTCUT_HINT,
+} from "../../shared/plugin-shortcut";
+import { PLUGIN_LIMITS } from "../../shared/plugin-access";
 import { modelKind } from "../../shared/model-kind";
 import { NotificationEditor } from "./notification-editor";
 import type { NotificationPlugin } from "../../shared/notification";
@@ -67,6 +74,9 @@ export function Plugins() {
   const [testing, setTesting] = useState<UserPlugin | null>(null);
   const [query, setQuery] = useState("");
   const [reply, setReply] = useState<{ text: string; cost: number } | null>(null);
+  const previousShortcut = editor && editor !== "new" ? editor.shortcut : undefined;
+  const keepingLegacyShortcut =
+    isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
   const textModels = data.assistants.filter((a) => modelKind(a) === "text");
   const selectedModel = textModels.find((a) => a.id === form.modelId);
@@ -164,6 +174,18 @@ export function Plugins() {
       setBusy("");
     }
   };
+  const maintain = async (id: string, patch: { shortcut?: string; enabled?: false }) => {
+    setBusy(id);
+    try {
+      await request(`/plugins/${id}`, json(patch, "PATCH"));
+      await refresh();
+      notify(patch.enabled === false ? "插件已停用" : "别名已更新，套餐限制保持不变");
+    } catch (e) {
+      notify((e as Error).message, true);
+    } finally {
+      setBusy("");
+    }
+  };
   const test = async (event: FormEvent) => {
     event.preventDefault();
     if (!testing) return;
@@ -189,7 +211,7 @@ export function Plugins() {
       <PageHead
         eyebrow="PLUGINS"
         title="插件"
-        description="给微信添一点新能力。所有插件均为 Plus 会员专享。"
+        description={`给微信添一点新能力。Free 最多配置 1 个插件，Plus 会员配置数量不限。当前已配置 ${data.plugins?.length ?? 0}${data.plan === "free" ? ` / ${PLUGIN_LIMITS.free}` : ""} 个。`}
         action={
           <Link className="text-link" to="/docs/ds-chat">
             使用指南 <ArrowRight size={15} />
@@ -222,9 +244,8 @@ export function Plugins() {
           </p>
         )}
       <p className="research-billing">
-        消息提醒为 Plus 会员免费权益，不扣 credits。其他插件输入与最终回复按 token
-        计费，生成图片另计 5 credits / 张；插件内部调用不重复计收。上游 API
-        费用由你的服务商另行收取。
+        消息提醒不扣 credits。其他插件输入与最终回复按 token 计费，生成图片另计 5 credits /
+        张；插件内部调用不重复计收。上游 API 费用由你的服务商另行收取。
       </p>
       {viewing &&
         !notificationEditor &&
@@ -260,6 +281,7 @@ export function Plugins() {
             onRecords={setPersonalRecords}
             onDelete={setDeleting}
             onAction={(id, operation) => void action(id, operation)}
+            onManage={(id, patch) => void maintain(id, patch)}
           />
         )}
       {notificationEditor && (
@@ -346,10 +368,18 @@ export function Plugins() {
                   <input
                     required
                     maxLength={24}
+                    pattern={pluginShortcutPatternForEdit(
+                      editor && editor !== "new" ? editor.shortcut : undefined,
+                    )}
+                    title={PLUGIN_SHORTCUT_HINT}
                     value={form.shortcut}
                     onChange={(e) => update("shortcut", e.target.value)}
                   />
-                  <small>例如「DS」：@DS 问题 单次使用，/use DS 设为默认</small>
+                  <small>
+                    {keepingLegacyShortcut
+                      ? LEGACY_NUMERIC_SHORTCUT_HINT
+                      : "别名不能是纯数字。例如「DS」：@DS 问题 单次使用，/use DS 设为默认"}
+                  </small>
                 </label>
               </div>
               <label>

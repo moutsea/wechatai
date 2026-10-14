@@ -1,3 +1,10 @@
+import {
+  pluginShortcutForEdit,
+  pluginShortcutPatternForEdit,
+  isLegacyNumericShortcut,
+  LEGACY_NUMERIC_SHORTCUT_HINT,
+  PLUGIN_SHORTCUT_HINT,
+} from "../../shared/plugin-shortcut";
 import { modelKind } from "../../shared/model-kind";
 import { useState, type FormEvent } from "react";
 import { useApp } from "../context";
@@ -19,8 +26,11 @@ export function PersonalAssistantEditor({
   onSaved: (id: string) => void;
 }) {
   const { data, request, refresh, notify } = useApp();
+  const editSchema = personalAssistantInputSchema.safeExtend({
+    shortcut: pluginShortcutForEdit(plugin === "new" ? undefined : plugin.shortcut).default("助理"),
+  });
   const [form, setForm] = useState<PersonalAssistantInput>(() =>
-    personalAssistantInputSchema.parse(
+    editSchema.parse(
       plugin === "new"
         ? {
             modelId: data?.assistants.find((a) => modelKind(a) === "text")?.id ?? "unselected",
@@ -31,6 +41,9 @@ export function PersonalAssistantEditor({
   );
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const previousShortcut = plugin === "new" ? undefined : plugin.shortcut;
+  const keepingLegacyShortcut =
+    isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
   const textModels = data.assistants.filter((a) => modelKind(a) === "text");
   const update = <K extends keyof PersonalAssistantInput>(
@@ -42,7 +55,7 @@ export function PersonalAssistantEditor({
     setBusy(true);
     setError("");
     try {
-      const value = personalAssistantInputSchema.parse(form);
+      const value = editSchema.parse(form);
       const saved = await request<PersonalAssistantPlugin>(
         plugin === "new" ? "/plugins" : `/plugins/${plugin.id}`,
         json(
@@ -51,7 +64,11 @@ export function PersonalAssistantEditor({
         ),
       );
       await refresh();
-      notify("个人助理已保存，发送 /use " + saved.shortcut + " 即可进入");
+      notify(
+        isLegacyNumericShortcut(saved.shortcut)
+          ? "个人助理已保存；使用 /use 前请修改纯数字别名"
+          : "个人助理已保存，发送 /use " + saved.shortcut + " 即可进入",
+      );
       onSaved(saved.id);
     } catch (e) {
       setError((e as Error).message);
@@ -81,11 +98,18 @@ export function PersonalAssistantEditor({
           <label>
             @ 快捷名称
             <input
+              pattern={pluginShortcutPatternForEdit(plugin === "new" ? undefined : plugin.shortcut)}
+              title={PLUGIN_SHORTCUT_HINT}
               value={form.shortcut}
               maxLength={24}
               onChange={(e) => update("shortcut", e.target.value)}
               required
             />
+            <small>
+              {keepingLegacyShortcut
+                ? LEGACY_NUMERIC_SHORTCUT_HINT
+                : `别名不能是纯数字。发送 /use ${form.shortcut} 进入助理`}
+            </small>
           </label>
         </div>
         <label>

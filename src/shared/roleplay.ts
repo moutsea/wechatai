@@ -1,3 +1,4 @@
+import { pluginShortcutSchema } from "./plugin-shortcut";
 import { z } from "zod";
 import { pluginManifestSchema } from "./plugins";
 import { roleAvatarIds } from "./plugin-visuals";
@@ -17,12 +18,7 @@ export const roleplayInputSchema = z
   .object({
     name: z.string().trim().min(1).max(40),
     avatar: z.enum(roleAvatarIds).default(""),
-    shortcut: z
-      .string()
-      .trim()
-      .min(1)
-      .max(24)
-      .regex(/^[\p{L}\p{N}_-]+$/u),
+    shortcut: pluginShortcutSchema,
     modelId: z.string().min(1).max(200),
     enabled: z.boolean().default(true),
     description: z.string().trim().min(1).max(16000),

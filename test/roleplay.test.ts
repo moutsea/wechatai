@@ -351,23 +351,23 @@ describe("roleplay account and gateway", () => {
     expect((await api(stub, "session.messages", { id: target.data.id })).data).toHaveLength(0);
   });
 
-  it("requires Plus for creation and use, rejects duplicate shortcuts and preserves configs on expiry", async () => {
+  it("allows Free roleplay, rejects a second slot and preserves the first after expiry", async () => {
     const { stub, model } = await setup("chat-completions", false);
+    const role = await saveRole(stub, model.id, { shortcut: "Lin" });
     expect(
       (
         await api(stub, "plugin.save", {
           ...roleInput({ modelId: model.id }),
           pluginId: "wechatai/roleplay",
         })
-      ).ok,
-    ).toBe(false);
+      ).error,
+    ).toBe("plugin_limit");
     await stub.applyPayment({
       id: "plus",
       kind: "subscription",
       units: 0,
       expires: Date.now() + 86400000,
     });
-    const role = await saveRole(stub, model.id, { shortcut: "Lin" });
     expect(
       (
         await api(stub, "plugin.save", {
@@ -376,16 +376,13 @@ describe("roleplay account and gateway", () => {
         })
       ).error,
     ).toBe("shortcut_exists");
-    await runInDurableObject(stub, (_, state) => {
-      state.storage.sql.exec(
-        "UPDATE settings SET value = ? WHERE key = ?",
-        JSON.stringify(Date.now() - 1000),
-        "planUntil",
-      );
-    });
+    await runInDurableObject(stub, (_, state) =>
+      state.storage.sql.exec("UPDATE settings SET value='0' WHERE key='planUntil'"),
+    );
     expect((await stub.snapshot()).plugins?.[0].id).toBe(role.id);
-    await expect(send(stub, "@Lin 你好")).rejects.toThrow("Plus");
-    expect(fetch).not.toHaveBeenCalled();
+    const calls = mockModel("chat-completions");
+    await send(stub, "@Lin 你好");
+    expect(calls.length).toBeGreaterThan(0);
   });
   it.each<Protocol>(["chat-completions", "responses", "anthropic"])(
     "uses %s with character, opening and matched lore, platform token billing and idempotency",

@@ -1,3 +1,9 @@
+import { PLUGIN_LIMITS, availablePluginIds } from "../shared/plugin-access";
+import {
+  pluginShortcutSchema,
+  pluginShortcutForEdit,
+  PLUGIN_SHORTCUT_HINT,
+} from "../shared/plugin-shortcut";
 import { extendMembership } from "../shared/billing";
 import {
   notificationInputSchema,
@@ -183,6 +189,10 @@ type Link = Connection & {
   lastPoll?: number;
   pollBaseUrl?: string;
 };
+// Server-created metadata for remote replies awaiting their first send attempt.
+// Once prepared, the final delivery text replaces this metadata so retries and
+// multipart delivery retain identical content and offsets across restarts.
+type RemoteReplySource = { pluginId: string; proactive: boolean };
 
 export class PersonalAccount extends DurableObject<Env> {
   private wallet: Wallet;
@@ -270,23 +280,13 @@ export class PersonalAccount extends DurableObject<Env> {
           });
         }
         if (text) {
-          const currentId = this.linkSetting(route.connectionId, "current", "");
-          const currentPluginId = this.sessions(route.connectionId).find(
-            (session) => session.id === currentId,
-          )?.pluginInstanceId;
-          // An @ call uses the current session, which can belong to another plugin.
-          // Compare the actual source instance with this WeChat link's active mode.
-          const showSource = proactive || currentPluginId !== route.pluginId;
           this.sql.exec(
-            "INSERT INTO inbox (id,payload,state,reply,createdAt,sessionId,connectionId) VALUES (?, '{}', 'reply', ?,?,?,?)",
+            "INSERT INTO inbox (id,payload,state,reply,createdAt,sessionId,connectionId) VALUES (?, ?, 'reply', ?,?,?,?)",
             id,
-            showSource
-              ? pluginNotificationText(
-                  remoteAgentManifest(this.plugin(route.pluginId).pluginId),
-                  this.plugin(route.pluginId),
-                  text,
-                )
-              : text,
+            JSON.stringify({
+              remoteReply: { pluginId: route.pluginId, proactive } satisfies RemoteReplySource,
+            }),
+            text,
             Date.now(),
             route.sessionId,
             route.connectionId,
@@ -642,11 +642,38 @@ export class PersonalAccount extends DurableObject<Env> {
     if (this.plan() !== "plus")
       throw new AppError("plus_required", "网页会话记录与管理是 Plus 会员功能", 403);
   }
-  private requirePluginPlus() {
-    if (this.plan() !== "plus")
+  private pluginAvailable(id: string) {
+    const limit = PLUGIN_LIMITS[this.plan()];
+    return limit === null
+      ? !!this.sql.exec("SELECT 1 FROM plugins WHERE id=?", id).toArray().length
+      : this.sql
+          .exec<{ id: string }>("SELECT id FROM plugins ORDER BY rowid LIMIT ?", limit)
+          .toArray()
+          .some((plugin) => plugin.id === id);
+  }
+  private requireUniqueShortcut(
+    shortcut: string,
+    owner: { pluginId?: string; modelId?: string } = {},
+  ) {
+    if (!shortcut) return;
+    const normalized = shortcut.toLowerCase();
+    if (
+      this.plugins().some(
+        (p) => p.id !== owner.pluginId && p.shortcut.toLowerCase() === normalized,
+      ) ||
+      this.assistants().some(
+        (a) => a.id !== owner.modelId && a.shortcut.toLowerCase() === normalized,
+      )
+    )
+      throw new AppError("shortcut_exists", "这个快捷名称已被模型或插件使用");
+  }
+  private requirePluginSlot(id?: string) {
+    const limit = PLUGIN_LIMITS[this.plan()];
+    if (limit === null) return;
+    if (id ? !this.pluginAvailable(id) : this.plugins().length >= limit)
       throw new AppError(
-        "plus_required",
-        `插件功能仅对 Plus 会员开放。\n\n[升级 Plus](${new URL("/app/billing", publicSiteUrl(this.env))})\n\n发送 /exit 可退出插件，继续普通模型对话。`,
+        "plugin_limit",
+        `Free 用户最多配置 ${limit} 个插件。${id ? "此配置已暂停，记录仍保留。" : ""}请删除不用的配置后重试，或升级会员。\n\n[管理插件](${new URL("/app/plugins", publicSiteUrl(this.env))})`,
         403,
       );
   }
@@ -654,19 +681,26 @@ export class PersonalAccount extends DurableObject<Env> {
     return this.sql
       .exec<{ data: string }>("SELECT data FROM plugins ORDER BY rowid")
       .toArray()
-      .map((r) => {
-        const p = JSON.parse(r.data) as StoredPlugin;
-        if (isRemoteAgent(p)) return { ...waitingMessageDefaults(OPENCLAW_WAITING_MESSAGE), ...p };
-        if (p.pluginId === "wechatai/image-generation")
-          return { ...waitingMessageDefaults(IMAGE_WAITING_MESSAGE), ...p };
-        return p;
-      });
+      .map((r) => this.decodePlugin(r.data));
+  }
+  private decodePlugin(data: string): StoredPlugin {
+    const p = JSON.parse(data) as StoredPlugin;
+    if (isRemoteAgent(p)) return { ...waitingMessageDefaults(OPENCLAW_WAITING_MESSAGE), ...p };
+    if (p.pluginId === "wechatai/image-generation")
+      return { ...waitingMessageDefaults(IMAGE_WAITING_MESSAGE), ...p };
+    return p;
+  }
+  private findPlugin(id: string) {
+    const row = this.sql
+      .exec<{ data: string }>("SELECT data FROM plugins WHERE id=?", id)
+      .toArray()[0];
+    return row ? this.decodePlugin(row.data) : undefined;
   }
   private plugin(id: string, usable = false) {
-    const p = this.plugins().find((p) => p.id === id);
+    const p = this.findPlugin(id);
     if (!p) throw new AppError("plugin_missing", "插件已删除，请用 /exit 返回普通模型", 404);
     if (usable) {
-      this.requirePluginPlus();
+      this.requirePluginSlot(id);
       if (!p.enabled)
         throw new AppError(
           "plugin_disabled",
@@ -698,19 +732,50 @@ export class PersonalAccount extends DurableObject<Env> {
     };
   }
   private async savePlugin(id: string | undefined, raw: unknown) {
-    this.requirePluginPlus();
     this.busy();
     const previous = id ? this.plugin(id) : undefined;
     const kind = raw && typeof raw === "object" ? Reflect.get(raw, "pluginId") : undefined;
     if (previous && kind && kind !== previous.pluginId)
       throw new AppError("plugin_type_identity", "更换插件类型请新建配置");
+    // Allow safe maintenance of suspended/legacy configurations without granting
+    // permission to reactivate them or change their model, credentials or tools.
+    if (
+      previous &&
+      raw &&
+      typeof raw === "object" &&
+      Object.keys(raw).every((key) => ["id", "pluginId", "shortcut", "enabled"].includes(key)) &&
+      (Reflect.get(raw, "enabled") === false || "shortcut" in raw) &&
+      (Reflect.get(raw, "enabled") === undefined || Reflect.get(raw, "enabled") === false)
+    ) {
+      let shortcut = previous.shortcut;
+      if ("shortcut" in raw && raw.shortcut !== previous.shortcut) {
+        if (previous.pluginId === "wechatai/notification")
+          throw new AppError("invalid_plugin_shortcut", "消息提醒不使用可编辑的快捷名称");
+        const parsed = pluginShortcutSchema.safeParse(raw.shortcut);
+        if (!parsed.success) throw new AppError("invalid_plugin_shortcut", PLUGIN_SHORTCUT_HINT);
+        shortcut = parsed.data;
+        this.requireUniqueShortcut(shortcut, { pluginId: id });
+      }
+      const updated = {
+        ...previous,
+        shortcut,
+        enabled: Reflect.get(raw, "enabled") === false ? false : previous.enabled,
+      };
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec("UPDATE plugins SET data=? WHERE id=?", JSON.stringify(updated), previous.id);
+        if (!updated.enabled && updated.pluginId === "wechatai/notification")
+          this.notifications.cancel(updated.id);
+      });
+      await this.scheduleWechat();
+      await this.flushNotificationSchedule();
+      return this.publicPlugin(updated);
+    }
+    this.requirePluginSlot(id);
     if ((kind ?? previous?.pluginId) === "wechatai/notification") {
       const input = notificationInputSchema.parse(
         raw && typeof raw === "object" ? { ...previous, ...raw } : raw,
       );
       this.requireLink(input.connectionId, true);
-      if (!previous && this.plugins().length >= 20)
-        throw new AppError("plugin_limit", "最多 20 个插件配置", 403);
       const pluginId = id ?? crypto.randomUUID();
       const plugin: StoredPlugin = {
         ...input,
@@ -737,21 +802,27 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.flushNotificationSchedule();
       return this.publicPlugin(plugin);
     }
+    const shortcut =
+      raw && typeof raw === "object" && "shortcut" in raw ? raw.shortcut : previous?.shortcut;
+    if (
+      shortcut !== undefined &&
+      shortcut !== previous?.shortcut &&
+      !pluginShortcutSchema.safeParse(shortcut).success
+    )
+      throw new AppError("invalid_plugin_shortcut", PLUGIN_SHORTCUT_HINT);
+    const editableShortcut = pluginShortcutForEdit(previous?.shortcut);
     if (["wechatai/openclaw", "wechatai/hermes"].includes(kind ?? previous?.pluginId)) {
       const input = (
         (kind ?? previous?.pluginId) === "wechatai/hermes" ? hermesInputSchema : openClawInputSchema
-      ).parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
+      )
+        .safeExtend({ shortcut: editableShortcut })
+        .parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
       if (previous && isRemoteAgent(previous) && previous.agentId !== input.agentId) {
         if (!this.claw.status(previous.id).agents.some((a) => a.id === input.agentId))
           throw new AppError("plugin_agent_unknown", "请选择已连接 Agent 中的助手");
       }
-      if (!previous && this.plugins().length >= 20)
-        throw new AppError("plugin_limit", "最多 20 个插件配置", 403);
-      if (
-        this.plugins().some((p) => p.id !== id && p.shortcut === input.shortcut) ||
-        this.assistants().some((a) => a.shortcut === input.shortcut)
-      )
-        throw new AppError("shortcut_exists", "这个快捷名称已被模型或插件使用");
+      if (!previous || input.shortcut !== previous.shortcut)
+        this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       if (isRemoteAgent(previous) && previous.agentId !== input.agentId)
         this.claw.clearRoutes(previous.id);
       const p: StoredPlugin = {
@@ -770,20 +841,13 @@ export class PersonalAccount extends DurableObject<Env> {
       return this.publicPlugin(p);
     }
     if ((kind ?? previous?.pluginId) === "wechatai/personal-assistant") {
-      const input = personalAssistantInputSchema.parse(
-        raw && typeof raw === "object" ? { ...previous, ...raw } : raw,
-      );
+      const input = personalAssistantInputSchema
+        .safeExtend({ shortcut: editableShortcut.default("助理") })
+        .parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
       this.textAssistant(input.modelId);
       if (input.reminderConnectionId) this.requireLink(input.reminderConnectionId);
-      if (!previous && this.plugins().length >= 20)
-        throw new AppError("plugin_limit", "最多可创建 20 个插件配置", 403);
-      if (
-        this.plugins().some(
-          (p) => p.id !== id && p.shortcut.toLowerCase() === input.shortcut.toLowerCase(),
-        ) ||
-        this.assistants().some((a) => a.shortcut.toLowerCase() === input.shortcut.toLowerCase())
-      )
-        throw new AppError("shortcut_exists", "这个快捷名称已被使用");
+      if (!previous || input.shortcut !== previous.shortcut)
+        this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       const plugin: StoredPlugin = {
         ...input,
         id: id ?? crypto.randomUUID(),
@@ -805,9 +869,9 @@ export class PersonalAccount extends DurableObject<Env> {
       return this.publicPlugin(plugin);
     }
     if ((kind ?? previous?.pluginId) === "wechatai/roleplay") {
-      const parsed = roleplayInputSchema.safeParse(
-        raw && typeof raw === "object" ? { ...previous, ...raw } : raw,
-      );
+      const parsed = roleplayInputSchema
+        .safeExtend({ shortcut: editableShortcut })
+        .safeParse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
       if (!parsed.success)
         throw new AppError(
           "invalid_role",
@@ -816,15 +880,8 @@ export class PersonalAccount extends DurableObject<Env> {
         );
       const input = parsed.data;
       this.textAssistant(input.modelId);
-      if (!previous && this.plugins().length >= 20)
-        throw new AppError("plugin_limit", "最多可创建 20 个插件配置", 403);
-      if (
-        this.plugins().some(
-          (p) => p.id !== id && p.shortcut.toLowerCase() === input.shortcut.toLowerCase(),
-        ) ||
-        this.assistants().some((a) => a.shortcut.toLowerCase() === input.shortcut.toLowerCase())
-      )
-        throw new AppError("shortcut_exists", "这个快捷名称已被模型或插件使用");
+      if (!previous || input.shortcut !== previous.shortcut)
+        this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       const p: StoredPlugin = {
         ...input,
         id: id ?? crypto.randomUUID(),
@@ -847,19 +904,14 @@ export class PersonalAccount extends DurableObject<Env> {
       return this.publicPlugin(p);
     }
     if ((kind ?? previous?.pluginId) === "wechatai/image-generation") {
-      const input = imageGenerationInputSchema.parse(
-        raw && typeof raw === "object" ? { ...previous, ...raw } : raw,
-      );
+      const input = imageGenerationInputSchema
+        .safeExtend({ shortcut: editableShortcut })
+        .parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
       this.assistant(input.modelId);
       if (previous && "modelId" in previous && previous.modelId !== input.modelId)
         throw new AppError("plugin_model_identity", "更换模型请新建配置，以保留会话归属");
-      if (!previous && this.plugins().length >= 20)
-        throw new AppError("plugin_limit", "最多可创建 20 个插件配置", 403);
-      if (
-        this.plugins().some((p) => p.id !== id && p.shortcut === input.shortcut) ||
-        this.assistants().some((a) => a.shortcut === input.shortcut)
-      )
-        throw new AppError("shortcut_exists", "这个快捷名称已被模型或插件使用");
+      if (!previous || input.shortcut !== previous.shortcut)
+        this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       const p: StoredPlugin = {
         ...input,
         id: id ?? crypto.randomUUID(),
@@ -879,7 +931,7 @@ export class PersonalAccount extends DurableObject<Env> {
       throw new AppError("plugin_type", "不支持的插件类型");
     if (previous && previous.pluginId !== "wechatai/web-research")
       throw new AppError("plugin_type", "插件类型不匹配");
-    const input = webResearchInputSchema.parse(raw);
+    const input = webResearchInputSchema.safeExtend({ shortcut: editableShortcut }).parse(raw);
     const pluginId = id ?? crypto.randomUUID();
     this.textAssistant(input.modelId);
     if (previous && "modelId" in previous && previous.modelId !== input.modelId)
@@ -899,18 +951,13 @@ export class PersonalAccount extends DurableObject<Env> {
         "search_key_missing",
         "请填写自己的搜索 API Key；更换搜索地址或类型时须重新填写",
       );
-    this.requirePluginPlus();
+    this.requirePluginSlot(id);
     this.busy();
     // Encryption yields; revalidate against concurrent configuration changes.
     if (previous && JSON.stringify(this.plugin(pluginId)) !== JSON.stringify(previous))
       throw new AppError("plugin_changed", "插件配置已变更，请刷新后重试", 409);
-    if (!previous && this.plugins().length >= 20)
-      throw new AppError("plugin_limit", "最多可创建 20 个插件配置", 403);
-    if (
-      this.plugins().some((p) => p.id !== id && p.shortcut === input.shortcut) ||
-      this.assistants().some((a) => a.shortcut === input.shortcut)
-    )
-      throw new AppError("shortcut_exists", "这个快捷名称已被模型或插件使用");
+    if (!previous || input.shortcut !== previous.shortcut)
+      this.requireUniqueShortcut(input.shortcut, { pluginId: id });
     this.textAssistant(input.modelId);
     const { apiKey: _key, ...safe } = input;
     const p: StoredPlugin = {
@@ -1388,7 +1435,7 @@ export class PersonalAccount extends DurableObject<Env> {
         this.notifications.finish(job.id, "failed", "超过 24 小时未送达");
         continue;
       }
-      const plugin = this.plugins().find((p) => p.id === job.pluginId);
+      const plugin = this.findPlugin(job.pluginId);
       if (
         !plugin ||
         plugin.pluginId !== "wechatai/notification" ||
@@ -1406,8 +1453,8 @@ export class PersonalAccount extends DurableObject<Env> {
         this.notifications.finish(job.id, "failed", "微信绑定已更改，请通过新的请求重新发送");
         continue;
       }
-      if (this.plan() !== "plus" || !this.linkEnabled(job.connectionId)) {
-        this.notifications.retry(job.id, "Plus 会员已到期，续费后继续投递", 60000);
+      if (!this.pluginAvailable(plugin.id) || !this.linkEnabled(job.connectionId)) {
+        this.notifications.retry(job.id, "插件或微信链接超出当前套餐上限，恢复后继续投递", 60000);
         continue;
       }
       if (link.status !== "connected" || !link.encryptedCredentials || !link.contextToken) {
@@ -1494,7 +1541,7 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private async deliverPersonalReminders() {
     for (const reminder of this.personalRecords.due()) {
-      const plugin = this.plugins().find((p) => p.id === reminder.pluginId);
+      const plugin = this.findPlugin(reminder.pluginId);
       if (!plugin || plugin.pluginId !== "wechatai/personal-assistant") {
         this.personalRecords.defer(reminder, "blocked", "助理配置已删除");
         continue;
@@ -1503,8 +1550,8 @@ export class PersonalAccount extends DurableObject<Env> {
         this.personalRecords.finish(reminder, false);
         continue;
       }
-      if (this.plan() !== "plus" || !plugin.enabled) {
-        this.personalRecords.defer(reminder, "paused", "助理已停用或 Plus 已到期");
+      if (!this.pluginAvailable(plugin.id) || !plugin.enabled) {
+        this.personalRecords.defer(reminder, "paused", "助理已停用或超出当前套餐的插件上限");
         continue;
       }
       if (
@@ -1550,7 +1597,7 @@ export class PersonalAccount extends DurableObject<Env> {
           continue;
         const latestPlugin = this.plugin(plugin.id);
         if (
-          this.plan() !== "plus" ||
+          !this.pluginAvailable(plugin.id) ||
           !latestPlugin.enabled ||
           latestPlugin.pluginId !== "wechatai/personal-assistant" ||
           latestPlugin.reminderConnectionId !== reminder.connectionId
@@ -1801,7 +1848,7 @@ export class PersonalAccount extends DurableObject<Env> {
           throw new AppError("plugin_type", "不是消息提醒插件");
         const endpoint = new URL("/api/notify", this.env.APP_URL).href;
         if (action === "notification.token") {
-          this.requirePluginPlus();
+          this.requirePluginSlot(plugin.id);
           const result = createNotificationToken(this.env, this.ctx.id.toString(), plugin.id);
           this.notifications.rotate(plugin.id, result.hash);
           data = { token: result.token, endpoint };
@@ -1823,7 +1870,7 @@ export class PersonalAccount extends DurableObject<Env> {
         else {
           this.busy();
           if (action === "personal.save") {
-            this.requirePluginPlus();
+            this.requirePluginSlot(plugin.id);
             if (!plugin.enabled)
               throw new AppError("plugin_disabled", "请先启用个人助理再编辑记录", 403);
           }
@@ -2307,12 +2354,10 @@ export class PersonalAccount extends DurableObject<Env> {
       throw new AppError("model_exists", "这个渠道已添加该模型 ID，请直接选择或编辑现有模型");
     if (input.shortcut && input.shortcut !== previous?.shortcut && this.plan() !== "plus")
       throw new AppError("plus_required", "自定义快捷指令是 Plus 功能", 403);
-    if (
-      input.shortcut &&
-      (models.some((a) => a.id !== id && a.shortcut === input.shortcut) ||
-        this.plugins().some((p) => p.shortcut === input.shortcut))
-    )
-      throw new AppError("shortcut_exists", "这个快捷名称已经被使用");
+    // An unchanged legacy collision must not block unrelated model settings.
+    // New or changed aliases still need to be unique; ambiguous calls stay rejected.
+    if (!previous || input.shortcut !== previous.shortcut)
+      this.requireUniqueShortcut(input.shortcut, { modelId: id });
     const model: StoredModel = {
       ...input,
       ...(input.kind === undefined && previous?.kind ? { kind: previous.kind } : {}),
@@ -2517,10 +2562,9 @@ export class PersonalAccount extends DurableObject<Env> {
     if (action === "delete") this.sql.exec("DELETE FROM sessions WHERE id = ?", id);
     else this.saveSession(s);
     if (current && (action === "archive" || action === "delete")) {
+      const candidate = this.findPlugin(s.pluginInstanceId ?? "");
       const replacementPlugin =
-        this.plan() === "plus"
-          ? this.plugins().find((p) => p.id === s.pluginInstanceId && p.enabled)
-          : undefined;
+        candidate?.enabled && this.pluginAvailable(candidate.id) ? candidate : undefined;
       const textModels = this.assistants().filter((a) => modelKind(a) === "text");
       const replacementModel = replacementPlugin
         ? s.assistantId
@@ -3043,7 +3087,6 @@ export class PersonalAccount extends DurableObject<Env> {
     this.ctx.waitUntil(this.media.cleanup().catch(() => this.scheduleWechat()));
   }
   async imageAsset(id: string): Promise<Response> {
-    if (this.plan() !== "plus") return new Response("图片查看仅对 Plus 会员开放", { status: 403 });
     if (!/^[0-9a-f-]{36}$/.test(id)) return new Response("Not found", { status: 404 });
     const result = await this.media.read(id);
     if (!result) return new Response("图片已过期或已删除", { status: 404 });
@@ -3068,7 +3111,7 @@ export class PersonalAccount extends DurableObject<Env> {
     attachmentBatch?: { connectionId: string; token: string },
     onPending?: (text: string) => Promise<void>,
   ): Promise<{ text: string; cost: number; images: string[] }> {
-    this.requirePluginPlus();
+    this.requirePluginSlot(plugin.id);
     if (modelImages(prompt).length || attachmentBatch)
       throw new AppError(
         "image_text_only",
@@ -3408,13 +3451,13 @@ export class PersonalAccount extends DurableObject<Env> {
         if (previous) return (JSON.parse(previous.response) as { text: string }).text;
         const reply = (() => {
           this.busy();
-          if (command[0] === "/help") return wechatHelp(publicSiteUrl(this.env), this.plan());
+          if (command[0] === "/help") return wechatHelp(publicSiteUrl(this.env));
           if (command[0] === "/status") {
             const session = this.sessions(connectionId).find((s) => s.id === currentId);
             if (session?.pluginInstanceId) {
               const plugin = this.plugins().find((p) => p.id === session.pluginInstanceId);
               return plugin
-                ? `**当前插件**\n\n- 名称：${plugin.name}${plugin.enabled ? "" : "（已停用）"}\n- 快捷名：@${plugin.shortcut}`
+                ? `**当前插件**\n\n- 名称：${plugin.name}${!this.pluginAvailable(plugin.id) ? "（超出套餐上限，已暂停）" : plugin.enabled ? "" : "（已停用）"}\n- 快捷名：@${plugin.shortcut}`
                 : "当前插件已删除。发送 /exit 返回普通模型。";
             }
             const model = assistants.find((a) => a.id === session?.assistantId);
@@ -3436,42 +3479,29 @@ export class PersonalAccount extends DurableObject<Env> {
               : "已退出插件，请先在网页添加模型。";
           }
           if (command[0] === "/plugins" || (command[0] === "/use" && !command[1])) {
-            this.requirePluginPlus();
             const plugins = this.plugins();
-            this.setLinkSetting(
-              connectionId,
-              "pluginList",
-              plugins.map((p) => p.id),
-            );
+            const availableIds = availablePluginIds(this.plan(), plugins);
             const activePlugin = this.sessions(connectionId).find(
               (s) => s.id === currentId,
             )?.pluginInstanceId;
             return plugins.length
-              ? `**我的插件**\n\n${plugins.map((p, i) => `${i + 1}. ${p.name} · ${p.pluginId === "wechatai/notification" ? "HTTP 推送（无需进入）" : `@${p.shortcut}`}${p.enabled ? "" : "（已停用）"}${activePlugin === p.id ? " [当前默认]" : ""}`).join("\n")}\n\n- /use 名称或编号：进入或直接切换插件，无需先 /exit\n- /exit：退出插件，返回普通模型\n- @快捷名 问题：在任何模式下仅本次调用，不改变默认模型或插件`
+              ? `**我的插件**\n\n${plugins.map((p) => `- ${p.name} · ${p.pluginId === "wechatai/notification" ? "HTTP 推送（无需进入）" : `@${p.shortcut}${/^\p{N}+$/u.test(p.shortcut) ? "（请在网页修改纯数字别名）" : ""}`}${!availableIds.has(p.id) ? "（超出套餐上限，已暂停）" : p.enabled ? "" : "（已停用）"}${activePlugin === p.id ? " [当前默认]" : ""}`).join("\n")}\n\n- /use 别名：使用上方 @ 后的快捷名称进入或直接切换插件，无需先 /exit\n- /exit：退出插件，返回普通模型\n- @快捷名 问题：在任何模式下仅本次调用，不改变默认模型或插件`
               : `还没有配置插件。\n\n[配置插件](${new URL("/app/plugins", publicSiteUrl(this.env))})`;
           }
           if (command[0] === "/use") {
-            this.requirePluginPlus();
-            const name = command.slice(1).join(" ").replace(/^@/, "");
+            const alias = command
+              .slice(1)
+              .join(" ")
+              .replace(/^[@＠]/, "");
+            if (/^\p{N}+$/u.test(alias))
+              return "/use 只支持插件别名，不支持编号或纯数字别名。发送 /wx plugins 查看别名；已有纯数字别名请在网页修改。";
             const plugins = this.plugins();
-            const aliases = plugins.filter((p) => p.shortcut.toLowerCase() === name.toLowerCase());
-            const matches = aliases.length
-              ? aliases
-              : plugins.filter((p) => p.name.toLowerCase() === name.toLowerCase());
+            const matches = plugins.filter((p) => p.shortcut.toLowerCase() === alias.toLowerCase());
             if (matches.length > 1)
-              return "有多个同名插件，请发送 /wx plugins，再用 /use 编号 选择。";
-            const ids = this.linkSetting<string[]>(
-              connectionId,
-              "pluginList",
-              plugins.map((p) => p.id),
-            );
-            const p =
-              matches[0] ??
-              (/^[1-9]\d*$/.test(name)
-                ? plugins.find((p) => p.id === ids[Number(name) - 1])
-                : undefined);
+              return "有多个插件使用了相同别名，请在网页修改为不同别名后再使用 /use。";
+            const p = matches[0];
             if (!p)
-              return "没有找到这个插件。发送 /wx plugins 查看名称与编号；切换普通模型请用 /wx models 和 /wx model 编号。";
+              return "没有找到这个插件别名。发送 /wx plugins 查看别名，再发送 /use 别名；切换普通模型请用 /wx models 和 /wx model 编号。";
             const previousPlugin = this.sessions(connectionId).find(
               (s) => s.id === currentId,
             )?.pluginInstanceId;
@@ -3490,7 +3520,7 @@ export class PersonalAccount extends DurableObject<Env> {
                     : p.pluginId === "wechatai/personal-assistant"
                       ? "之后直接告诉我想记下的事情、收支或待办，也可以单独设置提醒。提醒按北京时间设置；/wx new 新建聊天，已保存的记录会保留。"
                       : "之后直接发送问题即可，模型会按需联网。";
-            return `${action}「${p.name}」。${usage}\n\n- @其他快捷名 内容：仅本次调用，不改变当前默认插件\n- /use 其他插件：直接切换，无需先退出\n- /exit：返回进入插件前的普通模型会话${hadStory ? "" : this.roleGreeting(story)}`;
+            return `${action}「${p.name}」。${usage}\n\n- @其他快捷名 内容：仅本次调用，不改变当前默认插件\n- /use 其他别名：直接切换，无需先退出\n- /exit：返回进入插件前的普通模型会话${hadStory ? "" : this.roleGreeting(story)}`;
           }
           if (command[0] === "/balance") {
             const balance = this.wallet.balance() / 1000;
@@ -3645,10 +3675,17 @@ export class PersonalAccount extends DurableObject<Env> {
     const mention = leadingMention(text);
     if (mention) {
       this.busy();
-      if (this.plan() !== "plus") this.requirePluginPlus();
       const { handle } = mention;
-      const a = handle ? assistants.find((a) => a.shortcut === handle) : undefined;
-      const plugin = handle ? this.plugins().find((p) => p.shortcut === handle) : undefined;
+      const plugins = this.plugins();
+      const alias = handle.toLowerCase();
+      const modelMatches = handle
+        ? assistants.filter((a) => a.shortcut.toLowerCase() === alias)
+        : [];
+      const pluginMatches = handle ? plugins.filter((p) => p.shortcut.toLowerCase() === alias) : [];
+      if (modelMatches.length + pluginMatches.length > 1)
+        return "有多个模型或插件使用了相同别名，请在网页修改为不同别名后再使用 @ 调用。";
+      const a = modelMatches[0];
+      const plugin = pluginMatches[0];
       if (plugin) {
         this.plugin(plugin.id, true);
         if (plugin.pluginId === "wechatai/notification")
@@ -3658,12 +3695,22 @@ export class PersonalAccount extends DurableObject<Env> {
           pluginId: plugin.id,
         };
       } else if (a) {
+        if (this.plan() !== "plus")
+          throw new AppError(
+            "plus_required",
+            "普通模型快捷调用是 Plus 会员功能；插件快捷调用对 Free 用户开放",
+            403,
+          );
         this.textAssistant(a.id);
         once = { modelId: a.id, pluginId: null };
       } else {
+        const plan = this.plan();
+        const availableIds = availablePluginIds(plan, plugins);
         const available = [
-          ...this.plugins().filter((p) => p.enabled && p.pluginId !== "wechatai/notification"),
-          ...assistants.filter((a) => a.shortcut && modelKind(a) === "text"),
+          ...plugins.filter(
+            (p) => p.enabled && availableIds.has(p.id) && p.pluginId !== "wechatai/notification",
+          ),
+          ...assistants.filter((a) => plan === "plus" && a.shortcut && modelKind(a) === "text"),
         ];
         return `没有找到快捷名「${handle.slice(0, 40)}」。请使用 @快捷名 内容，名称后可用空格、逗号或冒号分隔。${
           available.length
@@ -4069,7 +4116,9 @@ export class PersonalAccount extends DurableObject<Env> {
           )
           .toArray()[0];
         if (pending) {
-          const message = JSON.parse(pending.payload) as WxMessage;
+          const message = JSON.parse(pending.payload) as WxMessage & {
+            remoteReply?: RemoteReplySource;
+          };
           if (pending.state === "pending") {
             const startedAt = Date.now();
             let code: string | undefined;
@@ -4142,6 +4191,15 @@ export class PersonalAccount extends DurableObject<Env> {
             if (reply.trim() && remainingSteps > 0 && Date.now() < deadline - 1000)
               await this.pollWechat(connectionId, deadline, remainingSteps - 1);
           } else {
+            // Older versions could revive a cancelled remote reply with an empty
+            // body. Discard it instead of sending the generic completion fallback.
+            if (pending.id.startsWith("claw:") && !pending.reply.trim()) {
+              this.sql.exec(
+                "UPDATE inbox SET state='done', payload='{}', reply='' WHERE id=?",
+                pending.id,
+              );
+              return;
+            }
             const completedRun = this.sql
               .exec<{ response: string }>(
                 "SELECT response FROM runs WHERE id = ? AND status = 'complete'",
@@ -4151,15 +4209,58 @@ export class PersonalAccount extends DurableObject<Env> {
             const images = completedRun
               ? ((JSON.parse(completedRun.response) as { images?: string[] }).images ?? [])
               : [];
-            const parts = Array.from(pending.reply).reduce<string[]>((p, ch, index) => {
-              const i = Math.floor(index / 1500);
-              p[i] = (p[i] ?? "") + ch;
-              return p;
-            }, []);
+            let parts: string[] = [];
             const token = this.connection(connectionId).contextToken || message.context_token;
             const sendStartedAt = Date.now();
+            // A deletion or disconnect can cancel this row while network I/O is
+            // pending. Late results must not revive it or advance a newer part.
+            const replyIsPending = () =>
+              this.connection(connectionId).generation === link.generation &&
+              !!this.sql
+                .exec(
+                  "SELECT 1 FROM inbox WHERE id=? AND state='reply' AND part=?",
+                  pending.id,
+                  pending.part,
+                )
+                .toArray().length;
             try {
+              if (pending.id.startsWith("claw:") && pending.part === 0 && message.remoteReply) {
+                const source = message.remoteReply;
+                const plugin = this.findPlugin(source.pluginId);
+                if (!plugin) {
+                  this.sql.exec(
+                    "UPDATE inbox SET state='done', payload='{}', reply='' WHERE id=?",
+                    pending.id,
+                  );
+                  return;
+                }
+                if (!token) throw new AppError("context_missing", "请先在微信发送一条新消息");
+                const currentId = this.linkSetting(connectionId, "current", "");
+                const currentPluginId = this.sessions(connectionId).find(
+                  (s) => s.id === currentId,
+                )?.pluginInstanceId;
+                if (source.proactive || currentPluginId !== source.pluginId) {
+                  pending.reply = pluginNotificationText(
+                    remoteAgentManifest(plugin.pluginId),
+                    plugin,
+                    pending.reply,
+                  );
+                }
+                // Freeze before network I/O: an ambiguous failure must retry the
+                // same client ID with exactly the same body, even after a switch.
+                // Legacy queued replies have no metadata and remain unchanged.
+                this.sql.exec(
+                  "UPDATE inbox SET reply=?, payload='{}' WHERE id=?",
+                  pending.reply,
+                  pending.id,
+                );
+              }
               if (!token) throw new AppError("context_missing", "请先在微信发送一条新消息");
+              parts = Array.from(pending.reply).reduce<string[]>((p, ch, index) => {
+                const i = Math.floor(index / 1500);
+                p[i] = (p[i] ?? "") + ch;
+                return p;
+              }, []);
               if (images.length)
                 await this.deliverImage(
                   images[pending.part],
@@ -4176,6 +4277,7 @@ export class PersonalAccount extends DurableObject<Env> {
                   `${pending.id}:${pending.part}`,
                   parts[pending.part] || "处理完成",
                 );
+              if (!replyIsPending()) return;
               console.info(
                 JSON.stringify({
                   event: "wechat.reply_sent",
@@ -4186,6 +4288,7 @@ export class PersonalAccount extends DurableObject<Env> {
                 }),
               );
             } catch (error) {
+              if (!replyIsPending()) return;
               this.sql.exec("UPDATE inbox SET attempts = attempts + 1 WHERE id = ?", pending.id);
               if (pending.attempts >= 4)
                 this.sql.exec(
@@ -4218,6 +4321,7 @@ export class PersonalAccount extends DurableObject<Env> {
                   ? await wechatIdentityHash(credentials.userId)
                   : null;
               this.ctx.storage.transactionSync(() => {
+                if (!replyIsPending()) return;
                 this.sql.exec(
                   "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id = ?",
                   pending.id,

@@ -35,7 +35,7 @@ Wrangler 的 `vars` 管理非敏感参数：
 | `AUTH_EMAIL_MODE`                           | 本地 `preview`，生产 `cloudflare`；生产不允许使用预览模式 |
 | `AUTH_EMAIL_FROM`                           | 已启用 Cloudflare Email Sending 域名下的发件地址          |
 
-Free 默认一条微信链接，Plus 最多十条。插件、网页历史和附件处理等有 Plus 权益限制；具体规则由 `src/server` 校验，套餐文案和价格在 `src/shared/billing.ts`。自部署可以修改这些规则，不依赖微伴官方站点授权。改变套餐须同时更新服务端、网页、文档和测试；不要仅隐藏前端限制。
+Free 默认一条微信链接，Plus 最多十条。Free 最多配置 1 个插件，Plus 插件配置数量不限。会员到期保留最早创建的 1 个插件可用，其余配置保留但暂停；停用配置仍占名额。暂停配置仍可停用或修改别名，其余设置和调用受套餐限制。网页历史和附件处理等有 Plus 权益限制；具体规则由 `src/server` 校验，套餐文案和价格在 `src/shared/billing.ts`。自部署可以修改这些规则，不依赖微伴官方站点授权。改变套餐须同时更新服务端、网页、文档和测试；不要仅隐藏前端限制。
 
 ## OAuth
 

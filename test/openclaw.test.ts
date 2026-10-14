@@ -6,6 +6,7 @@ import type { PersonalAccount } from "../src/server/personal-account";
 import type { WxMessage } from "../src/server/wechat";
 import { creditUnits } from "../src/server/wallet";
 import { countTextTokens } from "../src/server/tokenizer";
+import { deliverQueuedReplies } from "./helpers/wechat-delivery";
 
 const accounts: DurableObjectStub<PersonalAccount>[] = [];
 const api = async (
@@ -22,9 +23,10 @@ const send = (stub: DurableObjectStub<PersonalAccount>, text: string, id = crypt
     ).processWechat(id, { item_list: [{ type: 1, text_item: { text } }] }, "default"),
   );
 afterEach(async () => {
-  vi.unstubAllGlobals();
   for (const stub of accounts.splice(0))
     await runInDurableObject(stub, (_, state) => state.storage.deleteAlarm());
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 async function setup(plus = true) {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
@@ -49,7 +51,6 @@ async function setup(plus = true) {
     shortcut: "claw",
     agentId: "main",
   });
-  if (!plus) return { stub, saved } as const;
   expect(saved.ok).toBe(true);
   const token = (await api(stub, "plugin.clawToken", { id: saved.data.id })).data.token as string;
   const [accountId, pluginId, secret] = token.split(".");
@@ -58,8 +59,8 @@ async function setup(plus = true) {
     JSON.parse(await stub.openClawRequest(pluginId, secret, action, { runnerId, ...body }));
   return { stub, saved, token, accountId, pluginId, secret, runnerId, call };
 }
-async function ready() {
-  const ctx = await setup();
+async function ready(plus = true) {
+  const ctx = await setup(plus);
   if (!ctx.call) throw new Error("setup");
   await send(ctx.stub, "/use claw");
   const text = "帮我安排今天的任务";
@@ -302,6 +303,77 @@ describe("OpenClaw native relay", () => {
     });
   });
 
+  it("preserves excess configs on downgrade, blocks their transport and frees the slot on deletion", async () => {
+    const ctx = await setup();
+    const second = (
+      await api(ctx.stub, "plugin.save", {
+        pluginId: "wechatai/openclaw",
+        name: "第二个",
+        shortcut: "second",
+      })
+    ).data;
+    const token = (await api(ctx.stub, "plugin.clawToken", { id: second.id })).data.token as string;
+    const [, , secret] = token.split(".");
+    await runInDurableObject(ctx.stub, (_, state) =>
+      state.storage.sql.exec("UPDATE settings SET value='0' WHERE key='planUntil'"),
+    );
+    expect((await ctx.call("poll")).ok).toBe(true);
+    expect(
+      JSON.parse(
+        await ctx.stub.openClawRequest(second.id, secret, "poll", {
+          runnerId: crypto.randomUUID(),
+        }),
+      ).error,
+    ).toBe("plugin_limit");
+    expect((await api(ctx.stub, "plugin.save", { ...second, name: "修改" })).error).toBe(
+      "plugin_limit",
+    );
+    expect((await api(ctx.stub, "plugin.clawPair", { id: second.id })).error).toBe("plugin_limit");
+    expect(await send(ctx.stub, "/wx plugins")).toContain("超出套餐上限");
+    await expect(send(ctx.stub, "/use second")).rejects.toThrow("最多配置 1 个插件");
+    expect(await api(ctx.stub, "plugin.save", { id: second.id, enabled: false })).toMatchObject({
+      ok: true,
+      data: { enabled: false },
+    });
+    expect(
+      await api(ctx.stub, "plugin.save", { id: second.id, shortcut: "renamed" }),
+    ).toMatchObject({ ok: true, data: { shortcut: "renamed", enabled: false } });
+    expect(await api(ctx.stub, "plugin.save", { id: second.id, enabled: true })).toMatchObject({
+      ok: false,
+      error: "plugin_limit",
+    });
+    expect(
+      await api(ctx.stub, "plugin.save", { id: second.id, shortcut: "renamed", agentId: "other" }),
+    ).toMatchObject({ ok: false, error: "plugin_limit" });
+    expect((await ctx.stub.snapshot()).plugins).toHaveLength(2);
+    await api(ctx.stub, "plugin.delete", { id: ctx.saved.data.id });
+    expect((await api(ctx.stub, "plugin.save", { ...second, name: "可编辑" })).ok).toBe(true);
+    expect(await send(ctx.stub, "/use second")).toContain("已进入");
+  });
+  it("allows Plus to add another agent after twenty configs, including disabled ones", async () => {
+    const ctx = await setup();
+    for (let i = 1; i < 20; i++)
+      expect(
+        (
+          await api(ctx.stub, "plugin.save", {
+            pluginId: "wechatai/openclaw",
+            name: `Agent ${i}`,
+            shortcut: `a${i}`,
+            enabled: false,
+          })
+        ).ok,
+      ).toBe(true);
+    expect(
+      (
+        await api(ctx.stub, "plugin.save", {
+          pluginId: "wechatai/hermes",
+          name: "额外的 Hermes",
+          shortcut: "extra",
+        })
+      ).ok,
+    ).toBe(true);
+    expect((await ctx.stub.snapshot()).plugins).toHaveLength(21);
+  });
   it.each([true, false])(
     "honors waiting notices, enabled=%s, while keeping final replies and dedupe intact",
     async (enabled) => {
@@ -559,9 +631,19 @@ describe("OpenClaw native relay", () => {
     expect(delivered[0].item_list[0].text_item.text).toBe(ctx.event.text);
     expect((await api(ctx.stub, "snapshot")).data.wallet.balance).toBe(before);
   });
-  it("enforces Plus without needing a model channel", async () => {
+  it("allows one Free plugin without needing a model channel", async () => {
     const free = await setup(false);
-    expect(free.saved.error).toBe("plus_required");
+    expect(free.saved.ok).toBe(true);
+    expect(
+      await api(free.stub, "plugin.save", {
+        pluginId: "wechatai/hermes",
+        name: "另一个",
+        shortcut: "hermes",
+      }),
+    ).toMatchObject({ error: "plugin_limit", status: 403 });
+    expect((await api(free.stub, "plugin.save", { ...free.saved.data, name: "新的名称" })).ok).toBe(
+      true,
+    );
     const { stub, saved } = await setup();
     const snapshot = (await api(stub, "snapshot")).data;
     expect(snapshot.assistants).toHaveLength(0);
@@ -569,8 +651,8 @@ describe("OpenClaw native relay", () => {
     expect(saved.data.modelId).toBeUndefined();
     expect(JSON.stringify(snapshot)).not.toContain("tokenHash");
   });
-  it("accepts text once and meters boundary tokens, ignoring falsified usage", async () => {
-    const ctx = await ready();
+  it.each([true, false])("accepts text once and meters boundary tokens (Plus=%s)", async (plus) => {
+    const ctx = await ready(plus);
     const before = (await api(ctx.stub, "snapshot")).data.wallet.balance;
     const result = await ctx.call("event", {
       ...ctx.event,
@@ -648,7 +730,9 @@ describe("OpenClaw native relay", () => {
         .one();
       return { reply: row.reply, history: history.content, response: JSON.parse(run.response) };
     });
-    expect(stored.reply).toBe(
+    expect(stored.reply).toBe(pushEvent.text);
+    const delivered = await deliverQueuedReplies(ctx.stub, 2);
+    expect(delivered[1].text).toBe(
       "消息来自 OpenClaw（工作助手）插件。\n使用 /use work 进入插件，或发送 @work 回复内容。\n\n──────────\n\n" +
         pushEvent.text,
     );
@@ -671,14 +755,8 @@ describe("OpenClaw native relay", () => {
     const before = (await api(ctx.stub, "snapshot")).data.currentSession;
     const result = await ctx.call("event", ctx.event);
     expect(result.ok).toBe(true);
-    const reply = await runInDurableObject(
-      ctx.stub,
-      (_, state) =>
-        state.storage.sql
-          .exec<{ reply: string }>("SELECT reply FROM inbox WHERE id = ?", result.data.id)
-          .one().reply,
-    );
-    expect(reply).toBe(
+    const delivered = await deliverQueuedReplies(ctx.stub);
+    expect(delivered[0].text).toBe(
       "消息来自 OpenClaw（我的 Agent）插件。\n使用 /use claw 进入插件，或发送 @claw 回复内容。\n\n──────────\n\n" +
         ctx.event.text,
     );
@@ -745,7 +823,7 @@ describe("OpenClaw native relay", () => {
     await runInDurableObject(ctx.stub, (_, state) =>
       state.storage.sql.exec("UPDATE settings SET value = '0' WHERE key = 'planUntil'"),
     );
-    expect((await ctx.call("poll")).error).toBe("plus_required");
+    expect((await ctx.call("poll")).ok).toBe(true);
   });
   it("limits output itself and does not bill failed tasks", async () => {
     const ctx = await ready();
@@ -873,7 +951,7 @@ describe("OpenClaw guided pairing", () => {
     expect((await ctx.exchange()).error).toBe("pair_expired");
     expect((await ctx.call!("heartbeat")).ok).toBe(true);
   });
-  it("revokes unused and redeemed commands, and rejects disabled/expired membership", async () => {
+  it("revokes unused and redeemed commands, rejects disabled plugins and permits the Free slot", async () => {
     const ctx = await pairing();
     await api(ctx.stub, "plugin.clawRevoke", { id: ctx.pluginId });
     expect((await ctx.exchange()).ok).toBe(false);
@@ -888,7 +966,7 @@ describe("OpenClaw guided pairing", () => {
     await runInDurableObject(expired.stub, (_, state) =>
       state.storage.sql.exec("UPDATE settings SET value = '0' WHERE key = 'planUntil'"),
     );
-    expect((await expired.exchange()).ok).toBe(false);
+    expect((await expired.exchange()).ok).toBe(true);
   });
   it("rejects unknown Agent selection and invalidates old routes when selecting a discovered Agent", async () => {
     const ctx = await ready();

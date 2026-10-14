@@ -318,8 +318,17 @@ describe("personal assistant records", () => {
     expect((await list(stub, p.id)).data.total).toBe(1);
     expect((await save(stub, p.id, entry)).ok).toBe(true);
   });
-  it("retains data after Plus expires; read/export/delete remain available, writes and calls require Plus", async () => {
+  it("retains excess plugin records after downgrade while blocking its writes and calls", async () => {
     const { stub, model } = await setup();
+    expect(
+      (
+        await api(stub, "plugin.save", {
+          pluginId: "wechatai/openclaw",
+          name: "首个插件",
+          shortcut: "first",
+        })
+      ).ok,
+    ).toBe(true);
     const p = await savePlugin(stub, model.id);
     const r = (await save(stub, p.id, note)).data;
     await runInDurableObject(stub, (_, state) =>
@@ -1321,9 +1330,35 @@ describe("personal reminders", () => {
       expect(state.storage.sql.exec("SELECT count(*) n FROM personal_records").one().n).toBe(0),
     );
   });
+  it("keeps the first personal assistant writable and delivers reminders on Free", async () => {
+    const { stub, model } = await setup();
+    await connect(stub);
+    await runInDurableObject(stub, (_, state) => {
+      state.storage.sql.exec("UPDATE settings SET value='0' WHERE key='planUntil'");
+    });
+    const p = await savePlugin(stub, model.id, { reminderConnectionId: "default" });
+    expect((await save(stub, p.id, note)).ok).toBe(true);
+    expect((await save(stub, p.id, { ...note, kind: "reminder", remindAt: future() })).ok).toBe(
+      true,
+    );
+    vi.mocked(fetch).mockImplementation(async () => Response.json({ ret: 0 }));
+    await due(stub);
+    await deliver(stub);
+    expect(vi.mocked(fetch)).toHaveBeenCalled();
+    expect((await reminders(stub))[0].state).toBe("sent");
+  });
   it("pauses reminders for disabled and expired Plus, resumes after recovery", async () => {
     const { stub, model } = await setup();
     await connect(stub);
+    expect(
+      (
+        await api(stub, "plugin.save", {
+          pluginId: "wechatai/openclaw",
+          name: "首个插件",
+          shortcut: "first",
+        })
+      ).ok,
+    ).toBe(true);
     const p = await savePlugin(stub, model.id, { reminderConnectionId: "default" });
     await save(stub, p.id, { ...note, kind: "reminder", remindAt: future(), repeat: "weekly" });
     await due(stub);

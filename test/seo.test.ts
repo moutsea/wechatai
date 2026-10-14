@@ -16,6 +16,14 @@ import {
 } from "../src/shared/seo";
 
 describe("search indexing boundaries", () => {
+  it("includes notification routes in the deployable private pages", () => {
+    for (const path of ["/app/notices", "/demo/notices"]) {
+      expect(PRIVATE_PATHS).toContain(path);
+      expect(getPageSeo(path).indexable).toBe(false);
+      expect(renderSitemap()).not.toContain(`https://wechatai.app${path}`);
+    }
+  });
+
   it("uses distinct public titles and stable production canonicals", () => {
     expect(getPageSeo("/").title).toContain("WeChat AI");
     expect(getPageSeo("/guide").title).not.toBe(getPageSeo("/").title);

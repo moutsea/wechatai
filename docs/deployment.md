@@ -36,10 +36,18 @@ pnpm exec wrangler r2 bucket create wechatai-media
 
 准备 `.production-secrets.local` JSON，至少包含不同的随机 `BETTER_AUTH_SECRET`、`ENCRYPTION_KEY`，每个不少于 32 字符。需要 OAuth 或 Stripe 时再加入对应配置，参考 `.dev.vars.example`。不要把生成的密钥粘贴到 README 或提交到 Git。
 
+以下命令用于全新数据库；已有站点的迁移顺序见第 4 节。
+
 ```sh
 chmod 600 .production-secrets.local
 pnpm db:migrate:remote
 ```
+
+站内通知模块包含 `0008_site_notices.sql`、`0009_notice_publication_versions.sql` 和 `0010_notice_read_state.sql`。查看通知或关闭横幅都会标为已读；修改内容不会再次提醒，管理员明确选择重新发布时才会重新出现。
+
+**已有站点升级时按 0008、0009 → 发布本版 Worker → 0010 的顺序执行。** 本版依赖 0009 新增的字段和版本表，兼容保留旧关闭字段的结构；0010 会把旧的关闭状态合并到已读状态，再删除旧字段。旧版通知接口仍依赖该字段，先执行 0010 会导致报错；迁移后也不要直接回滚到依赖旧字段的 Worker。
+
+全新站点可以在首次部署前执行全部迁移。0008 和 0009 保留为独立迁移，不要重写已执行的迁移。
 
 本地数据不会自动迁移到生产。D1 迁移和账户 SQLite 升级是两套机制，均需保持兼容。
 
@@ -89,11 +97,21 @@ pnpm db:migrate:remote
 
 ## 4. 后续发布
 
+本次升级分为三步：
+
+1. 确认 0008 和 0009 已执行；尚未执行时，只先应用截至 0009 的迁移。不要在这一步直接运行会应用所有待执行迁移的 `pnpm db:migrate:remote`，否则会提前执行 0010。
+2. 检查并发布本版 Worker，确认新版已接管流量、旧版在途请求已结束。
+3. 执行剩余的 0010 迁移，合并已读状态并删除旧字段。
+
+完成第 1 步后：
+
 ```sh
-pnpm db:migrate:remote
 pnpm check
 pnpm deploy
+pnpm db:migrate:remote
 ```
+
+其他发布先查看待执行迁移的兼容要求；增加表或字段的迁移通常先执行，删除字段则需要先发布不再依赖它的代码。不要把迁移顺序固定为一律先迁移。
 
 仅调度服务自身发生变化时运行 `pnpm deploy:reminders`。新增调度 RPC 时先发布调度器，再发布调用它的网站代码。普通部署保留已有 Secrets。
 

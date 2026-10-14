@@ -1,4 +1,11 @@
 import {
+  pluginShortcutForEdit,
+  pluginShortcutPatternForEdit,
+  isLegacyNumericShortcut,
+  LEGACY_NUMERIC_SHORTCUT_HINT,
+  PLUGIN_SHORTCUT_HINT,
+} from "../../shared/plugin-shortcut";
+import {
   remoteAgentName,
   type RemoteAgentKind,
   type RemoteAgentPlugin,
@@ -35,13 +42,19 @@ export function OpenClawEditor({
   const { request, refresh, notify, demo } = useApp();
   const agentName = remoteAgentName(`wechatai/${kind}`);
   const [saved, setSaved] = useState(plugin === "new" ? null : plugin);
-  const [form, setForm] = useState<OpenClawInput>(
-    openClawInputSchema.parse(
+  const editSchema = openClawInputSchema.safeExtend({
+    shortcut: pluginShortcutForEdit(saved?.shortcut),
+  });
+  const [form, setForm] = useState<OpenClawInput>(() =>
+    editSchema.parse(
       plugin === "new"
         ? { name: agentName, shortcut: kind === "hermes" ? "hermes" : "claw" }
         : plugin,
     ),
   );
+  const previousShortcut = saved?.shortcut;
+  const keepingLegacyShortcut =
+    isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   const [pairing, setPairing] = useState<OpenClawPairing | null>(null);
   const [status, setStatus] = useState<OpenClawStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -173,7 +186,9 @@ export function OpenClawEditor({
             </strong>
             <p>
               {connected
-                ? "在微信发送 /use " + form.shortcut + "，即可开始对话。"
+                ? isLegacyNumericShortcut(saved?.shortcut)
+                  ? "请在「更多设置」中修改纯数字别名，再使用 /use 进入对话。"
+                  : "在微信发送 /use " + saved?.shortcut + "，即可开始对话。"
                 : saved
                   ? connection.description
                   : "自动安装渠道、选择默认助手并完成配对，无需填写密钥。"}
@@ -235,7 +250,7 @@ export function OpenClawEditor({
             </button>
             <p>
               {demo
-                ? "这是演示预览。登录 Plus 账号后可以生成真实连接命令。"
+                ? "这是演示预览。登录账号后可以生成真实连接命令。"
                 : "命令仅用于本次连接，请勿转发。支持 macOS、Linux 和 WSL。"}
             </p>
             <div className="claw-waiting">
@@ -341,13 +356,17 @@ export function OpenClawEditor({
                 <label>
                   快捷名称
                   <input
+                    pattern={pluginShortcutPatternForEdit(saved?.shortcut)}
+                    title={PLUGIN_SHORTCUT_HINT}
                     value={form.shortcut}
                     onChange={(e) => update("shortcut", e.target.value)}
                     required
                     maxLength={24}
                   />
                   <small>
-                    @{form.shortcut} 单次调用；/use {form.shortcut} 进入
+                    {keepingLegacyShortcut
+                      ? LEGACY_NUMERIC_SHORTCUT_HINT
+                      : `别名不能是纯数字。@${form.shortcut} 单次调用；/use ${form.shortcut} 进入`}
                   </small>
                 </label>
                 <label>

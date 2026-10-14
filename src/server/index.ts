@@ -1,3 +1,12 @@
+import {
+  listUserNotices,
+  readAllNotices,
+  markNotice,
+  listAdminNotices,
+  createNotice,
+  updateNotice,
+  deleteNotice,
+} from "./site-notices";
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
 import { Hono } from "hono";
@@ -227,6 +236,41 @@ app.use("/api/admin/*", async (c, next) => {
   c.header("X-Robots-Tag", "noindex, nofollow");
   return next();
 });
+app.get("/api/notices", async (c) =>
+  c.json(await listUserNotices(c.env, c.var.user.id, c.req.query())),
+);
+app.post("/api/notices/read-all", async (c) =>
+  c.json(await readAllNotices(c.env, c.var.user.id, await c.req.json().catch(() => null))),
+);
+// Keep the old close URL as a read alias for browser tabs opened before the upgrade.
+for (const action of ["read", "dismiss"] as const)
+  app.post(`/api/notices/:id/${action}`, async (c) =>
+    c.json(
+      await markNotice(
+        c.env,
+        c.var.user.id,
+        c.req.param("id"),
+        await c.req.json().catch(() => null),
+      ),
+    ),
+  );
+app.get("/api/admin/notices", async (c) => c.json(await listAdminNotices(c.env, c.req.query())));
+app.post("/api/admin/notices", async (c) =>
+  c.json(await createNotice(c.env, c.var.user.id, await c.req.json().catch(() => null))),
+);
+app.patch("/api/admin/notices/:id", async (c) =>
+  c.json(
+    await updateNotice(
+      c.env,
+      c.var.user.id,
+      c.req.param("id"),
+      await c.req.json().catch(() => null),
+    ),
+  ),
+);
+app.delete("/api/admin/notices/:id", async (c) =>
+  c.json(await deleteNotice(c.env, c.req.param("id"), await c.req.json().catch(() => null))),
+);
 app.get("/api/admin/overview", async (c) => c.json(await adminOverview(c.env)));
 app.get("/api/admin/users", async (c) => c.json(await adminUsers(c.env, c.req.query())));
 app.get("/api/admin/users/:id/membership", async (c) =>

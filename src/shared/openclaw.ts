@@ -1,3 +1,4 @@
+import { pluginShortcutSchema, pluginShortcutJsonSchema } from "./plugin-shortcut";
 import { z } from "zod";
 import { pluginManifestSchema } from "./plugins";
 import { DEFAULT_INPUT_TOKENS, MAX_CONTEXT_TOKENS } from "./context";
@@ -39,12 +40,7 @@ export type OpenClawStatus = {
 export const openClawInputSchema = z
   .object({
     name: z.string().trim().min(1).max(40),
-    shortcut: z
-      .string()
-      .trim()
-      .min(1)
-      .max(24)
-      .regex(/^[\p{L}\p{N}_-]+$/u),
+    shortcut: pluginShortcutSchema,
     agentId: z
       .string()
       .trim()
@@ -91,7 +87,7 @@ export const openClawManifest = pluginManifestSchema.parse({
     required: ["name", "shortcut", "agentId"],
     properties: {
       name: { type: "string" },
-      shortcut: { type: "string" },
+      shortcut: pluginShortcutJsonSchema,
       agentId: { type: "string", default: "main" },
       enabled: { type: "boolean", default: true },
       allowProactive: { type: "boolean", default: true },

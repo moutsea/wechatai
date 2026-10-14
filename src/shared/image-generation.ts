@@ -1,3 +1,4 @@
+import { pluginShortcutSchema, pluginShortcutJsonSchema } from "./plugin-shortcut";
 import { z } from "zod";
 import type { NotificationPlugin } from "./notification";
 import { pluginManifestSchema } from "./plugins";
@@ -17,12 +18,7 @@ import {
 export const imageGenerationInputSchema = z
   .object({
     name: z.string().trim().min(1).max(40),
-    shortcut: z
-      .string()
-      .trim()
-      .min(1)
-      .max(24)
-      .regex(/^[\p{L}\p{N}_-]+$/u),
+    shortcut: pluginShortcutSchema,
     modelId: z.string().min(1).max(200),
     enabled: z.boolean().default(true),
     ...waitingMessageFields(IMAGE_WAITING_MESSAGE),
@@ -64,7 +60,7 @@ export const imageGenerationManifest = pluginManifestSchema.parse({
     required: ["name", "shortcut", "modelId"],
     properties: {
       name: { type: "string", maxLength: 40 },
-      shortcut: { type: "string", maxLength: 24 },
+      shortcut: pluginShortcutJsonSchema,
       modelId: {
         type: "string",
         description:

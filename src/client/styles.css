@@ -4323,6 +4323,13 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.shortcut-conflict {
+  color: #9b491c;
+  font-size: 12px;
+  text-align: left;
+  align-self: flex-start;
+  overflow-wrap: anywhere;
+}
 .channel-model-tools {
   display: flex;
   align-items: center;
