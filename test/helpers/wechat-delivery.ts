@@ -17,13 +17,26 @@ const credentials = (state: DurableObjectState) =>
     `${state.id}:wechat`,
   );
 
-async function useManualAlarms(state: DurableObjectState) {
+export async function useManualAlarms(state: DurableObjectState) {
   // These tests explicitly advance the sender. A real alarm would race that
   // manual poll (production runs it only from non-overlapping alarms).
   // Reinstall on restored objects too: abortAllDurableObjects removes spies.
   if (!vi.isMockFunction(state.storage.setAlarm))
     vi.spyOn(state.storage, "setAlarm").mockResolvedValue(undefined);
   await state.storage.deleteAlarm();
+}
+
+export async function deferAutomaticAlarms(state: DurableObjectState) {
+  // Preserve scheduled/not-scheduled state for runDurableObjectAlarm(), but keep
+  // wall-clock alarms from racing the test's explicit advancement of the sender.
+  if (!vi.isMockFunction(state.storage.setAlarm)) {
+    const setAlarm = state.storage.setAlarm.bind(state.storage);
+    vi.spyOn(state.storage, "setAlarm").mockImplementation((time, options) =>
+      setAlarm(Math.max(Number(time), Date.now() + 86400000), options),
+    );
+  }
+  const pending = await state.storage.getAlarm();
+  if (pending !== null) await state.storage.setAlarm(pending);
 }
 
 export async function connectForManualDelivery(stub: Account) {

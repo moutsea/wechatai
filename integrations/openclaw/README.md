@@ -20,7 +20,9 @@ Proactive delivery: start a WeChat conversation first. The shared message tool o
 
 Text only, including WeChat-transcribed voice. Media and approvals are not transported. The Agent owns tools, models and memory. Wechatai meters only submitted input and accepted final output; internal tokens are not reported or billed. Output caps affect delivery, not the Agent's execution budget.
 
-Pending inbound jobs expire after 24 hours. Interrupted jobs fail without automatic re-execution because tools may have side effects. Replies are persisted in a private SQLite outbox and retried with stable event IDs. Revoked credentials/changed routes cannot deliver to new WeChat bindings. Reset/archive clears the platform route but does not delete local memory or cancel local cron jobs.
+Inbound job records expire 24 hours after creation, including claimed jobs. Expiration does not stop local execution, but the relay may reject its late result. Interrupted jobs fail without automatic re-execution because tools may have side effects. Replies are persisted in a private SQLite outbox and retried with stable event IDs. Revoked credentials/changed routes cannot deliver to new WeChat bindings. Reset/archive clears the platform route but does not delete local memory or cancel local cron jobs.
+
+The connector's 20-second HTTP timeout applies only to individual relay requests, not the Agent turn. Agent execution uses the local OpenClaw timeout settings. A valid final answer accompanied by tool warnings is delivered with a short warning; raw tool error details are not forwarded. Error-only results, empty results and interrupted dispatches still fail without billing.
 
 Latency: the connector uses a bounded 15-second long poll that wakes as soon as a job arrives. Replies and proactive messages flush immediately after local persistence, independently of heartbeat and Agent execution. The server interrupts idle WeChat receive polls when a reply arrives and prioritizes queued replies. Legacy connectors may continue short polling. Structured server timing events (`openclaw.claimed`, `openclaw.result`, `openclaw.delivered`) report queue and delivery delays without recording prompts, replies or credentials.
 
@@ -34,4 +36,10 @@ Heartbeat, poll and claim advertise `nativeCommands: true`. Two poll lanes (`mes
 
 ## License
 
-MIT; see [LICENSE](LICENSE). Connector 1.1.2 adds license metadata to the downloadable package; the wire protocol remains compatible with 1.1.x.
+MIT; see [LICENSE](LICENSE). Connector 1.1.4 adds runtime version reporting and an independent upgrade path; the wire protocol remains compatible with 1.1.x.
+
+## Upgrade without pairing
+
+Open the existing OpenClaw configuration in Wechatai and expand the connector update section. Run its upgrade command on the original host and OpenClaw profile after current tasks complete. It downloads and verifies the package, overwrites only the connector installation, and preserves channel credentials, Agent selections and routes. All Wechatai accounts in that installation share the upgrade.
+
+The installer requests `openclaw gateway restart --safe` when supported. If unavailable or unsuccessful, restart manually after tasks finish; it never falls back to a forced/ordinary restart. Installation is not proof of activation: the page confirms the running version from fresh authenticated heartbeats (`connectorVersion`). Older clients remain supported and display an unknown version. No automatic updates are enabled.

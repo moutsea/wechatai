@@ -45,7 +45,9 @@ import {
   signOpenClawPairing,
   deriveOpenClawSecret,
   openClawConnectCommand,
+  openClawUpgradeCommand,
 } from "./openclaw-token";
+import { openClawRelease } from "../shared/openclaw-release";
 import { openClawInputSchema, type OpenClawPlugin } from "../shared/openclaw";
 import { OpenClawRelay, clawPairExchangeSchema, type ClawRoute } from "./openclaw-relay";
 import {
@@ -1943,6 +1945,14 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!isRemoteAgent(plugin)) throw new AppError("plugin_type", "不是远程 Agent 配置");
         data = {
           ...this.claw.status(plugin.id),
+          ...(plugin.pluginId === "wechatai/openclaw"
+            ? {
+                connectorUpdate: {
+                  ...openClawRelease,
+                  command: openClawUpgradeCommand(this.env.APP_URL, plugin.id),
+                },
+              }
+            : {}),
           agentId: plugin.agentId,
           deliveries: this.sql
             .exec(

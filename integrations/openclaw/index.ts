@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { OpenClawPluginApi, OpenClawConfig } from "openclaw/plugin-sdk/plugin-entry";
 import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
+import { AgentReply } from "./reply.js";
+import { OPENCLAW_CONNECTOR_VERSION } from "./version.js";
 import {
   defineChannelMessageAdapter,
   createMessageReceiptFromOutboundResults,
@@ -167,6 +169,11 @@ export function createWechataiChannel(
           isDefault: agent.id === defaultId,
         }));
         const journal = journalFor(a);
+        const heartbeat = {
+          agents,
+          nativeCommands: true,
+          connectorVersion: OPENCLAW_CONNECTOR_VERSION,
+        };
         let outboxBusy = false;
         let outboxRetryAt = 0;
         const drainOutbox = () => {
@@ -200,7 +207,7 @@ export function createWechataiChannel(
         const timer = setInterval(() => {
           if (heartbeatBusy || ctx.abortSignal.aborted) return;
           heartbeatBusy = true;
-          void relay(a, "heartbeat", { agents, nativeCommands: true }, ctx.abortSignal)
+          void relay(a, "heartbeat", heartbeat, ctx.abortSignal)
             .catch(() => {})
             .finally(() => {
               heartbeatBusy = false;
@@ -212,7 +219,7 @@ export function createWechataiChannel(
             try {
               await flush(journal, a, ctx.abortSignal);
               if (!ctx.getStatus().connected)
-                await relay(a, "heartbeat", { agents, nativeCommands: true }, ctx.abortSignal);
+                await relay(a, "heartbeat", heartbeat, ctx.abortSignal);
               const pollStarted = Date.now();
               const result = await relay<{ jobs: Job[]; retryAfterMs?: number }>(
                 a,
@@ -257,47 +264,45 @@ export function createWechataiChannel(
                         // Only explicitly routed slash jobs may control the Agent.
                         CommandAuthorized: Boolean(job.command),
                       });
-                      const chunks: string[] = [];
-                      let failed = false;
-                      await runtime.inbound.dispatchReply({
-                        cfg: ctx.cfg,
-                        channel: "wechatai",
-                        accountId: a.accountId,
-                        agentId: job.agentId,
-                        routeSessionKey: sessionKey,
-                        storePath: runtime.session.resolveStorePath(ctx.cfg.session?.store, {
-                          agentId: job.agentId,
-                        }),
-                        ctxPayload: payload,
-                        recordInboundSession: runtime.session.recordInboundSession,
-                        dispatchReplyWithBufferedBlockDispatcher:
-                          runtime.reply.dispatchReplyWithBufferedBlockDispatcher,
-                        record: {
-                          updateLastRoute: {
-                            sessionKey,
-                            channel: "wechatai",
-                            to: job.routeId,
-                            accountId: a.accountId,
-                          },
-                        },
-                        replyOptions: { disableBlockStreaming: true },
-                        delivery: {
-                          durable: false,
-                          deliver: async (p, info) => {
-                            if (p.isError) failed = true;
-                            if (info.kind === "final" && p.text) chunks.push(p.text);
-                            if (p.mediaUrl || p.mediaUrls?.length)
-                              chunks.push("此渠道暂不支持附件，请在 OpenClaw 查看生成的文件。");
-                          },
-                          onError: () => {
-                            failed = true;
-                          },
-                        },
-                      });
-                      if (failed) throw new Error("Agent dispatch failed");
+                      const reply = new AgentReply({ command: Boolean(job.command) });
                       const turn = turns.getStore()!;
-                      turn.active = false;
-                      return chunks.length ? chunks.join("\n\n") : turn.sent ? null : "";
+                      try {
+                        await runtime.inbound.dispatchReply({
+                          cfg: ctx.cfg,
+                          channel: "wechatai",
+                          accountId: a.accountId,
+                          agentId: job.agentId,
+                          routeSessionKey: sessionKey,
+                          storePath: runtime.session.resolveStorePath(ctx.cfg.session?.store, {
+                            agentId: job.agentId,
+                          }),
+                          ctxPayload: payload,
+                          recordInboundSession: runtime.session.recordInboundSession,
+                          dispatchReplyWithBufferedBlockDispatcher:
+                            runtime.reply.dispatchReplyWithBufferedBlockDispatcher,
+                          record: {
+                            updateLastRoute: {
+                              sessionKey,
+                              channel: "wechatai",
+                              to: job.routeId,
+                              accountId: a.accountId,
+                            },
+                          },
+                          replyOptions: { disableBlockStreaming: true },
+                          delivery: {
+                            durable: false,
+                            deliver: async (p, info) => {
+                              reply.accept(p, info.kind);
+                            },
+                            onError: () => {
+                              reply.failDelivery();
+                            },
+                          },
+                        });
+                        return reply.finish(turn.sent);
+                      } finally {
+                        turn.active = false;
+                      }
                     }),
                   ctx.abortSignal,
                 );

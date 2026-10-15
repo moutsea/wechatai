@@ -1,3 +1,6 @@
+import { compareConnectorVersions } from "../shared/openclaw-release";
+import type { OpenClawStatus } from "../shared/openclaw";
+
 type Connection = { hasKey: boolean; lastSeen?: number };
 
 const labels = {
@@ -27,5 +30,23 @@ export function remoteAgentConnection(connection: Connection, now = Date.now()) 
     label: labels[state],
     description: descriptions[state],
     connectedBefore: connection.hasKey && lastSeen > 0,
+  };
+}
+
+export function openClawUpgradeState(status: OpenClawStatus, now = Date.now()) {
+  const comparison = compareConnectorVersions(
+    status.connectorVersion ?? "",
+    status.connectorUpdate?.version ?? "",
+  );
+  const fresh =
+    remoteAgentConnection(status, now).state === "online" &&
+    (status.versionSeenAt ?? 0) > now - 60000;
+  if (comparison === null) return { state: "unknown", label: "版本待检测", confirmed: false };
+  if (comparison < 0) return { state: "outdated", label: "有更新", confirmed: false };
+  if (!fresh) return { state: "offline", label: "等待上线确认", confirmed: false };
+  return {
+    state: "current",
+    label: comparison > 0 ? "运行版本高于本站版本" : "已是最新版本",
+    confirmed: true,
   };
 }

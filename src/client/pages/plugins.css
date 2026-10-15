@@ -394,6 +394,28 @@
   border-radius: 12px;
   min-width: 0;
 }
+.claw-upgrade {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.claw-upgrade-version {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+.claw-upgrade summary {
+  cursor: pointer;
+}
+.claw-upgrade ul {
+  padding-left: 20px;
+  color: var(--muted);
+}
 .claw-command-heading {
   display: flex;
   flex-wrap: wrap;

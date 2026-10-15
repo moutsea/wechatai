@@ -24,7 +24,7 @@
     "setup:local": "node scripts/setup-local.mjs && pnpm cf-typegen && pnpm db:migrate:local",
     "test:seo": "node scripts/verify-seo.mjs",
     "prebuild": "node scripts/package-openclaw.mjs && node scripts/package-hermes.mjs",
-    "test:openclaw": "node --experimental-transform-types --test integrations/openclaw/transport.node-test.ts",
+    "test:openclaw": "node --experimental-transform-types --test integrations/openclaw/transport.node-test.ts integrations/openclaw/upgrade.node-test.mjs",
     "test:openclaw:runtime": "node scripts/test-openclaw-runtime.mjs",
     "test:hermes": "node scripts/test-hermes.mjs",
     "cf:production": "node scripts/production.mjs",

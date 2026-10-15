@@ -7,6 +7,7 @@ import { randomUUID, randomBytes } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import assert from "node:assert/strict";
+import { OPENCLAW_CONNECTOR_VERSION } from "../integrations/openclaw/version.ts";
 
 const dir = await mkdtemp(join(tmpdir(), "wechatai-connect-smoke-"));
 const accountId = randomUUID();
@@ -26,7 +27,9 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
   if (req.url.startsWith("/downloads/")) {
-    const file = req.url.endsWith(".tgz") ? "wechatai-openclaw-1.1.2.tgz" : "wechatai-connect.mjs";
+    const file = req.url.endsWith(".tgz")
+      ? `wechatai-openclaw-${OPENCLAW_CONNECTOR_VERSION}.tgz`
+      : "wechatai-connect.mjs";
     res.end(await readFile(resolve("public/downloads", file)));
     return;
   }
@@ -66,7 +69,7 @@ const realBinary =
   execFileSync("which", ["openclaw"], { encoding: "utf8" }).trim();
 await writeFile(
   join(dir, "bin", "openclaw"),
-  `#!/usr/bin/env node\nconst {spawnSync}=require("node:child_process");const {appendFileSync}=require("node:fs");const a=process.argv.slice(2);if(a[0]==="gateway"&&a[1]==="restart"){appendFileSync(${JSON.stringify(join(dir, "restart"))},"1");process.exit(0)}const r=spawnSync(${JSON.stringify(realBinary)},a,{stdio:"inherit",env:process.env});process.exit(r.status??1);\n`,
+  `#!/usr/bin/env node\nconst {spawnSync}=require("node:child_process");const {appendFileSync}=require("node:fs");const a=process.argv.slice(2);if(a[0]==="gateway"&&a[1]==="restart"){if(a.includes("--help")){console.log("--safe");process.exit(0)}appendFileSync(${JSON.stringify(join(dir, "restart"))},JSON.stringify(a)+"\\n");process.exit(0)}const r=spawnSync(${JSON.stringify(realBinary)},a,{stdio:"inherit",env:process.env});process.exit(r.status??1);\n`,
   { mode: 0o700 },
 );
 await writeFile(
@@ -129,10 +132,52 @@ try {
   assert.equal(config.agents.list[0].id, "custom");
   assert.equal(config.channels.wechatai.accounts[accountId].token, token);
   assert.equal(config.channels.wechatai.accounts[accountId].agentId, "custom");
-  restartCalls = (await readFile(join(dir, "restart"), "utf8")).length;
+  restartCalls = (await readFile(join(dir, "restart"), "utf8")).trim().split("\n").length;
   assert.equal(restartCalls, 1);
   console.log(
     "One-command download, actual CLI install, Agent discovery, lost-response retry and preserving existing config passed.",
+  );
+  // Exercise an actual old-to-new upgrade in this temporary profile.
+  execFileSync(
+    realBinary,
+    ["plugins", "install", resolve("public/downloads/wechatai-openclaw-1.1.2.tgz"), "--force"],
+    {
+      env: childEnv,
+      stdio: "pipe",
+      timeout: 180000,
+    },
+  );
+  const upgradeBootstrap = bootstrap
+    .replace("await m.connect(", "await m.upgrade(")
+    .replace(JSON.stringify({ endpoint, code }), JSON.stringify({ endpoint, accountId }));
+  const updater = spawn(process.execPath, ["-e", upgradeBootstrap], {
+    env: childEnv,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let upgradeLog = "";
+  updater.stdout.on("data", (c) => (upgradeLog += c));
+  updater.stderr.on("data", (c) => (upgradeLog += c));
+  const updateTimer = setTimeout(() => updater.kill("SIGTERM"), 240000);
+  const updateExit = await new Promise((r) => updater.on("exit", r)).finally(() =>
+    clearTimeout(updateTimer),
+  );
+  assert.equal(updateExit, 0, upgradeLog.slice(-4000));
+  const upgradedConfig = JSON.parse(await readFile(configPath, "utf8"));
+  assert.deepEqual(upgradedConfig.channels, config.channels);
+  assert.deepEqual(upgradedConfig.agents, config.agents);
+  assert.deepEqual(upgradedConfig.gateway, config.gateway);
+  assert.equal(paired, 2, "Upgrade must not pair again");
+  assert(!upgradeLog.includes(token));
+  const restarts = (await readFile(join(dir, "restart"), "utf8"))
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  assert.deepEqual(restarts, [
+    ["gateway", "restart"],
+    ["gateway", "restart", "--safe"],
+  ]);
+  console.log(
+    "Independent upgrade preserved credentials, channels, Agent configuration and Gateway identity without pairing.",
   );
   const reserve = createServer();
   await new Promise((r) => reserve.listen(0, "127.0.0.1", r));
@@ -149,6 +194,7 @@ try {
   while (!heartbeat && Date.now() < deadline && gateway.exitCode === null) await delay(500);
   assert(heartbeat, `Installed package failed to connect: ${gatewayLog.slice(-5000)}`);
   assert.equal(heartbeat.agents.find((a) => a.isDefault).id, "custom");
+  assert.equal(heartbeat.connectorVersion, OPENCLAW_CONNECTOR_VERSION);
   console.log(
     "Installed JavaScript package loaded in the real isolated Gateway and reported Agent catalog/online status.",
   );

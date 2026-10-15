@@ -66,6 +66,13 @@ export function openClawConnectCommand(endpoint: string, code: string) {
   return `node -e '${script.replace(/'/g, `'"'"'`)}'`;
 }
 
+export function openClawUpgradeCommand(endpoint: string, accountId: string) {
+  const origin = new URL(endpoint).origin;
+  const options = JSON.stringify({ endpoint: origin, accountId });
+  const script = `(async()=>{const r=await fetch(${JSON.stringify(`${origin}/downloads/wechatai-connect.mjs`)},{redirect:"error",signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error("无法下载安装程序");const chunks=[];let n=0;for await(const c of r.body){n+=c.length;if(n>262144)throw Error("安装脚本过大");chunks.push(c)}const m=await import("data:text/javascript;base64,"+Buffer.concat(chunks).toString("base64"));if(typeof m.upgrade!=="function")throw Error("升级程序尚未发布，请稍后重试");await m.upgrade(${options})})().catch(e=>{console.error(e.message);process.exitCode=1})`;
+  return `node -e '${script.replace(/'/g, `'"'"'`)}'`;
+}
+
 export function hermesConnectCommand(endpoint: string, code: string) {
   const origin = new URL(endpoint).origin;
   const options = JSON.stringify({ endpoint: origin, code });

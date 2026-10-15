@@ -7,6 +7,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { guideUrl, wechatHelp, welcomeGuide } from "../src/shared/guide";
 import type { WxMessage } from "../src/server/wechat";
+import { deferAutomaticAlarms } from "./helpers/wechat-delivery";
 
 const account = () => env.ACCOUNTS.getByName(crypto.randomUUID());
 type Account = ReturnType<typeof account>;
@@ -22,6 +23,7 @@ afterEach(async () => {
     await runInDurableObject(stub, async (_instance, state) => {
       await state.storage.deleteAlarm();
     });
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -100,12 +102,14 @@ async function bind(stub: Account) {
 async function newAccount() {
   const stub = account();
   accounts.push(stub);
+  await runInDurableObject(stub, (_, state) => deferAutomaticAlarms(state));
   return stub;
 }
 async function restart(stub: Account) {
   await abortAllDurableObjects();
   const fresh = env.ACCOUNTS.get(stub.id);
   accounts[accounts.indexOf(stub)] = fresh;
+  await runInDurableObject(fresh, (_, state) => deferAutomaticAlarms(state));
   return fresh;
 }
 async function makeRetryDue(stub: Account) {

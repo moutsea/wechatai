@@ -6,6 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 // Filled by the release packager. The installer and archive come from the same site.
 const ARCHIVE_SHA256 = "__WECHATAI_ARCHIVE_SHA256__";
+const CONNECTOR_VERSION = "__WECHATAI_CONNECTOR_VERSION__";
 export function normalizeAgents(value) {
   if (!Array.isArray(value) || !value.length || value.length > 100)
     throw new Error("没有找到可用助手，请先完成 OpenClaw 初始化。");
@@ -88,10 +89,7 @@ function cli(args, input, optional = false) {
   }
   return result.stdout.trim();
 }
-export async function connect({ endpoint, code }) {
-  endpoint = origin(endpoint);
-  if (!/^pair1\.[a-f0-9]{64}\.[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/.test(code))
-    throw new Error("连接命令无效，请在微伴重新生成。");
+function checkEnvironment() {
   const [major, minor] = process.versions.node.split(".").map(Number);
   if (major < 22 || (major === 22 && minor < 19))
     throw new Error("请先更新到 Node.js 22.19 或更新版本。");
@@ -103,6 +101,59 @@ export async function connect({ endpoint, code }) {
   )
     throw new Error("请先将 OpenClaw 更新到 2026.6.10 或更新版本。");
   cli(["config", "validate"]);
+}
+async function installArchive(endpoint, temp) {
+  const archive = await boundedBody(
+    await fetch(`${endpoint}/downloads/wechatai-openclaw-${CONNECTOR_VERSION}.tgz`, {
+      redirect: "error",
+      signal: AbortSignal.timeout(60000),
+    }),
+    5 * 1024 * 1024,
+  );
+  if (createHash("sha256").update(archive).digest("hex") !== ARCHIVE_SHA256)
+    throw new Error("渠道包校验失败，请稍后重新获取命令。");
+  const file = join(temp, "wechatai.tgz");
+  await writeFile(file, archive, { mode: 0o600 });
+  cli(["plugins", "install", file, "--force"]);
+}
+
+// Upgrade only: never exchange a pairing code, rotate credentials or patch channels.
+export async function upgrade({ endpoint, accountId }) {
+  endpoint = origin(endpoint);
+  if (!/^[a-f0-9-]{36}$/.test(accountId)) throw new Error("升级命令无效，请从网页重新获取。");
+  checkEnvironment();
+  const channel = JSON.parse(cli(["config", "get", "channels.wechatai", "--json"]));
+  const account = channel?.accounts?.[accountId];
+  if (!account || origin(account.endpoint ?? "https://wechatai.app") !== endpoint)
+    throw new Error("当前 OpenClaw 没有这条微伴连接，请在原先连接的电脑和配置环境中执行。");
+  const temp = await mkdtemp(join(tmpdir(), "wechatai-upgrade-"));
+  try {
+    console.log(`正在升级微伴连接器至 ${CONNECTOR_VERSION}，保留原有绑定…`);
+    await installArchive(endpoint, temp);
+    cli(["config", "validate"]);
+    // Never fall back to a normal/forced restart: it can interrupt Agent tasks.
+    const help = cli(["gateway", "restart", "--help"], undefined, true);
+    if (
+      help?.includes("--safe") &&
+      cli(["gateway", "restart", "--safe"], undefined, true) !== null
+    ) {
+      console.log("已安装并请求安全重启；有任务运行时会等待。请回到微伴，等待新版连接器上线确认。");
+      return { installed: true, restartRequested: true, version: CONNECTOR_VERSION };
+    }
+    console.log(
+      "已安装，但尚未确认加载。请等待任务结束后，按原来的运行方式重新启动 Gateway，再回微伴查看版本。无需重新配对。",
+    );
+    return { installed: true, restartRequested: false, version: CONNECTOR_VERSION };
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+}
+
+export async function connect({ endpoint, code }) {
+  endpoint = origin(endpoint);
+  if (!/^pair1\.[a-f0-9]{64}\.[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/.test(code))
+    throw new Error("连接命令无效，请在微伴重新生成。");
+  checkEnvironment();
   const agents = normalizeAgents(JSON.parse(cli(["agents", "list", "--json"])));
   const configLine = cli(["config", "file"]).split("\n").at(-1).trim();
   const configFile = configLine.startsWith("~/")
@@ -125,18 +176,7 @@ export async function connect({ endpoint, code }) {
   const temp = await mkdtemp(join(tmpdir(), "wechatai-connect-"));
   try {
     console.log("1/3 正在安装微伴渠道…");
-    const archive = await boundedBody(
-      await fetch(`${endpoint}/downloads/wechatai-openclaw-1.1.2.tgz`, {
-        redirect: "error",
-        signal: AbortSignal.timeout(60000),
-      }),
-      5 * 1024 * 1024,
-    );
-    if (createHash("sha256").update(archive).digest("hex") !== ARCHIVE_SHA256)
-      throw new Error("渠道包校验失败，请重新生成连接命令。");
-    const file = join(temp, "wechatai.tgz");
-    await writeFile(file, archive, { mode: 0o600 });
-    cli(["plugins", "install", file, "--force"]);
+    await installArchive(endpoint, temp);
     const rawAllow = cli(["config", "get", "plugins.allow", "--json"], undefined, true);
     const allow = rawAllow === null ? undefined : JSON.parse(rawAllow);
     if (allow !== undefined && (!Array.isArray(allow) || allow.some((a) => typeof a !== "string")))

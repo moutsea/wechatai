@@ -1,10 +1,12 @@
 {
   "name": "@wechatai/openclaw-channel",
-  "version": "1.1.2",
+  "version": "1.1.4",
   "description": "Personal WeChat channel through the Wechatai relay",
   "files": [
     "index.js",
     "transport.js",
+    "reply.js",
+    "version.js",
     "openclaw.plugin.json",
     "README.md"
   ],

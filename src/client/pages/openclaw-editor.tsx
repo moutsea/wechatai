@@ -25,6 +25,7 @@ import {
 import { OPENCLAW_WAITING_MESSAGE } from "../../shared/waiting-message";
 import { WaitingMessageField } from "./waiting-message-field";
 import { remoteAgentConnection } from "../remote-agent-status";
+import { OpenClawUpgrade } from "./openclaw-upgrade";
 
 export function OpenClawEditor({
   plugin,
@@ -263,7 +264,10 @@ export function OpenClawEditor({
             </div>
           </div>
         )}
-        {status?.hasKey && !status.nativeCommands && !pairing && (
+        {kind === "openclaw" && status?.hasKey && !pairing && (
+          <OpenClawUpgrade status={status} demo={demo} />
+        )}
+        {kind === "hermes" && status?.hasKey && !status.nativeCommands && !pairing && (
           <p className="muted">
             当前连接器尚不支持 Agent 原生命令。点击「重新连接」，生成并执行新命令即可升级。
           </p>

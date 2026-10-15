@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
+import { OPENCLAW_CONNECTOR_VERSION } from "../integrations/openclaw/version.ts";
 
 const root =
   process.env.OPENCLAW_PACKAGE_ROOT ||
@@ -21,7 +22,7 @@ try {
   await symlink(root, join(dir, "node_modules", "openclaw"));
   await writeFile(join(dir, "package.json"), '{"type":"module"}');
   await writeFile(process.env.OPENCLAW_CONFIG_PATH, "{}");
-  for (const name of ["index", "transport"])
+  for (const name of ["index", "transport", "reply", "version"])
     await writeFile(
       join(dir, `${name}.js`),
       stripTypeScriptTypes(await readFile(resolve(`integrations/openclaw/${name}.ts`), "utf8"), {
@@ -43,6 +44,7 @@ try {
   };
   const stop = { ...normal, id: randomUUID(), text: "/stop", command: "stop", lane: "control" };
   const help = { ...normal, id: randomUUID(), text: "/help", command: "help" };
+  const compact = { ...normal, id: randomUUID(), text: "/compact", command: "compact" };
   let releaseNormal;
   const waiting = new Promise((resolve) => {
     releaseNormal = resolve;
@@ -54,12 +56,14 @@ try {
     deliveries = [];
   globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
+    if (String(url).endsWith("heartbeat"))
+      assert.equal(body.connectorVersion, OPENCLAW_CONNECTOR_VERSION);
     if (String(url).endsWith("poll")) {
       assert.equal(body.nativeCommands, true);
       let job;
       if (body.lane === "control" && started) job = stop;
       if (body.lane === "message")
-        job = !offered.has(normal.id) ? normal : normalFinished ? help : undefined;
+        job = [normal, help, compact].find((candidate) => !offered.has(candidate.id));
       if (job && !offered.has(job.id)) {
         offered.add(job.id);
         return Response.json({ jobs: [job], retryAfterMs: 0 });
@@ -72,7 +76,7 @@ try {
     }
     if (String(url).endsWith("event")) {
       deliveries.push(body);
-      if (deliveries.length === 3) controller.abort();
+      if (deliveries.length === 4) controller.abort();
       return Response.json({ status: "queued" });
     }
     return Response.json({ ok: true });
@@ -91,6 +95,10 @@ try {
           await waiting;
           normalFinished = true;
           await delivery.deliver({ text: "stopped task" }, { kind: "final" });
+          await delivery.deliver(
+            { text: "sensitive tool error details", isError: true },
+            { kind: "final" },
+          );
           return;
         }
         assert.equal(ctxPayload.CommandAuthorized, true);
@@ -113,14 +121,19 @@ try {
           releaseNormal();
         }
         const result = await reply.getReplyFromConfig(ctxPayload, {}, cfg);
-        for (const payload of [result].flat().filter(Boolean))
-          await delivery.deliver(payload, { kind: "final" });
+        const payloads = [result].flat().filter(Boolean);
+        if (ctxPayload.Body === "/compact")
+          assert(payloads.some((payload) => payload.isStatusNotice));
+        for (const payload of payloads) await delivery.deliver(payload, { kind: "final" });
       },
     },
   };
   let status = {};
   const channel = createWechataiChannel({ runtime: { state: { resolveStateDir: () => dir } } });
-  const timer = setTimeout(() => controller.abort(), 15000);
+  const timer = setTimeout(() => {
+    controller.abort();
+    releaseNormal();
+  }, 60000);
   try {
     await channel.gateway.startAccount({
       account: {
@@ -145,11 +158,16 @@ try {
     clearTimeout(timer);
   }
   assert.equal(stopReceived, true);
-  assert.equal(deliveries.length, 3);
+  assert.equal(deliveries.length, 4);
   assert.ok(deliveries.every((event) => event.status === "completed"));
+  const normalReply = deliveries.find((event) => event.jobId === normal.id).text;
+  assert.match(normalReply, /^stopped task/);
+  assert.match(normalReply, /部分步骤报错/);
+  assert(!normalReply.includes("sensitive tool error details"));
   assert.match(deliveries.find((event) => event.jobId === help.id).text, /\/new.*\/reset/);
+  assert.match(deliveries.find((event) => event.jobId === compact.id).text, /[Cc]ompact/);
   console.log(
-    "OpenClaw runtime: native help, authorization, concurrent stop and final delivery passed.",
+    "OpenClaw runtime: native help/compact, authorization, concurrent stop and final answer with tool warning passed.",
   );
 } finally {
   controller.abort();

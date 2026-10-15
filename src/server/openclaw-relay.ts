@@ -6,6 +6,7 @@ import { AppError } from "./config";
 import { countTextTokens, limitTextTokens } from "./tokenizer";
 import { creditUnits } from "./wallet";
 import { openClawAgentsSchema, type OpenClawAgent } from "../shared/openclaw";
+import { connectorVersionPattern } from "../shared/openclaw-release";
 
 export type ClawRoute = {
   id: string;
@@ -97,6 +98,8 @@ export class OpenClawRelay {
       ["claw_jobs", "command", "TEXT NOT NULL DEFAULT ''"],
       ["claw_jobs", "lane", "TEXT NOT NULL DEFAULT 'message'"],
       ["claw_connectors", "nativeCommands", "INTEGER NOT NULL DEFAULT 0"],
+      ["claw_connectors", "connectorVersion", "TEXT NOT NULL DEFAULT ''"],
+      ["claw_connectors", "versionSeenAt", "INTEGER NOT NULL DEFAULT 0"],
     ]) {
       if (
         !this.sql
@@ -110,8 +113,13 @@ export class OpenClawRelay {
 
   status(pluginId: string) {
     const row = this.sql
-      .exec<{ lastSeen: number; nativeCommands: number }>(
-        "SELECT lastSeen,nativeCommands FROM claw_connectors WHERE pluginId = ?",
+      .exec<{
+        lastSeen: number;
+        nativeCommands: number;
+        connectorVersion: string;
+        versionSeenAt: number;
+      }>(
+        "SELECT lastSeen,nativeCommands,connectorVersion,versionSeenAt FROM claw_connectors WHERE pluginId = ?",
         pluginId,
       )
       .toArray()[0];
@@ -129,6 +137,8 @@ export class OpenClawRelay {
       hasKey: Boolean(row),
       nativeCommands: Boolean(row?.nativeCommands),
       lastSeen: row?.lastSeen ?? 0,
+      connectorVersion: row?.connectorVersion || null,
+      versionSeenAt: row?.versionSeenAt ?? 0,
       agents: agents ? (JSON.parse(agents.agents) as OpenClawAgent[]) : [],
     };
   }
@@ -186,7 +196,7 @@ export class OpenClawRelay {
       const agentId = (selected || agents.find((a) => a.isDefault) || agents[0]).id;
       this.clearRoutes(pluginId);
       this.sql.exec(
-        "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0) ON CONFLICT(pluginId) DO UPDATE SET tokenHash=excluded.tokenHash,lastSeen=0,nativeCommands=0",
+        "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0) ON CONFLICT(pluginId) DO UPDATE SET tokenHash=excluded.tokenHash,lastSeen=0,nativeCommands=0,connectorVersion='',versionSeenAt=0",
         pluginId,
         hash(connectorSecret),
       );
@@ -440,15 +450,18 @@ export class OpenClawRelay {
         return { claimed: job.state === "pending" };
       }
       if (action === "heartbeat") {
-        const { agents, nativeCommands } = z
+        const { agents, nativeCommands, connectorVersion } = z
           .object({
             agents: openClawAgentsSchema.optional(),
             nativeCommands: z.boolean().default(false),
+            connectorVersion: z.string().regex(connectorVersionPattern).optional(),
           })
           .parse(raw);
         this.sql.exec(
-          "UPDATE claw_connectors SET nativeCommands = ? WHERE pluginId = ?",
+          "UPDATE claw_connectors SET nativeCommands = ?, connectorVersion = ?, versionSeenAt = ? WHERE pluginId = ?",
           nativeCommands ? 1 : 0,
+          connectorVersion ?? "",
+          connectorVersion ? Date.now() : 0,
           pluginId,
         );
         if (agents) this.recordAgents(pluginId, agents, true);

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Protocol } from "../src/shared/types";
 import { PersonalRecordsStore } from "../src/server/personal-records";
 import { dailyTasksMessage } from "../src/server/plugins/personal-daily";
+import { useManualAlarms } from "./helpers/wechat-delivery";
 import {
   personalRecordInputSchema,
   dailyTasksReminderSchema,
@@ -192,6 +193,7 @@ describe("daily todo digests", () => {
   });
   it("skips empty days and yesterday's delayed digest while retaining tomorrow's schedule", async () => {
     const { stub, model } = await setup();
+    await runInDurableObject(stub, (_, state) => useManualAlarms(state));
     await connect(stub);
     const p = await savePlugin(stub, model.id, { reminderConnectionId: "default" });
     await save(stub, p.id, dailyRecord());

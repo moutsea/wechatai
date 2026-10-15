@@ -6,7 +6,8 @@ import type { PersonalAccount } from "../src/server/personal-account";
 import type { WxMessage } from "../src/server/wechat";
 import { creditUnits } from "../src/server/wallet";
 import { countTextTokens } from "../src/server/tokenizer";
-import { deliverQueuedReplies } from "./helpers/wechat-delivery";
+import { deliverQueuedReplies, useManualAlarms } from "./helpers/wechat-delivery";
+import { openClawRelease } from "../src/shared/openclaw-release";
 
 const accounts: DurableObjectStub<PersonalAccount>[] = [];
 const api = async (
@@ -562,6 +563,7 @@ describe("OpenClaw native relay", () => {
   });
   it("retains a failed WeChat reply, resumes with a fresh context, and charges only once", async () => {
     const ctx = await ready();
+    await runInDurableObject(ctx.stub, (_, state) => useManualAlarms(state));
     const result = await ctx.call("event", ctx.event);
     const before = (await api(ctx.stub, "snapshot")).data.wallet.balance;
     await runInDurableObject(ctx.stub, async (_, state) => {
@@ -908,6 +910,41 @@ describe("OpenClaw guided pairing", () => {
       ctx.stub.openClawRequest(pluginId, secret, "pair", body).then(JSON.parse);
     return { ...ctx, code, secret, accountId, pluginId, proof, exchange };
   }
+  it("reports the loaded connector version without rotating credentials or clearing routes", async () => {
+    const ctx = await ready();
+    const state = () =>
+      api(ctx.stub, "plugin.clawStatus", { id: ctx.pluginId }).then((r) => r.data);
+    const initial = await state();
+    expect(initial.connectorVersion).toBeNull();
+    expect(initial.versionSeenAt).toBe(0);
+    expect(initial.connectorUpdate.version).toBe(openClawRelease.version);
+    expect(initial.connectorUpdate.command).toContain("m.upgrade(");
+    expect(initial.connectorUpdate.command).toContain(ctx.pluginId);
+    expect(initial.connectorUpdate.command).not.toContain(ctx.token);
+    expect(initial.connectorUpdate.command).not.toContain('"code"');
+    await ctx.call("heartbeat", {
+      connectorVersion: openClawRelease.version,
+      nativeCommands: true,
+    });
+    const online = await state();
+    expect(online.connectorVersion).toBe(openClawRelease.version);
+    expect(online.versionSeenAt).toBeGreaterThan(0);
+    expect(online.nativeCommands).toBe(true);
+    // Fetching the upgrade command and reporting a version must leave the claimed job usable.
+    expect((await ctx.call("event", ctx.event)).ok).toBe(true);
+    expect((await ctx.call("heartbeat", { connectorVersion: "bad-version" })).ok).toBe(false);
+    expect((await state()).connectorVersion).toBe(openClawRelease.version);
+    // An old process coming back must not keep advertising a newer process's version.
+    await ctx.call("heartbeat", {});
+    expect(await state()).toMatchObject({ connectorVersion: null, versionSeenAt: 0 });
+  });
+  it("clears a previously reported version when replacing a binding", async () => {
+    const ctx = await pairing();
+    await ctx.call("heartbeat", { connectorVersion: openClawRelease.version });
+    await ctx.exchange();
+    const state = (await api(ctx.stub, "plugin.clawStatus", { id: ctx.pluginId })).data;
+    expect(state).toMatchObject({ connectorVersion: null, versionSeenAt: 0, lastSeen: 0 });
+  });
   it("chooses the real default, preserves an existing connection until exchange, and never exposes the token in status", async () => {
     const ctx = await pairing();
     expect((await ctx.call!("heartbeat")).ok).toBe(true);

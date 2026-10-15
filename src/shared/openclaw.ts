@@ -32,6 +32,9 @@ export type OpenClawStatus = {
   nativeCommands?: boolean;
   hasKey: boolean;
   lastSeen: number;
+  connectorVersion?: string | null;
+  versionSeenAt?: number;
+  connectorUpdate?: { version: string; notes: string[]; command: string };
   agents: OpenClawAgent[];
   agentId: string;
   deliveries: { id: string; state: string; createdAt: number }[];

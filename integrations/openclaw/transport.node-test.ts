@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Journal, executeJob, flush, relay, type Account, type Job } from "./transport.ts";
+import { AgentReply, PARTIAL_FAILURE_NOTICE } from "./reply.ts";
 
 const account: Account = {
   accountId: "test",
@@ -26,6 +27,142 @@ function fixture() {
   };
   return { dir, path, journal, job };
 }
+
+for (const text of [
+  "⚙️ Compacted (10k → 2k) • Context 2k/128k",
+  "⚙️ Compaction skipped: nothing to compact",
+  "⚙️ Compaction unavailable (missing session id).",
+]) {
+  test(`delivers the native command result: ${text}`, async () => {
+    const { dir, journal, job } = fixture();
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => Response.json({ claimed: true });
+    try {
+      await executeJob(
+        { ...job, text: "/compact", command: "compact" },
+        journal,
+        account,
+        async () => {
+          const reply = new AgentReply({ command: true });
+          reply.accept({ text: "working", isStatusNotice: true }, "tool");
+          reply.accept({ text: "thinking", isReasoning: true }, "final");
+          reply.accept({ text: "switching model", isFallbackNotice: true }, "final");
+          reply.accept({ text: "compacting", isCompactionNotice: true }, "final");
+          reply.accept({ text, isStatusNotice: true }, "final");
+          return reply.finish(false);
+        },
+      );
+      assert.equal(journal.pending()[0].status, "completed");
+      assert.equal(journal.pending()[0].text, text);
+    } finally {
+      journal.close();
+      globalThis.fetch = original;
+      rmSync(dir, { recursive: true });
+    }
+  });
+}
+
+test("status-only normal turns and command progress do not become completed answers", () => {
+  const normal = new AgentReply();
+  normal.accept({ text: "working", isStatusNotice: true }, "final");
+  assert.equal(normal.finish(false), "");
+  const command = new AgentReply({ command: true });
+  command.accept({ text: "working", isStatusNotice: true }, "tool");
+  command.accept({ text: "compacting", isCompactionNotice: true }, "final");
+  command.accept({ text: "switching model", isFallbackNotice: true }, "final");
+  assert.equal(command.finish(false), "");
+  command.accept({ text: "sensitive error", isError: true, isStatusNotice: true }, "final");
+  assert.throws(() => command.finish(false), /Agent dispatch failed/);
+});
+
+for (const order of ["before", "after"] as const) {
+  test(`a tool warning ${order} a final answer preserves the answer and hides raw errors`, async () => {
+    const { dir, journal, job } = fixture();
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => Response.json({ claimed: true });
+    try {
+      await executeJob(job, journal, account, async () => {
+        const reply = new AgentReply();
+        const warning = { text: "sensitive command and credentials", isError: true };
+        if (order === "before") reply.accept(warning, "tool");
+        reply.accept({ text: "最终查询结果" }, "final");
+        if (order === "after") reply.accept(warning, "final");
+        return reply.finish(false);
+      });
+      const result = journal.pending()[0];
+      assert.equal(result.status, "completed");
+      assert.equal(result.text, `最终查询结果\n\n${PARTIAL_FAILURE_NOTICE}`);
+      assert(!result.text.includes("credentials"));
+    } finally {
+      journal.close();
+      globalThis.fetch = original;
+      rmSync(dir, { recursive: true });
+    }
+  });
+}
+
+for (const scenario of [
+  "error only",
+  "progress then error",
+  "status notices then error",
+  "delivery failure after final",
+  "dispatch throws after final",
+  "empty reply",
+  "error after message-tool delivery",
+] as const) {
+  test(`${scenario} still produces a failed task`, async () => {
+    const { dir, journal, job } = fixture();
+    const original = globalThis.fetch;
+    globalThis.fetch = async () => Response.json({ claimed: true });
+    try {
+      await executeJob(job, journal, account, async () => {
+        const reply = new AgentReply();
+        if (scenario === "progress then error") {
+          reply.accept({ text: "正在查询" }, "block");
+          reply.accept({ text: "工具执行中" }, "tool");
+        }
+        if (scenario === "status notices then error") {
+          reply.accept({ text: "thinking", isReasoning: true }, "final");
+          reply.accept({ text: "working", isStatusNotice: true }, "final");
+          reply.accept({ text: "switching model", isFallbackNotice: true }, "final");
+          reply.accept({ text: "compacting", isCompactionNotice: true }, "final");
+        }
+        if (scenario === "delivery failure after final") {
+          reply.accept({ text: "answer" }, "final");
+          reply.failDelivery();
+        } else if (scenario === "dispatch throws after final") {
+          reply.accept({ text: "answer" }, "final");
+          throw new Error("dispatch interrupted");
+        } else if (scenario !== "empty reply") {
+          reply.accept({ text: "internal error", isError: true }, "final");
+        }
+        return reply.finish(scenario === "error after message-tool delivery");
+      });
+      assert.equal(journal.pending()[0].status, "failed");
+      assert.equal(journal.pending()[0].text, "");
+    } finally {
+      journal.close();
+      globalThis.fetch = original;
+      rmSync(dir, { recursive: true });
+    }
+  });
+}
+
+test("a reply already sent by the message tool completes without a duplicate answer", async () => {
+  const { dir, journal, job } = fixture();
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ claimed: true });
+  try {
+    await executeJob(job, journal, account, async () => new AgentReply().finish(true));
+    assert.equal(journal.pending()[0].status, "completed");
+    assert.equal(journal.pending()[0].text, "");
+  } finally {
+    journal.close();
+    globalThis.fetch = original;
+    rmSync(dir, { recursive: true });
+  }
+});
+
 test("claims before execution and retries a lost event receipt without rerunning tools", async () => {
   const { dir, journal, job } = fixture();
   const original = globalThis.fetch;
