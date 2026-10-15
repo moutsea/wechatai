@@ -34,7 +34,7 @@ Agent ID 是 OpenClaw 里某个助手的内部标识，例如 main。普通用�
 
 Agent 的 /new、/reset 不删除微伴聊天记录，也不额外执行微伴重置。/wx new 建立新的平台会话与远端路由。/stop 使用独立控制通道，可以在任务执行期间送达当前远端会话，免 credits；其他原生命令按转入和最终返回文本计费。Agent 的命令开关、权限校验和自身支持范围仍然生效，工具审批仍需在 Agent 端处理。
 
-原生命令要求连接器 1.1.0 或更新版本。旧连接器会提示升级，请在插件配置中重新生成并执行连接命令。
+原生命令要求连接器 1.1.0 或更新版本。旧连接器会提示升级，请在插件配置中展开「更新说明与升级命令」，执行升级命令，无需重新配对。
 
 ## 3. 在微信使用
 
@@ -99,7 +99,7 @@ OpenClaw 的 message 工具、定时任务 announce 和后台完成通知，只�
 
 - poll：{ runnerId, waitMs?: 15000 }，返回 jobs 和 retryAfterMs。waitMs 为 0–15000 毫秒，省略时立即返回；新连接包使用长轮询，有任务时立即唤醒，不必等待下一轮固定间隔。runnerId 是本机持久保存的 UUID。任务包含 id、routeId、agentId、text、state。
 - claim：{ id, runnerId }，原子领取一次；claimed 为 false 时不得执行。
-- heartbeat：{ agents?: [{ id, name, isDefault }] }，更新连接状态及可选助手；仅同步名称、ID 和默认标记。
+- heartbeat：{ agents?: [{ id, name, isDefault }], nativeCommands?: boolean, connectorVersion?: string }，更新连接状态、可选助手、原生命令支持情况及实际运行的连接器版本；不上传助手的模型配置或密钥。
 - event：{ eventId, routeId, jobId?, runnerId?, status, text }。eventId 是稳定 UUID，网络重试必须复用。任务结果须携带 jobId 与领取者 runnerId；主动通知省略 jobId。
 - event 响应 status: queued 仅表示平台已接收。平台界面的已投递状态才表示微信接口已确认发送。
 - 401 凭证撤销；403 权限关闭或会员失效；409 任务或路由已失效；402 主动推送余额不足；429 降低频率重试。
