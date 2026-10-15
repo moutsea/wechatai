@@ -82,6 +82,74 @@ async function ready(plus = true) {
   return { ...ctx, call: ctx.call, id, text, job, event };
 }
 describe("OpenClaw native relay", () => {
+  it("targets legacy connectors, groups connections and keeps read state per account and release", async () => {
+    const first = await setup();
+    const second = await setup();
+    const notice = await first.stub.connectorUpdateNotice();
+    expect(notice).toMatchObject({
+      version: openClawRelease.version,
+      isRead: false,
+      connections: [{ id: first.pluginId, currentVersion: null }],
+    });
+    expect(await first.stub.connectorUpdateNotice()).toEqual(notice);
+    expect(await first.stub.readConnectorUpdateNotice("99.0.0")).toBe(false);
+    expect(await first.stub.readConnectorUpdateNotice(openClawRelease.version)).toBe(true);
+    expect((await first.stub.connectorUpdateNotice())?.isRead).toBe(true);
+    expect((await second.stub.connectorUpdateNotice())?.isRead).toBe(false);
+    const another = (
+      await api(first.stub, "plugin.save", {
+        pluginId: "wechatai/openclaw",
+        name: "另一台电脑",
+        shortcut: "work",
+      })
+    ).data;
+    expect((await first.stub.connectorUpdateNotice())?.connections).toHaveLength(1);
+    await api(first.stub, "plugin.clawToken", { id: another.id });
+    const grouped = await first.stub.connectorUpdateNotice();
+    expect(grouped?.connections.map((c) => c.id)).toEqual([first.pluginId, another.id]);
+    expect(grouped?.isRead).toBe(true); // No new red dot for the same release.
+    expect(JSON.stringify(grouped)).not.toContain(first.secret);
+    await runInDurableObject(first.stub, (_, state) =>
+      state.storage.sql.exec(
+        "UPDATE settings SET value=? WHERE key='openclawUpdateNotice'",
+        JSON.stringify({ version: "1.1.3", createdAt: 1, isRead: true }),
+      ),
+    );
+    expect((await first.stub.connectorUpdateNotice())?.isRead).toBe(false);
+    expect(await first.stub.readConnectorUpdateNotice("1.1.3")).toBe(false);
+  });
+
+  it("resolves upgrade notices on runtime version reports and omits unused connectors", async () => {
+    const ctx = await setup();
+    await ctx.call("heartbeat", { connectorVersion: "1.1.3" });
+    expect((await ctx.stub.connectorUpdateNotice())?.connections[0].currentVersion).toBe("1.1.3");
+    await ctx.call("heartbeat", { connectorVersion: openClawRelease.version });
+    expect(await ctx.stub.connectorUpdateNotice()).toBeNull();
+    await runInDurableObject(ctx.stub, (_, state) =>
+      state.storage.sql.exec("UPDATE claw_connectors SET lastSeen=0,versionSeenAt=0"),
+    );
+    expect(await ctx.stub.connectorUpdateNotice()).toBeNull(); // Offline does not mean outdated.
+    await ctx.call("heartbeat", { connectorVersion: "1.10.0" });
+    expect(await ctx.stub.connectorUpdateNotice()).toBeNull();
+    await ctx.call("heartbeat", {});
+    expect(await ctx.stub.connectorUpdateNotice()).not.toBeNull();
+    await api(ctx.stub, "plugin.save", { id: ctx.pluginId, enabled: false });
+    expect(await ctx.stub.connectorUpdateNotice()).toBeNull();
+    await api(ctx.stub, "plugin.save", { id: ctx.pluginId, enabled: true });
+    expect(await ctx.stub.connectorUpdateNotice()).not.toBeNull();
+    await api(ctx.stub, "plugin.clawRevoke", { id: ctx.pluginId });
+    expect(await ctx.stub.connectorUpdateNotice()).toBeNull();
+    const hermes = (
+      await api(ctx.stub, "plugin.save", {
+        pluginId: "wechatai/hermes",
+        name: "Hermes",
+        shortcut: "hermes",
+      })
+    ).data;
+    await api(ctx.stub, "plugin.hermesToken", { id: hermes.id });
+    expect(await ctx.stub.connectorUpdateNotice()).toBeNull();
+  });
+
   it("requires a capable connector and keeps native /new separate from platform history", async () => {
     const ctx = await setup();
     if (!ctx.call) throw new Error("setup");

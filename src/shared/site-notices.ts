@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ConnectorUpdateNotice } from "./connector-update";
+import { connectorVersionPattern } from "./openclaw-release";
 
 export const noticeInputSchema = z
   .object({
@@ -14,7 +16,10 @@ export const noticeUpdateSchema = noticeInputSchema.extend({
   republish: z.boolean().default(false),
 });
 export const noticeReadAllSchema = z
-  .object({ readThrough: z.number().int().nonnegative() })
+  .object({
+    readThrough: z.number().int().nonnegative(),
+    connectorVersion: z.string().regex(connectorVersionPattern).optional(),
+  })
   .strict();
 export const noticeRevisionSchema = z.object({ revision: z.number().int().positive() }).strict();
 export const noticePageSchema = z.object({
@@ -41,7 +46,10 @@ export type UserNotices = NoticePage & {
   unread: number;
   important: UserNotice | null;
   readThrough: number;
+  connectorUpdate?: ConnectorUpdateNotice | null;
 };
+export const unreadNoticeCount = (feed: UserNotices | null) =>
+  (feed?.unread ?? 0) + (feed?.connectorUpdate && !feed.connectorUpdate.isRead ? 1 : 0);
 export const noticeDate = (time: number) =>
   new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",

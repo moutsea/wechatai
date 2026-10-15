@@ -30,12 +30,14 @@ import { OpenClawUpgrade } from "./openclaw-upgrade";
 export function OpenClawEditor({
   plugin,
   kind = "openclaw",
+  showUpgrade = false,
   onClose,
   onSaved,
   onComplete,
 }: {
   plugin: RemoteAgentPlugin | "new";
   kind?: RemoteAgentKind;
+  showUpgrade?: boolean;
   onClose: () => void;
   onSaved: (id: string) => void;
   onComplete: (id: string) => void;
@@ -265,7 +267,7 @@ export function OpenClawEditor({
           </div>
         )}
         {kind === "openclaw" && status?.hasKey && !pairing && (
-          <OpenClawUpgrade status={status} demo={demo} />
+          <OpenClawUpgrade status={status} demo={demo} initiallyExpanded={showUpgrade} />
         )}
         {kind === "hermes" && status?.hasKey && !status.nativeCommands && !pairing && (
           <p className="muted">

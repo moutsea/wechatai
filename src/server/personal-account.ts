@@ -47,7 +47,8 @@ import {
   openClawConnectCommand,
   openClawUpgradeCommand,
 } from "./openclaw-token";
-import { openClawRelease } from "../shared/openclaw-release";
+import { compareConnectorVersions, openClawRelease } from "../shared/openclaw-release";
+import type { ConnectorUpdateNotice, ConnectorUpdateReadState } from "../shared/connector-update";
 import { openClawInputSchema, type OpenClawPlugin } from "../shared/openclaw";
 import { OpenClawRelay, clawPairExchangeSchema, type ClawRoute } from "./openclaw-relay";
 import {
@@ -1720,6 +1721,43 @@ export class PersonalAccount extends DurableObject<Env> {
   private refreshWallet() {
     this.wallet.reap();
     this.wallet.daily(this.dailyGrants()[this.plan()]);
+  }
+  // Account-scoped notification, derived from installed connections. Never broadcast
+  // an upgrade to users who have no bound OpenClaw connector.
+  connectorUpdateNotice(): ConnectorUpdateNotice | null {
+    const limit = PLUGIN_LIMITS[this.plan()];
+    const connections: ConnectorUpdateNotice["connections"] = [];
+    for (const plugin of this.plugins().slice(0, limit ?? Infinity)) {
+      if (!plugin.enabled || plugin.pluginId !== "wechatai/openclaw") continue;
+      const status = this.claw.status(plugin.id);
+      if (!status.hasKey) continue;
+      const comparison = compareConnectorVersions(
+        status.connectorVersion ?? "",
+        openClawRelease.version,
+      );
+      // A previously reported current version remains current while offline.
+      if (comparison !== null && comparison >= 0) continue;
+      connections.push({
+        id: plugin.id,
+        name: plugin.name,
+        shortcut: plugin.shortcut,
+        currentVersion: status.connectorVersion,
+      });
+    }
+    if (!connections.length) return null;
+    let state = this.getSetting<ConnectorUpdateReadState | null>("openclawUpdateNotice", null);
+    if (state?.version !== openClawRelease.version) {
+      state = { version: openClawRelease.version, createdAt: Date.now(), isRead: false };
+      this.setSetting("openclawUpdateNotice", state);
+    }
+    return { ...state, connections };
+  }
+  readConnectorUpdateNotice(version: string): boolean {
+    const state = this.getSetting<ConnectorUpdateReadState | null>("openclawUpdateNotice", null);
+    // Reading an old tab must not silence a later release, or another account.
+    if (version !== openClawRelease.version || state?.version !== version) return false;
+    if (!state.isRead) this.setSetting("openclawUpdateNotice", { ...state, isRead: true });
+    return true;
   }
   snapshot(): Snapshot {
     this.refreshWallet();

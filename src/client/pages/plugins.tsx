@@ -20,7 +20,7 @@ import {
   type RemoteAgentKind,
 } from "../../shared/remote-agent";
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, FlaskConical, Power } from "lucide-react";
 import { useApp } from "../context";
 import { Modal, PageHead } from "../ui";
@@ -53,6 +53,7 @@ const initial: WebResearchInput = {
 };
 export function Plugins() {
   const { data, request, refresh, notify, demo } = useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [editor, setEditor] = useState<WebResearchPlugin | "new" | null>(null);
   const [notificationEditor, setNotificationEditor] = useState<NotificationPlugin | "new" | null>(
     null,
@@ -78,6 +79,22 @@ export function Plugins() {
   const keepingLegacyShortcut =
     isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
+  const upgradeId = searchParams.get("upgrade");
+  const upgradePlugin = upgradeId
+    ? data.plugins?.find(
+        (p): p is RemoteAgentPlugin => p.id === upgradeId && p.pluginId === "wechatai/openclaw",
+      )
+    : undefined;
+  const activeClawEditor = upgradePlugin ?? clawEditor;
+  const activeAgentKind = upgradePlugin ? "openclaw" : agentKind;
+  const closeClawEditor = () => {
+    setClawEditor(null);
+    if (upgradeId) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("upgrade");
+      setSearchParams(next, { replace: true });
+    }
+  };
   const textModels = data.assistants.filter((a) => modelKind(a) === "text");
   const selectedModel = textModels.find((a) => a.id === form.modelId);
   const update = <K extends keyof WebResearchInput>(key: K, value: WebResearchInput[K]) =>
@@ -218,6 +235,14 @@ export function Plugins() {
           </Link>
         }
       />
+      {upgradeId && !upgradePlugin && (
+        <p className="plugin-config-renew" role="alert">
+          这个 OpenClaw 配置已删除，或不属于当前登录账号。
+          <button className="text-link" onClick={closeClawEditor}>
+            返回插件列表
+          </button>
+        </p>
+      )}
       <PluginLibrary
         onConfigure={configure}
         onResume={open}
@@ -254,7 +279,7 @@ export function Plugins() {
         !roleEditor &&
         !editor &&
         !imageEditor &&
-        !clawEditor &&
+        !activeClawEditor &&
         !testing &&
         !deleting && (
           <PluginConfiguration
@@ -309,19 +334,20 @@ export function Plugins() {
       {personalRecords && (
         <PersonalRecords plugin={personalRecords} onClose={() => setPersonalRecords(null)} />
       )}
-      {clawEditor && (
+      {activeClawEditor && (
         <OpenClawEditor
-          key={agentKind}
-          kind={agentKind}
-          plugin={clawEditor}
-          onClose={() => setClawEditor(null)}
+          key={`${activeAgentKind}:${activeClawEditor === "new" ? "new" : activeClawEditor.id}`}
+          kind={activeAgentKind}
+          plugin={activeClawEditor}
+          showUpgrade={Boolean(upgradePlugin)}
+          onClose={closeClawEditor}
           onSaved={(id) => {
             setViewedId(id);
-            setViewing(`wechatai/${agentKind}`);
+            setViewing(`wechatai/${activeAgentKind}`);
           }}
           onComplete={(id) => {
             setViewedId(id);
-            setClawEditor(null);
+            closeClawEditor();
             setViewing(null);
           }}
         />

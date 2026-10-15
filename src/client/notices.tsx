@@ -14,6 +14,9 @@ import { json } from "./api";
 import { Modal } from "./ui";
 import { ChatMarkdown } from "./chat-markdown";
 import { noticeDate, type UserNotice, type UserNotices } from "../shared/site-notices";
+import { unreadNoticeCount } from "../shared/site-notices";
+import { connectorUpgradePath, type ConnectorUpdateNotice } from "../shared/connector-update";
+import { ConnectorUpdateCard } from "./connector-update-notice";
 import "./notices.css";
 
 type NoticeState = {
@@ -25,6 +28,7 @@ type NoticeState = {
   open: (notice: UserNotice) => void;
   markRead: (notice: UserNotice) => Promise<void>;
   readAll: (snapshot: UserNotices) => Promise<void>;
+  readConnectorUpdate: (notice: ConnectorUpdateNotice) => Promise<void>;
 };
 const NoticesContext = createContext<NoticeState | null>(null);
 export function useNotices() {
@@ -84,15 +88,18 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     notice: UserNotice | null,
     action: "read" | "read-all",
     readThrough?: number,
+    connectorVersion?: string,
   ) => {
-    const key = notice ? `${notice.id}:${notice.revision}:${action}` : `all:${readThrough}`;
+    const key = notice
+      ? `${notice.id}:${notice.revision}:${action}`
+      : `all:${readThrough}:${connectorVersion ?? ""}`;
     if (operations.current.has(key)) return;
     const epoch = generation.current;
     operations.current.add(key);
     setBusy(true);
     try {
       await request(notice ? `/notices/${notice.id}/${action}` : "/notices/read-all", {
-        ...json(notice ? { revision: notice.revision } : { readThrough }),
+        ...json(notice ? { revision: notice.revision } : { readThrough, connectorVersion }),
         signal: AbortSignal.timeout(15000),
       });
       if (epoch !== generation.current) return;
@@ -121,6 +128,30 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
     setSelected(notice);
     if (!notice.isRead) void mark(notice, "read");
   };
+  const readConnectorUpdate = async (notice: ConnectorUpdateNotice) => {
+    const key = `connector:${notice.version}`;
+    if (notice.isRead || operations.current.has(key)) return;
+    const epoch = generation.current;
+    operations.current.add(key);
+    setBusy(true);
+    try {
+      await request("/notices/connector-update/read", {
+        ...json({ version: notice.version }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (epoch !== generation.current) return;
+      await refresh();
+    } catch (e) {
+      if (epoch !== generation.current) return;
+      notify((e as Error).message, true);
+      await refresh();
+    } finally {
+      if (epoch === generation.current) {
+        operations.current.delete(key);
+        setBusy(operations.current.size > 0);
+      }
+    }
+  };
   return (
     <NoticesContext.Provider
       value={{
@@ -131,7 +162,9 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
         refresh,
         open,
         markRead: (notice) => mark(notice, "read"),
-        readAll: (snapshot) => mark(null, "read-all", snapshot.readThrough),
+        readAll: (snapshot) =>
+          mark(null, "read-all", snapshot.readThrough, snapshot.connectorUpdate?.version),
+        readConnectorUpdate,
       }}
     >
       {children}
@@ -202,12 +235,13 @@ export function NoticeItem({
 }
 
 export function NoticeBell() {
-  const { feed, error, busy, refresh, open, readAll } = useNotices();
+  const { feed, error, busy, refresh, open, readAll, readConnectorUpdate } = useNotices();
   const { base } = useApp();
   const [expanded, setExpanded] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const location = useLocation();
+  const unread = unreadNoticeCount(feed);
   useEffect(() => setExpanded(false), [location.pathname]);
   useEffect(() => {
     if (!expanded) return;
@@ -232,7 +266,7 @@ export function NoticeBell() {
       <button
         ref={button}
         className="icon-button notice-bell-button"
-        aria-label={`通知${feed?.unread ? `，${feed.unread} 条未读` : ""}`}
+        aria-label={`通知${unread ? `，${unread} 条未读` : ""}`}
         aria-expanded={expanded}
         aria-controls="notice-popover"
         onClick={() => {
@@ -241,15 +275,13 @@ export function NoticeBell() {
         }}
       >
         <Bell size={19} />
-        {Boolean(feed?.unread) && (
-          <span className="notice-badge">{feed!.unread > 99 ? "99+" : feed!.unread}</span>
-        )}
+        {Boolean(unread) && <span className="notice-badge">{unread > 99 ? "99+" : unread}</span>}
       </button>
       {expanded && (
         <section id="notice-popover" className="notice-popover" aria-label="站内通知">
           <div className="notice-popover-heading">
             <h2>通知</h2>
-            {Boolean(feed?.unread) && (
+            {Boolean(unread) && (
               <button
                 className="text-link"
                 disabled={busy}
@@ -271,19 +303,30 @@ export function NoticeBell() {
             <p className="notice-empty" role="status">
               正在加载通知…
             </p>
-          ) : !feed.items.length ? (
+          ) : !feed.items.length && !feed.connectorUpdate ? (
             <p className="notice-empty">暂时没有新通知</p>
           ) : (
-            feed.items.map((notice) => (
-              <NoticeItem
-                key={notice.id}
-                notice={notice}
-                onOpen={() => {
-                  setExpanded(false);
-                  open(notice);
-                }}
-              />
-            ))
+            <>
+              {feed.connectorUpdate && (
+                <ConnectorUpdateCard
+                  notice={feed.connectorUpdate}
+                  base={base}
+                  busy={busy}
+                  onRead={() => void readConnectorUpdate(feed.connectorUpdate!)}
+                  onNavigate={() => setExpanded(false)}
+                />
+              )}
+              {feed.items.map((notice) => (
+                <NoticeItem
+                  key={notice.id}
+                  notice={notice}
+                  onOpen={() => {
+                    setExpanded(false);
+                    open(notice);
+                  }}
+                />
+              ))}
+            </>
           )}
           <Link
             className="notice-view-all"
@@ -299,8 +342,37 @@ export function NoticeBell() {
 }
 
 export function ImportantNotice() {
-  const { feed, busy, open, markRead } = useNotices();
+  const { feed, busy, open, markRead, readConnectorUpdate } = useNotices();
+  const { base } = useApp();
   const notice = feed?.important;
+  const update = feed?.connectorUpdate;
+  if (!notice && update && !update.isRead && update.connections.length) {
+    return (
+      <aside className="notice-banner" aria-label="连接器升级通知">
+        <Megaphone size={18} />
+        <Link
+          className="notice-banner-title"
+          to={connectorUpgradePath(update.connections[0].id, base)}
+          onClick={() => void readConnectorUpdate(update)}
+        >
+          <span>连接器更新</span>
+          <strong>
+            OpenClaw v{update.version} 可升级
+            {update.connections.length > 1 ? ` · ${update.connections.length} 个连接` : ""}
+          </strong>
+          <span>去升级 →</span>
+        </Link>
+        <button
+          className="icon-button"
+          disabled={busy}
+          aria-label="不再提醒此版本"
+          onClick={() => void readConnectorUpdate(update)}
+        >
+          <X size={17} />
+        </button>
+      </aside>
+    );
+  }
   if (!notice) return null;
   return (
     <aside className="notice-banner" aria-label="重要通知">

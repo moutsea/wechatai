@@ -7,6 +7,8 @@ import {
   updateNotice,
   deleteNotice,
 } from "./site-notices";
+import { noticeReadAllSchema } from "../shared/site-notices";
+import { connectorVersionPattern } from "../shared/openclaw-release";
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
 import { Hono } from "hono";
@@ -236,12 +238,34 @@ app.use("/api/admin/*", async (c, next) => {
   c.header("X-Robots-Tag", "noindex, nofollow");
   return next();
 });
-app.get("/api/notices", async (c) =>
-  c.json(await listUserNotices(c.env, c.var.user.id, c.req.query())),
-);
-app.post("/api/notices/read-all", async (c) =>
-  c.json(await readAllNotices(c.env, c.var.user.id, await c.req.json().catch(() => null))),
-);
+app.get("/api/notices", async (c) => {
+  const [feed, connectorUpdate] = await Promise.all([
+    listUserNotices(c.env, c.var.user.id, c.req.query()),
+    c.env.ACCOUNTS.getByName(c.var.user.id).connectorUpdateNotice(),
+  ]);
+  return c.json({ ...feed, connectorUpdate });
+});
+app.post("/api/notices/connector-update/read", async (c) => {
+  const body = await c.req.json<{ version?: unknown }>().catch(() => null);
+  if (typeof body?.version !== "string" || !connectorVersionPattern.test(body.version))
+    throw new AppError("invalid_notice", "通知参数无效", 400);
+  const read = await c.env.ACCOUNTS.getByName(c.var.user.id).readConnectorUpdateNotice(
+    body.version,
+  );
+  if (!read) throw new AppError("notice_changed", "升级通知已变化，请刷新后查看", 409);
+  return c.json({ ok: true });
+});
+app.post("/api/notices/read-all", async (c) => {
+  const parsed = noticeReadAllSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw new AppError("invalid_notice", "通知参数无效", 400);
+  if (parsed.data.connectorVersion) {
+    const read = await c.env.ACCOUNTS.getByName(c.var.user.id).readConnectorUpdateNotice(
+      parsed.data.connectorVersion,
+    );
+    if (!read) throw new AppError("notice_changed", "升级通知已变化，请刷新后查看", 409);
+  }
+  return c.json(await readAllNotices(c.env, c.var.user.id, parsed.data));
+});
 // Keep the old close URL as a read alias for browser tabs opened before the upgrade.
 for (const action of ["read", "dismiss"] as const)
   app.post(`/api/notices/:id/${action}`, async (c) =>

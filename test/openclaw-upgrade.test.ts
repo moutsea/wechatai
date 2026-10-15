@@ -51,4 +51,14 @@ describe("connector update status", () => {
       ),
     ).toBe("");
   });
+  it("expands the upgrade command immediately when opened from a notification link", () => {
+    const linked = renderToStaticMarkup(
+      createElement(OpenClawUpgrade, { status, initiallyExpanded: true }),
+    );
+    expect(linked).toContain('<details open=""');
+    expect(linked).toContain("node upgrade");
+    expect(renderToStaticMarkup(createElement(OpenClawUpgrade, { status }))).not.toContain(
+      '<details open=""',
+    );
+  });
 });

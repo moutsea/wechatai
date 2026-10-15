@@ -12,6 +12,11 @@ import { createDemo } from "../src/client/demo";
 import { useApp } from "../src/client/context";
 import { PluginLibrary, PluginConfiguration } from "../src/client/pages/plugin-library";
 import { Channels } from "../src/client/pages/channels";
+import { Plugins } from "../src/client/pages/plugins";
+import { ConnectorUpdateCard } from "../src/client/connector-update-notice";
+import { connectorUpgradePath } from "../src/shared/connector-update";
+import { authReturnPath } from "../src/shared/auth";
+import { unreadNoticeCount, type UserNotices } from "../src/shared/site-notices";
 import { openClawInputSchema, type OpenClawPlugin } from "../src/shared/openclaw";
 import type { Snapshot } from "../src/shared/types";
 
@@ -81,6 +86,57 @@ beforeEach(async () => {
 });
 
 describe("plugin entitlement controls", () => {
+  it("opens the addressed OpenClaw connection directly and rejects foreign or deleted links", () => {
+    data.plugins = [plugin("first"), plugin("second")];
+    const linked = (id: string) =>
+      renderToStaticMarkup(
+        <MemoryRouter initialEntries={[connectorUpgradePath(id)]}>
+          <Plugins />
+        </MemoryRouter>,
+      );
+    const html = linked("second");
+    expect(html).toMatch(/<h2[^>]*>连接 OpenClaw<\/h2>/);
+    expect(html).toContain('value="Agent second"');
+    expect(html).not.toContain('value="Agent first"');
+    expect(linked("foreign")).toContain("不属于当前登录账号");
+    expect(linked("foreign")).not.toMatch(/<h2[^>]*>连接 OpenClaw<\/h2>/);
+    expect(authReturnPath(connectorUpgradePath("second"))).toBe(connectorUpgradePath("second"));
+  });
+
+  it("gives each connector an upgrade link and counts the grouped notice only once", () => {
+    const notice = {
+      version: "1.1.4",
+      createdAt: 1,
+      isRead: false,
+      connections: [
+        { id: "first", name: "工作助手", shortcut: "work", currentVersion: "1.1.3" },
+        { id: "second", name: "生活助手", shortcut: "life", currentVersion: null },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ConnectorUpdateCard notice={notice} base="/app" onRead={noop} />
+      </MemoryRouter>,
+    );
+    expect(html).toContain('href="/app/plugins?upgrade=first"');
+    expect(html).toContain('href="/app/plugins?upgrade=second"');
+    expect(html).toContain("尚未上报版本");
+    const feed: UserNotices = {
+      items: [],
+      total: 0,
+      page: 1,
+      totalPages: 1,
+      unread: 0,
+      important: null,
+      readThrough: 0,
+      connectorUpdate: notice,
+    };
+    expect(unreadNoticeCount(feed)).toBe(1);
+    expect(unreadNoticeCount({ ...feed, unread: 2 })).toBe(3);
+    expect(unreadNoticeCount({ ...feed, connectorUpdate: { ...notice, isRead: true } })).toBe(0);
+    expect(unreadNoticeCount(null)).toBe(0);
+  });
+
   it("offers all seven plugins before the Free slot is used", () => {
     const html = library();
     expect(html.match(/aria-label="配置 /g)).toHaveLength(7);

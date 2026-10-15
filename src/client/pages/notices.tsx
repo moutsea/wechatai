@@ -3,11 +3,12 @@ import { CheckCheck, ChevronLeft, ChevronRight, Bell } from "lucide-react";
 import { useApp } from "../context";
 import { NoticeItem, useNotices } from "../notices";
 import { PageHead } from "../ui";
-import type { UserNotices } from "../../shared/site-notices";
+import { unreadNoticeCount, type UserNotices } from "../../shared/site-notices";
+import { ConnectorUpdateCard } from "../connector-update-notice";
 
 export function Notices() {
-  const { request } = useApp();
-  const { open, busy, readAll, version } = useNotices();
+  const { request, base } = useApp();
+  const { open, busy, readAll, version, readConnectorUpdate } = useNotices();
   const [page, setPage] = useState(1);
   const [data, setData] = useState<UserNotices | null>(null);
   const [error, setError] = useState("");
@@ -41,7 +42,7 @@ export function Notices() {
         action={
           <button
             className="button secondary"
-            disabled={busy || loading || !data?.unread}
+            disabled={busy || loading || !unreadNoticeCount(data)}
             onClick={() => data && void readAll(data)}
           >
             <CheckCheck size={16} />
@@ -61,10 +62,20 @@ export function Notices() {
           <p className="notice-empty" role="status">
             正在加载通知…
           </p>
-        ) : data?.items.length ? (
-          data.items.map((notice) => (
-            <NoticeItem key={notice.id} notice={notice} onOpen={() => open(notice)} />
-          ))
+        ) : data && (data.items.length || data.connectorUpdate) ? (
+          <>
+            {data.connectorUpdate && (
+              <ConnectorUpdateCard
+                notice={data.connectorUpdate}
+                base={base}
+                busy={busy}
+                onRead={() => void readConnectorUpdate(data.connectorUpdate!)}
+              />
+            )}
+            {data.items.map((notice) => (
+              <NoticeItem key={notice.id} notice={notice} onOpen={() => open(notice)} />
+            ))}
+          </>
         ) : (
           <div className="notice-empty">
             <Bell size={28} />

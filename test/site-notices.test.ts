@@ -12,6 +12,7 @@ import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import worker from "../src/server/index";
 import { createNotice, listUserNotices } from "../src/server/site-notices";
 import type { NoticeInput, SiteNotice, UserNotices } from "../src/shared/site-notices";
+import { openClawRelease } from "../src/shared/openclaw-release";
 
 type Account = { id: string; cookie: string };
 let owner: Account, alice: Account, bob: Account;
@@ -95,6 +96,87 @@ beforeEach(async () => {
 });
 
 describe("site notices", () => {
+  it("delivers private connector notices through the feed and protects the read endpoints", async () => {
+    const target = await login();
+    const other = await login();
+    const response = await call(target, "/plugins", "POST", {
+      pluginId: "wechatai/openclaw",
+      name: "我的电脑",
+      shortcut: "claw",
+    });
+    expect(response.status).toBe(200);
+    const plugin = await response.json<{ id: string }>();
+    expect((await feed(target)).connectorUpdate).toBeNull();
+    expect((await call(target, `/plugins/${plugin.id}/openclaw/token`, "POST", {})).status).toBe(
+      200,
+    );
+    const initial = await feed(target);
+    expect(initial.connectorUpdate).toMatchObject({
+      version: openClawRelease.version,
+      isRead: false,
+      connections: [{ id: plugin.id }],
+    });
+    expect((await feed(other)).connectorUpdate).toBeNull();
+    expect(
+      (
+        await request("/api/notices/connector-update/read", {
+          method: "POST",
+          headers: { origin: env.APP_URL },
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await call(other, "/notices/connector-update/read", "POST", {
+          version: openClawRelease.version,
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await request("/api/notices/connector-update/read", {
+          method: "POST",
+          headers: {
+            cookie: target.cookie,
+            origin: "https://foreign.example",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ version: openClawRelease.version }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await call(target, "/notices/connector-update/read", "POST", { version: "invalid" })).status,
+    ).toBe(400);
+    expect(
+      (await call(target, "/notices/connector-update/read", "POST", { version: "1.0.0" })).status,
+    ).toBe(409);
+    // A stale read-all snapshot that did not contain the upgrade cannot mark it read.
+    expect(
+      (await call(target, "/notices/read-all", "POST", { readThrough: initial.readThrough }))
+        .status,
+    ).toBe(200);
+    expect((await feed(target)).connectorUpdate?.isRead).toBe(false);
+    expect(
+      (
+        await call(target, "/notices/read-all", "POST", {
+          readThrough: initial.readThrough,
+          connectorVersion: openClawRelease.version,
+        })
+      ).status,
+    ).toBe(200);
+    expect((await feed(target)).connectorUpdate?.isRead).toBe(true);
+    expect(
+      (
+        await call(target, "/notices/connector-update/read", "POST", {
+          version: openClawRelease.version,
+        })
+      ).status,
+    ).toBe(200);
+    expect((await call(target, `/plugins/${plugin.id}`, "DELETE")).status).toBe(200);
+    expect((await feed(target)).connectorUpdate).toBeNull();
+  });
+
   it("authenticates readers and requires the server-side admin role for every mutation", async () => {
     expect((await request("/api/notices")).status).toBe(401);
     expect((await request("/api/admin/notices")).status).toBe(401);

@@ -6,12 +6,15 @@ import { openClawUpgradeState } from "../remote-agent-status";
 export function OpenClawUpgrade({
   status,
   demo = false,
+  initiallyExpanded = false,
 }: {
   status: OpenClawStatus;
   demo?: boolean;
+  initiallyExpanded?: boolean;
 }) {
   const [copiedAt, setCopiedAt] = useState(0);
   const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   const release = status.connectorUpdate;
   if (!release || !status.hasKey) return null;
   const version = openClawUpgradeState(status);
@@ -31,7 +34,7 @@ export function OpenClawUpgrade({
       {version.state === "unknown" && (
         <p className="muted">旧连接器可能不会上报版本，升级后可自动检测。</p>
       )}
-      <details>
+      <details open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
         <summary>更新说明与升级命令</summary>
         <ul>
           {release.notes.map((note) => (
