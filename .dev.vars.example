@@ -1,6 +1,14 @@
 # Generate separate random values of at least 32 characters. Never commit .dev.vars.
 BETTER_AUTH_SECRET=
 ENCRYPTION_KEY=
+# Optional receive-only server credential. Empty account scope keeps local polling.
+WECHAT_RECEIVER_SECRET=
+WECHAT_RECEIVER_ACCOUNTS=
+# Optional server executor, using a separate random secret; scope = account IDs or all.
+EXECUTOR_SECRET=
+EXECUTOR_ACCOUNTS=
+# Optional aggregate-only server monitoring credential, independent of receiver/executor.
+SERVER_MONITOR_SECRET=
 # Same random secret as KimiSeek WECHATAI_CONNECT_SECRET (at least 32 characters).
 KIMISEEK_CONNECT_SECRET=
 # Optional: each OAuth button is enabled only when both values are configured.

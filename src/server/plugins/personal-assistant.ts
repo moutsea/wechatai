@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ExecutionPending } from "../execution-context";
 import {
   personalAssistantManifest,
   personalQuerySchema,
@@ -17,6 +18,7 @@ import {
   type ModelTool,
   type ModelToolRound,
   type ModelToolReply,
+  type ToolReplyRetryState,
 } from "../llm-tools";
 import { invokePlugin, pluginOutputBudget } from "./gateway";
 import { personalContext } from "./personal-context";
@@ -85,6 +87,7 @@ export async function invokePersonalAssistant(
   draft: PersonalDraft,
   checkpoint: () => Promise<void>,
   journal?: PersonalAssistantJournal,
+  toolReplyRetry: ToolReplyRetryState = { used: false },
 ) {
   // The advertised default and the applied default must agree with this user's config.
   const createSchema = personalRecordFields.extend({
@@ -178,13 +181,22 @@ export async function invokePersonalAssistant(
             deadline - Date.now(),
             step < 8,
             2000,
+            {
+              state: toolReplyRetry,
+              checkpoint: async () => {
+                await checkpoint();
+                draft.assertCurrent();
+              },
+            },
           ));
         draft.assertCurrent();
         // Persist the native response before any awaited checkpoint. A restart
         // after this point must execute its tools, not ask the model again.
+        toolReplyRetry.pending = false;
         persist({ pendingReply: reply });
         pendingReply = undefined;
       } catch (error) {
+        if (error instanceof ExecutionPending) throw error;
         console.warn(
           JSON.stringify({
             event: "personal.model_round_failed",

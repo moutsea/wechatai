@@ -11,13 +11,21 @@ Hono API（Cloudflare Worker）
     ├── Better Auth → D1：用户、登录、订单、邀请、管理员统计
     ├── PersonalAccount（每个用户一个 Durable Object）
     │     ├── SQLite：渠道、会话、消息、钱包、插件、个人记录
-    │     ├── 模型 / 插件网关 → 用户自备的上游 API
+    │     ├── 模型 / 插件网关 → 用户自备的上游 API（可由独立执行器运行）
     │     ├── R2：图片和受控媒体文件
     │     └── OpenClaw / Hermes ← 用户侧连接器向外连接
     └── 独立提醒 Worker → ReminderScheduler → 账户 RPC → 微信
 ```
 
 普通网页请求先验证登录，随后只路由到当前用户的账户对象。管理后台使用独立的服务器端角色检查。连接器和消息提醒 Token 仅拥有对应插件的有限权限，不等同网页登录 Cookie。
+
+## 可选常驻服务
+
+- `wechat-receiver` 在独立服务器长轮询微信，通过可休眠 WebSocket 转交消息。连接中断时，账户对象恢复原轮询。
+- `wechat-executor` 领取账户对象持久化的任务，执行模型、摘要、搜索、网页读取、生图和附件解析。等待上游时，账户对象已经结束本次处理。
+- 执行结果回传后，账户对象恢复处理进度，保留权限、上下文、个人记录修改和 credits 结算。微信最终投递与提醒调度仍在 Cloudflare。
+
+两项服务均默认关闭，独立密钥鉴权，支持按账号逐步开启。执行器的领取与结果回传带任务凭证，重复结果不会重复结算。服务在上游结果未知时重启，只返回中断失败，不自动重跑可能产生费用或副作用的操作。正常网站更新不终止服务器上已领取的请求。详见[部署说明](deployment.md)。
 
 ## 微信消息
 
@@ -46,15 +54,17 @@ Hono API（Cloudflare Worker）
 
 ## 关键位置
 
-| 位置 | 职责 |
-| --- | --- |
-| `src/server/index.ts` | API 路由、登录和请求边界 |
-| `src/server/personal-account.ts` | 账户状态、微信消息、插件与会话协调 |
-| `src/server/reminder-scheduler.ts` | 独立提醒调度与恢复 |
-| `src/server/llm*.ts`、`context.ts` | 上游协议、工具调用和上下文 |
-| `src/server/plugins/` | 内置插件实现 |
-| `src/server/wallet.ts`、`billing.ts` | 用量结算、订单、Stripe 校验 |
-| `src/server/billing-notifications.ts` | 付款通知持久队列与重试 |
-| `src/shared/plugins.ts` | 插件协议与运行时 Schema |
+| 位置                                                             | 职责                               |
+| ---------------------------------------------------------------- | ---------------------------------- |
+| `src/server/index.ts`                                            | API 路由、登录和请求边界           |
+| `src/server/personal-account.ts`                                 | 账户状态、微信消息、插件与会话协调 |
+| `src/server/execution-*.ts`、`integrations/wechat-executor/`     | 耗时任务队列、执行和恢复           |
+| `src/server/wechat-receiver.ts`、`integrations/wechat-receiver/` | 收消息传输和断线回退               |
+| `src/server/reminder-scheduler.ts`                               | 独立提醒调度与恢复                 |
+| `src/server/llm*.ts`、`context.ts`                               | 上游协议、工具调用和上下文         |
+| `src/server/plugins/`                                            | 内置插件实现                       |
+| `src/server/wallet.ts`、`billing.ts`                             | 用量结算、订单、Stripe 校验        |
+| `src/server/billing-notifications.ts`                            | 付款通知持久队列与重试             |
+| `src/shared/plugins.ts`                                          | 插件协议与运行时 Schema            |
 
 账户协调模块仍较集中。后续可以按会话、微信传输和插件运行分拆，但需保留现有存储兼容和隔离测试。

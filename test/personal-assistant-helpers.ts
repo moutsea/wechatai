@@ -7,6 +7,7 @@ import type { PersonalAssistantPlugin, PersonalRecord } from "../src/shared/pers
 import type { Protocol } from "../src/shared/types";
 import type { WxMessage } from "../src/server/wechat";
 import { encrypt } from "../src/server/security";
+import { deferAutomaticAlarms } from "./helpers/wechat-delivery";
 const accounts: DurableObjectStub<import("../src/server/personal-account").PersonalAccount>[] = [];
 type Account = (typeof accounts)[number];
 const scheduler = (stub: Account) =>
@@ -183,16 +184,20 @@ async function connect(stub: Account, overrides = {}) {
   });
 }
 
-// Capture the durable state at a real journal boundary, then recreate the object
+// Capture the durable state at a real journal or model-request boundary, then recreate the object
 // from that state. The synthetic failure only unwinds the test's live promise;
 // restoring the snapshot models a reset where catch/finally never took effect.
 async function interruptPersonal(
   stub: Account,
   input: string,
-  at: (progress: PersonalAssistantProgress) => boolean,
+  at:
+    | ((progress: PersonalAssistantProgress) => boolean)
+    | { modelRequest: number }
+    | { runSaved: (run: PersonalRun) => boolean },
   id = "restart-run",
 ) {
   await runInDurableObject(stub, async (instance, state) => {
+    await deferAutomaticAlarms(state);
     const target = instance as unknown as {
       personalRuns: PersonalRunStore;
       processWechat(id: string, message: WxMessage, connectionId: string): Promise<string>;
@@ -218,30 +223,53 @@ async function interruptPersonal(
           busy: string;
         }
       | undefined;
-    const hook = vi.spyOn(store, "write").mockImplementation((runId, kind, value) => {
-      write(runId, kind, value);
-      if (kind === "progress" && at(value as PersonalAssistantProgress)) {
-        captured = {
-          meta: store.get(id)!,
-          parts: state.storage.sql
-            .exec<{ kind: string; part: number; data: ArrayBuffer }>(
-              "SELECT kind,part,data FROM personal_run_data WHERE id=?",
-              id,
-            )
-            .toArray(),
-          busy: state.storage.sql
-            .exec<{ value: string }>("SELECT value FROM settings WHERE key='busy'")
-            .one().value,
-        };
-        throw new Error("simulated process reset");
-      }
-    });
+    const capture = () => {
+      captured = {
+        meta: store.get(id)!,
+        parts: state.storage.sql
+          .exec<{ kind: string; part: number; data: ArrayBuffer }>(
+            "SELECT kind,part,data FROM personal_run_data WHERE id=?",
+            id,
+          )
+          .toArray(),
+        busy: state.storage.sql
+          .exec<{ value: string }>("SELECT value FROM settings WHERE key='busy'")
+          .one().value,
+      };
+      throw new Error("simulated process reset");
+    };
+    let restore: () => void;
+    if (typeof at === "function") {
+      const hook = vi.spyOn(store, "write").mockImplementation((runId, kind, value) => {
+        write(runId, kind, value);
+        if (kind === "progress" && at(value as PersonalAssistantProgress)) capture();
+      });
+      restore = () => hook.mockRestore();
+    } else if ("runSaved" in at) {
+      const save = store.save.bind(store);
+      const hook = vi.spyOn(store, "save").mockImplementation((runId, value) => {
+        save(runId, value);
+        if (at.runSaved(value)) capture();
+      });
+      restore = () => hook.mockRestore();
+    } else {
+      const upstream = vi.mocked(fetch).getMockImplementation()!;
+      let requests = 0;
+      vi.mocked(fetch).mockImplementation(async (url, init) => {
+        const host = new URL(url instanceof Request ? url.url : String(url)).hostname;
+        if (host === "llm.example.com" && ++requests === at.modelRequest) capture();
+        return upstream(url, init);
+      });
+      restore = () => {
+        vi.mocked(fetch).mockImplementation(upstream);
+      };
+    }
     try {
       await expect(target.processWechat(id, message, "default")).rejects.toThrow(
         "simulated process reset",
       );
     } finally {
-      hook.mockRestore();
+      restore();
     }
     expect(captured).toBeDefined();
     const saved = captured!;
@@ -261,7 +289,17 @@ async function interruptPersonal(
     expect(state.storage.sql.exec("SELECT count(*) n FROM usage WHERE id=?", id).one().n).toBe(0);
   });
   await abortAllDurableObjects();
-  return env.ACCOUNTS.get(stub.id);
+  const restored = env.ACCOUNTS.get(stub.id);
+  await runInDurableObject(restored, async (_, state) => {
+    // The constructor correctly schedules immediate recovery. Assert that before
+    // deferring it, so the test's explicit resume cannot race a wall-clock alarm
+    // under a busy full-suite run. runDurableObjectAlarm still fires it manually.
+    const alarm = await state.storage.getAlarm();
+    expect(alarm).not.toBeNull();
+    expect(alarm).toBeLessThanOrEqual(Date.now() + 1000);
+    await deferAutomaticAlarms(state);
+  });
+  return restored;
 }
 async function due(stub: Account, age = 1000) {
   await runInDurableObject(stub, (_, state) => {

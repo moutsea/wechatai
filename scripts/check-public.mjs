@@ -4,7 +4,11 @@ import { execFileSync } from "node:child_process";
 const files = execFileSync("git", ["ls-files", "--cached", "-z"], { encoding: "utf8" })
   .split("\0")
   .filter(Boolean);
-const allowed = new Set([".dev.vars.example", ".env.example"]);
+const allowed = new Set([
+  ".dev.vars.example",
+  ".env.example",
+  "integrations/server-monitor/.env.example",
+]);
 const privatePath =
   /(^|\/)(?:\.env(?:\..*)?|\.dev\.vars(?:\..*)?|\.wrangler|node_modules|dist)(?:\/|$)|\.local(?:\.[^/]*)?$|\.(?:sqlite|db)(?:-shm|-wal)?$|(?:^|\/)env\.d\.ts$/;
 const rules = [

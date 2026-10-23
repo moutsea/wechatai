@@ -1,3 +1,4 @@
+import { ExecutionPending } from "./execution-context";
 import { countTextTokens } from "./tokenizer";
 import type { Assistant } from "../shared/types";
 import { CONTEXT_SUMMARY_THRESHOLD, modelInputBudget } from "../shared/context";
@@ -142,6 +143,7 @@ export async function prepareContext(options: PrepareOptions) {
       try {
         summary = await summarize(messages, output, part.at(-1)!.at(-1)!.id);
       } catch (error) {
+        if (error instanceof ExecutionPending) throw error;
         // Stale state / exhausted wallet must not turn into another model call.
         if (
           error instanceof AppError &&

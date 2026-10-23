@@ -34,3 +34,4 @@ design/image-assets/brand-references/*
 *.db-shm
 *.db-wal
 *.local.mjs
+integrations/wechat-executor/*.bundle.mjs

@@ -1,3 +1,4 @@
+import { activityFetch, executionId, executionSignal } from "../execution-context";
 import { z } from "zod";
 import type { Assistant } from "../../shared/types";
 import { imageGenerationManifest, type ImageGenerationPlugin } from "../../shared/image-generation";
@@ -82,10 +83,10 @@ async function imageUpstreamError(response: Response, startedAt: number): Promis
 export async function fetchGeneratedBytes(url: string, signal: AbortSignal): Promise<Uint8Array> {
   for (let redirects = 0; redirects <= 3; redirects++) {
     url = publicPageUrl(url);
-    await validatePublicDNS(url);
+    if (!executionId()) await validatePublicDNS(url);
     signal.throwIfAborted();
     // Never forward the model API credential to image URLs or redirect targets.
-    const r = await fetch(url, { redirect: "manual", signal });
+    const r = await activityFetch(url, { redirect: "manual", signal }, 30000, MAX_GENERATED_BYTES);
     if ([301, 302, 303, 307, 308].includes(r.status)) {
       const target = r.headers.get("location");
       await r.body?.cancel();
@@ -164,7 +165,7 @@ export async function invokeImageGeneration(
         validateModelBaseUrl(env, model.baseUrl),
         "/v1/images/generations",
       );
-      await validateModelDNS(env, endpoint);
+      if (!executionId()) await validateModelDNS(env, endpoint);
       checkpoint();
       if (deadline - Date.now() < 1000)
         throw new AppError("image_timeout", "生图请求已超时，请稍后重试", 504);
@@ -172,16 +173,21 @@ export async function invokeImageGeneration(
       checkpoint();
       const remaining = Math.min(MODEL_REQUEST_TIMEOUT_MS, deadline - Date.now());
       if (remaining < 1000) throw new AppError("image_timeout", "生图请求已超时，请稍后重试", 504);
-      const signal = AbortSignal.timeout(remaining);
+      const signal = executionSignal(remaining);
       const startedAt = Date.now();
-      const r = await fetch(endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-        // Explicit prompt ratios control the canvas. Omit size for unspecified ratios.
-        body: JSON.stringify({ model: model.model, prompt, n: 1, ...(size ? { size } : {}) }),
-        redirect: "manual",
-        signal,
-      });
+      const r = await activityFetch(
+        endpoint,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+          // Explicit prompt ratios control the canvas. Omit size for unspecified ratios.
+          body: JSON.stringify({ model: model.model, prompt, n: 1, ...(size ? { size } : {}) }),
+          redirect: "manual",
+          signal,
+        },
+        remaining,
+        12_000_000,
+      );
       if (!r.ok) {
         const paymentError = upstreamPaymentError(env, model.baseUrl, r.status);
         if (paymentError) {

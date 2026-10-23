@@ -27,23 +27,23 @@
 
 ## 内置插件
 
-| 插件 | 用途 |
-| --- | --- |
-| DS Chat | 模型按需调用搜索和网页阅读工具；回答模型、搜索服务均可配置 |
-| AI 生图 | 使用自己的生图 API，在微信里生成并接收图片 |
+| 插件     | 用途                                                             |
+| -------- | ---------------------------------------------------------------- |
+| DS Chat  | 模型按需调用搜索和网页阅读工具；回答模型、搜索服务均可配置       |
+| AI 生图  | 使用自己的生图 API，在微信里生成并接收图片                       |
 | OpenClaw | 将自己运行的 OpenClaw 接入微信，支持多个配置、原生命令和主动推送 |
-| Hermes | 将自己运行的 Hermes 接入微信，支持后台任务与定时任务的结果回传 |
-| 角色扮演 | 自定义人设、开场白、对话示例和世界书，导入角色卡 |
-| 个人助理 | 笔记、待办清单、记账、独立提醒与每日待办提醒 |
-| 消息提醒 | 专属 Token 接收 HTTP 请求并转发到微信，不调用模型 |
+| Hermes   | 将自己运行的 Hermes 接入微信，支持后台任务与定时任务的结果回传   |
+| 角色扮演 | 自定义人设、开场白、对话示例和世界书，导入角色卡                 |
+| 个人助理 | 笔记、待办清单、记账、独立提醒与每日待办提醒                     |
+| 消息提醒 | 专属 Token 接收 HTTP 请求并转发到微信，不调用模型                |
 
 目前是内置插件与专用 Agent 连接器。插件市场、用户上传代码和云端托管 Agent 尚未实现。[插件开发说明](docs/plugins.md)解释了已有能力和协议预留部分。
 
 <details>
 <summary>查看配置界面</summary>
 
-| 模型渠道 | DS Chat | OpenClaw |
-| --- | --- | --- |
+| 模型渠道                                             | DS Chat                                             | OpenClaw                                             |
+| ---------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------- |
 | ![模型渠道](public/images/docs/deepseek-channel.jpg) | ![DS Chat](public/images/docs/ds-chat-settings.jpg) | ![OpenClaw](public/images/docs/openclaw-configs.jpg) |
 
 </details>
@@ -72,16 +72,16 @@ OAuth、支付和 KimiSeek 一键导入都是可选集成，未配置时基础�
 
 ## 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [本地开发](docs/development.md) | 环境、常用命令、测试、连接器联调 |
-| [配置说明](docs/configuration.md) | 密钥、OAuth、模型、套餐、可选集成 |
-| [部署到 Cloudflare](docs/deployment.md) | D1、R2、独立提醒服务、管理员、备份 |
-| [支付与通知](docs/billing.md) | Stripe 业务隔离、会员与 credits、管理员付款通知 |
-| [架构说明](docs/architecture.md) | 数据隔离、消息链路、上下文与调度 |
-| [插件开发](docs/plugins.md) | 协议、计量、Agent 接入、开发边界 |
-| [贡献指南](CONTRIBUTING.md) | 提交问题、开发检查、Pull Request |
-| [安全报告](SECURITY.md) | 私下报告漏洞，避免公开凭据和用户数据 |
+| 文档                                    | 内容                                               |
+| --------------------------------------- | -------------------------------------------------- |
+| [本地开发](docs/development.md)         | 环境、常用命令、测试、连接器联调                   |
+| [配置说明](docs/configuration.md)       | 密钥、OAuth、模型、套餐、可选集成                  |
+| [部署到 Cloudflare](docs/deployment.md) | D1、R2、提醒、可选收消息服务与执行器、管理员、备份 |
+| [支付与通知](docs/billing.md)           | Stripe 业务隔离、会员与 credits、管理员付款通知    |
+| [架构说明](docs/architecture.md)        | 数据隔离、消息链路、上下文与调度                   |
+| [插件开发](docs/plugins.md)             | 协议、计量、Agent 接入、开发边界                   |
+| [贡献指南](CONTRIBUTING.md)             | 提交问题、开发检查、Pull Request                   |
+| [安全报告](SECURITY.md)                 | 私下报告漏洞，避免公开凭据和用户数据               |
 
 网页用户教程位于 [/docs](https://wechatai.app/docs)。Agent 可读取 [/llms.txt](https://wechatai.app/llms.txt)、[Markdown 协议](https://wechatai.app/developers/plugins.md)和 [JSON Schema](https://wechatai.app/api/plugins/protocol/1.0/schema.json)。
 

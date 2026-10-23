@@ -142,6 +142,12 @@ SELECT id,unixepoch()*1000 FROM user WHERE id='VERIFIED_USER_ID';
 
 ## 6. 验证与备份
 
+若部署常驻微信收消息服务，先应用新增表迁移 `0011_wechat_receivers.sql`，再发布主 Worker；随后按[收消息服务说明](../integrations/wechat-receiver/README.md)配置独立密钥、接管范围和服务器。该功能默认关闭，未配置时继续原来的微信轮询。独立提醒 Worker 无需重新部署。
+
+如需把模型、搜索、生图和附件解析的耗时工作迁到常驻服务，先应用 `0012_execution_queue.sql`，按[执行器部署说明](../integrations/wechat-executor/README.md)发布网站与独立执行器；使用独立密钥及账号范围逐步启用。Cloudflare 继续负责数据和计费，收消息服务与提醒调度器保持独立。
+
+管理后台的「服务器」页需要先应用 `0013_server_status.sql`，再按[服务器状态采集说明](../integrations/server-monitor/README.md)安装独立采集器并配置 `SERVER_MONITOR_SECRET`。采集器每 30 秒推送一次最新快照，不唤醒账户 Durable Objects；无需重启现有消息服务。未配置时显示等待接入，超过 90 秒无上报显示过期状态。
+
 每次上线后先检查 HTTP 入口是否跳转，并保留路径和查询参数：
 
 ```sh

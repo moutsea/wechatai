@@ -1,3 +1,4 @@
+import { activityFetch, executionId, executionSignal } from "./execution-context";
 import { z } from "zod";
 import type { Assistant, Protocol } from "../shared/types";
 import { modelEndpoint } from "../shared/model-endpoint";
@@ -242,9 +243,9 @@ export async function requestModel(
   toolRequest = false,
 ) {
   const startedAt = Date.now();
-  const signal = AbortSignal.timeout(Math.max(1, Math.min(MODEL_REQUEST_TIMEOUT_MS, timeoutMs)));
+  const signal = executionSignal(Math.max(1, Math.min(MODEL_REQUEST_TIMEOUT_MS, timeoutMs)));
   validateModelBaseUrl(env, assistant.baseUrl);
-  await validateModelDNS(env, assistant.baseUrl);
+  if (!executionId()) await validateModelDNS(env, assistant.baseUrl);
   const validatedAt = Date.now();
   let attempts = 1;
   signal.throwIfAborted();
@@ -255,13 +256,17 @@ export async function requestModel(
     headers["anthropic-version"] = "2023-06-01";
   } else headers.authorization = `Bearer ${apiKey}`;
   const send = (body: object) =>
-    fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      redirect: "manual",
-      signal,
-    });
+    activityFetch(
+      url,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        redirect: "manual",
+        signal,
+      },
+      timeoutMs,
+    );
   let response = await send(body);
   let failure: Record<string, unknown> | undefined;
   // Older compatible providers reject the newer limit before running inference.

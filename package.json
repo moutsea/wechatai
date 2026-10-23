@@ -2,6 +2,16 @@
   "name": "wechatai",
   "version": "0.1.0",
   "private": true,
+  "description": "Bring your own AI models and agents into WeChat.",
+  "homepage": "https://wechatai.app",
+  "bugs": {
+    "url": "https://github.com/moutsea/wechatai/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moutsea/wechatai.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -28,7 +38,11 @@
     "test:openclaw:runtime": "node scripts/test-openclaw-runtime.mjs",
     "test:hermes": "node scripts/test-hermes.mjs",
     "cf:production": "node scripts/production.mjs",
-    "check:public": "node scripts/check-public.mjs"
+    "check:public": "node scripts/check-public.mjs",
+    "test:receiver": "npm --prefix integrations/wechat-receiver ci --ignore-scripts --no-audit --no-fund && npm --prefix integrations/wechat-receiver test",
+    "build:executor": "esbuild src/server/executor/attachments.ts --bundle --platform=node --format=esm --target=node22 --outfile=integrations/wechat-executor/attachments.bundle.mjs",
+    "test:executor": "pnpm build:executor && node --test integrations/wechat-executor/executor.test.mjs",
+    "test:monitor": "node --test integrations/server-monitor/collector.test.mjs"
   },
   "dependencies": {
     "@better-auth/core": "1.6.26",
@@ -63,6 +77,7 @@
     "@vitejs/plugin-react": "^6.0.5",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
+    "esbuild": "0.28.1",
     "oxfmt": "^0.62.0",
     "oxlint": "^1.77.0",
     "typescript": "^7.0.2",
@@ -73,15 +88,5 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "packageManager": "pnpm@10.15.0",
-  "description": "Bring your own AI models and agents into WeChat.",
-  "homepage": "https://wechatai.app",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/moutsea/wechatai.git"
-  },
-  "bugs": {
-    "url": "https://github.com/moutsea/wechatai/issues"
-  },
-  "license": "MIT"
+  "packageManager": "pnpm@10.15.0"
 }

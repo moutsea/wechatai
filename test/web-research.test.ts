@@ -375,6 +375,69 @@ describe("user supplied search adapters", () => {
 
 describe("bounded web research runtime", () => {
   it.each(["chat-completions", "responses", "anthropic"] as const)(
+    "corrects malformed %s calls before searching and bills only the final boundary",
+    async (protocol) => {
+      let modelCalls = 0,
+        searches = 0;
+      mockFetch((url, init) => {
+        if (url.includes("search.example.com")) {
+          searches++;
+          return Response.json({
+            results: [{ title: "资料", url: "https://docs.example.com/article", content: "结果" }],
+          });
+        }
+        expect(url).toContain("llm.example.com");
+        modelCalls++;
+        if (modelCalls === 1)
+          return Response.json(
+            toolReply(protocol, "", [
+              { id: "ignored", name: "web_search", args: { query: "不要执行这项搜索" } },
+              { id: "", name: "web_search", args: { query: "资料" } },
+            ]),
+          );
+        if (modelCalls === 2) {
+          expect(searches).toBe(0);
+          expect(String(init?.body)).toContain("没有任何工具被执行");
+          expect(String(init?.body)).not.toContain("不要执行这项搜索");
+          return Response.json(
+            toolReply(protocol, "", [{ id: "fixed", name: "web_search", args: { query: "资料" } }]),
+          );
+        }
+        return Response.json(toolReply(protocol, "找到资料 [1]"));
+      });
+      const result = await invoke(protocol);
+      expect(modelCalls).toBe(3);
+      expect(searches).toBe(1);
+      expect(result.text).toContain("来源");
+      expect(result.units).toBe(creditUnits(result.inputTokens, countTextTokens(result.text)));
+    },
+  );
+  it("does not grant another correction after a successful search round", async () => {
+    let modelCalls = 0,
+      searches = 0;
+    mockFetch((url) => {
+      if (url.includes("search.example.com")) {
+        searches++;
+        return Response.json({
+          results: [{ title: "资料", url: "https://docs.example.com/article", content: "结果" }],
+        });
+      }
+      modelCalls++;
+      return Response.json(
+        toolReply("chat-completions", "", [
+          {
+            id: modelCalls === 2 ? "fixed" : "",
+            name: "web_search",
+            args: { query: "资料" },
+          },
+        ]),
+      );
+    });
+    await expect(invoke()).rejects.toMatchObject({ code: "tool_call_invalid" });
+    expect(modelCalls).toBe(3);
+    expect(searches).toBe(1);
+  });
+  it.each(["chat-completions", "responses", "anthropic"] as const)(
     "answers directly via %s without touching search or reading and preserves normal Markdown",
     async (protocol) => {
       let calls = 0;

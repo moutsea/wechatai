@@ -141,8 +141,6 @@ import { leadingMention, nativeCommand, platformCommand } from "../shared/comman
 import { REFERRAL_CREDITS } from "../shared/referrals";
 import { qualifyReferral, wechatIdentityHash, type ReferralRow } from "./referrals";
 import {
-  downloadImage,
-  downloadMedia,
   extractText,
   sendText,
   validateWechatHost,
@@ -150,10 +148,25 @@ import {
   type WxCredentials,
   type WxMessage,
 } from "./wechat";
-import { AttachmentQueue, extractFileText, safeFileName, MAX_BATCH_BYTES } from "./attachments";
+import { AttachmentQueue } from "./attachments";
+import { parseAttachmentBatch } from "./executor/attachments";
 
 import { DEFAULT_WECHAT_LINK, WECHAT_LINK_LIMITS, wechatLinkKey } from "../shared/wechat-links";
+import {
+  WechatReceiver,
+  RECEIVER_TAG,
+  RECEIVER_PING,
+  RECEIVER_PONG,
+  type WechatUpdates,
+} from "./wechat-receiver";
 import { wechatSetupIssue } from "../shared/wechat-readiness";
+import { ExecutionStore, type ActivityOutcome } from "./execution-store";
+import {
+  ExecutionPending,
+  executionId,
+  withExecution,
+  executionActivity,
+} from "./execution-context";
 import {
   OPENCLAW_WAITING_MESSAGE,
   IMAGE_WAITING_MESSAGE,
@@ -209,8 +222,38 @@ export class PersonalAccount extends DurableObject<Env> {
   private notificationDelivery: Promise<void> | null = null;
   private wechatPolls = new Set<AbortController>();
   private wechatWakeVersion = 0;
+  private receiver: WechatReceiver;
+  private execution: ExecutionStore;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.execution = new ExecutionStore(ctx.storage, env, ctx.id.toString());
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(RECEIVER_PING, RECEIVER_PONG));
+    this.receiver = new WechatReceiver(ctx, env, {
+      links: () =>
+        this.links()
+          .slice(0, this.limits().connections)
+          .map((l) => ({ ...this.connection(l.id), id: l.id }))
+          .filter((l) => l.status === "connected" && !!l.encryptedCredentials)
+          .map((l) => ({ ...l, ...this.wechatTyping(l.id, l.generation, l.contextToken) })),
+      getRegistered: () => this.getSetting<boolean | null>("receiverRegistered", null),
+      setRegistered: (active) => this.setSetting("receiverRegistered", active),
+      ingest: (id, generation, cursor, updates, credentials) =>
+        this.ingestWechat(id, generation, cursor, updates, credentials),
+      expired: (id, generation) => {
+        const link = this.connection(id);
+        if (link.generation === generation && this.linkEnabled(id))
+          this.setLinkSetting(id, "connection", {
+            ...link,
+            status: "expired",
+            error: "微信连接已过期，请重新扫码",
+          });
+      },
+      wake: () => {
+        this.wechatWakeVersion++;
+        for (const poll of this.wechatPolls) poll.abort();
+      },
+      schedule: () => this.scheduleWechat(),
+    });
     this.wallet = new Wallet(ctx.storage);
     this.notifications = new NotificationStore(ctx.storage);
     this.personalRecords = new PersonalRecordsStore(ctx.storage.sql);
@@ -218,6 +261,15 @@ export class PersonalAccount extends DurableObject<Env> {
     this.attachments = new AttachmentQueue(ctx.storage.sql);
     this.media = new MediaStore(ctx.storage.sql, env.MEDIA, ctx.id.toString());
     this.claw = new OpenClawRelay(ctx.storage, {
+      wake: (pluginId) => {
+        for (const socket of ctx.getWebSockets(`connector:${pluginId}`)) {
+          try {
+            if (socket.readyState === WebSocket.OPEN) socket.send("wake");
+          } catch {
+            /* The job remains durable even if an HTTP waiter disconnected. */
+          }
+        }
+      },
       plugin: (id) => {
         const p = this.plugin(id, true);
         if (!isRemoteAgent(p)) throw new AppError("plugin_type", "不是远程 Agent 配置");
@@ -367,6 +419,7 @@ export class PersonalAccount extends DurableObject<Env> {
         "CREATE INDEX IF NOT EXISTS inbox_connection ON inbox(connectionId, state, createdAt)",
       );
       this.personalRuns.init();
+      this.execution.init();
       // A new instance cannot have a live model invocation from its predecessor.
       // Recover immediately instead of waiting for the six-minute lease to expire.
       const interrupted = this.sql
@@ -389,6 +442,191 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private get sql() {
     return this.ctx.storage.sql;
+  }
+  private wechatTyping(connectionId: string, generation: string, contextToken?: string) {
+    if (!contextToken) return { typingUntil: 0 };
+    const pending =
+      this.sql
+        .exec<{ time: number | null }>(
+          `
+      SELECT MAX(createdAt) time FROM inbox i WHERE connectionId=? AND state='pending'
+      AND EXISTS(SELECT 1 FROM json_each(i.payload,'$.item_list') item
+        WHERE trim(COALESCE(json_extract(item.value,'$.text_item.text'),json_extract(item.value,'$.voice_item.text'),'')) != ''
+        AND substr(trim(COALESCE(json_extract(item.value,'$.text_item.text'),json_extract(item.value,'$.voice_item.text'),'')),1,1) != '/')
+    `,
+          connectionId,
+        )
+        .one().time ?? 0;
+    // Only a claimed, user-initiated remote job is processing. Offline agents and
+    // proactive notifications must not leave the user seeing a typing indicator.
+    const claimed =
+      this.sql
+        .exec<{ time: number | null }>(
+          `
+      SELECT MAX(j.createdAt) time FROM claw_jobs j JOIN claw_routes r ON r.id=j.routeId
+      JOIN sessions s ON s.id=r.sessionId JOIN plugins p ON p.id=j.pluginId
+      WHERE j.state='claimed' AND r.connectionId=? AND r.generation=?
+      AND json_extract(s.data,'$.archived')=0 AND json_extract(s.data,'$.resetAt')=r.epoch
+      AND json_extract(p.data,'$.enabled')=1
+    `,
+          connectionId,
+          generation,
+        )
+        .one().time ?? 0;
+    const until = Math.max(pending, claimed) + MODEL_TURN_TIMEOUT_MS;
+    return until > Date.now()
+      ? { typingUntil: until, typingContextToken: contextToken }
+      : { typingUntil: 0 };
+  }
+  // These upgrades are reachable only through authenticated server routes.
+  async fetch(request: Request): Promise<Response> {
+    if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
+      return new Response("WebSocket required", { status: 426 });
+    const path = new URL(request.url).pathname;
+    if (path === "/wechat-receiver") return this.receiver.connect();
+    if (path !== "/connector-wait") return new Response("Not found", { status: 404 });
+    const pluginId = request.headers.get("X-Plugin-Id") || "";
+    try {
+      const plugin = this.claw.authenticate(
+        pluginId,
+        request.headers.get("X-Connector-Secret") || "",
+      );
+      if (plugin.pluginId !== `wechatai/${request.headers.get("X-Connector-Kind")}`)
+        return new Response("Invalid connector kind", { status: 403 });
+    } catch {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    // A disconnected HTTP caller cannot accumulate unlimited wait sockets.
+    const waiting = this.ctx.getWebSockets(`connector:${pluginId}`);
+    for (const old of waiting.slice(0, Math.max(0, waiting.length - 3)))
+      old.close(1012, "wait replaced");
+    const pair = new WebSocketPair();
+    this.ctx.acceptWebSocket(pair[1], [`connector:${pluginId}`]);
+    pair[1].serializeAttachment({ kind: "connector" });
+    return new Response(null, { status: 101, webSocket: pair[0] });
+  }
+  async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
+    if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
+      await this.receiver.message(socket, message);
+    else socket.close(1008, "receive-only socket");
+  }
+  async webSocketClose(socket: WebSocket) {
+    socket.close(1000, "closed");
+    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.scheduleWechat();
+  }
+  async webSocketError(socket: WebSocket) {
+    socket.close(1011, "connection error");
+    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.scheduleWechat();
+  }
+  async receiverStatus() {
+    return {
+      enabled: this.receiver.enabled(),
+      registered: this.getSetting<boolean | null>("receiverRegistered", null),
+      delegated: !!this.receiver.socket(),
+      connectedLinks: this.links().filter(
+        (l) => this.linkEnabled(l.id) && this.connection(l.id).status === "connected",
+      ).length,
+      nextAlarm: await this.ctx.storage.getAlarm(),
+    };
+  }
+  async executionRequest(
+    action: "claim" | "complete" | "status",
+    payload: { id?: string; lease?: string; result?: ActivityOutcome },
+  ) {
+    if (action === "status") {
+      const turn = this.execution.active();
+      return {
+        enabled: this.execution.enabled(),
+        active: !!turn,
+        waiting: turn ? this.execution.waiting(turn.id) : false,
+        jobs: this.sql
+          .exec<{ state: string; count: number }>(
+            "SELECT state,count(*) count FROM execution_jobs GROUP BY state",
+          )
+          .toArray(),
+        modes: this.links()
+          .filter((l) => this.linkEnabled(l.id))
+          .map((l) => {
+            const current = this.linkSetting(l.id, "current", "");
+            const session = this.sessions(l.id).find((s) => s.id === current);
+            return this.findPlugin(session?.pluginInstanceId ?? "")?.pluginId ?? "llm";
+          }),
+        latest:
+          this.sql
+            .exec<{ status: string; createdAt: number }>(
+              "SELECT status,createdAt FROM runs ORDER BY createdAt DESC LIMIT 1",
+            )
+            .toArray()[0] ?? null,
+      };
+    }
+    this.pruneExecution();
+    this.execution.expire();
+    const result =
+      action === "claim"
+        ? await this.execution.claim(() => this.pruneExecution())
+        : this.execution.settle(payload.id!, payload.lease!, payload.result!);
+    await this.scheduleWechat();
+    return result;
+  }
+  private ingestWechat(
+    connectionId: string,
+    generation: string,
+    fromCursor: string,
+    result: WechatUpdates,
+    credentials: WxCredentials,
+  ): string | null {
+    return this.ctx.storage.transactionSync(() => {
+      const link = this.connection(connectionId);
+      if (
+        link.generation !== generation ||
+        link.status !== "connected" ||
+        !this.linkEnabled(connectionId)
+      )
+        return null;
+      let token = link.contextToken;
+      let received = false;
+      for (const message of result.msgs ?? []) {
+        if (
+          message.message_type !== 1 ||
+          message.from_user_id !== credentials.userId ||
+          (!message.message_id && !message.seq)
+        )
+          continue;
+        const id = `${connectionId === DEFAULT_WECHAT_LINK ? "" : connectionId + ":"}${credentials.botId}:${credentials.userId}:${message.message_id ?? message.seq}`;
+        const inserted = this.sql
+          .exec(
+            "INSERT OR IGNORE INTO inbox (id,payload,createdAt,connectionId) VALUES (?, ?, ?, ?) RETURNING id",
+            id,
+            JSON.stringify(message),
+            Date.now(),
+            connectionId,
+          )
+          .toArray().length;
+        if (!inserted) continue;
+        received = true;
+        token = message.context_token || token;
+        if (message.context_token)
+          this.sql.exec(
+            "UPDATE inbox SET state = 'reply', attempts = 0 WHERE connectionId = ? AND state = 'waiting_context'",
+            connectionId,
+          );
+      }
+      // A fallback poll or a lost acknowledgement may race this batch. Merge
+      // messages, but never overwrite a cursor advanced by another receiver.
+      const cursor =
+        (link.cursor || "") === fromCursor
+          ? (result.get_updates_buf ?? result.sync_buf ?? link.cursor ?? "")
+          : link.cursor || "";
+      this.setLinkSetting(connectionId, "connection", {
+        ...link,
+        cursor,
+        contextToken: token,
+        lastPoll: Date.now(),
+        lastSeen: received ? Date.now() : link.lastSeen,
+        error: undefined,
+      });
+      return cursor;
+    });
   }
   private validateClawRoute(route: ClawRoute) {
     this.requireLink(route.connectionId, true);
@@ -498,6 +736,10 @@ export class PersonalAccount extends DurableObject<Env> {
         for (const poll of this.wechatPolls) poll.abort();
         await this.scheduleWechat();
       }
+      if (action === "claim")
+        await this.receiver
+          .sync()
+          .catch(() => console.warn(JSON.stringify({ event: "wechat.typing_sync_retry" })));
       return JSON.stringify({ ok: true, data });
     } catch (error) {
       return JSON.stringify({
@@ -1047,9 +1289,50 @@ export class PersonalAccount extends DurableObject<Env> {
     };
   }
   private busy() {
+    this.pruneExecution();
+    const external = this.execution.active();
+    if (external && external.id !== executionId())
+      throw new AppError("conversation_busy", "正在处理一条消息，请稍后再操作", 409);
     const b = this.getSetting<{ id: string; time: number } | null>("busy", null);
     if (b && b.time > Date.now() - MODEL_RUN_LOCK_MS)
       throw new AppError("conversation_busy", "正在处理一条消息，请稍后再操作", 409);
+  }
+  private pruneExecution() {
+    const turn = this.execution.active();
+    if (!turn) return;
+    const pending = this.sql
+      .exec<{ state: string }>("SELECT state FROM inbox WHERE id=?", turn.id)
+      .toArray()[0];
+    const link = this.connection(turn.connectionId);
+    const connected =
+      this.linkEnabled(turn.connectionId) &&
+      link.status === "connected" &&
+      link.generation === turn.generation;
+    const saved = this.personalRuns.get(turn.id);
+    const plugin = saved?.pluginId ? this.findPlugin(saved.pluginId) : undefined;
+    const pluginAllowed = !saved?.pluginId || (plugin?.enabled && this.pluginAvailable(plugin.id));
+    if (pending?.state === "pending" && connected && pluginAllowed && turn.deadline > Date.now())
+      return;
+    this.ctx.storage.transactionSync(() => {
+      this.execution.finish(turn.id);
+      this.personalRuns.remove(turn.id);
+      this.sql.exec(
+        "UPDATE runs SET status='failed' WHERE id=? AND status IN ('running','interrupted')",
+        turn.id,
+      );
+      if (pending?.state === "pending") {
+        if (connected)
+          this.sql.exec(
+            "UPDATE inbox SET state='reply',reply=? WHERE id=?",
+            "本次任务已过期或配置已变更，本次未扣 credits，请重新发送。",
+            turn.id,
+          );
+        else
+          this.sql.exec("UPDATE inbox SET state='done',payload='{}',reply='' WHERE id=?", turn.id);
+      }
+      if (this.getSetting<{ id: string } | null>("busy", null)?.id === turn.id)
+        this.setSetting("busy", null);
+    });
   }
   private channels() {
     return this.sql
@@ -1671,20 +1954,50 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private async scheduleWechat() {
     this.attachments.expire();
+    this.pruneExecution();
+    await this.execution
+      .sync()
+      .catch(() => console.warn(JSON.stringify({ event: "execution.registry_retry" })));
+    // Registry failure must not take down local receiving or pending replies.
+    await this.receiver
+      .sync()
+      .catch(() => console.warn(JSON.stringify({ event: "wechat.receiver_sync_failed" })));
+    const receivingExternally = !!this.receiver.socket();
     const links = this.links()
       .slice(0, this.limits().connections)
-      .map((l) => this.connection(l.id))
+      .map((l) => ({ ...this.connection(l.id), id: l.id }))
       .filter((l) => ["connected", "waiting", "scanned"].includes(l.status));
     const wakeups = [
       this.attachments.nextExpiry(),
       this.media.nextExpiry(),
       this.personalRecords.schedulePending() ? Date.now() + 1000 : null,
       this.notifications.pendingSync() ? Date.now() + 1000 : null,
+      this.execution.nextAt(),
+      this.execution.dirty() ? Date.now() + 1000 : null,
     ].filter((v): v is number => v !== null);
     if (links.length) {
-      const hasReply =
-        this.sql.exec("SELECT id FROM inbox WHERE state = 'reply' LIMIT 1").toArray().length > 0;
-      wakeups.push(Date.now() + (links.every((l) => l.error) ? 15000 : hasReply ? 100 : 1000));
+      const activeIds = new Set(links.map((l) => l.id));
+      const external = this.execution.active();
+      const hasPending = this.sql
+        .exec<{ connectionId: string }>(
+          "SELECT DISTINCT connectionId FROM inbox WHERE state='reply' OR (state='pending' AND (?='' OR id=?))",
+          external?.id ?? "",
+          external && !this.execution.waiting(external.id) ? external.id : "",
+        )
+        .toArray()
+        .some((row) => activeIds.has(row.connectionId));
+      if (hasPending || !receivingExternally || links.some((l) => l.status !== "connected"))
+        wakeups.push(Date.now() + (links.every((l) => l.error) ? 15000 : hasPending ? 100 : 1000));
+      if (receivingExternally) {
+        wakeups.push(this.receiver.checkAt()!);
+        const until = this.getSetting("planUntil", 0);
+        if (until > Date.now()) wakeups.push(until);
+        for (const record of links) {
+          const guide = this.linkSetting<GuideDelivery | null>(record.id, "guideDelivery", null);
+          if (guide?.status === "pending" && this.connection(record.id).contextToken)
+            wakeups.push(Math.max(Date.now() + 100, guide.retryAt));
+        }
+      }
     }
     if (this.referralPending()) wakeups.push(Date.now() + 60000);
     if (wakeups.length)
@@ -2697,19 +3010,30 @@ export class PersonalAccount extends DurableObject<Env> {
     const startedAt = recovery?.startedAt ?? Date.now();
     const originalMessages = messages;
     let savedRun = recovery;
+    // One format correction for the whole user turn, including context retries
+    // and Durable Object recovery. Never reset this allowance with tool progress.
+    const toolReplyRetry = {
+      used: !!(recovery?.toolReplyRetried || recovery?.toolReplyCorrectionPending),
+      pending: recovery?.toolReplyCorrectionPending ?? false,
+    };
+    // DS Chat's read-only tool loop is replayed from cached activity results.
+    // Its format retry budget must replay from the beginning of that loop too.
+    if (recovery?.external && plugin?.pluginId === "wechatai/web-research") {
+      toolReplyRetry.used = false;
+      toolReplyRetry.pending = false;
+    }
     if (
       !savedRun &&
-      personalDraft &&
-      plugin?.pluginId === "wechatai/personal-assistant" &&
+      (personalDraft || executionId() === id) &&
       s &&
       this.sql.exec("SELECT id FROM inbox WHERE id=? AND state='pending'", id).toArray().length
     )
       savedRun = {
         version: 1,
         modelId: a.id,
-        pluginId: plugin.id,
+        pluginId: plugin?.id ?? "",
         modelConfig: JSON.stringify(a),
-        pluginConfig: JSON.stringify(plugin),
+        pluginConfig: plugin ? JSON.stringify(plugin) : "",
         sessionId: s.id,
         connectionId: s.connectionId ?? DEFAULT_WECHAT_LINK,
         generation: this.connection(s.connectionId ?? DEFAULT_WECHAT_LINK).generation,
@@ -2719,8 +3043,12 @@ export class PersonalAccount extends DurableObject<Env> {
         deadline,
         resumes: 0,
         outputLimit,
-        reminderTarget: this.personalReminderTarget(plugin),
+        reminderTarget:
+          plugin?.pluginId === "wechatai/personal-assistant"
+            ? this.personalReminderTarget(plugin)
+            : null,
         attachmentBatch,
+        external: executionId() === id,
       };
     if (plugin?.pluginId === "wechatai/personal-assistant")
       a = { ...a, systemPrompt: personalAssistantPrompt({ ...plugin, hasKey: true }, startedAt) };
@@ -2768,7 +3096,7 @@ export class PersonalAccount extends DurableObject<Env> {
     this.ctx.storage.transactionSync(() => {
       if (recovery) {
         this.sql.exec("UPDATE runs SET status='running' WHERE id=? AND status='interrupted'", id);
-        savedRun = { ...recovery, resumes: recovery.resumes + 1 };
+        savedRun = { ...recovery, resumes: recovery.resumes + (recovery.external ? 0 : 1) };
         this.personalRuns.save(id, savedRun);
       } else {
         this.sql.exec(
@@ -2791,9 +3119,24 @@ export class PersonalAccount extends DurableObject<Env> {
       const searchKey = plugin?.encryptedKey
         ? await decrypt(this.env, plugin.encryptedKey, `${this.ctx.id}:plugin:${plugin.id}`)
         : "";
+      const persistToolReplyRetry = () => {
+        if (
+          savedRun &&
+          (!!savedRun.toolReplyRetried !== toolReplyRetry.used ||
+            !!savedRun.toolReplyCorrectionPending !== toolReplyRetry.pending)
+        ) {
+          savedRun = {
+            ...savedRun,
+            toolReplyRetried: toolReplyRetry.used,
+            toolReplyCorrectionPending: toolReplyRetry.pending,
+          };
+          this.personalRuns.save(id, savedRun);
+        }
+      };
       const checkpoint = async () => {
         assertCurrent();
         if (plugin) this.plugin(plugin.id, true);
+        persistToolReplyRetry();
         this.setSetting("busy", { id, time: Date.now() });
         await this.scheduleRecovery();
       };
@@ -2840,9 +3183,16 @@ export class PersonalAccount extends DurableObject<Env> {
                 savedRun
                   ? {
                       load: () => this.personalRuns.read<PersonalAssistantProgress>(id, "progress"),
-                      save: (progress) => this.personalRuns.write(id, "progress", progress),
+                      save: (progress) =>
+                        this.ctx.storage.transactionSync(() => {
+                          // A restart must see either a pending correction or its
+                          // accepted native reply, never a gap between the two.
+                          persistToolReplyRetry();
+                          this.personalRuns.write(id, "progress", progress);
+                        }),
                     }
                   : undefined,
+                toolReplyRetry,
               )
             : plugin?.pluginId === "wechatai/web-research" && !internal
               ? await invokeWebResearch(
@@ -2858,6 +3208,7 @@ export class PersonalAccount extends DurableObject<Env> {
                   { ...plugin, hasKey: Boolean(plugin.encryptedKey) },
                   searchKey,
                   checkpoint,
+                  toolReplyRetry,
                 )
               : await invokeLlmChat(
                   this.env,
@@ -3118,6 +3469,10 @@ export class PersonalAccount extends DurableObject<Env> {
       );
       return reply;
     } catch (error) {
+      if (error instanceof ExecutionPending) {
+        this.sql.exec("UPDATE runs SET status='interrupted' WHERE id=? AND status='running'", id);
+        throw error;
+      }
       this.ctx.storage.transactionSync(() => {
         this.sql.exec("UPDATE runs SET status = 'failed' WHERE id = ? AND status = 'running'", id);
         recordCallFailure(this.sql, id, error);
@@ -3180,12 +3535,38 @@ export class PersonalAccount extends DurableObject<Env> {
     };
     this.ctx.storage.transactionSync(() => {
       this.sql.exec(
-        "INSERT INTO runs (id,sessionId,status,createdAt) VALUES (?,?,'running',?)",
+        "INSERT INTO runs (id,sessionId,status,createdAt) VALUES (?,?,'running',?) ON CONFLICT(id) DO UPDATE SET status='running' WHERE status='interrupted'",
         id,
         session?.id ?? null,
         Date.now(),
       );
       this.setSetting("busy", { id, time: Date.now() });
+      if (executionId() === id && session && !this.personalRuns.get(id)) {
+        this.personalRuns.save(id, {
+          version: 1,
+          modelId: model.id,
+          pluginId: plugin.id,
+          modelConfig: JSON.stringify(model),
+          pluginConfig: JSON.stringify(plugin),
+          sessionId: session.id,
+          connectionId: session.connectionId ?? DEFAULT_WECHAT_LINK,
+          generation: this.connection(session.connectionId ?? DEFAULT_WECHAT_LINK).generation,
+          contextStart: session.contextStart,
+          resetAt: session.resetAt,
+          currentSessionId: this.linkSetting(
+            session.connectionId ?? DEFAULT_WECHAT_LINK,
+            "current",
+            "",
+          ),
+          startedAt: Date.now(),
+          deadline,
+          resumes: 0,
+          outputLimit: model.maxOutputTokens,
+          reminderTarget: null,
+          external: true,
+        });
+        this.personalRuns.write(id, "input", { original: [prompt] });
+      }
     });
     try {
       await this.scheduleRecovery();
@@ -3262,6 +3643,10 @@ export class PersonalAccount extends DurableObject<Env> {
         return reply;
       });
     } catch (error) {
+      if (error instanceof ExecutionPending) {
+        this.sql.exec("UPDATE runs SET status='interrupted' WHERE id=?", id);
+        throw error;
+      }
       this.sql.exec("UPDATE runs SET status = 'failed' WHERE id = ?", id);
       recordCallFailure(this.sql, id, error);
       this.sql.exec(
@@ -3380,28 +3765,32 @@ export class PersonalAccount extends DurableObject<Env> {
           "这条请求因处理进程中断而未完成，本次未扣 credits，请重新发送。",
           409,
         );
-      if (saved.resumes >= 3 || Date.now() >= saved.deadline - 1000)
+      if ((!saved.external && saved.resumes >= 3) || Date.now() >= saved.deadline - 1000)
         throw new AppError(
           "personal_recovery_expired",
           "个人助理多次中断或等待过久，本轮记录未保存、未扣 credits，请重新发送。",
           409,
         );
       const session = this.session(saved.sessionId);
-      const plugin = this.plugin(saved.pluginId, true);
+      const plugin = saved.pluginId ? this.plugin(saved.pluginId, true) : undefined;
       const model = this.assistant(saved.modelId);
       if (
-        plugin.pluginId !== "wechatai/personal-assistant" ||
-        JSON.stringify(plugin) !== saved.pluginConfig ||
+        (!saved.external && plugin?.pluginId !== "wechatai/personal-assistant") ||
+        (plugin ? JSON.stringify(plugin) : "") !== saved.pluginConfig ||
         JSON.stringify(model) !== saved.modelConfig ||
         session.archived ||
         (session.connectionId ?? DEFAULT_WECHAT_LINK) !== connectionId ||
         saved.connectionId !== connectionId ||
         session.resetAt !== saved.resetAt ||
         session.contextStart !== saved.contextStart ||
-        this.linkSetting(connectionId, "current", "") !== session.id ||
+        this.linkSetting(connectionId, "current", "") !== (saved.currentSessionId ?? session.id) ||
         this.connection(connectionId).generation !== saved.generation ||
         this.connection(connectionId).status !== "connected" ||
-        JSON.stringify(this.personalReminderTarget(plugin)) !== JSON.stringify(saved.reminderTarget)
+        JSON.stringify(
+          plugin?.pluginId === "wechatai/personal-assistant"
+            ? this.personalReminderTarget(plugin)
+            : null,
+        ) !== JSON.stringify(saved.reminderTarget)
       )
         throw new AppError(
           "personal_recovery_changed",
@@ -3437,6 +3826,7 @@ export class PersonalAccount extends DurableObject<Env> {
         )
       ).text;
     } catch (error) {
+      if (error instanceof ExecutionPending) throw error;
       this.ctx.storage.transactionSync(() => {
         this.sql.exec("UPDATE runs SET status='failed' WHERE id=? AND status='interrupted'", id);
         recordCallFailure(this.sql, id, error);
@@ -3873,31 +4263,12 @@ export class PersonalAccount extends DurableObject<Env> {
         "AI 生图当前支持文字描述生成图片，暂不支持参考图或文件。请用 /cancel 清空待处理附件，或切换到聊天模型分析附件。",
         422,
       );
-    const images: NonNullable<ModelMessage["images"]> = [];
-    const files: { name: string; text: string }[] = [];
-    let bytes = 0;
-    for (const item of pending?.items ?? []) {
-      if (item.type === 2) {
-        const image = await downloadImage(item);
-        bytes += Buffer.byteLength(image.data, "base64");
-        images.push(image);
-      } else {
-        const data = await downloadMedia(item);
-        bytes += data.length;
-        if (bytes > MAX_BATCH_BYTES)
-          throw new AppError(
-            "attachment_batch_size",
-            "一批附件合计最大 8 MB，请用 /cancel 清空后分批发送",
-          );
-        const name = safeFileName(item.file_item?.file_name ?? "附件");
-        files.push({ name, text: await extractFileText(name, data) });
-      }
-      if (bytes > MAX_BATCH_BYTES)
-        throw new AppError(
-          "attachment_batch_size",
-          "一批附件合计最大 8 MB，请用 /cancel 清空后分批发送",
-        );
-    }
+    const { images, files } = pending?.items.length
+      ? await executionActivity(
+          { kind: "attachments", items: pending.items, timeoutMs: 120000 },
+          () => parseAttachmentBatch(pending!.items),
+        )
+      : { images: [], files: [] };
     this.requireLink(connectionId, true);
     if (pending && Date.now() >= pending.expiresAt)
       throw new AppError("attachment_expired", "暂存附件已过期，请重新发送附件和处理要求");
@@ -3978,6 +4349,8 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   async alarm() {
     await this.scheduleRecovery();
+    this.pruneExecution();
+    this.execution.expire();
     this.personalRuns.prune();
     const wakeVersion = this.wechatWakeVersion;
     this.attachments.expire();
@@ -4164,6 +4537,13 @@ export class PersonalAccount extends DurableObject<Env> {
           )
           .toArray()[0];
         if (pending) {
+          const external = this.execution.active();
+          if (
+            pending.state === "pending" &&
+            external &&
+            (external.id !== pending.id || this.execution.waiting(pending.id))
+          )
+            return;
           const message = JSON.parse(pending.payload) as WxMessage & {
             remoteReply?: RemoteReplySource;
           };
@@ -4172,12 +4552,8 @@ export class PersonalAccount extends DurableObject<Env> {
             let code: string | undefined;
             let reply: string;
             try {
-              reply = await this.processWechat(
-                pending.id,
-                message,
-                connectionId,
-                deadline,
-                async (text) => {
+              const perform = () =>
+                this.processWechat(pending.id, message, connectionId, deadline, async (text) => {
                   const current = this.connection(connectionId);
                   if (current.generation !== link.generation || !this.linkEnabled(connectionId))
                     throw new AppError("connection_changed", "链接已变更，请重新发送消息", 409);
@@ -4197,9 +4573,44 @@ export class PersonalAccount extends DurableObject<Env> {
                     !this.linkEnabled(connectionId)
                   )
                     throw new AppError("connection_changed", "链接已变更，请重新发送消息", 409);
-                },
-              );
+                });
+              if (this.execution.enabled() || this.execution.turn(pending.id)) {
+                const scope = this.execution.scope(pending.id, connectionId, link.generation);
+                if (scope.generation !== link.generation || scope.deadline <= Date.now())
+                  throw new AppError(
+                    "execution_expired",
+                    "本次任务已过期或链接已变更，本次未扣 credits，请重新发送",
+                    409,
+                  );
+                reply = await withExecution(
+                  {
+                    id: pending.id,
+                    startedAt: scope.startedAt,
+                    perform: (input) => this.execution.perform(scope, input),
+                  },
+                  perform,
+                );
+              } else reply = await perform();
+              if (this.execution.turn(pending.id)) {
+                this.execution.finish(pending.id);
+                this.personalRuns.remove(pending.id);
+              }
             } catch (error) {
+              if (error instanceof ExecutionPending) {
+                code = "queued";
+                return;
+              }
+              if (
+                !(error instanceof AppError && error.code === "conversation_busy") &&
+                this.execution.turn(pending.id)
+              ) {
+                this.execution.finish(pending.id);
+                this.personalRuns.remove(pending.id);
+                this.sql.exec(
+                  "UPDATE runs SET status='failed' WHERE id=? AND status='interrupted'",
+                  pending.id,
+                );
+              }
               code = error instanceof AppError ? error.code : "processing_failed";
               if (error instanceof AppError && error.code === "conversation_busy") return;
               reply =
@@ -4388,6 +4799,9 @@ export class PersonalAccount extends DurableObject<Env> {
               );
           }
         } else {
+          // An inbound hibernating socket delegates receive-only polling to the
+          // server. Pending replies above still run normally in this account.
+          if (this.receiver.socket()) return;
           let result: { msgs?: WxMessage[]; get_updates_buf?: string; sync_buf?: string };
           const poll = new AbortController();
           this.wechatPolls.add(poll);
@@ -4415,40 +4829,7 @@ export class PersonalAccount extends DurableObject<Env> {
             !this.linkEnabled(connectionId)
           )
             return;
-          this.ctx.storage.transactionSync(() => {
-            let token = link.contextToken;
-            for (const message of result.msgs ?? []) {
-              // Personal-use isolation: never answer other senders or echoed bot messages.
-              if (
-                message.message_type !== 1 ||
-                message.from_user_id !== credentials.userId ||
-                (!message.message_id && !message.seq)
-              )
-                continue;
-              const id = `${connectionId === DEFAULT_WECHAT_LINK ? "" : connectionId + ":"}${credentials.botId}:${credentials.userId}:${message.message_id ?? message.seq}`;
-              this.sql.exec(
-                "INSERT OR IGNORE INTO inbox (id,payload,createdAt,connectionId) VALUES (?, ?, ?, ?)",
-                id,
-                JSON.stringify(message),
-                Date.now(),
-                connectionId,
-              );
-              token = message.context_token || token;
-              if (message.context_token)
-                this.sql.exec(
-                  "UPDATE inbox SET state = 'reply', attempts = 0 WHERE connectionId = ? AND state = 'waiting_context'",
-                  connectionId,
-                );
-            }
-            this.setLinkSetting(connectionId, "connection", {
-              ...link,
-              cursor: result.get_updates_buf ?? result.sync_buf ?? link.cursor,
-              contextToken: token,
-              lastPoll: Date.now(),
-              lastSeen: result.msgs?.length ? Date.now() : link.lastSeen,
-              error: undefined,
-            });
-          });
+          this.ingestWechat(connectionId, link.generation, link.cursor || "", result, credentials);
           // The next phase may process one message and send its reply. An empty
           // poll never recursively polls again, and a batch remains FIFO in SQLite.
           if (

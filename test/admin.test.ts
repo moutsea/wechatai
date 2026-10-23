@@ -6,6 +6,7 @@ import billingMigration from "../migrations/0002_billing.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
 import prepaidMigration from "../migrations/0004_prepaid_membership.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
+import serverStatusMigration from "../migrations/0013_server_status.sql?raw";
 import worker from "../src/server/index";
 import { adminOverview, adminUsers, saveAdminStats, syncAdminStats } from "../src/server/admin";
 import { readAdminAccountStats } from "../src/server/admin-account";
@@ -21,6 +22,7 @@ beforeAll(async () => {
     prepaidMigration,
     adminMigration,
     authEmailMigration,
+    serverStatusMigration,
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
@@ -123,7 +125,12 @@ async function login() {
 
 describe("admin authorization", () => {
   it("requires authentication and a server-side role on every protected endpoint", async () => {
-    for (const path of ["/api/admin/access", "/api/admin/overview", "/api/admin/users"])
+    for (const path of [
+      "/api/admin/access",
+      "/api/admin/overview",
+      "/api/admin/users",
+      "/api/admin/server-status",
+    ])
       expect((await request(path)).status).toBe(401);
     const account = await login();
     const headers = {
@@ -134,7 +141,12 @@ describe("admin authorization", () => {
     expect(await (await request("/api/admin/access", { headers })).json()).toEqual({
       isAdmin: false,
     });
-    for (const path of ["/api/admin/overview", "/api/admin/users?q=admin", "/api/admin/unknown"])
+    for (const path of [
+      "/api/admin/overview",
+      "/api/admin/users?q=admin",
+      "/api/admin/unknown",
+      "/api/admin/server-status",
+    ])
       expect((await request(path, { headers })).status).toBe(403);
     expect((await request("/api/admin/sync", { method: "POST", headers, body: "{}" })).status).toBe(
       403,
@@ -144,6 +156,22 @@ describe("admin authorization", () => {
     expect(allowed.status).toBe(200);
     expect(allowed.headers.get("cache-control")).toBe("no-store");
     expect(allowed.headers.get("x-robots-tag")).toContain("noindex");
+    const serverStatus = await request("/api/admin/server-status", { headers });
+    expect(serverStatus.status).toBe(200);
+    expect(serverStatus.headers.get("cache-control")).toBe("no-store");
+    expect(serverStatus.headers.get("x-robots-tag")).toContain("noindex");
+    // Admin cookies cannot publish host metrics; the reporter cannot read admin data.
+    expect(
+      (await request("/api/internal/server-status", { method: "POST", headers, body: "{}" }))
+        .status,
+    ).toBe(401);
+    expect(
+      (
+        await request("/api/admin/server-status", {
+          headers: { authorization: "Bearer monitor-secret" },
+        })
+      ).status,
+    ).toBe(401);
     expect(
       (
         await request("/api/admin/sync", {

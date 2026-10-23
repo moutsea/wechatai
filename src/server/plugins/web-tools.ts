@@ -1,3 +1,4 @@
+import { activityFetch, executionId } from "../execution-context";
 import { DEEPSEEK_SEARCH_DEFAULT_MODEL, type WebResearchPlugin } from "../../shared/web-research";
 import { AppError } from "../config";
 import { readJson, validateBaseUrl, validatePublicDNS } from "../security";
@@ -27,7 +28,7 @@ export async function searchWeb(
   const endpoint = validateBaseUrl(config.searchEndpoint);
   if (config.searchProvider !== "searxng" && !key)
     throw new AppError("search_key_missing", "请配置自己的搜索 API Key");
-  await validatePublicDNS(endpoint);
+  if (!executionId()) await validatePublicDNS(endpoint);
   signal.throwIfAborted();
   const headers: Record<string, string> = { "content-type": "application/json" };
   let body: object;
@@ -68,13 +69,18 @@ export async function searchWeb(
     if (key) headers.authorization = `Bearer ${key}`;
     body = {};
   }
-  const response = await fetch(url, {
-    method: config.searchProvider === "searxng" ? "GET" : "POST",
-    headers,
-    ...(config.searchProvider === "searxng" ? {} : { body: JSON.stringify(body) }),
-    redirect: "manual",
-    signal,
-  });
+  const response = await activityFetch(
+    url,
+    {
+      method: config.searchProvider === "searxng" ? "GET" : "POST",
+      headers,
+      ...(config.searchProvider === "searxng" ? {} : { body: JSON.stringify(body) }),
+      redirect: "manual",
+      signal,
+    },
+    45000,
+    1_000_000,
+  );
   if (!response.ok || response.status >= 300) {
     await response.body?.cancel();
     throw new AppError(
@@ -196,16 +202,21 @@ export async function extractPage(html: string) {
 export async function readWebPage(value: string, signal: AbortSignal): Promise<WebSource> {
   let url = publicPageUrl(value);
   for (let redirects = 0; redirects <= 3; redirects++) {
-    await validatePublicDNS(url);
+    if (!executionId()) await validatePublicDNS(url);
     signal.throwIfAborted();
-    const response = await fetch(url, {
-      redirect: "manual",
-      signal,
-      headers: {
-        accept: "text/html,text/plain,text/markdown",
-        "user-agent": "Wechatai-Reader/1.0",
+    const response = await activityFetch(
+      url,
+      {
+        redirect: "manual",
+        signal,
+        headers: {
+          accept: "text/html,text/plain,text/markdown",
+          "user-agent": "Wechatai-Reader/1.0",
+        },
       },
-    });
+      30000,
+      1_000_000,
+    );
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get("location");
       await response.body?.cancel();

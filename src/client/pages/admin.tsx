@@ -1,4 +1,5 @@
 import { AdminNotices } from "./admin-notices";
+import { AdminServer } from "./admin-server";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -17,6 +18,7 @@ import {
   Megaphone,
   RefreshCw,
   Search,
+  Server,
   ShieldCheck,
   Users,
   Wallet,
@@ -541,7 +543,10 @@ export function Admin() {
       ? "notices"
       : params.get("tab") === "users"
         ? "users"
-        : "overview";
+        : params.get("tab") === "server"
+          ? "server"
+          : "overview";
+  const accountTab = tab === "overview" || tab === "users";
   const query = params.get("q") || "";
   const plan = params.get("plan") || "";
   const page = params.get("page") || "1";
@@ -560,7 +565,7 @@ export function Admin() {
   const loadedView = useRef("");
   useEffect(() => setSearch(query), [query]);
   useEffect(() => {
-    if (tab === "notices") {
+    if (tab === "notices" || tab === "server") {
       setLoading(false);
       setError("");
       return;
@@ -649,7 +654,7 @@ export function Admin() {
   }, []);
   // Start only after an authorized read succeeds. Re-renders, filters and batch
   // refreshes must not restart the loop or launch concurrent synchronizations.
-  const canSync = tab !== "notices" && overview !== null && !forbidden;
+  const canSync = accountTab && overview !== null && !forbidden;
   useEffect(() => {
     if (!canSync) return;
     void sync();
@@ -690,9 +695,9 @@ export function Admin() {
               管理员
             </span>
           </h1>
-          <p>看看微伴的用户、收入和使用情况。</p>
+          <p>查看用户、收入、使用情况与服务器状态。</p>
         </div>
-        {tab !== "notices" && (
+        {accountTab && (
           <button
             className="button secondary"
             onClick={() => void sync()}
@@ -728,6 +733,14 @@ export function Admin() {
           <Megaphone size={16} />
           通知管理
         </button>
+        <button
+          className={tab === "server" ? "active" : ""}
+          aria-current={tab === "server" ? "page" : undefined}
+          onClick={() => changeParams({ tab: "server", page: "", q: "", plan: "" })}
+        >
+          <Server size={16} />
+          服务器
+        </button>
         {overview?.mode === "test" && <span className="admin-test-badge">测试支付环境</span>}
       </nav>
       {error && (
@@ -736,7 +749,7 @@ export function Admin() {
           <button onClick={() => setRefresh((v) => v + 1)}>重新加载</button>
         </div>
       )}
-      {tab !== "notices" && syncError && (
+      {accountTab && syncError && (
         <div className="admin-error" role="alert">
           {syncError}
           <button onClick={() => void sync()} disabled={syncing}>
@@ -744,7 +757,7 @@ export function Admin() {
           </button>
         </div>
       )}
-      {tab !== "notices" && overview && (
+      {accountTab && overview && (
         <div
           className={`admin-sync-info ${overview.coverage.synced < overview.summary.users ? "incomplete" : ""}`}
         >
@@ -758,7 +771,9 @@ export function Admin() {
           <span role="status">{progress || "账户统计自动更新 · 注册与订单数据实时读取"}</span>
         </div>
       )}
-      {tab === "notices" ? (
+      {tab === "server" ? (
+        <AdminServer />
+      ) : tab === "notices" ? (
         <AdminNotices />
       ) : loading ? (
         <div className="admin-loading" role="status">

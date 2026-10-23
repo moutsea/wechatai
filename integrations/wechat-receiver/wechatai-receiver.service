@@ -1,0 +1,29 @@
+[Unit]
+Description=WeChatAI receive-only transport
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wechatai-receiver
+Group=wechatai-receiver
+WorkingDirectory=/opt/wechatai-receiver/current
+EnvironmentFile=/etc/wechatai-receiver.env
+ExecStart=/usr/bin/node main.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=45
+StateDirectory=wechatai-receiver
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+LimitNOFILE=16384
+MemoryMax=768M
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target

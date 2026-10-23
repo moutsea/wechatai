@@ -1,0 +1,25 @@
+[Unit]
+Description=WeChatAI server status reporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=true
+WorkingDirectory=/opt/wechatai-monitor/current
+EnvironmentFile=/etc/wechatai-monitor.env
+ExecStart=/usr/bin/node main.mjs
+Restart=always
+RestartSec=10
+TimeoutStopSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+UMask=0077
+MemoryMax=128M
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target

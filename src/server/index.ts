@@ -12,6 +12,10 @@ import { connectorVersionPattern } from "../shared/openclaw-release";
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
 import { Hono } from "hono";
+import { receiverAuthorized, receiverEnabled } from "./wechat-receiver";
+import { connectorPoll } from "./connector-poll";
+import { executionAuthorized, EXECUTION_MAX_BYTES } from "./execution-store";
+import { serverMonitorAuthorized, saveServerStatus, adminServerStatus } from "./server-status";
 import {
   isAdmin,
   adminOverview,
@@ -47,14 +51,134 @@ export { ReminderScheduler } from "./reminder-scheduler";
 type App = { Bindings: Env; Variables: { user: KimiseekIdentity } };
 const app = new Hono<App>();
 app.use("*", secureHeaders());
-app.use(
-  "/api/*",
-  bodyLimit({
-    maxSize: 128 * 1024,
-    onError: (c) => c.json({ error: "body_too_large", message: "请求内容过大" }, 413),
-  }),
+app.use("/api/*", async (c, next) =>
+  c.req.path.startsWith("/api/internal/executor/")
+    ? next()
+    : bodyLimit({
+        maxSize: 128 * 1024,
+        onError: (c) => c.json({ error: "body_too_large", message: "请求内容过大" }, 413),
+      })(c, next),
 );
+app.use("/api/internal/executor/*", async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  if (!executionAuthorized(c.env, c.req.header("authorization") || ""))
+    return c.json({ error: "unauthorized" }, 401);
+  return bodyLimit({
+    maxSize: EXECUTION_MAX_BYTES,
+    onError: (c) => c.json({ error: "body_too_large" }, 413),
+  })(c, next);
+});
+app.get("/api/internal/executor/accounts", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT account_id FROM execution_accounts WHERE pending=1 ORDER BY updated_at LIMIT 100",
+  ).all<{ account_id: string }>();
+  return c.json({
+    // Scope controls creation, not draining work already accepted before a rollback.
+    accounts: rows.results.map((r) => r.account_id),
+  });
+});
+app.get("/api/internal/executor/:accountId/status", async (c) => {
+  const id = c.req.param("accountId");
+  if (!/^[0-9a-f]{64}$/.test(id)) return c.json({ error: "not_found" }, 404);
+  return c.json(
+    await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).executionRequest("status", {}),
+  );
+});
+app.post("/api/internal/executor/:accountId/:action", async (c) => {
+  const id = c.req.param("accountId"),
+    action = c.req.param("action");
+  if (!/^[0-9a-f]{64}$/.test(id) || !["claim", "complete"].includes(action))
+    return c.json({ error: "not_found" }, 404);
+  const payload =
+    action === "claim"
+      ? {}
+      : z
+          .object({
+            id: z.string().regex(/^[0-9a-f]{64}$/),
+            lease: z.uuid(),
+            result: z.discriminatedUnion("ok", [
+              z.object({ ok: z.literal(true), value: z.unknown() }),
+              z.object({
+                ok: z.literal(false),
+                code: z.string().max(100),
+                message: z.string().max(1000),
+              }),
+            ]),
+          })
+          .parse(await c.req.json());
+  return c.json({
+    data: await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).executionRequest(
+      action as "claim" | "complete",
+      payload,
+    ),
+  });
+});
 app.get("/api/health", (c) => c.json({ ok: true, service: "wechatai" }));
+// A dedicated write-only monitor credential; browser sessions cannot publish metrics.
+app.post("/api/internal/server-status", async (c) => {
+  c.header("Cache-Control", "no-store");
+  if (!serverMonitorAuthorized(c.env, c.req.header("authorization") || ""))
+    return c.json({ error: "unauthorized" }, 401);
+  if (!(await c.env.API_LIMIT.limit({ key: "server-monitor" })).success)
+    return c.json({ error: "rate_limited" }, 429);
+  return c.json(await saveServerStatus(c.env, await c.req.json().catch(() => null)));
+});
+// Operator-only receiver discovery/transport; never authenticated by a user cookie.
+app.use("/api/internal/wechat-receiver/*", async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  if (!receiverAuthorized(c.env, c.req.header("authorization") || ""))
+    return c.json({ error: "unauthorized" }, 401);
+  return next();
+});
+app.get("/api/internal/wechat-receiver/accounts", async (c) => {
+  const after = c.req.query("after") || "";
+  if (after && !/^[0-9a-f]{64}$/.test(after)) return c.json({ error: "invalid_cursor" }, 400);
+  const rows = await c.env.DB.prepare(
+    "SELECT account_id FROM wechat_receivers WHERE active=1 AND account_id>? ORDER BY account_id LIMIT 200",
+  )
+    .bind(after)
+    .all<{ account_id: string }>();
+  return c.json({
+    accounts: rows.results.map((r) => r.account_id).filter((id) => receiverEnabled(c.env, id)),
+    next: rows.results.length === 200 ? rows.results.at(-1)!.account_id : null,
+  });
+});
+app.get("/api/internal/wechat-receiver/status/:accountId", async (c) => {
+  const id = c.req.param("accountId");
+  if (!/^[0-9a-f]{64}$/.test(id)) return c.json({ error: "invalid_account" }, 400);
+  try {
+    return c.json(await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).receiverStatus());
+  } catch (error) {
+    // Authenticated operator diagnostic; no credentials/messages are read here.
+    return c.json(
+      {
+        error: "receiver_unavailable",
+        reason: error instanceof Error ? error.message.slice(0, 400) : "unknown",
+      },
+      503,
+    );
+  }
+});
+app.get("/api/internal/wechat-receiver/connect/:accountId", async (c) => {
+  const id = c.req.param("accountId");
+  if (!/^[0-9a-f]{64}$/.test(id) || !receiverEnabled(c.env, id))
+    return c.json({ error: "not_found" }, 404);
+  if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
+    return c.json({ error: "websocket_required" }, 426);
+  const response = await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).fetch(
+    "https://account.internal/wechat-receiver",
+    {
+      headers: { Upgrade: "websocket" },
+    },
+  );
+  // DO fetch responses have immutable headers. Hono's security middleware adds
+  // response headers, so clone explicitly while retaining the upgrade socket.
+  return new Response(response.body, {
+    status: response.status,
+    headers: response.headers,
+    ...(response.webSocket ? { webSocket: response.webSocket } : {}),
+  });
+});
 app.route("/", publicPluginDocs);
 app.get("/invite/:code", (c) => acceptReferral(c.env, c.req.param("code"), c.req.raw));
 app.use("/api/auth/*", async (c, next) => {
@@ -200,14 +324,24 @@ for (const kind of ["openclaw", "hermes"] as const)
     )
       return c.json({ error: "rate_limited" }, 429);
     const account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(match.accountId));
+    const payload = await c.req.json();
     const result = JSON.parse(
-      await account.openClawRequest(
-        match.pluginId,
-        match.secret,
-        c.req.param("action"),
-        await c.req.json(),
-        kind,
-      ),
+      c.req.param("action") === "poll"
+        ? await connectorPoll(
+            account,
+            match.pluginId,
+            match.secret,
+            kind,
+            payload,
+            c.req.raw.signal,
+          )
+        : await account.openClawRequest(
+            match.pluginId,
+            match.secret,
+            c.req.param("action"),
+            payload,
+            kind,
+          ),
     );
     return result.ok
       ? c.json(result.data)
@@ -296,6 +430,7 @@ app.delete("/api/admin/notices/:id", async (c) =>
   c.json(await deleteNotice(c.env, c.req.param("id"), await c.req.json().catch(() => null))),
 );
 app.get("/api/admin/overview", async (c) => c.json(await adminOverview(c.env)));
+app.get("/api/admin/server-status", async (c) => c.json(await adminServerStatus(c.env)));
 app.get("/api/admin/users", async (c) => c.json(await adminUsers(c.env, c.req.query())));
 app.get("/api/admin/users/:id/membership", async (c) =>
   c.json(await adminMembership(c.env, c.req.param("id"))),

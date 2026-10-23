@@ -30,6 +30,7 @@ type Job = {
   lane: "message" | "control";
 };
 type Hooks = {
+  wake?: (pluginId: string) => void;
   plugin: (id: string) => RemoteAgentPlugin;
   validateRoute: (route: ClawRoute) => void;
   balance: () => number;
@@ -243,6 +244,7 @@ export class OpenClawRelay {
     );
     this.pollWaiters.get(`${pluginId}:message`)?.();
     this.pollWaiters.get(`${pluginId}:control`)?.();
+    this.hooks.wake?.(pluginId);
   }
   cancelSession(sessionId: string) {
     this.sql.exec(
@@ -338,6 +340,7 @@ export class OpenClawRelay {
     );
     this.pollWaiters.get(`${pluginId}:message`)?.();
     this.pollWaiters.get(`${pluginId}:control`)?.();
+    this.hooks.wake?.(pluginId);
     return { id, routeId: target.id };
   }
   async poll(pluginId: string, secret: string, raw: unknown) {

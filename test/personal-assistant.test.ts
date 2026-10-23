@@ -37,6 +37,213 @@ import {
   reminders,
 } from "./personal-assistant-helpers";
 
+describe("personal assistant tool format recovery", () => {
+  it.each([
+    ["chat-completions", "checkpoint"],
+    ["responses", "checkpoint"],
+    ["anthropic", "checkpoint"],
+    ["chat-completions", "request"],
+    ["responses", "request"],
+    ["anthropic", "request"],
+  ] as const)(
+    "resumes the same %s correction after a restart at the %s boundary",
+    async (protocol, phase) => {
+      const { stub, model } = await setup(protocol);
+      await connect(stub);
+      const p = await savePlugin(stub, model.id, { reminderConnectionId: "default" });
+      const remindAt = future();
+      const reminder = { ...note, kind: "reminder", title: "喝水", remindAt };
+      const bodies = modelNetwork(protocol, [
+        response(protocol, "", [{ id: "", name: "personal_create", args: reminder }]),
+        response(protocol, "", [{ id: "fixed", name: "personal_create", args: reminder }]),
+        response(protocol, "已设置"),
+      ]);
+      const fresh = await interruptPersonal(
+        stub,
+        "@助理 一小时后提醒我喝水",
+        phase === "checkpoint"
+          ? { runSaved: (run) => !!run.toolReplyCorrectionPending }
+          : { modelRequest: 2 },
+      );
+      await runInDurableObject(fresh, (_, state) => {
+        expect(new PersonalRunStore(state.storage).get("restart-run")).toMatchObject({
+          toolReplyRetried: true,
+          toolReplyCorrectionPending: true,
+        });
+      });
+      expect(bodies).toHaveLength(1);
+      const reply = await send(fresh, "重试", "restart-run");
+      expect(reply).toContain("提醒已设置");
+      expect(bodies).toHaveLength(3);
+      expect(systemText(bodies[1])).toContain("上一批工具调用因格式校验失败");
+      expect(systemText(bodies[2])).not.toContain("上一批工具调用因格式校验失败");
+      expect((await list(fresh, p.id)).data.total).toBe(1);
+      expect(await reminders(fresh)).toHaveLength(1);
+      await runInDurableObject(fresh, (_, state) => {
+        expect(
+          state.storage.sql.exec("SELECT count(*) n FROM usage WHERE id='restart-run'").one().n,
+        ).toBe(1);
+      });
+    },
+  );
+  it("does not grant another correction if the resumed correction is invalid", async () => {
+    const { stub, model } = await setup();
+    await connect(stub);
+    const p = await savePlugin(stub, model.id);
+    const invalid = response("chat-completions", "", [
+      { id: "", name: "personal_create", args: note },
+    ]);
+    const bodies = modelNetwork("chat-completions", [invalid, invalid]);
+    const fresh = await interruptPersonal(stub, "@助理 记录看展", { modelRequest: 2 });
+    await expect(send(fresh, "重试", "restart-run")).rejects.toThrow("工具调用无效或过多");
+    expect(bodies).toHaveLength(2);
+    expect(systemText(bodies[1])).toContain("上一批工具调用因格式校验失败");
+    expect((await list(fresh, p.id)).data.total).toBe(0);
+    await runInDurableObject(fresh, (_, state) => {
+      expect(
+        state.storage.sql.exec("SELECT count(*) n FROM usage WHERE id='restart-run'").one().n,
+      ).toBe(0);
+    });
+  });
+  it("retains earlier staged operations when a later correction resumes after a restart", async () => {
+    const { stub, model } = await setup();
+    await connect(stub);
+    const p = await savePlugin(stub, model.id, { reminderConnectionId: "default" });
+    const reminder = { ...note, kind: "reminder", title: "喝水", remindAt: future() };
+    const bodies = modelNetwork("chat-completions", [
+      response("chat-completions", "", [{ id: "entry", name: "personal_create", args: entry }]),
+      response("chat-completions", "", [{ id: "", name: "personal_create", args: reminder }]),
+      response("chat-completions", "", [{ id: "fixed", name: "personal_create", args: reminder }]),
+      response("chat-completions", "都已记录"),
+    ]);
+    const fresh = await interruptPersonal(stub, "@助理 记录午餐并在一小时后提醒我喝水", {
+      modelRequest: 3,
+    });
+    expect((await list(fresh, p.id)).data.total).toBe(0);
+    expect(await send(fresh, "重试", "restart-run")).toContain("35.20 CNY");
+    expect(bodies).toHaveLength(4);
+    expect(systemText(bodies[2])).toContain("上一批工具调用因格式校验失败");
+    expect(JSON.stringify(bodies[2])).toContain('"tool_call_id":"entry"');
+    expect(systemText(bodies[3])).not.toContain("上一批工具调用因格式校验失败");
+    expect(
+      (await list(fresh, p.id)).data.records.map((r: PersonalRecord) => r.kind).sort(),
+    ).toEqual(["entry", "reminder"]);
+    expect(await reminders(fresh)).toHaveLength(1);
+  });
+  it.each<Protocol>(["chat-completions", "responses", "anthropic"])(
+    "rejects the entire malformed %s batch, corrects it once and charges only the final result",
+    async (protocol) => {
+      const { stub, model } = await setup(protocol);
+      const p = await savePlugin(stub, model.id);
+      const bodies = modelNetwork(protocol, [
+        response(protocol, "", [
+          { id: "must-not-run", name: "personal_create", args: note },
+          { id: "", name: "personal_create", args: entry },
+        ]),
+        response(protocol, "", [{ id: "fixed", name: "personal_create", args: entry }]),
+        response(protocol, "已记录午餐"),
+      ]);
+      const reply = await send(stub, "@助理 记一笔午餐", "corrected");
+      expect(reply).toContain("35.20 CNY");
+      expect(bodies).toHaveLength(3);
+      expect(systemText(bodies[1])).toContain("没有任何工具被执行");
+      expect(JSON.stringify(bodies[1])).not.toContain("must-not-run");
+      expect((await list(stub, p.id)).data.records.map((r: PersonalRecord) => r.kind)).toEqual([
+        "entry",
+      ]);
+      await runInDurableObject(stub, (_, state) => {
+        expect(
+          state.storage.sql.exec("SELECT count(*) n FROM usage WHERE id='corrected'").one().n,
+        ).toBe(1);
+        expect(
+          state.storage.sql.exec("SELECT count(*) n FROM call_failures WHERE id='corrected'").one()
+            .n,
+        ).toBe(0);
+        const meter = JSON.parse(
+          String(
+            state.storage.sql.exec("SELECT data FROM platform_metering WHERE id='corrected'").one()
+              .data,
+          ),
+        );
+        expect(meter.outputTokens).toBe(countTextTokens(reply));
+      });
+    },
+  );
+  it("validates reused IDs before any tool in that batch and retains earlier receipts without repeating writes", async () => {
+    const { stub, model } = await setup();
+    const p = await savePlugin(stub, model.id);
+    const bodies = modelNetwork("chat-completions", [
+      response("chat-completions", "", [{ id: "write", name: "personal_create", args: entry }]),
+      response("chat-completions", "", [
+        { id: "must-not-run", name: "personal_create", args: note },
+        { id: "write", name: "personal_create", args: entry },
+      ]),
+      // Even a model that repeats the operation with a new ID reuses the receipt.
+      response("chat-completions", "", [
+        { id: "write-again", name: "personal_create", args: entry },
+      ]),
+      response("chat-completions", "已记录"),
+    ]);
+    await send(stub, "@助理 记一笔午餐");
+    expect(bodies).toHaveLength(4);
+    expect(JSON.stringify(bodies[2])).toContain('"tool_call_id":"write"');
+    expect(JSON.stringify(bodies[2])).not.toContain("must-not-run");
+    expect((await list(stub, p.id)).data.records.map((r: PersonalRecord) => r.kind)).toEqual([
+      "entry",
+    ]);
+  });
+  it("rolls back staged writes and charges nothing if correction is also invalid", async () => {
+    const { stub, model } = await setup();
+    const p = await savePlugin(stub, model.id);
+    const invalid = response("chat-completions", "", [
+      { id: "", name: "personal_create", args: note },
+    ]);
+    const bodies = modelNetwork("chat-completions", [
+      response("chat-completions", "", [{ id: "write", name: "personal_create", args: entry }]),
+      invalid,
+      invalid,
+    ]);
+    await expect(send(stub, "@助理 记午餐", "failed-correction")).rejects.toThrow(
+      "工具调用无效或过多",
+    );
+    expect(bodies).toHaveLength(3);
+    expect((await list(stub, p.id)).data.total).toBe(0);
+    await runInDurableObject(stub, (_, state) => {
+      expect(
+        state.storage.sql.exec("SELECT count(*) n FROM usage WHERE id='failed-correction'").one().n,
+      ).toBe(0);
+      expect(
+        state.storage.sql.exec("SELECT code FROM call_failures WHERE id='failed-correction'").one()
+          .code,
+      ).toBe("tool_call_invalid");
+    });
+  });
+  it("persists the consumed allowance across a restart before tool execution", async () => {
+    const { stub, model } = await setup();
+    await connect(stub);
+    const p = await savePlugin(stub, model.id);
+    const invalid = response("chat-completions", "", [
+      { id: "", name: "personal_create", args: note },
+    ]);
+    const bodies = modelNetwork("chat-completions", [
+      invalid,
+      response("chat-completions", "", [{ id: "write", name: "personal_create", args: entry }]),
+      invalid,
+    ]);
+    const fresh = await interruptPersonal(stub, "@助理 记午餐", (p) => !!p.pendingReply);
+    await runInDurableObject(fresh, (_, state) => {
+      expect(new PersonalRunStore(state.storage).get("restart-run")).toMatchObject({
+        toolReplyRetried: true,
+        toolReplyCorrectionPending: false,
+      });
+    });
+    await expect(send(fresh, "重试", "restart-run")).rejects.toThrow("工具调用无效或过多");
+    expect(bodies).toHaveLength(3);
+    expect(systemText(bodies[2])).not.toContain("上一批工具调用因格式校验失败");
+    expect((await list(fresh, p.id)).data.total).toBe(0);
+  });
+});
+
 describe("personal assistant records", () => {
   it("keeps ordinary notes, todo notes and reminders separate through updates and cancellation", async () => {
     const { stub, model } = await setup();
@@ -867,7 +1074,9 @@ describe("personal assistant execution", () => {
         expect(
           state.storage.sql.exec("SELECT value FROM settings WHERE key='busy'").one().value,
         ).toBe("null");
-        expect(await state.storage.getAlarm()).toBeLessThanOrEqual(Date.now() + 1000);
+        // interruptPersonal verifies the immediate recovery deadline, then
+        // defers automatic firing until runDurableObjectAlarm below.
+        expect(await state.storage.getAlarm()).not.toBeNull();
       });
       expect((await list(fresh, p.id)).data.total).toBe(0);
       const upstream = vi.mocked(fetch).getMockImplementation()!;

@@ -8,6 +8,7 @@ import { creditUnits } from "../src/server/wallet";
 import { countTextTokens } from "../src/server/tokenizer";
 import { deliverQueuedReplies, useManualAlarms } from "./helpers/wechat-delivery";
 import { openClawRelease } from "../src/shared/openclaw-release";
+import { connectorPoll } from "../src/server/connector-poll";
 
 const accounts: DurableObjectStub<PersonalAccount>[] = [];
 const api = async (
@@ -282,6 +283,80 @@ describe("OpenClaw native relay", () => {
       return JSON.parse(await polling);
     });
     expect(result.error).toBe("unauthorized");
+  });
+
+  it("holds compatible HTTP polling outside the account and wakes through a hibernating socket", async () => {
+    const ctx = await setup();
+    await send(ctx.stub, "/use claw");
+    const polling = connectorPoll(ctx.stub, ctx.pluginId!, ctx.secret!, "openclaw", {
+      runnerId: ctx.runnerId,
+      waitMs: 15000,
+    });
+    await vi.waitFor(async () =>
+      expect(await runInDurableObject(ctx.stub, (_, state) => state.getWebSockets().length)).toBe(
+        1,
+      ),
+    );
+    await runInDurableObject(ctx.stub, (instance) => {
+      expect(Reflect.get(Reflect.get(instance, "claw"), "pollWaiters").size).toBe(0);
+    });
+    const id = crypto.randomUUID();
+    await send(ctx.stub, "唤醒休眠队列", id);
+    const result = JSON.parse(await polling);
+    expect(result.data.jobs).toMatchObject([{ id, text: "唤醒休眠队列" }]);
+    expect((await ctx.call!("claim", { id })).data.claimed).toBe(true);
+    expect((await ctx.call!("claim", { id })).data.claimed).toBe(false);
+  });
+
+  it("rechecks revocation after a hibernating HTTP poll wakes and bounds its wait", async () => {
+    const ctx = await setup();
+    const idle = JSON.parse(
+      await connectorPoll(ctx.stub, ctx.pluginId!, ctx.secret!, "openclaw", {
+        runnerId: ctx.runnerId,
+        waitMs: 20,
+      }),
+    );
+    expect(idle.data).toMatchObject({ jobs: [], retryAfterMs: 0 });
+    const polling = connectorPoll(ctx.stub, ctx.pluginId!, ctx.secret!, "openclaw", {
+      runnerId: ctx.runnerId,
+      waitMs: 15000,
+    });
+    await vi.waitFor(async () =>
+      expect(
+        await runInDurableObject(
+          ctx.stub,
+          (_, state) => state.getWebSockets().filter((s) => s.readyState === WebSocket.OPEN).length,
+        ),
+      ).toBe(1),
+    );
+    await api(ctx.stub, "plugin.clawRevoke", { id: ctx.pluginId });
+    expect(JSON.parse(await polling).error).toBe("unauthorized");
+  });
+  it("preserves the old polling protocol while an older account version lacks the wait socket", async () => {
+    const payload = { runnerId: crypto.randomUUID(), waitMs: 15000 };
+    const openClawRequest = vi
+      .fn()
+      .mockResolvedValue(JSON.stringify({ ok: true, data: { jobs: [], retryAfterMs: 0 } }));
+    const fetch = vi.fn().mockRejectedValue(new Error("Durable Object has no fetch handler"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = JSON.parse(
+      await connectorPoll(
+        { fetch, openClawRequest },
+        "plugin",
+        "test-credential",
+        "openclaw",
+        payload,
+      ),
+    );
+    expect(result.ok).toBe(true);
+    expect(openClawRequest).toHaveBeenCalledWith(
+      "plugin",
+      "test-credential",
+      "poll",
+      payload,
+      "openclaw",
+    );
+    expect(warning.mock.calls.flat().join(" ")).not.toContain("test-credential");
   });
 
   it("releases an idle WeChat receive poll when a result arrives and promptly sends it once", async () => {

@@ -1,0 +1,29 @@
+[Unit]
+Description=WeChatAI bounded task executor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wechatai-executor
+Group=wechatai-executor
+WorkingDirectory=/opt/wechatai-executor/current
+EnvironmentFile=/etc/wechatai-executor.env
+ExecStart=/usr/bin/node main.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=45
+StateDirectory=wechatai-executor
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+LimitNOFILE=4096
+MemoryMax=768M
+CPUQuota=100%
+
+[Install]
+WantedBy=multi-user.target

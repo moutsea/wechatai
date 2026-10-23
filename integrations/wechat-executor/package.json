@@ -1,0 +1,13 @@
+{
+  "name": "wechatai-executor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node main.mjs",
+    "test": "node --test *.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

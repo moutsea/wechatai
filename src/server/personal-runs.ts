@@ -9,6 +9,7 @@ export type PersonalRun = {
   modelConfig: string;
   pluginConfig: string;
   sessionId: string;
+  currentSessionId?: string;
   connectionId: string;
   generation: string;
   contextStart: number;
@@ -21,6 +22,9 @@ export type PersonalRun = {
   attachmentBatch?: { connectionId: string; token: string };
   omitted?: boolean;
   retryBudget?: number;
+  external?: boolean;
+  toolReplyRetried?: boolean;
+  toolReplyCorrectionPending?: boolean;
 };
 export type PersonalRunInput = { original: ModelMessage[]; prepared?: ModelMessage[] };
 
