@@ -128,6 +128,46 @@ describe("protocol adapters and token accounting", () => {
       );
     },
   );
+  it.each([
+    "https://open.bigmodel.cn/api/coding/paas/v4",
+    "https://generativelanguage.googleapis.com/v1beta/openai",
+    "https://gateway.ai.cloudflare.com/v1/account/gateway/openai",
+    "https://api.example.com/custom/chat/completions",
+  ])(
+    "sends chat requests to the explicit provider route %s without inserting v1",
+    async (baseUrl) => {
+      const requests: Request[] = [];
+      vi.mocked(fetch).mockImplementation(async (url, init) => {
+        if (String(url).includes("cloudflare-dns.com"))
+          return Response.json({ Answer: [{ type: 1, data: "1.1.1.1" }] });
+        requests.push(new Request(url, init));
+        return Response.json({ choices: [{ message: { content: "ok" } }] });
+      });
+      const model = { ...assistant, baseUrl };
+      expect(
+        (await callModel(env, model, "test-only-key", [{ role: "user", content: "hi" }])).text,
+      ).toBe("ok");
+      expect(requests).toHaveLength(1);
+      expect(requests[0].url).toBe(
+        baseUrl.endsWith("/chat/completions") ? baseUrl : `${baseUrl}/chat/completions`,
+      );
+      expect(requests[0].headers.get("authorization")).toBe("Bearer test-only-key");
+      expect(requests[0].redirect).toBe("manual");
+    },
+  );
+  it("points 404 failures to endpoint, protocol and model configuration without exposing upstream data", async () => {
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      String(url).includes("cloudflare-dns.com")
+        ? Response.json({ Answer: [{ type: 1, data: "1.1.1.1" }] })
+        : new Response("private-upstream-details", { status: 404 }),
+    );
+    await expect(
+      callModel(env, assistant, "test-only-key", [{ role: "user", content: "hi" }]),
+    ).rejects.toMatchObject({
+      code: "model_http_error",
+      message: "模型服务返回 404，请检查渠道 Base URL、接口协议和模型 ID 是否匹配服务商文档",
+    });
+  });
   it("falls back to max_tokens only when a compatible provider explicitly rejects the new parameter", async () => {
     const bodies: Record<string, unknown>[] = [];
     vi.mocked(fetch).mockImplementation(async (url, init) => {

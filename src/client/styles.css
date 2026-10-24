@@ -4744,6 +4744,72 @@ code {
 .channel-name-field small {
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.7;
+}
+.provider-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.provider-connection-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.provider-connection-meta button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.provider-advanced-fields {
+  display: grid;
+  gap: 18px;
+  padding-top: 18px;
+}
+.provider-advanced summary {
+  font-size: 12px;
+}
+.model-endpoint-preview {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 12px 14px;
+  margin-top: -8px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.model-endpoint-preview-title,
+.model-endpoint-preview > small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.model-endpoint-preview-url {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+.model-endpoint-preview-url > span {
+  flex-shrink: 0;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 600;
+}
+.model-endpoint-preview-url > code {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 .channel-model-group {
   border-top: 1px solid var(--line);

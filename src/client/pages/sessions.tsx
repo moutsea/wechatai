@@ -1,4 +1,4 @@
-import { modelKind } from "../../shared/model-kind";
+import { isChatModel } from "../../shared/model-compatibility";
 import { RoleSummary } from "./role-summary";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -135,7 +135,7 @@ export function Sessions() {
     }
   };
   if (!data) return null;
-  const textModels = data.assistants.filter((a) => modelKind(a) === "text");
+  const textModels = data.assistants.filter(isChatModel);
   const pluginName = (s: ChatSession) =>
     data.plugins?.find((p) => p.id === s.pluginInstanceId)?.name || s.pluginName;
   const sessionAvatar = (s: ChatSession) => {

@@ -50,6 +50,77 @@ beforeEach(() =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("channels and their models", () => {
+  it.each([
+    { modelId: "gpt-audio-1.5", unsupported: "responses", supported: "chat-completions" },
+    { modelId: "o3-pro", unsupported: "chat-completions", supported: "responses" },
+  ] as const)(
+    "rechecks $modelId compatibility for saved models, plugin entry points and default selection",
+    async ({ modelId, unsupported, supported }) => {
+      const stub = account();
+      await stub.applyPayment({
+        id: "plus-model-protocol",
+        kind: "subscription",
+        units: 0,
+        expires: Date.now() + 86400000,
+      });
+      const c = await channel(stub, {
+        baseUrl: "https://api.openai.com/v1",
+        protocol: unsupported,
+      });
+      const restricted = await model(stub, c.id, modelId, { kind: "text" });
+      expect((await stub.snapshot()).currentSession).toBeNull();
+      const text = await model(stub, c.id, "gpt-4.1-mini");
+      const before = await stub.snapshot();
+      for (const action of ["assistant.activate", "assistant.test"])
+        expect(await api(stub, action, { id: restricted.id })).toMatchObject({
+          ok: false,
+          error: "model_protocol",
+          status: 422,
+        });
+      expect(await api(stub, "session.create", { assistantId: restricted.id })).toMatchObject({
+        ok: false,
+        error: "model_protocol",
+      });
+      expect(
+        await api(stub, "plugin.save", {
+          pluginId: "wechatai/personal-assistant",
+          modelId: restricted.id,
+        }),
+      ).toMatchObject({ ok: false, error: "model_protocol" });
+      expect((await stub.snapshot()).ledger).toEqual(before.ledger);
+      expect((await api(stub, "channel.activate", { id: c.id })).ok).toBe(true);
+      expect((await stub.snapshot()).currentSession?.assistantId).toBe(text.id);
+
+      expect((await api(stub, "channel.save", { ...c, protocol: supported })).ok).toBe(true);
+      expect((await api(stub, "assistant.activate", { id: restricted.id })).ok).toBe(true);
+      const session = (await stub.snapshot()).currentSession!;
+      const plugin = await api(stub, "plugin.save", {
+        pluginId: "wechatai/personal-assistant",
+        modelId: restricted.id,
+      });
+      expect(plugin.ok).toBe(true);
+      expect((await api(stub, "channel.save", { ...c, protocol: unsupported })).ok).toBe(true);
+      expect(await api(stub, "session.action", { id: session.id, action: "switch" })).toMatchObject(
+        {
+          ok: false,
+          error: "model_protocol",
+        },
+      );
+      expect(await api(stub, "plugin.activate", { id: plugin.data.id })).toMatchObject({
+        ok: false,
+        error: "model_protocol",
+      });
+      expect((await api(stub, "channel.activate", { id: c.id })).ok).toBe(true);
+      expect((await stub.snapshot()).currentSession?.assistantId).toBe(text.id);
+      expect((await api(stub, "assistant.delete", { id: text.id })).ok).toBe(true);
+      expect((await stub.snapshot()).currentSession).toBeNull();
+      expect(await api(stub, "wechat.bind")).toMatchObject({
+        ok: false,
+        error: "wechat_model_required",
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
   it("keeps non-text models out of WeChat selection and rejects direct chat and text-plugin entry points", async () => {
     const stub = account();
     await stub.applyPayment({

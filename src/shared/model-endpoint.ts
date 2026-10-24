@@ -16,12 +16,23 @@ export function modelsEndpoint(baseUrl: string): string {
 
 export function apiEndpoint(baseUrl: string, path: string): string {
   const url = new URL(baseUrl);
-  // Accept existing /v1 bases and pasted endpoints without duplicating the suffix.
-  // Keep gateway path prefixes, as well as the original host and URL security checks.
-  const prefix = url.pathname
-    .replace(/\/+$/, "")
-    .replace(/\/(?:chat\/completions|responses|messages|models|images\/generations)$/, "")
-    .replace(/\/v1$/, "");
-  url.pathname = `${prefix}${path}`;
+  const pathname = url.pathname.replace(/\/+$/, "");
+  const prefix = pathname.replace(
+    /\/(?:chat\/completions|responses|messages|models|images\/generations)$/,
+    "",
+  );
+  // A pasted endpoint explicitly defines its root, including the absence of /v1.
+  // Switching protocols replaces only the resource, never the provider/gateway prefix.
+  const explicitEndpoint = prefix !== pathname;
+  const versionedRoot = /\/v\d+(?:(?:alpha|beta)\d*)?$/.test(prefix);
+  // These OpenAI-compatible roots already include their API version. Match both
+  // host and path; Cloudflare's Anthropic route still requires /v1/messages.
+  const compatibleRoot =
+    (url.hostname === "generativelanguage.googleapis.com" &&
+      /^\/v\d+(?:(?:alpha|beta)\d*)?\/openai$/.test(prefix)) ||
+    (url.hostname === "gateway.ai.cloudflare.com" && /^\/v1\/[^/]+\/[^/]+\/openai$/.test(prefix));
+  const suffix =
+    explicitEndpoint || versionedRoot || compatibleRoot ? path.replace(/^\/v1(?=\/)/, "") : path;
+  url.pathname = `${prefix}${suffix}`;
   return url.toString();
 }

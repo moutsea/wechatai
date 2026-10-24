@@ -5,7 +5,7 @@ import {
   LEGACY_NUMERIC_SHORTCUT_HINT,
   PLUGIN_SHORTCUT_HINT,
 } from "../../shared/plugin-shortcut";
-import { modelKind } from "../../shared/model-kind";
+import { isChatModel } from "../../shared/model-compatibility";
 import { useRef, useState, type FormEvent } from "react";
 import { BookOpen, Download, LayoutGrid, Plus, Theater, Trash2, Upload } from "lucide-react";
 import { useApp } from "../context";
@@ -55,12 +55,12 @@ export function RoleplayEditor({
           ...editSchema.parse({
             name: "新角色",
             shortcut: "角色",
-            modelId: data?.assistants.find((a) => modelKind(a) === "text")?.id || "unselected",
+            modelId: data?.assistants.find(isChatModel)?.id || "unselected",
             description: "待填写",
           }),
           name: "",
           description: "",
-          modelId: data?.assistants.find((a) => modelKind(a) === "text")?.id || "",
+          modelId: data?.assistants.find(isChatModel)?.id || "",
         }
       : editSchema.parse(plugin),
   );
@@ -75,7 +75,7 @@ export function RoleplayEditor({
   const keepingLegacyShortcut =
     isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
-  const textModels = data.assistants.filter((a) => modelKind(a) === "text");
+  const textModels = data.assistants.filter(isChatModel);
   const model = textModels.find((a) => a.id === form.modelId);
   const choosePreset = (preset: RoleplayPreset) => {
     setForm(

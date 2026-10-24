@@ -2,6 +2,7 @@ import { activityFetch, executionId, executionSignal } from "./execution-context
 import { z } from "zod";
 import type { Assistant, Protocol } from "../shared/types";
 import { modelEndpoint } from "../shared/model-endpoint";
+import { modelProtocolIssue } from "../shared/model-compatibility";
 import { AppError, MODEL_REQUEST_TIMEOUT_MS } from "./config";
 import { upstreamPaymentError } from "./upstream-error";
 import { readJson, validateModelBaseUrl, validateModelDNS } from "./security";
@@ -53,6 +54,10 @@ export const modelSchema = assistantSchema
   .extend({
     channelId: z.string().trim().min(1).max(100),
   });
+export function assertModelProtocol(model: Assistant) {
+  const issue = modelProtocolIssue(model);
+  if (issue) throw new AppError("model_protocol", issue, 422);
+}
 const object = (v: unknown): Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
@@ -242,6 +247,7 @@ export async function requestModel(
   timeoutMs: number,
   toolRequest = false,
 ) {
+  assertModelProtocol(assistant);
   const startedAt = Date.now();
   const signal = executionSignal(Math.max(1, Math.min(MODEL_REQUEST_TIMEOUT_MS, timeoutMs)));
   validateModelBaseUrl(env, assistant.baseUrl);
@@ -304,7 +310,9 @@ export async function requestModel(
     if (paymentError) throw paymentError;
     throw new AppError(
       "model_http_error",
-      `模型服务返回 ${response.status}，请检查 Key、模型名称和余额`,
+      response.status === 404
+        ? "模型服务返回 404，请检查渠道 Base URL、接口协议和模型 ID 是否匹配服务商文档"
+        : `模型服务返回 ${response.status}，请检查 Key、模型名称和余额`,
       502,
       response.status,
     );

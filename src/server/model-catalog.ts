@@ -5,7 +5,13 @@ import { readJson, validateModelBaseUrl, validateModelDNS } from "./security";
 import { MAX_CONTEXT_TOKENS } from "../shared/context";
 import { inferModelKind, type ModelKind } from "../shared/model-kind";
 
-export type AvailableModel = { id: string; name: string; kind: ModelKind; contextTokens?: number };
+export type AvailableModel = {
+  id: string;
+  name: string;
+  kind: ModelKind;
+  contextTokens?: number;
+  maxOutputTokens?: number;
+};
 const object = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -30,11 +36,26 @@ export function parseAvailableModel(item: unknown): AvailableModel | null {
     context <= MAX_CONTEXT_TOKENS
       ? context
       : undefined;
+  const kind = inferModelKind(id, entry);
+  const outputLimits = [
+    entry.max_output_tokens,
+    entry.max_completion_tokens,
+    object(entry.top_provider).max_completion_tokens,
+  ].filter(
+    (value): value is number =>
+      typeof value === "number" && Number.isSafeInteger(value) && value > 0,
+  );
+  const maxOutputTokens =
+    kind === "text" && outputLimits.length ? Math.min(...outputLimits) : undefined;
+  // Such a model cannot be represented by our minimum output setting (64).
+  // Skip it instead of increasing its advertised cap or aborting the entire import.
+  if (maxOutputTokens !== undefined && maxOutputTokens < 64) return null;
   return {
     id,
     name: (name || id).slice(0, 40),
-    kind: inferModelKind(id, entry),
+    kind,
     ...(contextTokens ? { contextTokens } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
   };
 }
 
@@ -69,11 +90,7 @@ export async function fetchAvailableModels(env: Env, channel: Channel, apiKey: s
             502,
           );
         if (response.status === 404 || response.status === 405)
-          throw new AppError(
-            "models_unsupported",
-            "上游未提供 /v1/models 接口，请手动添加模型",
-            502,
-          );
+          throw new AppError("models_unsupported", "上游未提供模型列表接口，请手动添加模型", 502);
         if (response.status >= 300 && response.status < 400)
           throw new AppError(
             "models_redirect",

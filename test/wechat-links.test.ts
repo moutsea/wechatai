@@ -298,8 +298,18 @@ describe("WeChat QR configuration preflight", () => {
   it("does not combine a model from one channel with another channel's key", () => {
     const setup = {
       channels: [
-        { id: "with-model", baseUrl: "https://llm.example.com", hasKey: false },
-        { id: "with-key", baseUrl: "https://llm.example.com", hasKey: true },
+        {
+          id: "with-model",
+          baseUrl: "https://llm.example.com",
+          protocol: "responses" as const,
+          hasKey: false,
+        },
+        {
+          id: "with-key",
+          baseUrl: "https://llm.example.com",
+          protocol: "responses" as const,
+          hasKey: true,
+        },
       ],
       assistants: [{ channelId: "with-model", model: "chat-model" }],
     };

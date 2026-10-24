@@ -22,6 +22,7 @@ export type ModelImportResult = {
   existing: number;
   invalid: number;
   limited: number;
+  incompatible?: number;
 };
 export type Assistant = {
   kind?: ModelKind;

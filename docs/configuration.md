@@ -78,6 +78,25 @@ https://你的域名/api/auth/callback/github
 
 模型 API Key 由用户在网页配置，不是全站环境变量。普通 LLM 支持三种协议；输入根地址后自动补全相应接口路径。渠道与模型分层，模型维护独立提示词、上下文窗口及输入输出上限。
 
+添加渠道时可直接选择 DeepSeek、Kimi、智谱、通义千问（百炼）、火山方舟、MiniMax、硅基流动、OpenAI、Claude、Gemini、OpenRouter 或 xAI，再填写自己的 API Key。协议、服务地址和渠道名称由预设填入；名称与备注可在「更多设置」中修改。「自定义」保留三种协议和 Base URL 的完整配置能力，KimiSeek 一键关联入口也继续保留。
+
+智谱、百炼和火山方舟的 Coding Plan 使用独立预设，失败时不会切换到按量付费接口。套餐可能限定接入工具和使用场景，选用前请查看服务商说明；预设地址不代表套餐授权微伴接入。百炼默认北京地域，其他地域或专属空间地址使用自定义配置。预设及官方说明链接集中维护在 `src/shared/channel-providers.ts`。
+
+新建预设渠道后会自动获取可用模型，并按文本、生图与其他模型归类；审核、实时音频、转写等非聊天模型不会成为默认聊天模型。获取失败不影响渠道保存，可稍后重试或手动填写模型 ID。新导入文本模型的输出上限取平台默认值、上游声明的输出上限与上下文窗口一半中的最小值；重复导入不覆盖用户已保存的模型设置。
+
+xAI 的 Grok Imagine 和 Gemini Flash / Pro Image 生图系列归入生图分类，兼容 `models/` 和服务商前缀。对于已确认的官方协议限制，导入时会跳过不兼容模型并显示数量：例如 OpenAI 官方的 `gpt-audio` / `gpt-4o-audio-preview` 系列只能在 Chat Completions 渠道中使用，不能在 Responses 渠道激活；官方明确标为 Responses 专用的模型（如 `o3-pro`）在切换到 Chat Completions 后也不能激活。已确认的 Responses 专属模型维护在 `src/shared/model-compatibility.ts`，不通过笼统的 `pro` / `codex` 名称猜测协议。已有配置和记录保留，页面显示切换协议的提示；新会话、插件选模、微信连接校验和实际请求都会检查兼容性。此限制按官方域名匹配，不根据相同模型名称限制第三方渠道；未知模型仍以实际服务商能力为准。
+
+编辑已有渠道不会自动导入模型或改写原地址。同一 API 根路径下切换协议可复用已保存的 Key；更换域名、网关前缀或 Coding Plan 入口时，要求重新填写 Key，避免把旧密钥带到另一家服务商或套餐。
+
+渠道编辑器会实时显示所选协议的**实际请求地址**，可在保存前与服务商文档核对。地址拼接遵循以下规则：
+
+- 保留 `/v1`、`/v4`、`/v1beta` 等已有版本前缀。例如智谱 Coding Plan 的 `https://open.bigmodel.cn/api/coding/paas/v4` 使用 **OpenAI Chat Completions** 协议，最终请求 `/api/coding/paas/v4/chat/completions`。[智谱文档](https://docs.bigmodel.cn/cn/coding-plan/quick-start)
+- [Gemini OpenAI 兼容接口](https://ai.google.dev/gemini-api/docs/openai)的 `/v1beta/openai` 和 [Cloudflare OpenAI 网关](https://developers.cloudflare.com/ai-gateway/usage/providers/openai/)的 `/v1/{account_id}/{gateway_id}/openai` 直接补全 `/chat/completions` 等资源路径，不额外添加 `/v1`。Cloudflare 的 Anthropic 网关仍补全 `/v1/messages`。
+- 粘贴以 `/chat/completions`、`/responses`、`/messages`、`/models` 或 `/images/generations` 结尾的完整地址时，保留其根路径；切换协议时只更换接口后缀。未知服务商也可通过这种方式明确指定路径。
+- 其他未包含版本的根地址仍默认补全 `/v1`，保留原有网关前缀。不会自动换域名、切换计费入口或尝试其他地址。
+
+不同协议可能使用不同的 Base URL；预览只展示请求路径，不代表上游支持对应协议或模型。服务商未开放模型列表接口时，可手动添加模型 ID。
+
 DS Chat 需要用户自行提供搜索 API；AI 生图也使用用户自己的上游。OpenClaw / Hermes 在用户自己的设备或服务器运行，微伴只承担消息传输和结果交付。
 
 ## 品牌与自部署域名

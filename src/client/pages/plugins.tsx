@@ -5,7 +5,7 @@ import {
   PLUGIN_SHORTCUT_HINT,
 } from "../../shared/plugin-shortcut";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
-import { modelKind } from "../../shared/model-kind";
+import { isChatModel } from "../../shared/model-compatibility";
 import { NotificationEditor } from "./notification-editor";
 import type { NotificationPlugin } from "../../shared/notification";
 import { PersonalAssistantEditor } from "./personal-assistant-editor";
@@ -95,7 +95,7 @@ export function Plugins() {
       setSearchParams(next, { replace: true });
     }
   };
-  const textModels = data.assistants.filter((a) => modelKind(a) === "text");
+  const textModels = data.assistants.filter(isChatModel);
   const selectedModel = textModels.find((a) => a.id === form.modelId);
   const update = <K extends keyof WebResearchInput>(key: K, value: WebResearchInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));

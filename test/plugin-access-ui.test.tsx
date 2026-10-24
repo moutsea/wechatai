@@ -86,6 +86,32 @@ beforeEach(async () => {
 });
 
 describe("plugin entitlement controls", () => {
+  it("explains an incompatible saved model without offering chat actions or plugin selection", () => {
+    const original = data.assistants[0];
+    const audio = {
+      ...original,
+      id: "audio-model",
+      model: "gpt-audio-1.5",
+      name: "Audio model",
+      kind: "text" as const,
+      baseUrl: "https://api.openai.com/v1",
+      protocol: "responses" as const,
+    };
+    data.assistants = [
+      audio,
+      { ...original, id: "compatible-model", name: "Compatible model", model: "gpt-4.1-mini" },
+    ];
+    const html = channels();
+    expect(html).toContain("此 OpenAI 模型仅支持 OpenAI Chat Completions");
+    expect(html).not.toContain('aria-label="使用模型 Audio model"');
+    expect(html).not.toContain('aria-label="测试模型 Audio model"');
+    expect(html).toContain('aria-label="编辑模型 Audio model"');
+    const editor = renderToStaticMarkup(
+      <PersonalAssistantEditor plugin="new" onClose={noop} onSaved={async () => {}} />,
+    );
+    expect(editor).not.toContain('value="audio-model"');
+    expect(editor).toContain('value="compatible-model"');
+  });
   it("opens the addressed OpenClaw connection directly and rejects foreign or deleted links", () => {
     data.plugins = [plugin("first"), plugin("second")];
     const linked = (id: string) =>

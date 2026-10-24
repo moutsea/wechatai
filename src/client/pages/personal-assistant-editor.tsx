@@ -5,7 +5,7 @@ import {
   LEGACY_NUMERIC_SHORTCUT_HINT,
   PLUGIN_SHORTCUT_HINT,
 } from "../../shared/plugin-shortcut";
-import { modelKind } from "../../shared/model-kind";
+import { isChatModel } from "../../shared/model-compatibility";
 import { useState, type FormEvent } from "react";
 import { useApp } from "../context";
 import { Modal } from "../ui";
@@ -33,7 +33,7 @@ export function PersonalAssistantEditor({
     editSchema.parse(
       plugin === "new"
         ? {
-            modelId: data?.assistants.find((a) => modelKind(a) === "text")?.id ?? "unselected",
+            modelId: data?.assistants.find(isChatModel)?.id ?? "unselected",
             reminderConnectionId: data?.selectedConnectionId ?? "",
           }
         : plugin,
@@ -45,7 +45,7 @@ export function PersonalAssistantEditor({
   const keepingLegacyShortcut =
     isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
-  const textModels = data.assistants.filter((a) => modelKind(a) === "text");
+  const textModels = data.assistants.filter(isChatModel);
   const update = <K extends keyof PersonalAssistantInput>(
     key: K,
     value: PersonalAssistantInput[K],

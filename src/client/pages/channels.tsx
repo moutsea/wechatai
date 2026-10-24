@@ -14,6 +14,14 @@ import {
 import { useApp } from "../context";
 import { Modal, PageHead, Empty } from "../ui";
 import { ChannelIcon } from "../channel-icon";
+import { ChannelConnectionFields } from "../channel-connection-fields";
+import { saveChannelSetup, modelImportMessage } from "../channel-setup";
+import {
+  DEFAULT_CHANNEL_PROVIDER,
+  channelProvider,
+  detectChannelProvider,
+  selectChannelProvider,
+} from "../../shared/channel-providers";
 import { json } from "../api";
 import {
   protocolLabels,
@@ -24,7 +32,6 @@ import {
   type ModelInput,
   type ModelImportResult,
 } from "../../shared/types";
-import { protocolPaths } from "../../shared/model-endpoint";
 import {
   DEFAULT_CONTEXT_TOKENS,
   DEFAULT_INPUT_TOKENS,
@@ -34,17 +41,21 @@ import {
 } from "../../shared/context";
 import { TOKENS_PER_CREDIT, OUTPUT_TOKEN_WEIGHT } from "../../shared/credits";
 import { modelKind, modelKindLabels, type ModelKind } from "../../shared/model-kind";
+import { isChatModel, modelProtocolIssue } from "../../shared/model-compatibility";
 import { KimiseekBalance, useKimiseekConnect } from "./kimiseek-connect";
 import { conflictingShortcuts } from "../../shared/shortcut-conflicts";
 
-const newChannel: ChannelInput = {
-  name: "",
-  description: "",
-  protocol: "chat-completions",
-  baseUrl: "https://api.openai.com",
-  apiKey: "",
-  color: "sage",
-};
+const newChannel = selectChannelProvider(
+  {
+    name: "",
+    description: "",
+    protocol: "chat-completions",
+    baseUrl: "",
+    apiKey: "",
+    color: "sage",
+  },
+  DEFAULT_CHANNEL_PROVIDER,
+);
 const newModel: ModelInput = {
   channelId: "",
   name: "",
@@ -65,6 +76,7 @@ export function Channels() {
   const [channelEditor, setChannelEditor] = useState<Channel | "new" | null>(null);
   const [modelEditor, setModelEditor] = useState<Assistant | "new" | null>(null);
   const [channelForm, setChannelForm] = useState<ChannelInput>(newChannel);
+  const [providerId, setProviderId] = useState(DEFAULT_CHANNEL_PROVIDER);
   const [form, setForm] = useState<ModelInput>(newModel);
   const effectiveInput = Math.max(0, modelInputBudget(form));
   const estimatedCallCredits =
@@ -87,11 +99,9 @@ export function Channels() {
     if (params.get("new")) {
       setError("");
       setChannelEditor("new");
-      setChannelForm(
-        params.get("provider") === "deepseek"
-          ? { ...newChannel, name: "DeepSeek", baseUrl: "https://api.deepseek.com" }
-          : newChannel,
-      );
+      const id = channelProvider(params.get("provider") ?? "")?.id ?? DEFAULT_CHANNEL_PROVIDER;
+      setProviderId(id);
+      setChannelForm(selectChannelProvider(newChannel, id));
       setParams({}, { replace: true });
     }
   }, [params, setParams]);
@@ -105,6 +115,7 @@ export function Channels() {
     setError("");
     setChannelEditor(c);
     setChannelForm(c === "new" ? newChannel : { ...c, apiKey: "" });
+    setProviderId(c === "new" ? DEFAULT_CHANNEL_PROVIDER : detectChannelProvider(c));
   };
   const openModel = (channel: Channel, a: Assistant | "new") => {
     setError("");
@@ -115,25 +126,46 @@ export function Channels() {
     setForm((f) => ({ ...f, [key]: value }));
   const updateChannel = <K extends keyof ChannelInput>(key: K, value: ChannelInput[K]) =>
     setChannelForm((f) => ({ ...f, [key]: value }));
+  const changeProvider = (id: string) => {
+    setProviderId(id);
+    setChannelForm((f) => selectChannelProvider(f, id));
+    setError("");
+  };
   const saveChannel = async (event: FormEvent) => {
     event.preventDefault();
     setBusy("channel-save");
     setError("");
     try {
-      await request<Channel>(
-        channelEditor === "new" ? "/channels" : `/channels/${(channelEditor as Channel).id}`,
-        json(
-          { ...channelForm, apiKey: channelForm.apiKey?.trim() || undefined },
-          channelEditor === "new" ? "POST" : "PATCH",
-        ),
+      const result = await saveChannelSetup(
+        request,
+        {
+          ...channelForm,
+          name: channelForm.name.trim() || channelProvider(providerId)?.name || "",
+        },
+        channelEditor && channelEditor !== "new" ? channelEditor : undefined,
+        providerId !== "custom",
       );
       await refresh();
       setChannelEditor(null);
-      notify(
-        channelEditor === "new"
-          ? "渠道已保存，可以获取可用模型或手动添加"
-          : "渠道已保存，所属模型共用这份连接配置",
-      );
+      if (result.models || result.importError) {
+        const text = result.models
+          ? modelImportMessage(result.models, data.limits.modelsPerChannel)
+          : `渠道已保存；获取模型失败：${result.importError}。可重试「获取可用模型」或手动添加模型。`;
+        setImportResults((results) => ({
+          ...results,
+          [result.channel.id]: { text, failed: Boolean(result.importError) },
+        }));
+        notify(
+          result.models?.imported
+            ? `渠道已保存，已导入 ${result.models.imported} 个模型`
+            : "渠道已保存，请在渠道卡片中查看模型导入结果",
+        );
+      } else
+        notify(
+          channelEditor === "new"
+            ? "渠道已保存，可以获取可用模型或手动添加"
+            : "渠道已保存，所属模型共用这份连接配置",
+        );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -171,22 +203,12 @@ export function Channels() {
         method: "POST",
       });
       await refresh();
-      const parts = [
-        result.imported
-          ? `已导入 ${result.imported} 个模型`
-          : result.total
-            ? "没有新模型可导入"
-            : "上游未返回可导入的模型",
-      ];
-      if (result.existing) parts.push(`${result.existing} 个已存在`);
-      if (result.invalid) parts.push(`跳过 ${result.invalid} 条无效记录`);
-      if (result.limited)
-        parts.push(
-          `渠道最多 ${data.limits.modelsPerChannel} 个模型，另有 ${result.limited} 个未导入`,
-        );
       setImportResults((results) => ({
         ...results,
-        [channel.id]: { text: parts.join("；"), failed: false },
+        [channel.id]: {
+          text: modelImportMessage(result, data.limits.modelsPerChannel),
+          failed: false,
+        },
       }));
     } catch (e) {
       setImportResults((results) => ({
@@ -331,6 +353,7 @@ export function Channels() {
                             {group.map((a) => {
                               const active = data.currentSession?.assistantId === a.id;
                               const label = a.name === channel.name ? a.model : a.name;
+                              const protocolIssue = modelProtocolIssue(a);
                               return (
                                 <li
                                   className={`channel-model-row ${active ? "is-current" : ""}`}
@@ -340,6 +363,9 @@ export function Channels() {
                                   <div className="channel-model-name">
                                     <strong title={label}>{label}</strong>
                                     {label !== a.model && <small title={a.model}>{a.model}</small>}
+                                    {protocolIssue && (
+                                      <small className="form-error">{protocolIssue}</small>
+                                    )}
                                     {shortcutConflicts.has(a.shortcut.toLowerCase()) && (
                                       <button
                                         className="text-link shortcut-conflict"
@@ -352,7 +378,7 @@ export function Channels() {
                                     )}
                                   </div>
                                   <div className="channel-model-tools">
-                                    {kind === "text" &&
+                                    {isChatModel(a) &&
                                       (active ? (
                                         <span className="channel-model-current">
                                           <Check size={13} />
@@ -368,7 +394,7 @@ export function Channels() {
                                           使用
                                         </button>
                                       ))}
-                                    {kind === "text" && (
+                                    {isChatModel(a) && (
                                       <button
                                         className="icon-button"
                                         aria-label={`测试模型 ${a.name}`}
@@ -449,7 +475,7 @@ export function Channels() {
                       添加模型
                     </button>
                   </div>
-                  {!activeHere && models.some((a) => modelKind(a) === "text") && (
+                  {!activeHere && models.some(isChatModel) && (
                     <button
                       className="text-button channel-card-activate"
                       disabled={Boolean(busy)}
@@ -485,16 +511,25 @@ export function Channels() {
         <Modal
           wide
           title={channelEditor === "new" ? "添加渠道" : `编辑渠道 · ${channelEditor.name}`}
-          description="同一渠道下的模型共用协议、服务地址和 API Key。"
+          description={
+            channelEditor === "new"
+              ? "选择服务商，填写你自己的 API Key。保存后即可配置模型。"
+              : "同一渠道下的模型共用协议、服务地址和 API Key。"
+          }
           onClose={() => {
             if (!busy) setChannelEditor(null);
           }}
         >
           <form onSubmit={(e) => void saveChannel(e)}>
             <div className="form-body">
-              <div className="channel-name-field">
-                <div className="channel-name-label">
-                  <label htmlFor="channel-name">渠道名称</label>
+              <ChannelConnectionFields
+                form={channelForm}
+                providerId={providerId}
+                previous={channelEditor === "new" ? undefined : channelEditor}
+                disabled={Boolean(busy)}
+                onChange={updateChannel}
+                onProviderChange={changeProvider}
+                importAction={
                   <button
                     type="button"
                     className="text-link"
@@ -503,98 +538,30 @@ export function Channels() {
                   >
                     {kimiseek.busy ? "正在关联…" : "kimiseek 一键导入"}
                   </button>
-                </div>
-                <input
-                  id="channel-name"
-                  autoFocus
-                  required
-                  maxLength={40}
-                  value={channelForm.name}
-                  onChange={(e) => updateChannel("name", e.target.value)}
-                  placeholder="例如：OpenAI 官方、我的中转服务"
-                />
-                {kimiseek.pendingUrl && (
-                  <small>
-                    正在打开 KimiSeek 充值页，完成后自动导入。
-                    <a
-                      className="text-link"
-                      href={kimiseek.pendingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      未打开？点此继续
-                    </a>
-                  </small>
-                )}
-                {kimiseek.error && (
-                  <small className="form-error" role="alert">
-                    {kimiseek.error}
-                  </small>
-                )}
-              </div>
-              <label>
-                备注（可选）
-                <input
-                  maxLength={160}
-                  value={channelForm.description}
-                  onChange={(e) => updateChannel("description", e.target.value)}
-                />
-              </label>
-              <label>
-                接口协议
-                <select
-                  value={channelForm.protocol}
-                  onChange={(e) => {
-                    const protocol = e.target.value as Channel["protocol"];
-                    setChannelForm((f) => ({
-                      ...f,
-                      protocol,
-                      baseUrl: /^https:\/\/api\.(openai|anthropic)\.com(?:\/v1)?\/?$/.test(
-                        f.baseUrl.trim(),
-                      )
-                        ? protocol === "anthropic"
-                          ? "https://api.anthropic.com"
-                          : "https://api.openai.com"
-                        : f.baseUrl,
-                    }));
-                  }}
-                >
-                  {Object.entries(protocolLabels).map(([value, label]) => (
-                    <option value={value} key={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Base URL
-                <input
-                  type="url"
-                  required
-                  maxLength={500}
-                  value={channelForm.baseUrl}
-                  onChange={(e) => updateChannel("baseUrl", e.target.value)}
-                  placeholder="https://api.example.com"
-                />
-                <small>
-                  只需填写服务地址，系统会自动补全{" "}
-                  <code>{protocolPaths[channelForm.protocol]}</code>。
-                </small>
-              </label>
-              <label>
-                API Key
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  required={channelEditor === "new"}
-                  maxLength={2000}
-                  value={channelForm.apiKey}
-                  onChange={(e) => updateChannel("apiKey", e.target.value)}
-                  placeholder={
-                    channelEditor === "new" ? "填写此渠道的 API Key" : "已加密保存，留空则不更改"
-                  }
-                />
-              </label>
+                }
+                importStatus={
+                  <>
+                    {kimiseek.pendingUrl && (
+                      <small>
+                        正在打开 KimiSeek 充值页，完成后自动导入。
+                        <a
+                          className="text-link"
+                          href={kimiseek.pendingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          未打开？点此继续
+                        </a>
+                      </small>
+                    )}
+                    {kimiseek.error && (
+                      <small className="form-error" role="alert">
+                        {kimiseek.error}
+                      </small>
+                    )}
+                  </>
+                }
+              />
               {channelEditor !== "new" && (
                 <div className="form-hint">
                   更新连接配置后，此渠道下所有模型的新请求都会使用新配置。
@@ -616,7 +583,13 @@ export function Channels() {
                 取消
               </button>
               <button className="button" disabled={Boolean(busy)}>
-                {busy ? "正在保存…" : channelEditor === "new" ? "保存并添加模型" : "保存渠道"}
+                {busy
+                  ? channelEditor === "new" && providerId !== "custom"
+                    ? "正在保存并获取模型…"
+                    : "正在保存…"
+                  : channelEditor === "new" && providerId !== "custom"
+                    ? "保存并获取模型"
+                    : "保存渠道"}
                 <ArrowRight size={16} />
               </button>
             </div>

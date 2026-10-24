@@ -85,6 +85,7 @@ import {
   modelSchema,
   ContextLimitError,
   modelImages,
+  assertModelProtocol,
   type ModelMessage,
 } from "./llm";
 import {
@@ -107,6 +108,7 @@ import {
 import { decrypt, encrypt, validateBaseUrl } from "./security";
 import { fetchAvailableModels, parseAvailableModel, type AvailableModel } from "./model-catalog";
 import { modelKind } from "../shared/model-kind";
+import { isChatModel, modelProtocolIssue } from "../shared/model-compatibility";
 import { validateModelBaseUrl } from "./security";
 import {
   integrationNonce,
@@ -1248,7 +1250,7 @@ export class PersonalAccount extends DurableObject<Env> {
     const currentId = this.linkSetting(connectionId, "current", "");
     const sessions = this.sessions(connectionId);
     const current = sessions.find((s) => s.id === currentId);
-    const models = this.assistants().filter((a) => modelKind(a) === "text");
+    const models = this.assistants().filter(isChatModel);
     if (current && !current.pluginInstanceId && models.some((a) => a.id === current.assistantId))
       return current;
     const previous = this.linkSetting(connectionId, "lastPlainSession", "");
@@ -1504,6 +1506,7 @@ export class PersonalAccount extends DurableObject<Env> {
         "该模型不能用于文字对话，请选择文本模型；生图模型请在 AI 生图插件中使用",
         422,
       );
+    assertModelProtocol(model);
     return model;
   }
   private sessions(connectionId?: string) {
@@ -2646,6 +2649,10 @@ export class PersonalAccount extends DurableObject<Env> {
     invalid: number,
   ): ModelImportResult {
     const id = channel.id;
+    const compatible = catalog.filter(
+      (model) => !modelProtocolIssue({ ...channel, model: model.id }),
+    );
+    const incompatible = catalog.length - compatible.length;
     // Backfill legacy classifications, while preserving the user's explicit choice.
     for (const model of this.assistants().filter((a) => a.channelId === id && !a.kind)) {
       const available = catalog.find((m) => m.id === model.model);
@@ -2665,7 +2672,7 @@ export class PersonalAccount extends DurableObject<Env> {
         .filter((a) => a.channelId === id)
         .map((a) => a.model),
     );
-    const pending = catalog
+    const pending = compatible
       .filter((m) => !existing.has(m.id))
       .sort((a, b) => Number(a.kind !== "text") - Number(b.kind !== "text"));
     const available = Math.max(0, this.limits().modelsPerChannel - existing.size);
@@ -2682,6 +2689,7 @@ export class PersonalAccount extends DurableObject<Env> {
           // Small-context models must retain space for input after import.
           maxOutputTokens: Math.min(
             DEFAULT_OUTPUT_TOKENS,
+            model.maxOutputTokens ?? DEFAULT_OUTPUT_TOKENS,
             model.contextTokens ? Math.floor(model.contextTokens / 2) : DEFAULT_OUTPUT_TOKENS,
           ),
           ...(model.contextTokens ? { contextTokens: model.contextTokens } : {}),
@@ -2690,9 +2698,10 @@ export class PersonalAccount extends DurableObject<Env> {
     return {
       total: catalog.length,
       imported: importing.length,
-      existing: catalog.length - pending.length,
+      existing: compatible.length - pending.length,
       invalid,
       limited: pending.length - importing.length,
+      ...(incompatible ? { incompatible } : {}),
     };
   }
   private saveModel(id: string | undefined, input: ModelInput) {
@@ -2730,7 +2739,10 @@ export class PersonalAccount extends DurableObject<Env> {
       model.id,
       JSON.stringify(model),
     );
-    if (!this.linkSetting(this.selectedLink(), "current", "") && modelKind(model) === "text")
+    if (
+      !this.linkSetting(this.selectedLink(), "current", "") &&
+      isChatModel(resolveModel(model, channel))
+    )
       this.createSession(model.id);
     return this.publicAssistant(resolveModel(model, channel));
   }
@@ -2760,7 +2772,7 @@ export class PersonalAccount extends DurableObject<Env> {
     for (const connectionId of linkIds) {
       if (!related.some((s) => s.id === this.linkSetting(connectionId, "current", ""))) continue;
       this.setLinkSetting(connectionId, "current", "");
-      const models = this.assistants().filter((a) => modelKind(a) === "text");
+      const models = this.assistants().filter(isChatModel);
       const next = this.sessions(connectionId).find(
         (s) => !s.archived && (s.pluginInstanceId || models.some((a) => a.id === s.assistantId)),
       );
@@ -2788,13 +2800,13 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private activateChannel(id: string, connectionId = this.selectedLink()) {
     this.channel(id);
-    const models = this.assistants().filter((a) => a.channelId === id && modelKind(a) === "text");
+    const models = this.assistants().filter((a) => a.channelId === id && isChatModel(a));
     const last = this.linkSetting(connectionId, `lastModel:${id}`, "");
     const model = models.find((a) => a.id === last) ?? models[0];
     if (!model)
       throw new AppError(
         "channel_empty",
-        "这个渠道还没有文本模型，请先添加；生图模型请在 AI 生图插件中使用",
+        "这个渠道还没有与当前协议兼容的文本模型，请先添加或检查渠道协议；生图模型请在 AI 生图插件中使用",
       );
     return this.activateAssistant(model.id, connectionId);
   }
@@ -2926,7 +2938,7 @@ export class PersonalAccount extends DurableObject<Env> {
       const candidate = this.findPlugin(s.pluginInstanceId ?? "");
       const replacementPlugin =
         candidate?.enabled && this.pluginAvailable(candidate.id) ? candidate : undefined;
-      const textModels = this.assistants().filter((a) => modelKind(a) === "text");
+      const textModels = this.assistants().filter(isChatModel);
       const replacementModel = replacementPlugin
         ? s.assistantId
         : (textModels.find((a) => a.id === s.assistantId)?.id ?? textModels[0]?.id ?? null);
@@ -3861,7 +3873,7 @@ export class PersonalAccount extends DurableObject<Env> {
       .toArray()[0];
     if (interrupted?.status === "interrupted")
       return this.resumePersonalRun(id, connectionId, deadline);
-    const defaultModel = this.assistants().find((a) => modelKind(a) === "text");
+    const defaultModel = this.assistants().find(isChatModel);
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
       this.createSession(defaultModel.id, "新的对话", false, connectionId);
     const text = extractText(message);
@@ -3994,9 +4006,7 @@ export class PersonalAccount extends DurableObject<Env> {
             return `已切换到渠道「${channel.name}」｜${a.name}（${a.model}）\n发送 /wx models 查看该渠道下的模型。`;
           }
           const channelId = currentModel?.channelId ?? this.channels()[0]?.id;
-          const available = assistants.filter(
-            (a) => a.channelId === channelId && modelKind(a) === "text",
-          );
+          const available = assistants.filter((a) => a.channelId === channelId && isChatModel(a));
           if (command[0] === "/models") {
             this.setLinkSetting(connectionId, "modelList", {
               channelId,
@@ -4148,7 +4158,7 @@ export class PersonalAccount extends DurableObject<Env> {
           ...plugins.filter(
             (p) => p.enabled && availableIds.has(p.id) && p.pluginId !== "wechatai/notification",
           ),
-          ...assistants.filter((a) => plan === "plus" && a.shortcut && modelKind(a) === "text"),
+          ...assistants.filter((a) => plan === "plus" && a.shortcut && isChatModel(a)),
         ];
         return `没有找到快捷名「${handle.slice(0, 40)}」。请使用 @快捷名 内容，名称后可用空格、逗号或冒号分隔。${
           available.length
