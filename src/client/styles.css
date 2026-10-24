@@ -2664,7 +2664,9 @@ code {
   margin-top: 20px;
 }
 .landing-guides {
-  padding: 10px 50px 20px;
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 10px 40px 20px;
   scroll-margin-top: 80px;
 }
 .landing-guides h2 {
