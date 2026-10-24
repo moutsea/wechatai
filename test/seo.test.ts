@@ -15,6 +15,11 @@ import {
   replaceSeoHead,
 } from "../src/shared/seo";
 import { SEO_PAGES } from "../src/shared/seo-pages";
+import { FAQ_DOC_SECTIONS, faqAnswerText } from "../src/shared/faq-doc";
+import { BILLING_OFFERS } from "../src/shared/billing";
+import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
+import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
+import { llmsText } from "../src/shared/plugin-docs";
 
 describe("search indexing boundaries", () => {
   it("includes notification routes in the deployable private pages", () => {
@@ -113,6 +118,7 @@ describe("search indexing boundaries", () => {
       ...DOC_ARTICLES.map((article) => `https://wechatai.app${docPath(article.slug)}`),
       "https://wechatai.app/wechat-ai",
       "https://wechatai.app/wechat-clawbot",
+      "https://wechatai.app/wechat-ai-ban-risk",
       "https://wechatai.app/wechat-clawbot-models",
       "https://wechatai.app/bring-your-own-api-key",
       "https://wechatai.app/wechat-deepseek",
@@ -240,6 +246,85 @@ describe("query landing pages", () => {
           expect(known.has(target), `${page.path} → ${match[1]}`).toBe(true);
         }
       }
+    }
+  });
+});
+
+describe("published prices stay in sync with billing", () => {
+  // A price change in BILLING_OFFERS must not leave public copy quoting the old number.
+  const yuan = (cents: number) => {
+    const value = cents / 100;
+    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  };
+  const offers = BILLING_OFFERS;
+  const planText = (page: (typeof SEO_PAGES)[number] | undefined): string => {
+    if (!page) return "";
+    return JSON.stringify(page);
+  };
+  const pricingText = planText(SEO_PAGES.find((page) => page.path === "/pricing"));
+
+  it("quotes the current Plus prices on the pricing page", () => {
+    const monthly = offers.find((offer) => offer.id === "plus_monthly");
+    const yearly = offers.find((offer) => offer.id === "plus_yearly");
+    expect(monthly && yearly).toBeTruthy();
+    expect(pricingText).toContain(`**¥${yuan(monthly!.amount)} / 月**`);
+    expect(pricingText).toContain(`**¥${yuan(yearly!.amount)} / 年**`);
+  });
+
+  it("quotes the current credit packs on the pricing page", () => {
+    for (const offer of offers.filter((item) => item.kind === "credits")) {
+      expect(pricingText, `${offer.id} 价格与数量`).toContain(
+        `¥${yuan(offer.amount)} / ${offer.credits}`,
+      );
+    }
+  });
+
+  it("matches the enforced plugin and WeChat link limits", () => {
+    expect(pricingText).toContain(`| 插件数量 | ${PLUGIN_LIMITS.free} 个 | 不限 |`);
+    expect(pricingText).toContain(
+      `| 微信链接 | ${WECHAT_LINK_LIMITS.free} 个 | ${WECHAT_LINK_LIMITS.plus} 个 |`,
+    );
+  });
+
+  it("keeps the llms.txt summary consistent with billing", () => {
+    const monthly = offers.find((offer) => offer.id === "plus_monthly")!;
+    const yearly = offers.find((offer) => offer.id === "plus_yearly")!;
+    expect(llmsText).toContain(`¥${yuan(monthly.amount)}/月`);
+    expect(llmsText).toContain(`¥${yuan(yearly.amount)}/年`);
+    expect(llmsText).toContain(`${PLUGIN_LIMITS.free} 个插件`);
+    expect(llmsText).toContain(`${WECHAT_LINK_LIMITS.plus} 个微信链接`);
+  });
+});
+
+describe("/docs/faq structured data", () => {
+  it("publishes every visible question as a FAQPage entry", () => {
+    const seo = getPageSeo("/docs/faq");
+    const graph = seo.structuredData?.["@graph"] as Array<Record<string, unknown>>;
+    const faq = graph.find((item) => item["@type"] === "FAQPage") as
+      | { "@id": string; mainEntity: { name: string; acceptedAnswer: { text: string } }[] }
+      | undefined;
+    expect(faq, "/docs/faq 缺少 FAQPage").toBeTruthy();
+    expect(faq!["@id"]).toBe(`${seo.canonical}#faq`);
+    expect(faq!.mainEntity).toHaveLength(FAQ_DOC_SECTIONS.length);
+    FAQ_DOC_SECTIONS.forEach((section, index) => {
+      expect(faq!.mainEntity[index].name).toBe(section.title);
+      expect(faq!.mainEntity[index].acceptedAnswer.text).toBe(faqAnswerText(section.body));
+    });
+  });
+
+  it("keeps answers free of markdown syntax", () => {
+    for (const section of FAQ_DOC_SECTIONS) {
+      const answer = faqAnswerText(section.body);
+      expect(answer, section.id).not.toMatch(/\[.*?\]\(|\*\*|`/);
+      expect(answer.length, section.id).toBeGreaterThan(30);
+    }
+  });
+
+  it("does not add FAQPage to documents that have no question list", () => {
+    for (const article of DOC_ARTICLES.filter((item) => item.slug !== "faq")) {
+      const seo = getPageSeo(docPath(article.slug));
+      const graph = seo.structuredData?.["@graph"] as Array<Record<string, unknown>>;
+      expect(graph.some((item) => item["@type"] === "FAQPage"), article.slug).toBe(false);
     }
   });
 });

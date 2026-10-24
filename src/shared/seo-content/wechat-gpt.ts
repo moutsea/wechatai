@@ -120,6 +120,7 @@ CowAgent 当前的微信接入使用官方 API，见 [项目接入文档](https:
     { label: "在微信里使用 Claude", href: "/wechat-claude" },
     { label: "在微信里使用 DeepSeek", href: "/wechat-deepseek" },
     { label: "微信 ClawBot 支持哪些模型", href: "/wechat-clawbot-models" },
+    { label: "微信用 AI 会不会封号", href: "/wechat-ai-ban-risk" },
     { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },
     { label: "渠道与模型配置", href: "/docs/channels-models" },
     { label: "价格与免费额度", href: "/pricing" },

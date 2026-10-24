@@ -124,6 +124,7 @@ Key 随时可删。微伴是 MIT 开源项目，代码公开，也可以自行�
   related: [
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },
     { label: "微信 ClawBot 支持哪些模型", href: "/wechat-clawbot-models" },
+    { label: "微信用 AI 会不会封号", href: "/wechat-ai-ban-risk" },
     { label: "价格与免费额度", href: "/pricing" },
     { label: "渠道与模型配置（文档）", href: "/docs/channels-models" },
     { label: "会员与 credits（文档）", href: "/docs/credits" },

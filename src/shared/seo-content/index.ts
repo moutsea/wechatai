@@ -4,6 +4,7 @@ import { pricingPage } from "./pricing";
 import { wechatAgentPage } from "./wechat-agent";
 import { wechatOptionsPage } from "./wechat-ai-options";
 import { wechatAiPage } from "./wechat-ai";
+import { wechatBanRiskPage } from "./wechat-ai-ban-risk";
 import { wechatClaudePage } from "./wechat-claude";
 import { wechatClawbotModelsPage } from "./wechat-clawbot-models";
 import { wechatClawbotPage } from "./wechat-clawbot";
@@ -17,6 +18,7 @@ import { wechatGptPage } from "./wechat-gpt";
 export const SEO_CONTENT: readonly SeoPage[] = [
   wechatAiPage,
   wechatClawbotPage,
+  wechatBanRiskPage,
   wechatClawbotModelsPage,
   byokPage,
   wechatDeepseekPage,

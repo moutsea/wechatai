@@ -2,12 +2,18 @@ import { wechatCommands } from "../../shared/guide";
 import { notificationSections } from "../../shared/notification-docs";
 import type { DOC_GUIDES } from "../../shared/docs";
 import type { DocContent } from "./docs-content";
+import { FAQ_DOC_SECTIONS } from "../../shared/faq-doc";
+import { DOC_SCREENSHOTS } from "./doc-screenshots";
 
 // The long-form guide now lives in small, independently linkable pages.
 export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocContent> = {
   notifications: {
     intro: "把订单状态、监控告警、脚本结果发到自己的微信。只需发送 HTTP 请求，无需模型 API。",
-    sections: notificationSections,
+    sections: notificationSections.map((section) =>
+      section.id === "setup"
+        ? { ...section, screenshots: [DOC_SCREENSHOTS.notificationToken] }
+        : section,
+    ),
   },
   "getting-started": {
     intro:
@@ -25,6 +31,7 @@ Free 用户可使用基础文字聊天，并配置 1 个插件；Plus 会员插�
       {
         id: "start",
         title: "三步开始聊天",
+        screenshots: [DOC_SCREENSHOTS.channelConfig],
         body: `1. 打开[渠道与模型](/app/channels)，点击「添加渠道」，选择服务商并填写 API Key。第三方地址选择「自定义（第三方渠道 / 其他协议）」后填写协议和 Base URL。保存后确认已有文本模型：预设渠道会尝试自动导入，自定义渠道可点击「获取可用模型」；获取失败或缺少所需模型时，点击「添加模型」。然后点击文本模型行的闪电图标「测试连接」，系统会发送固定测试请求并正常计费。
 2. 打开[微信连接](/app/wechat)，创建链接，获取连接二维码。在微信打开「设置」，找到「功能」分组中的「插件」，进入「微信 ClawBot → 扫一扫」，扫描二维码并确认连接。
 3. 在对应的微信对话中发一句话，收到回答后就可以继续聊了。
@@ -56,6 +63,7 @@ Free 用户可创建 1 个微信链接，Plus 会员最多 10 个。连接方式
       {
         id: "configure",
         title: "添加渠道和模型",
+        screenshots: [DOC_SCREENSHOTS.channelConfig],
         body: `打开[渠道与模型](/app/channels)，点击「添加渠道」，先选择服务商。预设模式只需填写 API Key，地址与协议会自动填好；渠道名称和备注可在「更多设置」里修改。
 
 如果使用第三方地址，或需要调整协议，选择「自定义（第三方渠道 / 其他协议）」；已选择预设时也可以点击「自定义接口」。自定义模式填写以下字段：
@@ -76,6 +84,7 @@ Free 用户可创建 1 个微信链接，Plus 会员最多 10 个。连接方式
       {
         id: "import",
         title: "获取可用模型",
+        screenshots: [DOC_SCREENSHOTS.channelModels],
         body: `新建预设服务商渠道后，微伴会尝试自动获取并导入模型。自定义渠道或需要重新获取时，点击渠道卡片的「获取可用模型」即可导入，结果按文本模型和生图模型分类显示；已有模型会跳过，不会覆盖它的设置或聊天记录。
 
 获取列表不消耗微伴 credits。每个渠道最多添加 50 个模型；如果获取失败、服务商未开放模型列表或缺少所需模型，点击「添加模型」，按其文档填写模型 ID。获取失败不代表渠道没有保存，不必重复创建渠道。
@@ -87,6 +96,7 @@ Free 用户可创建 1 个微信链接，Plus 会员最多 10 个。连接方式
       {
         id: "limits",
         title: "设置提示词与输入输出上限",
+        screenshots: [DOC_SCREENSHOTS.modelLimits],
         body: `每个模型可以单独设置系统提示词、上下文窗口、输入上限、输出上限和单次 credits 上限。默认系统提示词可以修改或清空；修改后可发送 \`/wx reset\`，让新对话不再受旧上下文影响。
 
 输入包含系统提示词、历史摘要、最近对话和本次问题；输出上限控制回复的最大长度。上下文窗口要按模型实际能力填写，填得更大不会让模型支持更长的输入。
@@ -111,13 +121,35 @@ Plus 会员还可以给模型设置快捷名称，发送 \`@快捷名 问题\` �
       {
         id: "connect",
         title: "扫码连接",
-        body: `1. 在微伴的[微信连接](/app/wechat)页面创建链接，获取连接二维码。
-2. 打开微信的「设置」，在「功能」分组中找到「插件」。
-3. 进入「微信 ClawBot」，点击「扫一扫」，扫描微伴页面上的二维码，并在手机上确认连接。
-4. 等微伴页面显示「已连接」，确认当前渠道与模型；需要更换时点击「切换渠道与模型」。
-5. 打开连接对应的微信对话，发送第一条消息。
+        screenshots: [
+          {
+            src: "/images/docs/wechat-settings-plugin.jpg",
+            alt: "微信「设置」页面的「功能」分组，其中最后一项是「插件」",
+            caption: "「插件」在「设置」的「功能」分组里，排在「其他功能」之后。",
+            width: 496,
+            height: 764,
+          },
+          {
+            src: "/images/docs/wechat-plugin-list.jpg",
+            alt: "微信「插件」页：「微信ClawBot」卡片副标题为「连接 OpenClaw 与微信」，右侧有「详情」按钮",
+            caption: "插件页是卡片式列表，点「微信ClawBot」右侧的「详情」进入。",
+            width: 496,
+            height: 569,
+          },
+        ],
+        body: `1. 在微伴的[微信连接](/app/wechat)页面创建链接，拿到连接二维码。
+2. 打开手机微信，点右下角「我」→「设置」。
+3. 在「设置」里向下找到「功能」分组，点最后一项「插件」。
+4. 在「插件」页找到「微信ClawBot」卡片（副标题是「连接 OpenClaw 与微信」），点右侧的「详情」。
+5. 在 ClawBot 详情页点「连接新的 OpenClaw」，按提示扫描微伴页面上的二维码并确认（部分版本这里显示为「扫一扫」）。
+6. 回到微伴页面，确认状态显示「已连接」，核对当前渠道与模型；需要更换时点「切换渠道与模型」。
+7. 打开连接对应的那个微信对话，发送第一条消息。
 
-**扫码入口：微信 → 设置 → 插件（在「功能」分组中）→ 微信 ClawBot → 扫一扫。**
+**完整路径：微信 → 我 → 设置 →（「功能」分组）插件 → 微信ClawBot → 详情 → 连接新的 OpenClaw。**
+
+这一步必须在手机上做，电脑版微信的设置里没有这个入口。微伴目前只处理你与该 ClawBot 的单聊消息，不支持群聊。
+
+**如果「功能」分组里没有「插件」：** 先在「设置 → 关于微信」确认版本号（较新的版本才有该入口）；该入口按账号逐步开放，未开放的账号暂时无法强制开启；企业微信是另一个应用，路径不通用。
 
 连接后的首次来信会触发问候语和命令教程链接，随后处理你的问题。还没收到问候语时，先主动发一句话；也可以发送 \`/wx help\` 随时查看帮助。
 
@@ -126,6 +158,15 @@ Plus 会员还可以给模型设置快捷名称，发送 \`@快捷名 问题\` �
       {
         id: "multiple",
         title: "管理多个链接",
+        screenshots: [
+          {
+            src: "/images/docs/wechat-link-status.jpg",
+            alt: "工作台「微信连接」页的「我的微信」卡片：已连接，显示当前渠道、当前模型、当前会话与最近消息，下方有「切换渠道与模型」和「断开连接」",
+            caption: "已连接的链接长这样：右上角「已连接」，卡片里能看到当前渠道与模型。（演示界面）",
+            width: 450,
+            height: 768,
+          },
+        ],
         body: `Free 用户可创建 1 个微信链接，Plus 会员最多 10 个。各链接单独保存当前模型、插件和会话上下文，共用账号的渠道配置和 credits。
 
 断开后重新连接同一个链接，不额外占用名额。删除链接会释放名额，但不会删除已有聊天记录。
@@ -135,9 +176,28 @@ Plus 会员到期后，首个链接可以继续使用，其余链接暂停。续
       {
         id: "reconnect",
         title: "断开或没有回复时",
-        body: `先在工作台查看连接状态。微信授权过期时重新扫码；如果提示消息发送窗口失效，请在微信里主动发一条新消息。
+        screenshots: [
+          {
+            src: "/images/docs/clawbot-detail.jpg",
+            alt: "微信 ClawBot 详情页说明：发消息后仅接收 OpenClaw 在 24 小时内的回复；下方有「我的 ClawBot」与「连接新的 OpenClaw」",
+            caption: "ClawBot 详情页中的 24 小时回复窗口说明。刚发的新消息没有回复时，还需检查连接与模型服务。",
+            width: 496,
+            height: 615,
+          },
+        ],
+        body: `先分清是哪一类问题，再动手：连接状态、24 小时窗口，还是模型本身。
 
-连接正常但模型一直没有回答，可以到[渠道与模型](/app/channels)测试对应模型，确认 API Key、余额和模型 ID。使用 OpenClaw 或 Hermes 时，还需要检查运行 Agent 的设备是否在线。
+| 现象 | 常见原因 | 处理 |
+| --- | --- | --- |
+| 微伴页面显示未连接或授权过期 | 微信侧授权失效 | 重新扫一次码；已连过的 ClawBot 可在详情页「我的 ClawBot」里查看 |
+| 超过 24 小时没有发消息，主动提醒或后台结果未送达 | 回复窗口可能已过期 | 在对应微信对话中主动发一条消息，更新回复窗口 |
+| 刚发的新消息一直没有回复 | 消息未收到、模型请求超时或 Agent 异常 | 发送 \`/wx status\`，并在工作台检查最近消息、连接状态与服务报错 |
+| 连接正常，但模型始终不答 | 渠道、Key、余额或模型 ID 有误 | 到[渠道与模型](/app/channels)，点模型行末尾的闪电图标「测试连接」核对（会消耗少量 credits） |
+| OpenClaw 或 Hermes 模式无响应 | 运行 Agent 的设备离线 | 检查设备是否开机、进程是否还在 |
+
+**关于 24 小时：** 微信 ClawBot 详情页写明，回复需要在你发消息后的 24 小时内送达。长时间没有互动时，主动提醒或延迟返回的任务结果可能无法发送；在对应微信对话中主动发一条新消息，可以更新回复窗口，但已经过期的任务不保证补发。
+
+如果刚发的新消息仍没有回复，请按上表继续检查消息接收、连接和模型或 Agent，不能仅凭「不回复」判定为窗口过期。仅窗口过期时不需要重新扫码。
 
 更多排查方法见[常见问题](/docs/faq)。`,
       },
@@ -199,6 +259,7 @@ Agent 的 \`/new\` 不会删除微伴聊天记录；\`/wx new\` 会在微伴新�
       {
         id: "history",
         title: "在网页查看记录",
+        screenshots: [DOC_SCREENSHOTS.sessionHistory],
         body: `Plus 会员可在[会话记录](/app/sessions)查看聊天内容、修改会话名称、新建或切换会话，也可以归档、恢复、清空和删除。
 
 打开一条记录查看，并不会自动切换微信正在使用的会话；需要点击切换操作。Free 用户仍可在微信中使用会话命令，账号设置也支持清理平台记录。
@@ -294,6 +355,7 @@ Agent 的 \`/new\` 不会删除微伴聊天记录；\`/wx new\` 会在微伴新�
       {
         id: "balance",
         title: "控制消耗与负余额",
+        screenshots: [DOC_SCREENSHOTS.creditsHistory],
         body: `可以在模型中设置输入、输出和单次 credits 上限。历史越长，输入通常越多；换话题时使用 \`/wx new\`，或用 \`/wx reset\` 重置上下文。
 
 请求开始时不预扣 credits。余额大于 0 时可以发起请求，成功后按实际消耗结算，因此余额可能变成负数。余额小于或等于 0 时，新的付费请求会暂停。
@@ -316,6 +378,7 @@ Agent 的 \`/new\` 不会删除微伴聊天记录；\`/wx new\` 会在微伴新�
       {
         id: "configure",
         title: "配置模型与搜索服务",
+        screenshots: [DOC_SCREENSHOTS.dsSearch],
         body: `打开[插件](/app/plugins)，找到 DS Chat，点击配置：
 
 1. 选择一个已添加的文本模型作为回答模型，建议使用支持工具调用的模型。
@@ -323,7 +386,7 @@ Agent 的 \`/new\` 不会删除微伴聊天记录；\`/wx new\` 会在微伴新�
 3. 填入你自己的搜索服务密钥；也可以使用已支持的 Tavily、Exa 或 SearXNG。SearXNG 需要开放 JSON 搜索接口，无需 API Key。
 4. 设置快捷名称，例如 \`ds\`，保存。
 
-回答模型和搜索服务是两项独立配置，不必来自同一家服务商。微伴不提供内置搜索 API。界面截图见 [DeepSeek 使用教程](/docs/deepseek-in-wechat#search)。`,
+回答模型和搜索服务是两项独立配置，不必来自同一家服务商。微伴不提供内置搜索 API。完整示例见 [DeepSeek 使用教程](/docs/deepseek-in-wechat#search)。`,
       },
       {
         id: "use",
@@ -354,6 +417,7 @@ Plus 会员到期后，最早创建的 1 个插件仍可使用，其余配置保
       {
         id: "configure",
         title: "配置生图服务",
+        screenshots: [DOC_SCREENSHOTS.imageGeneration],
         body: `先在[渠道与模型](/app/channels)添加生图服务的地址、API Key 和模型。上游需要支持 \`/v1/images/generations\` 接口。
 
 然后打开[插件](/app/plugins)，找到 AI 生图，选择对应模型，并设置快捷名称，例如「画图」。提交后的等待提示语可以自定义，也可以关闭。`,
@@ -383,6 +447,7 @@ Plus 会员到期后，最早创建的 1 个插件仍可使用，其余配置保
       {
         id: "character",
         title: "选一个角色，或自己创建",
+        screenshots: [DOC_SCREENSHOTS.roleplay],
         body: `打开[插件](/app/plugins)，找到角色扮演，选择回答模型。支持 OpenAI Chat Completions、OpenAI Responses 和 Anthropic Messages 三种协议。
 
 内置角色包括陆星野、沈砚、苏晚晴、许知遥、岑雾和橘灯。选择前可以预览开场白，应用后也可以修改设定。
@@ -423,6 +488,7 @@ Plus 会员到期后，最早创建的 1 个插件仍可使用，其余配置保
       {
         id: "configure",
         title: "配置并开始使用",
+        screenshots: [DOC_SCREENSHOTS.personalAssistant],
         body: `打开[插件](/app/plugins)，配置个人助理，选择回答模型、默认币种和接收提醒的微信链接。保存快捷名称，例如「助理」。
 
 发送 \`/use 助理\` 进入插件，之后直接说要做的事；也可以单次发送 \`@助理，5 分钟之后提醒我喝水\`。用 \`/exit\` 回到普通模型。
@@ -453,6 +519,7 @@ Plus 会员到期后，最早创建的 1 个插件仍可使用，其余配置保
       {
         id: "daily-tasks",
         title: "今日待办与每日提醒",
+        screenshots: [DOC_SCREENSHOTS.personalTodos],
         body: `在记录管理的「笔记 → 待办清单」里，选择「今日待办」查看计划日期为今天的事项；「全部待办」可查看其他日期的安排。完成后直接勾选，也可以在微信告诉助理「已完成：寄快递」。
 
 开启上方的「每日待办提醒」，设置北京时间并保存。微信里也可以说「每天早上 9 点提醒我今日待办」「改成每天晚上 8 点」或「关闭每日待办提醒」。每份助理配置有一条每日汇总提醒，修改时间会更新原设置。
@@ -475,44 +542,7 @@ Plus 会员到期后仍可查看、导出和删除已有记录。网页编辑与
   faq: {
     intro:
       "先确认当前微信连接、模型和插件，再排查具体服务。微信中发送 /wx status 可以快速查看当前使用的配置。",
-    sections: [
-      {
-        id: "no-reply",
-        title: "连上了，为什么没有回复？",
-        body: `连接后的问候语要等你先发一条消息才会触发。先在微信主动发一句话，再查看工作台连接状态；授权过期时重新扫码。
-
-模型没有回复时，到[渠道与模型](/app/channels)测试连接，依次核对协议、服务地址、API Key、实际模型 ID 和服务商余额。地址请使用最终的公开 HTTPS 接口，不要填会跳转的网页地址。
-
-OpenClaw 或 Hermes 还需要运行设备在线、连接器正常工作。电脑休眠或关机后，Agent 无法处理消息。`,
-      },
-      {
-        id: "model",
-        title: "模型自称和我的配置不一样？",
-        body: `模型对自己名称、版本的描述不一定准确。以工作台配置的实际模型 ID 和 \`/wx status\` 显示的信息为准。
-
-微伴的默认系统提示词不要求模型隐藏身份，你可以在模型设置中查看、修改或清空。修改后可发送 \`/wx reset\`，排除旧上下文的影响。`,
-      },
-      {
-        id: "limits",
-        title: "问题很短，为什么还提示输入超限？",
-        body: `输入不仅包含这一句话，还可能包含系统提示词、历史摘要、最近对话、角色设定和附件。先检查[模型的输入与上下文设置](/docs/channels-models#limits)，再尝试新建会话或重置上下文。
-
-提高上限前，请确认上游模型实际支持的上下文长度。更多说明见[会话与上下文](/docs/sessions#context)。`,
-      },
-      {
-        id: "privacy",
-        title: "聊天记录会发给谁？",
-        body: `你发送的内容和回答所需的上下文会交给所选模型或插件。微伴与微信、腾讯及各模型服务商没有官方关联。
-
-在微伴删除记录，不会同时删除微信客户端或模型服务商保存的数据。断开微信连接也不会自动清空平台聊天记录。具体处理方式见[隐私政策](/privacy)。`,
-      },
-      {
-        id: "membership",
-        title: "会员到期后，配置和记录还在吗？",
-        body: `会保留。到期后最早创建的 1 个插件仍可使用，其余插件配置、网页会话记录和其他 Plus 会员功能暂停；数据保留，续费后可恢复。多个微信链接的处理见[连接微信](/docs/wechat-connection#multiple)。
-
-没有解决的问题，可以[联系我们](/contact)。描述问题时带上报错原文和发生时间，请勿发送 API Key、连接密钥或账号密码。`,
-      },
-    ],
+    // 正文与 /docs/faq 的 FAQPage 结构化数据共用同一份数据，避免两边漂移。
+    sections: FAQ_DOC_SECTIONS,
   },
 };

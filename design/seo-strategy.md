@@ -1,6 +1,6 @@
 # 微信 AI 赛道的 SEO 计划（微伴 Wechatai）
 
-> 目标：先选定 query，再按 query 设计页面。落地代码已进仓库（10 个新落地页 + 站内链接 + 结构化数据 + 校验），`pnpm build` 通过全部 SEO 断言。
+> 目标：先选定 query，再按 query 设计页面。落地代码已进仓库（11 个新落地页 + 站内链接 + 结构化数据 + 校验），`pnpm build` 通过全部 SEO 断言。
 > 结论一句话：**不要去打「微信AI助手」这类被腾讯占满的头部词，去打 ClawBot 的技术长尾和「自带 API Key」这个结构性空位。**
 
 ---
@@ -72,6 +72,7 @@
 | **P1** | 微信接入 GPT / chatgpt-on-wechat | 部署类内容对小白不友好，我们做「跳过部署」 | `/wechat-gpt` ✅ |
 | **P1** | 微信 AI 接 agent / OpenClaw 多开 | 几乎无商业落地页 | `/wechat-agent` ✅ |
 | **P1** | 微信 AI 方案对比 / 值不值得 | 决策型流量，最能筛出高意图用户 | `/wechat-ai-options` ✅ |
+| **P1** | 微信用 AI 会不会封号 / ClawBot 封号 | 高焦虑、SERP 答案敷衍；有腾讯客服与 CNCERT 两份官方原文可引用 | `/wechat-ai-ban-risk` ✅ |
 | **P1** | 微信 AI 多少钱 / 怎么收费 | 有价格页就有资格参与 | `/pricing` ✅ |
 | **P2 hub** | 微信 AI 助手（头部词） | 被腾讯占据，**不指望排名**，只作内链枢纽 | `/wechat-ai` ✅ |
 | **放弃** | 微信 AI 中转站 / API 中转站 | 8/10 结果是程序化榜单站，语义=买便宜 token，与定位冲突 | — |
@@ -115,7 +116,7 @@
 ```
 首页 /  ──「按你的问题找入口」6 卡──▶ wechat-ai / wechat-clawbot / bring-your-own-api-key
         │                              wechat-deepseek / wechat-agent / wechat-ai-options
-        └─页脚 5 栏──────────────────▶ 全部 10 个落地页 + 16 篇文档 + 3 个开发者页
+        └─页脚 5 栏──────────────────▶ 全部 11 个落地页 + 16 篇文档 + 3 个开发者页
 
 /wechat-ai（hub）──▶ 其余 6 个场景页 + /pricing
 /wechat-clawbot ──#no-reply 被 /wechat-deepseek 与 /wechat-clawbot-models 引用
@@ -132,18 +133,18 @@
 | 文件 | 变更 |
 | --- | --- |
 | `src/shared/seo-pages.ts` | 新建：`SeoPage` 类型 + `SEO_PAGES` / `SEO_PATHS` / `findSeoPage` |
-| `src/shared/seo-content/*.ts` | 新建 10 个页面数据文件 + `index.ts` |
+| `src/shared/seo-content/*.ts` | 新建 11 个页面数据文件 + `index.ts` |
 | `src/client/pages/seo-page.tsx` | 新建：统一落地页模板（10 页复用） |
 | `src/client/pages/seo-page.css` | 新建：`.seopage-*` 样式，复用现有设计 token |
 | `src/shared/seo.ts` | `PUBLIC_PATHS` 纳入 10 页；新增 `seoLandingPage()` 生成 WebPage/Article + Breadcrumb + FAQ；`pageLastModified` 用 `page.updatedAt` |
 | `src/client/prerender.tsx` | 预渲染分支接入落地页 |
 | `src/client/main.tsx` | `SEO_PAGES.map` 注册路由 + 引入样式 |
 | `src/client/public-pages.tsx` | 首页新增「按你的问题找入口」6 卡内链区 |
-| `src/client/site-footer.tsx` | 5 栏、`<h2>`→`<p>`、补全 10 个落地页与 3 篇教程链接 |
+| `src/client/site-footer.tsx` | 5 栏、`<h2>`→`<p>`、补全 11 个落地页与 3 篇教程链接 |
 | `src/client/styles.css` | `.landing-guides` 样式；页脚栏目标题选择器与 5 栏栅格 |
 | `src/client/pages/openclaw-guide.tsx` | 补 `SiteFooter`（修复死链胡同） |
 | `src/client/pages/docs.tsx` | H1 改用 `article.seoTitle ?? article.title`（13 篇文档 H1 因此含关键词） |
-| `src/shared/plugin-docs.ts` | `/llms.txt` 重写：产品事实（可引用）+ 10 个落地页 + 8 个开发者入口 + 16 篇文档自动生成 |
+| `src/shared/plugin-docs.ts` | `/llms.txt` 重写：产品事实（可引用）+ 11 个落地页 + 8 个开发者入口 + 16 篇文档自动生成 |
 | `scripts/verify-seo.mjs` | 新增 10 页断言：直答块、FAQ 锚点、`@graph` 结构、跨页锚点可达、内链可解析 |
 | `test/seo.test.ts` | sitemap 顺序断言 + 落地页 4 组断言（唯一性 / 数据完整性 / schema / 内链） |
 
@@ -176,9 +177,14 @@ pnpm build       # vite + prerender 34 页 + verify-seo 全绿
 
 ## 8. 后续（按 ROI 排序）
 
-1. **`/wechat-clawbot` 补真实截图**：故障排查页的排名几乎由「有没有截图」决定，文字回答拿不到「不回复怎么办」的点击。建议 6 张（无插件入口 / 功能页 / 扫码页 / 绑定成功 / 报错 / 灰度提示）。
+1. ~~**`/wechat-clawbot` 补真实截图**~~ —— **已做**（2026-10-24）：`/docs/wechat-connection` 已接入 4 张图（微信设置页「功能 → 插件」、插件卡片页、ClawBot 详情页、工作台「已连接」状态卡）。截图暴露出两条竞品普遍写错的事实，可直接作为内容护城河：
+   - **真实路径**是「我 → 设置 → 功能 分组 → 插件 → 微信ClawBot → 详情 → 连接新的 OpenClaw」，多数中文教程写成「设置 → 插件 → 扫一扫」，读者照做找不到按钮；
+   - **24 小时回复窗口**：ClawBot 详情页说明回复需在用户发消息后的 24 小时内送达。排查时区分长时间未互动后的主动推送与刚发的新消息：前者可能因窗口过期无法发送，后者应继续检查消息接收、连接及模型或 Agent。不要将窗口过期描述为所有不回复的首要原因。已同步 `/docs/wechat-connection#reconnect` 与 `/wechat-clawbot#no-reply`（P0 页）。
+   截图接入方式：`DocSection.screenshots` 支持多图；`scripts/verify-seo.mjs` 会断言图片文件存在，缺图 build 直接失败。
 2. **`/pricing` 接实时价格**：目前写死文案，价格调整时容易与 `src/shared/billing.ts` 不一致，建议从 `BILLING_OFFERS` 渲染。
-3. **`/docs/faq` 补 FAQPage schema**：本次未做——Google 已把 FAQ 富结果限制在权威站点，收益低于成本；等 landing 页 FAQ 先跑一段看曝光再决定。
+3. ~~**`/docs/faq` 补 FAQPage schema**~~ —— **已做**（2026-10-24）。问答正文抽到 `src/shared/faq-doc.ts` 的 `FAQ_DOC_SECTIONS`，页面渲染（`src/client/pages/guide-content.ts`）与结构化数据（`src/shared/seo.ts` 的 `faqPageNode`）共用同一份数据，改文案不会两边漂移；答案经 `faqAnswerText()` 去掉 Markdown 标记后进 `acceptedAnswer`。`test/seo.test.ts` 的「/docs/faq structured data」三个用例锁住问题条数、顺序与纯文本，并断言其他文档页不会误挂 FAQPage。
+   注：Google 的 FAQ 富结果目前只对权威站点展示，这条的实际收益在 **Bing 与 AI 搜索**（Perplexity/ChatGPT 抓 FAQ 结构比抓正文更稳），属于低成本兜底。
 4. **周更 2 篇 ClawBot 长尾**：灰度期窗口有限，`支持哪些模型 / 不回复 / 没入口 / 多开 / 封号` 这类词现在写就是首发，晚 3 个月就是第 8 名。
 5. **监测**：Search Console 分 query 看 10 页的曝光与排名；重点看 `/wechat-clawbot-models` 是否吃到「支持哪些模型」的全量。
 6. **品牌防护**：`/contact` 与首页加实体声明；考虑注册 `wechatai` 相关社交媒体账号做实体信号。
+7. ~~**构建改脏 `public/downloads/`**~~ —— **已修**（2026-10-24）：`scripts/package-hermes.mjs` 改为自行拼 tar 头（固定 mtime/uid/gid/mode）再用 `zlib.gzipSync` 压缩，同样的源码产出逐字节相同的 tgz。之前 `tar -czf` 会把源文件 mtime 和本机用户名写进归档，导致每次 `pnpm build` 都产生二进制 diff，Hermes 安装器的 SHA256 也随机变化。

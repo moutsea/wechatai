@@ -8,6 +8,7 @@ import {
   findDocArticle,
 } from "./docs";
 import { SEO_PATHS, findSeoPage, type SeoPage } from "./seo-pages";
+import { FAQ_DOC_SECTIONS, faqAnswerText } from "./faq-doc";
 
 // Public search URLs always use the production domain, including local builds.
 export const SITE_URL = "https://wechatai.app";
@@ -137,6 +138,25 @@ function seoLandingPage(page: SeoPage): PageSeo {
   };
 }
 
+/**
+ * `/docs/faq` 的 FAQPage 节点。问答正文与页面共用 `FAQ_DOC_SECTIONS`，
+ * 答案在这里被还原成纯文本（Markdown 链接标记原样输出会被当成乱码）。
+ */
+function faqPageNode(canonical: string) {
+  return {
+    "@type": "FAQPage",
+    "@id": `${canonical}#faq`,
+    mainEntity: FAQ_DOC_SECTIONS.map((section) => ({
+      "@type": "Question",
+      name: section.title,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: faqAnswerText(section.body),
+      },
+    })),
+  };
+}
+
 export function getPageSeo(pathname: string): PageSeo {
   const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, "") || "/";
   // Production redirects this route at the edge. The fallback HTML has the
@@ -203,6 +223,7 @@ export function getPageSeo(pathname: string): PageSeo {
                 },
               },
           { "@type": "BreadcrumbList", itemListElement: breadcrumbs },
+          ...(article?.slug === "faq" ? [faqPageNode(canonical)] : []),
         ],
       },
     };

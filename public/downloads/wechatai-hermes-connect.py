@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ARCHIVE_SHA256 = "d5cf02a4346d8facb7ee8f68a5cc12de389e9958f4783911d6cf3ed2b24d2092"
+ARCHIVE_SHA256 = "936a68b2a43358f51a93124c7cf28fd78559cd0528d99c880bacf781f21a13aa"
 USER_AGENT = "Wechatai-Hermes/1.1.2"
 FILES = {"__init__.py", "adapter.py", "transport.py", "plugin.yaml", "README.md"}
 

@@ -303,19 +303,19 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
             >
               {section.body}
             </ReactMarkdown>
-            {section.screenshot && (
-              <figure className="docs-screenshot" style={{ maxWidth: section.screenshot.width }}>
+            {section.screenshots?.map((shot) => (
+              <figure key={shot.src} className="docs-screenshot" style={{ maxWidth: shot.width }}>
                 <a
-                  href={section.screenshot.src}
+                  href={shot.src}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label={`查看大图：${section.screenshot.alt}（新窗口打开）`}
+                  aria-label={`查看大图：${shot.alt}（新窗口打开）`}
                 >
                   <img
-                    src={section.screenshot.src}
-                    alt={section.screenshot.alt}
-                    width={section.screenshot.width}
-                    height={section.screenshot.height}
+                    src={shot.src}
+                    alt={shot.alt}
+                    width={shot.width}
+                    height={shot.height}
                     loading="lazy"
                     decoding="async"
                   />
@@ -324,9 +324,9 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
                     <ArrowUpRight size={14} />
                   </span>
                 </a>
-                <figcaption>{section.screenshot.caption}</figcaption>
+                <figcaption>{shot.caption}</figcaption>
               </figure>
-            )}
+            ))}
           </section>
         ))}
       </article>

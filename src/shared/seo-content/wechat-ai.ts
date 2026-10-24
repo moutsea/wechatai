@@ -143,6 +143,7 @@ DS Chat 也可以直接回答，进入插件不代表每条回复都经过联网
     { label: "在微信里使用 DeepSeek", href: "/wechat-deepseek" },
     { label: "在微信里使用 GPT", href: "/wechat-gpt" },
     { label: "微信 ClawBot 插件怎么用", href: "/wechat-clawbot" },
+    { label: "微信用 AI 会不会封号", href: "/wechat-ai-ban-risk" },
     { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },
     { label: "几种接入方案对比", href: "/wechat-ai-options" },
     { label: "价格与免费额度", href: "/pricing" },

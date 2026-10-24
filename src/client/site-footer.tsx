@@ -30,6 +30,7 @@ export function SiteFooter() {
           <Link to="/docs">文档与教程</Link>
           <Link to="/wechat-clawbot">ClawBot 绑定与排查</Link>
           <Link to="/wechat-clawbot-models">ClawBot 支持哪些模型</Link>
+          <Link to="/wechat-ai-ban-risk">用 AI 会不会封号</Link>
           <Link to="/wechat-deepseek">在微信里用 DeepSeek</Link>
           <Link to="/wechat-claude">在微信里用 Claude</Link>
           <Link to="/wechat-gpt">在微信里用 GPT</Link>

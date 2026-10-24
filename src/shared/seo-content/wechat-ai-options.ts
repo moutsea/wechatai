@@ -137,6 +137,7 @@ CowAgent 的具体接法见 [项目微信文档](https://docs.cowagent.ai/channe
     { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },
     { label: "微信 ClawBot 插件怎么用", href: "/wechat-clawbot" },
     { label: "微信 ClawBot 支持哪些模型", href: "/wechat-clawbot-models" },
+    { label: "微信用 AI 会不会封号", href: "/wechat-ai-ban-risk" },
     { label: "微信接入 Agent", href: "/wechat-agent" },
     { label: "价格与免费额度", href: "/pricing" },
     { label: "微信 AI 常见问题（文档）", href: "/docs/faq" },

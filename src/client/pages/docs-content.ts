@@ -1,17 +1,21 @@
 import type { DocSlug } from "../../shared/docs";
 import { GUIDE_CONTENT } from "./guide-content";
+import { DOC_SCREENSHOTS } from "./doc-screenshots";
+
+export interface DocScreenshot {
+  src: string;
+  alt: string;
+  caption: string;
+  width: number;
+  height: number;
+}
 
 export interface DocSection {
   id: string;
   title: string;
   body: string;
-  screenshot?: {
-    src: string;
-    alt: string;
-    caption: string;
-    width: number;
-    height: number;
-  };
+  /** Figures are rendered after the body, in order. */
+  screenshots?: readonly DocScreenshot[];
 }
 export interface DocContent {
   intro: string;
@@ -36,13 +40,7 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
       {
         id: "channel",
         title: "第一步：添加 DeepSeek 渠道和模型",
-        screenshot: {
-          src: "/images/docs/deepseek-channel.png",
-          alt: "添加渠道：选择 DeepSeek 服务商，填写自己的 API Key，点击保存并获取模型",
-          caption: "选择 DeepSeek 预设后，协议和请求地址会自动填好，只需填写自己的 API Key。",
-          width: 1265,
-          height: 712,
-        },
+        screenshots: [DOC_SCREENSHOTS.channelConfig],
         body: `1. 打开[渠道与模型](/app/channels)，点击「添加渠道」。服务商选择 **DeepSeek**，填写自己的 API Key，再点击「保存并获取模型」。协议和请求地址会自动填好；需要修改渠道名称时，展开「更多设置」。
 2. 保存后会尝试自动导入模型，请检查渠道卡片中的文本模型列表。如果获取失败或没有所需模型，点击「添加模型」，填写服务商提供的模型 ID。渠道已经保存，不必重新创建。
 3. 点击文本模型行的闪电图标「测试连接」。系统会发送固定测试请求，无需自己输入消息。**测试会消耗少量 credits，并可能产生上游 API 费用**，请确认 API Key 有可用额度。
@@ -66,13 +64,7 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
       {
         id: "search",
         title: "配置 DS Chat 插件，获得逼近 DeepSeek 网页版体验",
-        screenshot: {
-          src: "/images/docs/ds-chat-settings.jpg",
-          alt: "DS Chat 配置：回答模型、搜索 API 类型、搜索地址与密钥的填写位置",
-          caption: "先选择回答模型，再填写自己的搜索 API。图中模型为演示数据。",
-          width: 496,
-          height: 953,
-        },
+        screenshots: [DOC_SCREENSHOTS.dsSearch],
         body: `普通 DeepSeek 模型聊天不会因为接入微信就自动获得搜索能力。如果希望它能处理最新信息，可以在[插件](/app/plugins)中配置 **DS Chat**：
 
 1. 选择刚才添加的文本模型作为回答模型。
@@ -142,13 +134,15 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
       {
         id: "first",
         title: "第一步：连接工作助手",
-        screenshot: {
-          src: "/images/docs/openclaw-connect.jpg",
-          alt: "OpenClaw 连接弹窗中的连接命令和复制按钮",
-          caption: "连接命令的位置（演示界面）。请复制自己账号生成的命令，不要使用截图内容。",
-          width: 496,
-          height: 746,
-        },
+        screenshots: [
+          {
+            src: "/images/docs/openclaw-connect.jpg",
+            alt: "OpenClaw 连接弹窗中的连接命令和复制按钮",
+            caption: "连接命令的位置（演示界面）。请复制自己账号生成的命令，不要使用截图内容。",
+            width: 496,
+            height: 746,
+          },
+        ],
         body: `1. 打开[插件](/app/plugins)，找到 OpenClaw，点击「配置插件」。
 2. 在弹窗中点击「连接 OpenClaw」，复制生成的命令。
 3. 到安装 OpenClaw 的设备上打开终端，粘贴并执行。如果装在服务器上，就在登录服务器后的终端执行。
@@ -160,13 +154,15 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
       {
         id: "second",
         title: "第二步：添加生活助手，保留原连接",
-        screenshot: {
-          src: "/images/docs/openclaw-configs.jpg",
-          alt: "OpenClaw 配置管理：顶部选择配置，底部添加另一组配置",
-          caption: "顶部选择要修改的配置，底部「添加另一组配置」新增助手。图中使用演示数据。",
-          width: 496,
-          height: 748,
-        },
+        screenshots: [
+          {
+            src: "/images/docs/openclaw-configs.jpg",
+            alt: "OpenClaw 配置管理：顶部选择配置，底部添加另一组配置",
+            caption: "顶部选择要修改的配置，底部「添加另一组配置」新增助手。图中使用演示数据。",
+            width: 496,
+            height: 748,
+          },
+        ],
         body: `打开 OpenClaw 的「查看配置」，点击下方「添加另一组配置」，再生成一条连接命令。
 
 - 如果生活助手装在另一台设备，就去那台设备执行。
@@ -242,13 +238,15 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
       {
         id: "pair",
         title: "第二步：执行一键连接命令",
-        screenshot: {
-          src: "/images/docs/hermes-connect.jpg",
-          alt: "Hermes 连接弹窗：复制连接命令，到安装 Hermes 的设备上执行",
-          caption: "Hermes 连接界面（演示数据）。登录自己的账号后生成并复制连接命令。",
-          width: 496,
-          height: 746,
-        },
+        screenshots: [
+          {
+            src: "/images/docs/hermes-connect.jpg",
+            alt: "Hermes 连接弹窗：复制连接命令，到安装 Hermes 的设备上执行",
+            caption: "Hermes 连接界面（演示数据）。登录自己的账号后生成并复制连接命令。",
+            width: 496,
+            height: 746,
+          },
+        ],
         body: `1. 打开[插件](/app/plugins)，找到 Hermes，点击「配置插件」。
 2. 在弹窗中点击「连接 Hermes」，复制连接命令。
 3. 打开安装 Hermes 的电脑或服务器的**终端命令行**，粘贴并执行。不要发到微信或 Hermes 的聊天框里。

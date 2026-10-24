@@ -228,6 +228,7 @@ export const llmsText = `# Wechatai · 微伴
 - [微信 AI 助手](${SITE_URL}/wechat-ai): 微信 AI 是什么、能做什么、怎么接入。
 - [微信 ClawBot 插件](${SITE_URL}/wechat-clawbot): 插件入口、扫一扫绑定步骤、不回复排查。
 - [ClawBot 支持哪些模型](${SITE_URL}/wechat-clawbot-models): ClawBot 是通道不是模型，支持范围取决于绑定端。
+- [微信用 AI 会不会封号](${SITE_URL}/wechat-ai-ban-risk): 官方外挂定义、分级处罚机制、三类接法风险差异与自查清单。
 - [自带 API Key](${SITE_URL}/bring-your-own-api-key): 为什么不买 token、Key 怎么存、账单谁付。
 - [在微信里使用 DeepSeek](${SITE_URL}/wechat-deepseek): 托管聊天与本机 Agent 的配置、费用对比。
 - [在微信里使用 Claude](${SITE_URL}/wechat-claude): 不需要 Claude Code，直连 API。
