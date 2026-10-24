@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Brand } from "./ui";
+import { DOC_TUTORIALS, docPath } from "../shared/docs";
 
 export function SiteFooter() {
   return (
@@ -16,29 +17,43 @@ export function SiteFooter() {
           </p>
         </div>
         <nav className="landing-footer-column" aria-label="产品">
-          <h2>产品</h2>
+          <p className="landing-footer-title">产品</p>
+          <Link to="/wechat-ai">微信 AI 助手</Link>
+          <Link to="/wechat-ai-options">方案对比</Link>
+          <Link to="/pricing">价格与免费额度</Link>
           <Link to="/app">我的工作台</Link>
           <Link to="/docs/channels-models">渠道与模型</Link>
-          <Link to="/docs/wechat-connection">连接微信</Link>
           <Link to="/docs/credits">会员与 credits</Link>
         </nav>
         <nav className="landing-footer-column" aria-label="使用帮助">
-          <h2>使用帮助</h2>
+          <p className="landing-footer-title">使用帮助</p>
           <Link to="/docs">文档与教程</Link>
-          <Link to="/docs/deepseek-in-wechat">在微信里使用 DeepSeek</Link>
-          <Link to="/docs/multiple-openclaw-in-wechat">连接多个 OpenClaw</Link>
-          <Link to="/docs/hermes-in-wechat">在微信里使用 Hermes</Link>
+          <Link to="/wechat-clawbot">ClawBot 绑定与排查</Link>
+          <Link to="/wechat-clawbot-models">ClawBot 支持哪些模型</Link>
+          <Link to="/wechat-deepseek">在微信里用 DeepSeek</Link>
+          <Link to="/wechat-claude">在微信里用 Claude</Link>
+          <Link to="/wechat-gpt">在微信里用 GPT</Link>
           <Link to="/docs/faq">常见问题</Link>
         </nav>
         <nav className="landing-footer-column" aria-label="开发者">
-          <h2>开发者</h2>
+          <p className="landing-footer-title">开发者</p>
           <Link to="/developers/plugins">插件开发文档</Link>
           <Link to="/developers/openclaw">OpenClaw 接入</Link>
           <Link to="/developers/hermes">Hermes 接入</Link>
+          <Link to="/wechat-agent">微信接入 Agent</Link>
+          <Link to="/bring-your-own-api-key">自带 API Key</Link>
           <a href="/developers/plugins.md">协议 Markdown</a>
         </nav>
+        <nav className="landing-footer-column" aria-label="实操教程">
+          <p className="landing-footer-title">实操教程</p>
+          {DOC_TUTORIALS.map((article) => (
+            <Link key={article.slug} to={docPath(article.slug)}>
+              {article.title}
+            </Link>
+          ))}
+        </nav>
         <nav className="landing-footer-column" aria-label="支持与条款">
-          <h2>支持与条款</h2>
+          <p className="landing-footer-title">支持与条款</p>
           <Link to="/terms">服务协议</Link>
           <Link to="/privacy">隐私政策</Link>
           <Link to="/contact">联系我们</Link>

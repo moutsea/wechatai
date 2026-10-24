@@ -1,4 +1,4 @@
-export const DOCS_UPDATED_AT = "2026-10-10";
+export const DOCS_UPDATED_AT = "2026-10-24";
 export const DOCS_TITLE = "微信 AI 教程与文档";
 export const DOCS_DESCRIPTION =
   "微伴 Wechatai 使用文档：配置模型、连接微信、管理会话和 credits。附 DeepSeek、多个 OpenClaw 与 Hermes 接入教程，以及联网问答、生图和个人助理说明。";

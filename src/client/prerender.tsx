@@ -8,7 +8,9 @@ import { NotFound } from "./not-found";
 import { PluginProtocol } from "./pages/plugin-protocol";
 import { SiteInfoPage } from "./pages/site-info";
 import { DocsIndex, DocArticlePage } from "./pages/docs";
+import { SeoPageView } from "./pages/seo-page";
 import { findDocArticle } from "../shared/docs";
+import { findSeoPage } from "../shared/seo-pages";
 import { INFO_PAGES } from "../shared/site-info";
 export {
   getPageSeo,
@@ -23,10 +25,13 @@ export function renderPublicPage(path: string) {
   const infoKind = (Object.keys(INFO_PAGES) as Array<keyof typeof INFO_PAGES>).find(
     (kind) => INFO_PAGES[kind].path === path,
   );
+  const landing = findSeoPage(path);
   return renderToString(
     <StaticRouter location={path}>
       <AnonymousAuthProvider>
-        {infoKind ? (
+        {landing ? (
+          <SeoPageView page={landing} />
+        ) : infoKind ? (
           <SiteInfoPage kind={infoKind} />
         ) : path === "/" ? (
           <Landing />

@@ -248,7 +248,7 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
           <span className="docs-kicker">{article.category}</span>
           {article.requirement && <span className="docs-plan-tag">{article.requirement}</span>}
         </div>
-        <h1>{article.title}</h1>
+        <h1>{article.seoTitle ?? article.title}</h1>
         <p>{article.outcome}</p>
         <div className="docs-article-meta">
           <span>

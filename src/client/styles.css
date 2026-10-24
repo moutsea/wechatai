@@ -2663,6 +2663,77 @@ code {
   color: var(--muted);
   margin-top: 20px;
 }
+.landing-guides {
+  padding: 10px 50px 20px;
+  scroll-margin-top: 80px;
+}
+.landing-guides h2 {
+  margin: 0 0 22px;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.landing-guides-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.landing-guides-grid a {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+.landing-guides-grid a:hover {
+  border-color: var(--green);
+  transform: translateY(-2px);
+}
+.landing-guides-grid strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.45;
+}
+.landing-guides-grid span {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.landing-guides-more {
+  margin: 18px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.landing-guides-more a {
+  margin: 0 3px;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 960px) {
+  .landing-guides {
+    padding: 10px 30px 20px;
+  }
+  .landing-guides-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .landing-guides {
+    padding: 10px 22px 20px;
+  }
+  .landing-guides-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .landing-footer {
   padding: 0 50px;
   background: var(--dark-surface);
@@ -2673,7 +2744,7 @@ code {
   margin: 0 auto;
   padding: 64px 0 52px;
   display: grid;
-  grid-template-columns: minmax(240px, 1.8fr) repeat(4, minmax(0, 1fr));
+  grid-template-columns: minmax(240px, 1.8fr) repeat(5, minmax(0, 1fr));
   gap: 32px;
 }
 .landing-footer-brand > a {
@@ -2691,7 +2762,7 @@ code {
   align-items: flex-start;
   gap: 8px;
 }
-.landing-footer-column h2 {
+.landing-footer-column .landing-footer-title {
   margin-bottom: 12px;
   color: var(--on-green);
   font-size: 14px;

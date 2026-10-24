@@ -8,6 +8,8 @@ import { VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage } from "./pages/
 import { Guide } from "./pages/guide";
 import { SiteInfoPage } from "./pages/site-info";
 import { DocsIndex, DocArticlePage } from "./pages/docs";
+import { SeoPageView } from "./pages/seo-page";
+import { SEO_PAGES } from "../shared/seo-pages";
 import { PageMetadata } from "./seo";
 import { NotFound } from "./not-found";
 import "./styles.css";
@@ -15,6 +17,7 @@ import "./styles.css";
 import "./pages/plugin-protocol.css";
 import "./pages/site-info.css";
 import "./pages/docs.css";
+import "./pages/seo-page.css";
 const PluginProtocol = lazy(() =>
   import("./pages/plugin-protocol").then((module) => ({ default: module.PluginProtocol })),
 );
@@ -45,6 +48,9 @@ root.render(
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/guide" element={<Guide />} />
+          {SEO_PAGES.map((page) => (
+            <Route key={page.path} path={page.path} element={<SeoPageView page={page} />} />
+          ))}
           <Route path="/docs" element={<DocsIndex />} />
           <Route path="/docs/:slug" element={<DocArticlePage />} />
           <Route path="/terms" element={<SiteInfoPage kind="terms" />} />

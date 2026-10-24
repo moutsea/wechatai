@@ -7,6 +7,7 @@ import {
   docPath,
   findDocArticle,
 } from "./docs";
+import { SEO_PATHS, findSeoPage, type SeoPage } from "./seo-pages";
 
 // Public search URLs always use the production domain, including local builds.
 export const SITE_URL = "https://wechatai.app";
@@ -18,6 +19,7 @@ export const PUBLIC_PATHS = [
   "/",
   "/docs",
   ...DOC_ARTICLES.map((article) => docPath(article.slug)),
+  ...SEO_PATHS,
   "/developers/plugins",
   "/developers/openclaw",
   "/developers/hermes",
@@ -56,11 +58,92 @@ export interface PageSeo {
   structuredData?: Record<string, unknown>;
 }
 
+/**
+ * Landing pages share one schema shape: a WebPage (or Article for guides), the
+ * breadcrumb trail and, when present, the FAQ block. Keeping it in one builder
+ * stops the eight pages from drifting apart as they are edited.
+ */
+function seoLandingPage(page: SeoPage): PageSeo {
+  const canonical = `${SITE_URL}${page.path}`;
+  const isArticle = page.kind === "article";
+  const publisher = {
+    "@type": "Organization",
+    "@id": `${SITE_URL}/#organization`,
+    name: SITE_NAME,
+    url: `${SITE_URL}/`,
+  };
+  const webPage = isArticle
+    ? {
+        "@type": "Article",
+        "@id": `${canonical}#article`,
+        url: canonical,
+        mainEntityOfPage: canonical,
+        headline: page.h1,
+        description: page.description,
+        inLanguage: "zh-CN",
+        image: SOCIAL_IMAGE,
+        datePublished: page.updatedAt,
+        dateModified: page.updatedAt,
+        author: { "@type": "Organization", name: "微伴团队", url: `${SITE_URL}/` },
+        publisher,
+      }
+    : {
+        "@type": "WebPage",
+        "@id": `${canonical}#webpage`,
+        url: canonical,
+        name: page.h1,
+        description: page.description,
+        inLanguage: "zh-CN",
+        about: {
+          "@type": "SoftwareApplication",
+          name: SITE_NAME,
+          url: `${SITE_URL}/`,
+          applicationCategory: "CommunicationApplication",
+        },
+        publisher,
+      };
+  return {
+    title: `${page.title} | ${SITE_NAME}`,
+    description: page.description,
+    indexable: true,
+    canonical,
+    ogType: isArticle ? "article" : "website",
+    structuredData: {
+      "@context": "https://schema.org",
+      "@graph": [
+        webPage,
+        {
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "首页", item: `${SITE_URL}/` },
+            { "@type": "ListItem", position: 2, name: page.title, item: canonical },
+          ],
+        },
+        ...(page.faq.length
+          ? [
+              {
+                "@type": "FAQPage",
+                "@id": `${canonical}#faq`,
+                mainEntity: page.faq.map((item) => ({
+                  "@type": "Question",
+                  name: item.question,
+                  acceptedAnswer: { "@type": "Answer", text: item.answer },
+                })),
+              },
+            ]
+          : []),
+      ],
+    },
+  };
+}
+
 export function getPageSeo(pathname: string): PageSeo {
   const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, "") || "/";
   // Production redirects this route at the edge. The fallback HTML has the
   // destination canonical without a conflicting noindex instruction.
   if (path === "/guide") return getPageSeo("/docs/getting-started");
+  const landing = findSeoPage(path);
+  if (landing) return seoLandingPage(landing);
   const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
   if (path === "/docs" || article) {
     const canonical = `${SITE_URL}${path}`;
@@ -308,6 +391,8 @@ export function pageLastModified(path: string): string | undefined {
   if (path === "/") return HOME_UPDATED_AT;
   if (path === "/docs" || DOC_ARTICLES.some((article) => docPath(article.slug) === path))
     return DOCS_UPDATED_AT;
+  const landing = findSeoPage(path);
+  if (landing) return landing.updatedAt;
   if (Object.values(INFO_PAGES).some((page) => page.path === path)) return POLICY_UPDATED_AT;
   // Omit unknown dates rather than presenting the build time as a content update.
   return undefined;

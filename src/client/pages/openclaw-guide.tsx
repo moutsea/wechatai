@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Brand } from "../ui";
+import { SiteFooter } from "../site-footer";
 import { openClawGuide } from "../../shared/openclaw-docs";
 import "./guide.css";
 
@@ -27,6 +28,7 @@ export function OpenClawGuide({ kind = "openclaw" }: { kind?: "openclaw" | "herm
           {kind === "hermes" ? hermesGuide : openClawGuide}
         </Markdown>
       </main>
+      <SiteFooter />
     </div>
   );
 }

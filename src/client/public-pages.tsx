@@ -234,6 +234,39 @@ export function Landing() {
           </strong>
         </section>
         <LandingSteps />
+        <section className="landing-guides" aria-labelledby="landing-guides-title">
+          <h2 id="landing-guides-title">按你的问题找入口</h2>
+          <div className="landing-guides-grid">
+            <Link to="/wechat-ai">
+              <strong>微信 AI 能做什么</strong>
+              <span>能对话、生图、接 Agent 的完整能力清单</span>
+            </Link>
+            <Link to="/wechat-clawbot">
+              <strong>ClawBot 插件在哪、不回复怎么办</strong>
+              <span>入口位置、扫一扫绑定步骤与五类排查</span>
+            </Link>
+            <Link to="/bring-your-own-api-key">
+              <strong>用自己的 API Key</strong>
+              <span>不卖 token 的中转方式，Key 存哪、账单谁付</span>
+            </Link>
+            <Link to="/wechat-deepseek">
+              <strong>在微信里用 DeepSeek</strong>
+              <span>托管聊天与本机 Agent 的配置、费用对比</span>
+            </Link>
+            <Link to="/wechat-agent">
+              <strong>在微信里接 Agent</strong>
+              <span>OpenClaw、Hermes 与主动推送</span>
+            </Link>
+            <Link to="/wechat-ai-options">
+              <strong>先对比几种方案</strong>
+              <span>官方内置、商业平台、开源自建与自带 Key</span>
+            </Link>
+          </div>
+          <p className="landing-guides-more">
+            也可以直接看 <Link to="/pricing">价格与免费额度</Link>，或从
+            <Link to="/docs">文档中心</Link>开始配置。
+          </p>
+        </section>
         <section className="landing-cta">
           <Sprout size={30} />
           <h2>免费使用，马上开始</h2>

@@ -37,22 +37,18 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
         id: "channel",
         title: "第一步：添加 DeepSeek 渠道和模型",
         screenshot: {
-          src: "/images/docs/deepseek-channel.jpg",
-          alt: "添加 DeepSeek 渠道：选择 OpenAI Chat Completions 协议，填写 Base URL 和 API Key",
-          caption: "DeepSeek 官方 API 填写示例。API Key 请填入你自己的密钥。",
-          width: 666,
-          height: 664,
+          src: "/images/docs/deepseek-channel.png",
+          alt: "添加渠道：选择 DeepSeek 服务商，填写自己的 API Key，点击保存并获取模型",
+          caption: "选择 DeepSeek 预设后，协议和请求地址会自动填好，只需填写自己的 API Key。",
+          width: 1265,
+          height: 712,
         },
-        body: `打开[渠道与模型](/app/channels)，添加一个渠道，按下面的方式填写：
+        body: `1. 打开[渠道与模型](/app/channels)，点击「添加渠道」。服务商选择 **DeepSeek**，填写自己的 API Key，再点击「保存并获取模型」。协议和请求地址会自动填好；需要修改渠道名称时，展开「更多设置」。
+2. 保存后会尝试自动导入模型，请检查渠道卡片中的文本模型列表。如果获取失败或没有所需模型，点击「添加模型」，填写服务商提供的模型 ID。渠道已经保存，不必重新创建。
+3. 点击文本模型行的闪电图标「测试连接」。系统会发送固定测试请求，无需自己输入消息。**测试会消耗少量 credits，并可能产生上游 API 费用**，请确认 API Key 有可用额度。
+4. 需要控制长上下文和长回复的消耗时，通过模型行的编辑按钮设置输入、输出上限。测试成功后，再按下一步连接微信。
 
-| 配置项 | DeepSeek 官方 API 的填写方式 |
-| --- | --- |
-| 渠道名称 | DeepSeek，或你容易辨认的名称 |
-| 协议 | OpenAI Chat Completions |
-| API 根地址 | \`https://api.deepseek.com\` |
-| API Key | 你在服务商处创建的 API 密钥 |
-
-保存后测试连接。测试会发起真实模型请求，请确认该 API Key 有可用额度。你还可以为模型设置输入、输出上限，控制长上下文和长回复的消耗。`,
+如果使用第三方渠道，服务商选择「自定义（第三方渠道 / 其他协议）」，按其说明填写渠道名称、协议、Base URL 和 API Key，并核对实际请求地址。保存后点击「获取可用模型」，或直接点击「添加模型」手动配置，再测试文本模型。`,
       },
       {
         id: "connect",

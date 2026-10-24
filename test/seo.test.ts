@@ -14,6 +14,7 @@ import {
   pageLastModified,
   replaceSeoHead,
 } from "../src/shared/seo";
+import { SEO_PAGES } from "../src/shared/seo-pages";
 
 describe("search indexing boundaries", () => {
   it("includes notification routes in the deployable private pages", () => {
@@ -110,6 +111,16 @@ describe("search indexing boundaries", () => {
       "https://wechatai.app/",
       "https://wechatai.app/docs",
       ...DOC_ARTICLES.map((article) => `https://wechatai.app${docPath(article.slug)}`),
+      "https://wechatai.app/wechat-ai",
+      "https://wechatai.app/wechat-clawbot",
+      "https://wechatai.app/wechat-clawbot-models",
+      "https://wechatai.app/bring-your-own-api-key",
+      "https://wechatai.app/wechat-deepseek",
+      "https://wechatai.app/wechat-claude",
+      "https://wechatai.app/wechat-gpt",
+      "https://wechatai.app/wechat-agent",
+      "https://wechatai.app/wechat-ai-options",
+      "https://wechatai.app/pricing",
       "https://wechatai.app/developers/plugins",
       "https://wechatai.app/developers/openclaw",
       "https://wechatai.app/developers/hermes",
@@ -169,5 +180,66 @@ describe("search indexing boundaries", () => {
     expect(head).toContain("&lt;img");
     const json = head.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)?.[1];
     expect(JSON.parse(json!).name).toBe("</script><script>alert(1)</script>");
+  });
+});
+
+describe("query landing pages", () => {
+  it("gives every public page a unique title and description", () => {
+    const titles = PUBLIC_PATHS.map((path) => getPageSeo(path).title);
+    const descriptions = PUBLIC_PATHS.map((path) => getPageSeo(path).description);
+    expect(new Set(titles).size).toBe(titles.length);
+    expect(new Set(descriptions).size).toBe(descriptions.length);
+  });
+
+  it("targets one query per page and keeps the answer block quotable", () => {
+    for (const page of SEO_PAGES) {
+      expect(page.primaryKeyword.length).toBeGreaterThan(3);
+      expect(page.secondaryKeywords.length).toBeGreaterThanOrEqual(3);
+      expect(page.answer.length).toBeGreaterThan(60);
+      expect(page.sections.length).toBeGreaterThanOrEqual(4);
+      expect(page.faq.length).toBeGreaterThanOrEqual(4);
+      expect(page.sections.some((section) => section.id === "faq")).toBe(false);
+    }
+  });
+
+  it("publishes canonical, breadcrumb and FAQ structured data per page", () => {
+    for (const page of SEO_PAGES) {
+      const seo = getPageSeo(`${page.path}/?utm_source=wechat`);
+      const canonical = `https://wechatai.app${page.path}`;
+      expect(seo.canonical).toBe(canonical);
+      expect(seo.indexable).toBe(true);
+      expect(seo.title).toContain(page.title);
+      expect(renderSeoHead(seo)).toContain('content="index, follow, max-image-preview:large"');
+      const graph = seo.structuredData?.["@graph"] as Array<Record<string, unknown>>;
+      const breadcrumb = graph.find((item) => item["@type"] === "BreadcrumbList");
+      expect(breadcrumb?.itemListElement).toEqual([
+        { "@type": "ListItem", position: 1, name: "首页", item: "https://wechatai.app/" },
+        { "@type": "ListItem", position: 2, name: page.title, item: canonical },
+      ]);
+      const faq = graph.find((item) => item["@type"] === "FAQPage") as
+        | { "@id": string; mainEntity: unknown[] }
+        | undefined;
+      expect(faq?.["@id"]).toBe(`${canonical}#faq`);
+      expect(faq?.mainEntity).toHaveLength(page.faq.length);
+      expect(pageLastModified(page.path)).toBe(page.updatedAt);
+    }
+  });
+
+  it("only links to pages that exist", () => {
+    const known = new Set(PUBLIC_PATHS);
+    // Setup tutorials also link to the existing, authenticated channel setup route.
+    for (const path of ["/register", "/login", "/docs", "/app/channels"]) known.add(path);
+    for (const page of SEO_PAGES) {
+      for (const link of page.related) {
+        const [path] = link.href.split("#");
+        expect(known.has(path), `${page.path} → ${link.href}`).toBe(true);
+      }
+      for (const section of page.sections) {
+        for (const match of section.body.matchAll(/\]\((\/[^)#\s]*)/g)) {
+          const target = match[1].replace(/\/$/, "") || "/";
+          expect(known.has(target), `${page.path} → ${match[1]}`).toBe(true);
+        }
+      }
+    }
   });
 });

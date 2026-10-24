@@ -59,6 +59,21 @@ const publicPages = [
   ["privacy.html", "https://wechatai.app/privacy", "隐私政策正文"],
   ["contact.html", "https://wechatai.app/contact", "cfjwlchangji@gmail.com"],
 ];
+// Query-driven landing pages. The marker is the rendered H1, which proves the
+// page component ran during prerender instead of falling through to NotFound.
+const landingPages = [
+  ["wechat-ai.html", "https://wechatai.app/wechat-ai", "微信 AI：把你的大模型接进微信聊天"],
+  ["wechat-clawbot.html", "https://wechatai.app/wechat-clawbot", "微信 ClawBot 插件：入口、绑定与不回复排查"],
+  ["wechat-clawbot-models.html", "https://wechatai.app/wechat-clawbot-models", "微信 ClawBot 支持哪些模型？"],
+  ["bring-your-own-api-key.html", "https://wechatai.app/bring-your-own-api-key", "用自己的 API Key，把 AI 接进微信"],
+  ["wechat-deepseek.html", "https://wechatai.app/wechat-deepseek", "微信接入 DeepSeek：先选路，再配置"],
+  ["wechat-claude.html", "https://wechatai.app/wechat-claude", "微信接入 Claude：绕开桥接的那条路"],
+  ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
+  ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],
+  ["wechat-ai-options.html", "https://wechatai.app/wechat-ai-options", "微信 AI 怎么选：四类方案的真实取舍"],
+  ["pricing.html", "https://wechatai.app/pricing", "价格：我们不卖 token"],
+];
+publicPages.push(...landingPages);
 const publicTitles = new Set();
 const publicDescriptions = new Set();
 for (const [file, canonical, text] of publicPages) {
@@ -124,6 +139,37 @@ for (const [file, canonical, text] of publicPages) {
     for (const match of html.matchAll(/src="(\/images\/[^"?#]+)"/g)) {
       await access(new URL(match[1].slice(1), dir));
     }
+  }
+}
+// Landing pages must be citable: a direct answer block, a FAQ accordion backed by
+// FAQPage structured data, a breadcrumb, and internal links that all resolve.
+for (const [file, , marker] of landingPages) {
+  const html = await read(file);
+  assert(html.includes('class="seopage-answer"'), `${file}: direct answer block`);
+  assert(html.includes('id="faq"'), `${file}: FAQ section`);
+  assert(html.includes(`<h1>${marker}</h1>`), `${file}: landing heading from page data`);
+  const graph = JSON.parse(
+    html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+  )["@graph"];
+  assert(graph.some((item) => item["@type"] === "BreadcrumbList"), `${file}: breadcrumb data`);
+  assert(graph.some((item) => item["@type"] === "FAQPage"), `${file}: FAQ data`);
+  const page = graph.find((item) => item["@type"] === "WebPage" || item["@type"] === "Article");
+  assert(page && (page.description || "").length > 40, `${file}: page node description`);
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(ids.length, new Set(ids).size, `${file}: unique section IDs`);
+  for (const match of html.matchAll(/href="#([^"]+)"/g)) {
+    assert(ids.includes(match[1]), `${file}: in-page anchor target ${match[1]}`);
+  }
+  assert(!html.includes('href="/guide"'), `${file}: no legacy internal links`);
+  for (const match of html.matchAll(/<a\b[^>]*href="(\/[^"#?]*)/g)) {
+    const path = match[1];
+    if (path === "/" || path.startsWith("/app") || workerDocuments.some(([url]) => url === path))
+      continue;
+    await access(new URL(path.slice(1) + ".html", dir));
+  }
+  for (const match of html.matchAll(/href="(\/[^"#?]+)#([^"]+)"/g)) {
+    const target = await read(`${match[1].slice(1)}.html`);
+    assert(target.includes(`id="${match[2]}"`), `${file}: cross-page anchor ${match[0]}`);
   }
 }
 const legacy = await read("guide.html");

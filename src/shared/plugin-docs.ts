@@ -7,6 +7,7 @@ import {
   pluginEventSchema,
 } from "./plugins";
 import { SITE_URL } from "./seo";
+import { DOC_ARTICLES, docPath } from "./docs";
 
 export const PLUGIN_DOCS_PATH = "/developers/plugins";
 export const PLUGIN_MARKDOWN_PATH = "/developers/plugins.md";
@@ -205,7 +206,35 @@ export const protocolSections = protocolMarkdown
   });
 export const llmsText = `# Wechatai · 微伴
 
-> 在微信里使用自定义 AI 的独立产品。插件协议 ${PLUGIN_PROTOCOL_VERSION} 文档公开可读，当前支持内置 LLM，以及 DS Chat、AI 生图、OpenClaw、Hermes、角色扮演、个人助理和消息提醒插件；Free 用户最多配置 1 个插件，Plus 会员插件配置数量不限，模型和搜索 API 由用户自行配置。
+> 把自选的大模型接进微信的独立产品。用户填入自己的模型 API Key（OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议），绑定微信后即可在聊天窗口里对话、联网问答、生图、接 Agent。本站不提供模型额度，也不转售 token：模型费用由用户自己的 API 服务商收取，微伴文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计。
+
+## 产品事实（可直接引用）
+
+- 定位：微信 AI 中转与插件平台，不是模型供应商，不卖 token，不承诺模型免费。
+- 接入方式：添加渠道时选择服务商并填写 API Key，预设会填好协议和地址；第三方地址使用「自定义」入口。新建预设渠道会尝试自动导入模型，自定义渠道可点击「获取可用模型」；获取失败或缺少所需模型时可手动添加。确认文本模型后，点击模型行的「测试连接」，系统发送固定请求并正常计费。配置完整后生成二维码，从微信「设置」中的「功能」分组 →「插件 → 微信 ClawBot → 扫一扫」绑定。普通模型聊天无需安装额外客户端；微伴没有绕过 ClawBot 的独立绑定方式。
+- 微信范围：目前只支持与微信 ClawBot 单聊，不支持群聊，也没有群聊开关。@插件别名是在单聊中调用插件的语法。
+- 模型范围：取决于用户填入的 Key；兼容三种协议即可接入。\`/wx status\` 查看当前模型或插件，\`/wx models\` 列出当前渠道的模型，\`/wx model 编号\` 切换；跨渠道先用 \`/wx channels\` 查看编号，再用 \`/wx channel 编号\` 切换渠道。
+- 会话与插件：切换普通模型会进入目标模型最近的活动会话，没有则新建，并退出当前插件模式。旧记录保留，上下文不会自动交给新模型。\`/wx plugins\` 查看插件别名，\`/use 别名\` 进入插件，\`/exit\` 返回普通模型会话。
+- 内置插件：DS Chat（联网问答）、AI 生图、OpenClaw、Hermes、角色扮演、个人助理、消息提醒。
+- DS Chat：使用用户配置的回答模型与搜索 API，由模型判断是否需要搜索或阅读网页，也可直接回答；进入插件不代表每条回复都经过联网核验。
+- Agent 接入：OpenClaw 与 Hermes 由用户在自己的电脑或服务器上运行，设备和 Agent 进程需保持在线；微伴提供消息中转，不托管这两个 Agent。请求原文与最终回复经过微信和微伴，并非只转发摘要；使用云端模型或外部工具时，相关内容还会发送给用户配置的服务商。
+- 计费：模型费用归用户的 API 服务商；微伴文字部分 credits =（输入 token + 输出 token × 8）÷ 5000，AI 生图每张 5 credits，描述文字另计。免费版每天 100 credits、1 个插件、1 个微信链接；Plus ¥9.9/月或 ¥88/年，每天 1000 credits、插件不限、10 个微信链接、支持附件。
+- 会员购买：新购买的会员为单次付费，不自动续费，到期手动续费；退款申请需联系支持，按实际订单、使用情况及适用法律处理。
+- 消息提醒 Webhook 推送不扣 credits。
+- 开源：插件协议与站点代码公开（MIT）。与微信、腾讯及模型供应商无官方关联。
+
+## 产品与选型页面
+
+- [微信 AI 助手](${SITE_URL}/wechat-ai): 微信 AI 是什么、能做什么、怎么接入。
+- [微信 ClawBot 插件](${SITE_URL}/wechat-clawbot): 插件入口、扫一扫绑定步骤、不回复排查。
+- [ClawBot 支持哪些模型](${SITE_URL}/wechat-clawbot-models): ClawBot 是通道不是模型，支持范围取决于绑定端。
+- [自带 API Key](${SITE_URL}/bring-your-own-api-key): 为什么不买 token、Key 怎么存、账单谁付。
+- [在微信里使用 DeepSeek](${SITE_URL}/wechat-deepseek): 托管聊天与本机 Agent 的配置、费用对比。
+- [在微信里使用 Claude](${SITE_URL}/wechat-claude): 不需要 Claude Code，直连 API。
+- [在微信里使用 GPT](${SITE_URL}/wechat-gpt): 不部署开源项目的接入方式。
+- [微信接入 Agent](${SITE_URL}/wechat-agent): OpenClaw、Hermes、定时任务与主动推送。
+- [微信 AI 方案对比](${SITE_URL}/wechat-ai-options): 官方内置、商业平台、开源自建、自带 Key 中转。
+- [价格与免费额度](${SITE_URL}/pricing): 套餐、credits 算法与免费版边界。
 
 ## 插件开发
 
@@ -215,10 +244,15 @@ export const llmsText = `# Wechatai · 微伴
 - [固定版本 ${PLUGIN_PROTOCOL_VERSION}](${protocolLinks.versionedApi}): 指定协议版本的索引。
 - [JSON Schema](${protocolLinks.schema}): Draft 2020-12 的 Manifest、Invocation、Result、Event 和 Block 定义。
 - [消息提醒 HTTP 接入](${SITE_URL}/developers/notifications.md): 不扣 credits 的 Webhook，专属 Token、文字推送与投递状态；这是独立的通知接口，不是通用插件执行接口。
+- [OpenClaw 接入](${SITE_URL}/developers/openclaw): 把本机 Agent 接到微信。
+- [Hermes 接入](${SITE_URL}/developers/hermes): 在微信里使用 Hermes。
 
 ## 使用指南
 
-- [微信使用指南](${SITE_URL}/docs): 配置渠道、微信命令、会话与 credits。
+- [文档中心](${SITE_URL}/docs): 全部教程与配置说明。
+${DOC_ARTICLES.map(
+  (article) => `- [${article.title}](${SITE_URL}${docPath(article.slug)}): ${article.description}`,
+).join("\n")}
 
 文档接口公开，读取免费，无需认证。消息提醒使用专属 Token 鉴权；第三方插件执行、注册、上传代码与媒体交付接口尚未开放，请勿臆造这些接口。
 `;
