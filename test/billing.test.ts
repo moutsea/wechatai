@@ -772,7 +772,7 @@ describe("durable administrator payment notices", () => {
       await send("checkout.session.completed", session(o), true, liveEnv);
       expect(await notice(o.session)).toMatchObject({ state: "pending", attempts: 0 });
       expect(posts()).toHaveLength(0);
-      await dispatchPaymentNotices(liveEnv);
+      await dispatchPaymentNotices(liveEnv, fetch);
       expect(await notice(o.session)).toMatchObject({ state: "accepted", data: "", attempts: 1 });
       const request = posts()[0][1]!;
       expect(new Headers(request.headers).get("authorization")).toBe(
@@ -788,7 +788,7 @@ describe("durable administrator payment notices", () => {
       expect(body.text).toContain(o.id);
       await send("checkout.session.async_payment_succeeded", session(o), true, liveEnv);
       expect((await checkoutStatus(liveEnv, o.userId, o.session)).status).toBe("paid");
-      await dispatchPaymentNotices(liveEnv);
+      await dispatchPaymentNotices(liveEnv, fetch);
       expect(posts()).toHaveLength(1);
     },
   );
@@ -827,7 +827,7 @@ describe("durable administrator payment notices", () => {
     const o = await liveOrder();
     upstream(o, () => new Response("unavailable", { status: 503 }));
     expect((await checkoutStatus(liveEnv, o.userId, o.session)).status).toBe("paid");
-    await dispatchPaymentNotices(liveEnv);
+    await dispatchPaymentNotices(liveEnv, fetch);
     expect(await notice(o.session)).toMatchObject({
       state: "pending",
       attempts: 1,
@@ -836,13 +836,13 @@ describe("durable administrator payment notices", () => {
     const original = posts()[0][1]!;
     await env.DB.prepare("UPDATE user SET name='Changed' WHERE id=?").bind(o.userId).run();
     await send("checkout.session.completed", session(o), true, liveEnv);
-    await dispatchPaymentNotices(liveEnv);
+    await dispatchPaymentNotices(liveEnv, fetch);
     expect(posts()).toHaveLength(1); // Backoff is respected.
     await env.DB.prepare("UPDATE billing_notification SET next_at=0 WHERE payment_id=?")
       .bind(o.session)
       .run();
     upstream(o);
-    await dispatchPaymentNotices(liveEnv);
+    await dispatchPaymentNotices(liveEnv, fetch);
     expect(await notice(o.session)).toMatchObject({ state: "accepted", attempts: 2 });
     const retried = posts()[1][1]!;
     expect(retried.body).toBe(original.body);
@@ -860,12 +860,15 @@ describe("durable administrator payment notices", () => {
     )
       .bind(Date.now() + 60_000, o.session)
       .run();
-    await dispatchPaymentNotices(liveEnv);
+    await dispatchPaymentNotices(liveEnv, fetch);
     expect(posts()).toHaveLength(0);
     await env.DB.prepare("UPDATE billing_notification SET next_at=0 WHERE payment_id=?")
       .bind(o.session)
       .run();
-    await Promise.all([dispatchPaymentNotices(liveEnv), dispatchPaymentNotices(liveEnv)]);
+    await Promise.all([
+      dispatchPaymentNotices(liveEnv, fetch),
+      dispatchPaymentNotices(liveEnv, fetch),
+    ]);
     expect(posts()).toHaveLength(1);
     expect(await notice(o.session)).toMatchObject({ state: "accepted", attempts: 2 });
   });
@@ -876,7 +879,7 @@ describe("durable administrator payment notices", () => {
     await env.DB.prepare("UPDATE billing_notification SET created_at=? WHERE payment_id=?")
       .bind(Date.now() - 25 * 3600000, o.session)
       .run();
-    await dispatchPaymentNotices(liveEnv);
+    await dispatchPaymentNotices(liveEnv, fetch);
     await send("checkout.session.completed", session(o), true, liveEnv);
     expect(await notice(o.session)).toMatchObject({
       state: "failed",

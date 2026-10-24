@@ -20,6 +20,7 @@ type Notice = {
   created_at: number;
 };
 const RETENTION_MS = 24 * 60 * 60 * 1000;
+type NotificationTransport = (url: URL, init: RequestInit) => Response | Promise<Response>;
 
 function configured(env: Env) {
   return Boolean(
@@ -86,23 +87,31 @@ function message(row: Notice) {
   };
 }
 
-async function deliver(env: Env, row: Notice) {
+async function deliver(env: Env, row: Notice, send: NotificationTransport) {
+  const startedAt = Date.now();
+  let stage = "format";
   try {
-    const response = await fetch(new URL("/api/notify", env.APP_URL), {
+    const body = JSON.stringify(message(row));
+    stage = "request";
+    const response = await send(new URL("/api/notify", env.APP_URL), {
       method: "POST",
-      redirect: "error",
+      // Workers supports only follow/manual. Non-2xx (including redirects) is
+      // rejected below, so credentials can never be forwarded to another URL.
+      redirect: "manual",
       headers: {
         authorization: `Bearer ${secret(env, "BILLING_NOTIFY_TOKEN")}`,
         "content-type": "application/json",
         "idempotency-key": `wechatai:payment:${row.payment_id}`,
       },
-      body: JSON.stringify(message(row)),
+      body,
       signal: AbortSignal.timeout(8000),
     });
+    stage = "response";
     if (!response.ok) {
       await response.body?.cancel();
       throw new Error(`http_${response.status}`);
     }
+    stage = "receipt";
     const result = (await readJson(response, 4096)) as { id?: string; status?: string } | null;
     if (
       !result ||
@@ -111,6 +120,7 @@ async function deliver(env: Env, row: Notice) {
       !["pending", "sending", "sent"].includes(result.status ?? "")
     )
       throw new Error("invalid_receipt");
+    stage = "persist";
     await env.DB.prepare(
       "UPDATE billing_notification SET state='accepted',data='',delivery_id=?,accepted_at=?,error='' WHERE payment_id=? AND state='sending' AND attempts=?",
     )
@@ -136,12 +146,25 @@ async function deliver(env: Env, row: Notice) {
       .bind(Date.now() + delay, code, row.payment_id, row.attempts)
       .run();
     console.warn(
-      JSON.stringify({ event: "billing.notification_retry", paymentId: row.payment_id, code }),
+      JSON.stringify({
+        event: "billing.notification_retry",
+        paymentId: row.payment_id,
+        code,
+        stage,
+        elapsedMs: Date.now() - startedAt,
+        errorType:
+          error instanceof Error &&
+          ["Error", "TypeError", "SyntaxError", "AbortError", "TimeoutError", "AppError"].includes(
+            error.name,
+          )
+            ? error.name
+            : "unknown",
+      }),
     );
   }
 }
 
-export async function dispatchPaymentNotices(env: Env): Promise<void> {
+export async function dispatchPaymentNotices(env: Env, send: NotificationTransport): Promise<void> {
   if (!configured(env)) return;
   try {
     const now = Date.now();
@@ -162,7 +185,7 @@ export async function dispatchPaymentNotices(env: Env): Promise<void> {
         )
           .bind(Date.now() + 60_000, payment_id, Date.now())
           .first<Notice>();
-        if (row) await deliver(env, row);
+        if (row) await deliver(env, row, send);
       }),
     );
     if (results.some((result) => result.status === "rejected"))

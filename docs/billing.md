@@ -76,4 +76,6 @@ WECHATAI_SITE_URL=https://your-domain.example pnpm stripe:setup --mode live
 
 核验付款并发放权益后，通知与订单 paid 状态在同一个 D1 事务中保存。后台立即尝试投递，生产每分钟 Cron 恢复未完成任务，最多重试 24 小时。每笔付款的幂等键固定，不复用示例里的订单号。
 
+站内付款通知直接调用消息提醒的请求处理流程，不通过公网域名回调本站；仍执行相同的 Token 校验、频率限制、插件权限和微信连接检查。投递失败日志记录阶段、异常类型与耗时，不记录 Token、通知内容或上游响应正文。
+
 `billing_notification.state=accepted` 表示消息提醒插件已接收，不代表微信已经收到。用 `delivery_id` 查询 `/api/notify/{id}` 的最终回执。发送失败不会撤销已到账的权益。成功接收或重试到期后清除通知中的买家信息，保留去重和诊断字段。更换插件 Token 后须同步更新 Secret。

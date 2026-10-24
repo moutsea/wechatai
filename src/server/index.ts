@@ -50,6 +50,11 @@ export { PersonalAccount } from "./personal-account";
 export { ReminderScheduler } from "./reminder-scheduler";
 type App = { Bindings: Env; Variables: { user: KimiseekIdentity } };
 const app = new Hono<App>();
+// Use the same token checks, quotas and durable queue as the public endpoint,
+// without a public fetch back into this Worker (which can fail before routing).
+function dispatchBillingNotices(env: Env, ctx: Parameters<typeof app.fetch>[2]) {
+  return dispatchPaymentNotices(env, (url, init) => app.fetch(new Request(url, init), env, ctx));
+}
 app.use("*", secureHeaders());
 app.use("/api/*", async (c, next) =>
   c.req.path.startsWith("/api/internal/executor/")
@@ -249,7 +254,7 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
 });
 app.post("/api/billing/webhook", async (c) => {
   await webhook(c.env, await c.req.text(), c.req.header("stripe-signature") || "");
-  c.executionCtx.waitUntil(dispatchPaymentNotices(c.env));
+  c.executionCtx.waitUntil(dispatchBillingNotices(c.env, c.executionCtx));
   return c.json({ received: true });
 });
 // Receive-only webhook credentials cannot use any account management endpoint.
@@ -749,7 +754,7 @@ app.post("/api/billing/checkout", async (c) => {
 });
 app.get("/api/billing/checkout-status", async (c) => {
   const status = await checkoutStatus(c.env, c.var.user.id, c.req.query("session_id") || "");
-  c.executionCtx.waitUntil(dispatchPaymentNotices(c.env));
+  c.executionCtx.waitUntil(dispatchBillingNotices(c.env, c.executionCtx));
   return c.json(status);
 });
 app.get("/api/billing/subscription", async (c) =>
@@ -770,9 +775,9 @@ app.onError((error, c) => {
 });
 export default {
   fetch: app.fetch,
-  async scheduled(_controller, env) {
+  async scheduled(_controller, env, ctx) {
     await Promise.all([
-      dispatchPaymentNotices(env),
+      dispatchBillingNotices(env, ctx),
       env.DB.prepare("DELETE FROM auth_email_limit WHERE last_sent_at<?")
         .bind(Date.now() - 2 * 86_400_000)
         .run()

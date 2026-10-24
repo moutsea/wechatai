@@ -3,11 +3,14 @@ import {
   env,
   runInDurableObject,
   createExecutionContext,
+  createScheduledController,
   abortAllDurableObjects,
 } from "cloudflare:test";
 import { beforeAll, beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
+import billingMigration from "../migrations/0002_billing.sql?raw";
+import paymentNoticeMigration from "../migrations/0006_billing_notifications.sql?raw";
 import worker from "../src/server/index";
 import { encrypt } from "../src/server/security";
 import { parseNotificationToken, createNotificationToken } from "../src/server/notification-token";
@@ -44,6 +47,12 @@ beforeAll(async () => {
   await env.DB.exec(authMigration);
   await env.DB.exec(referralMigration);
   await env.DB.exec(authEmailMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
+  await env.DB.batch(
+    (billingMigration + "\n" + paymentNoticeMigration)
+      .split(";")
+      .filter((sql) => sql.trim())
+      .map((sql) => env.DB.prepare(sql)),
+  );
 });
 beforeEach(() =>
   vi.stubGlobal(
@@ -142,6 +151,85 @@ const status = async (stub: DurableObjectStub<PersonalAccount>, id: string) =>
   (await api(stub, "notification.status", { id })).data;
 
 describe("receive-only notification plugin", () => {
+  it.each([false, true])(
+    "dispatches payment notices internally, retaining token validation (revoked=%s)",
+    async (revoked) => {
+      const { stub, plugin, token } = await setup();
+      if (revoked)
+        expect((await api(stub, "notification.revoke", { id: plugin.id })).ok).toBe(true);
+      const id = crypto.randomUUID(),
+        buyer = crypto.randomUUID(),
+        now = Date.now();
+      await env.DB.prepare(
+        "INSERT INTO user (id,name,email,createdAt,updatedAt) VALUES (?,'Buyer',?,?,?)",
+      )
+        .bind(buyer, `${buyer}@example.test`, now, now)
+        .run();
+      await env.DB.prepare(
+        `INSERT INTO billing_order(id,user_id,mode,offer_id,kind,price_id,amount,currency,credits,customer_id,status,created_at,paid_at)
+         VALUES (?,?,'live','plus_monthly','plus','price_fixture',990,'cny',0,'cus_fixture','paid',?,?)`,
+      )
+        .bind(id, buyer, now, now)
+        .run();
+      await env.DB.prepare(
+        "INSERT INTO billing_notification(payment_id,order_id,data,created_at,next_at) VALUES (?,?,?,?,?)",
+      )
+        .bind(
+          id,
+          id,
+          JSON.stringify({
+            name: "Buyer",
+            email: `${buyer}@example.test`,
+            offerId: "plus_monthly",
+            amount: 990,
+            currency: "cny",
+            credits: 0,
+            firstPayment: 1,
+            renewal: 0,
+          }),
+          now,
+          now,
+        )
+        .run();
+      const liveEnv = {
+        ...env,
+        APP_URL: "https://wechatai.app" as const,
+        STRIPE_SECRET_KEY: "sk_live_fixture_not_real",
+        BILLING_NOTIFY_TOKEN: token,
+      };
+      // Same-site network fetch is unavailable, as in the production failure.
+      vi.mocked(fetch).mockImplementation(async (input) => {
+        if (new URL(String(input)).hostname === "wechatai.app")
+          throw new TypeError("Same-site fetch is unavailable");
+        return Response.json({ ret: 0 });
+      });
+      await worker.scheduled(createScheduledController(), liveEnv, createExecutionContext());
+      expect(fetch).not.toHaveBeenCalled();
+      const notice = await env.DB.prepare(
+        "SELECT state,attempts,error,delivery_id FROM billing_notification WHERE payment_id=?",
+      )
+        .bind(id)
+        .first();
+      if (revoked) {
+        expect(notice).toMatchObject({
+          state: "pending",
+          attempts: 1,
+          error: "http_401",
+          delivery_id: null,
+        });
+        expect((await status(stub, plugin.id)).deliveries).toHaveLength(0);
+      } else {
+        expect(notice).toMatchObject({ state: "accepted", attempts: 1, error: "" });
+        await stub.dispatchNotifications();
+        expect((await status(stub, plugin.id)).deliveries).toEqual([
+          expect.objectContaining({ id: notice!.delivery_id, state: "sent", attempts: 1 }),
+        ]);
+        await worker.scheduled(createScheduledController(), liveEnv, createExecutionContext());
+        await stub.dispatchNotifications();
+        expect(fetch).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
   it("saves and edits notification configuration through authenticated browser HTTP routes", async () => {
     const signup = await request("/api/auth/sign-up/email", {
       method: "POST",
