@@ -13,5 +13,12 @@
     "resolveJsonModule": true,
     "types": ["node", "vite/client", "@cloudflare/vitest-pool-workers/types"]
   },
-  "include": ["src", "test", "env.d.ts", "vite.config.ts", "vitest.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "env.d.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "vitest.client.config.ts"
+  ]
 }

@@ -1,0 +1,61 @@
+.analytics-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.analytics-toolbar h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.analytics-toolbar p,
+.analytics-range,
+.analytics-empty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.analytics-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+}
+.analytics-toolbar select {
+  width: auto;
+}
+.analytics-refresh {
+  display: flex;
+  justify-content: flex-end;
+  margin: 14px 0;
+}
+.analytics-report {
+  display: grid;
+  gap: 20px;
+}
+.analytics-range {
+  margin: 0;
+}
+.analytics-report .admin-kpis article p {
+  line-height: 1.8;
+}
+.analytics-bars {
+  gap: 2px;
+}
+.analytics-bars button span {
+  min-height: 0;
+}
+.admin-page td.analytics-label {
+  min-width: 150px;
+  max-width: 360px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.analytics-empty {
+  padding: 20px 0;
+  text-align: center;
+}
+.analytics-empty.admin-panel {
+  padding: 28px 20px;
+}

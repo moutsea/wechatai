@@ -307,6 +307,46 @@ describe("getTrafficSummary", () => {
     expect((await getTrafficSummary(env, 7)).totals.pv).toBe(0);
     expect((await getTrafficSummary(env, 60)).totals.pv).toBe(1);
   });
+
+  it("uses the same Shanghai midnight boundary for traffic and registration reports", async () => {
+    const midnight = Date.parse("2026-10-26T00:00:00+08:00");
+    for (const [sessionId, now] of [
+      ["session-before", midnight - 1],
+      ["session-after", midnight],
+    ] as const) {
+      await recordPageView(env, {
+        payload: event({ sessionId, pathname: "/pricing" }),
+        ip: "203.0.113.9",
+        userAgent: "Mozilla/5.0",
+        country: "CN",
+        now,
+      });
+      await recordSignupConversion(env, {
+        payload: { eventId: crypto.randomUUID(), sessionId },
+        userAgent: "Mozilla/5.0",
+        now,
+      });
+    }
+    const at = new Date(midnight + 1);
+    const today = await getTrafficSummary(env, 1, at);
+    expect(today.range).toEqual({ from: "2026-10-26", to: "2026-10-26", days: 1 });
+    expect(today.totals).toMatchObject({ pv: 1, visitorDays: 1, sessions: 1 });
+    expect(await getSignupConversions(env, 1, at)).toMatchObject({
+      total: 1,
+      sessions: 1,
+      rate: 1,
+    });
+    expect((await getTrafficSummary(env, 2, at)).totals).toMatchObject({
+      pv: 2,
+      visitorDays: 2,
+      sessions: 2,
+    });
+    expect(await getSignupConversions(env, 2, at)).toMatchObject({
+      total: 2,
+      sessions: 2,
+      rate: 1,
+    });
+  });
 });
 
 describe("POST /api/analytics/page-view", () => {
@@ -563,7 +603,7 @@ describe("getSignupConversions", () => {
   });
 
   it("does not let one session count as two signups", async () => {
-    // 同一个会话提交了两次（重复点击、注册失败后重试）：注册数是人数口径，
+    // 同一个会话记录了两次注册：注册数按会话去重，
     // 不能变成 2，否则转化率会超过 100%。
     await visit("session-7777", "/pricing", 1);
     await register("session-7777", 2);
@@ -578,7 +618,13 @@ describe("getSignupConversions", () => {
   it("deduplicates unattributed signups as well as attributed signups", async () => {
     await register("session-unknown", 1);
     await register("session-unknown", 2);
-    expect(await getSignupConversions(env, 7)).toEqual({ total: 1, unattributed: 1, rows: [] });
+    expect(await getSignupConversions(env, 7)).toEqual({
+      total: 1,
+      unattributed: 1,
+      sessions: 1,
+      rate: 1,
+      rows: [],
+    });
   });
 
   it("keeps the true landing page when the report crosses midnight", async () => {
@@ -617,6 +663,8 @@ describe("getSignupConversions", () => {
       expect(await getSignupConversions(env, days)).toEqual({
         total: 1,
         unattributed: 0,
+        sessions: 2,
+        rate: 0.5,
         rows: [{ label: "/wechat-ai", sessions: 2, signups: 1, rate: 0.5 }],
       });
     }
@@ -631,6 +679,8 @@ describe("getSignupConversions", () => {
     const expected = {
       total: 1,
       unattributed: 0,
+      sessions: 1,
+      rate: 1,
       rows: [{ label: "/pricing", sessions: 1, signups: 1, rate: 1 }],
     };
     expect(await getSignupConversions(env, 1)).toEqual(expected);
@@ -641,10 +691,16 @@ describe("getSignupConversions", () => {
   it("does not invent a landing page from a visit after an unattributed registration", async () => {
     await register("session-late-view", 1);
     await visit("session-late-view", "/pricing", 2);
-    expect(await getSignupConversions(env, 7)).toEqual({ total: 1, unattributed: 1, rows: [] });
+    expect(await getSignupConversions(env, 7)).toEqual({
+      total: 1,
+      unattributed: 1,
+      sessions: 1,
+      rate: 1,
+      rows: [],
+    });
   });
 
-  it("counts attributions beyond the 15 shown landing pages", async () => {
+  it("uses all converted and unconverted sessions beyond the 15 shown landing pages", async () => {
     // 明细表只展示 15 行，但「已归因」必须是全量：否则第 16 个落地页带来的注册
     // 会被算成未归因，报表上的缺口是假的。
     for (let index = 0; index < 17; index += 1) {
@@ -652,12 +708,19 @@ describe("getSignupConversions", () => {
       await visit(session, `/wechat-page-${index}`, index);
       await register(session, index);
     }
+    // 这些未注册会话的页面会被排在前 15 项之外。只按可见行计算会得到 100%，
+    // 全量口径应是 17 个注册会话 / 100 个活跃会话 = 17%。
+    for (let index = 17; index < 100; index += 1)
+      await visit(`session-page-${index}`, `/wechat-page-${index}`, index);
 
     const summary = await getSignupConversions(env, 7);
     expect(summary.total).toBe(17);
     expect(summary.unattributed).toBe(0);
+    expect(summary.sessions).toBe(100);
+    expect(summary.rate).toBeCloseTo(0.17);
     expect(summary.rows).toHaveLength(15);
     expect(summary.rows.reduce((sum, row) => sum + row.signups, 0)).toBe(15);
+    expect(summary.rows.every((row) => row.rate === 1)).toBe(true);
   });
 });
 

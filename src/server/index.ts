@@ -8,7 +8,7 @@ import {
   deleteNotice,
 } from "./site-notices";
 import { noticeReadAllSchema } from "../shared/site-notices";
-import { pruneExpiredPageViews, recordPageView } from "./analytics";
+import { getAdminAnalytics, pruneExpiredPageViews, recordPageView } from "./analytics";
 import { connectorVersionPattern } from "../shared/openclaw-release";
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
@@ -471,6 +471,9 @@ app.delete("/api/admin/notices/:id", async (c) =>
   c.json(await deleteNotice(c.env, c.req.param("id"), await c.req.json().catch(() => null))),
 );
 app.get("/api/admin/overview", async (c) => c.json(await adminOverview(c.env)));
+app.get("/api/admin/analytics", async (c) =>
+  c.json(await getAdminAnalytics(c.env, c.req.query("days"))),
+);
 app.get("/api/admin/server-status", async (c) => c.json(await adminServerStatus(c.env)));
 app.get("/api/admin/users", async (c) => c.json(await adminUsers(c.env, c.req.query())));
 app.get("/api/admin/users/:id/membership", async (c) =>

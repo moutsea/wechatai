@@ -166,3 +166,18 @@ export type LandingConversion = {
   signups: number;
   rate: number;
 };
+
+export type SignupConversions = {
+  /** 区间内注册的去重会话数，并非全部新用户数。 */
+  total: number;
+  unattributed: number;
+  /** 区间内有浏览或注册的会话数；不受明细条数限制。 */
+  sessions: number;
+  rate: number;
+  rows: LandingConversion[];
+};
+
+export type AdminAnalytics = {
+  traffic: TrafficSummary;
+  conversions: SignupConversions;
+};

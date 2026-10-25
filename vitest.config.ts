@@ -3,7 +3,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   // Each Workers test file starts an isolated workerd runtime. Bound concurrent
   // runtimes so cold imports/tokenization don't starve unrelated delivery tests.
-  test: { maxWorkers: 4, include: ["test/**/*.test.{ts,tsx}"] },
+  test: {
+    maxWorkers: 4,
+    include: ["test/**/*.test.{ts,tsx}"],
+    exclude: ["test/**/*.client.test.tsx"],
+  },
   plugins: [
     cloudflareTest({
       remoteBindings: false,

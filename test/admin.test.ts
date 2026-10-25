@@ -7,6 +7,10 @@ import referralMigration from "../migrations/0003_referrals.sql?raw";
 import prepaidMigration from "../migrations/0004_prepaid_membership.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
 import serverStatusMigration from "../migrations/0013_server_status.sql?raw";
+import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
+import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
+import { recordPageView, recordSignupConversion } from "../src/server/analytics";
+import type { AdminAnalytics } from "../src/shared/analytics";
 import worker from "../src/server/index";
 import { adminOverview, adminUsers, saveAdminStats, syncAdminStats } from "../src/server/admin";
 import { readAdminAccountStats } from "../src/server/admin-account";
@@ -23,12 +27,16 @@ beforeAll(async () => {
     adminMigration,
     authEmailMigration,
     serverStatusMigration,
+    pageViewsMigration,
+    signupMigration,
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
 beforeEach(async () => {
   await env.DB.batch(
     [
+      "page_views",
+      "signup_attributions",
       "admin_account_stats",
       "admin_user",
       "billing_order",
@@ -130,6 +138,7 @@ describe("admin authorization", () => {
       "/api/admin/overview",
       "/api/admin/users",
       "/api/admin/server-status",
+      "/api/admin/analytics",
     ])
       expect((await request(path)).status).toBe(401);
     const account = await login();
@@ -146,6 +155,7 @@ describe("admin authorization", () => {
       "/api/admin/users?q=admin",
       "/api/admin/unknown",
       "/api/admin/server-status",
+      "/api/admin/analytics",
     ])
       expect((await request(path, { headers })).status).toBe(403);
     expect((await request("/api/admin/sync", { method: "POST", headers, body: "{}" })).status).toBe(
@@ -189,7 +199,151 @@ describe("admin authorization", () => {
     );
     await env.DB.prepare("DELETE FROM admin_user WHERE user_id=?").bind(account.id).run();
     expect((await request("/api/admin/overview", { headers })).status).toBe(403);
+    expect((await request("/api/admin/analytics", { headers })).status).toBe(403);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("admin analytics", () => {
+  async function headers() {
+    const account = await login();
+    await env.DB.prepare("INSERT INTO admin_user VALUES (?,?)").bind(account.id, Date.now()).run();
+    return { cookie: account.cookie };
+  }
+
+  it("returns an uncached empty report for an authorized administrator", async () => {
+    const response = await request("/api/admin/analytics", { headers: await headers() });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toContain("noindex");
+    const data = await response.json<AdminAnalytics>();
+    expect(data.traffic.range.days).toBe(7);
+    expect(data.traffic.totals).toEqual({ pv: 0, visitorDays: 0, sessions: 0, pagesPerSession: 0 });
+    expect(data.conversions).toEqual({ total: 0, unattributed: 0, sessions: 0, rate: 0, rows: [] });
+  });
+
+  it("validates the range instead of silently accepting invalid or unbounded queries", async () => {
+    const auth = await headers();
+    for (const days of ["", "0", "-1", "91", "1.5", "NaN", "Infinity", "7 OR 1=1", "7days"]) {
+      const response = await request(`/api/admin/analytics?${new URLSearchParams({ days })}`, {
+        headers: auth,
+      });
+      expect(response.status, days).toBe(400);
+      expect(await response.json()).toMatchObject({ error: "invalid_analytics_range" });
+    }
+    for (const days of [1, 7, 30, 90]) {
+      const response = await request(`/api/admin/analytics?days=${days}`, { headers: auth });
+      expect(response.status).toBe(200);
+      expect((await response.json<AdminAnalytics>()).traffic.range.days).toBe(days);
+    }
+  });
+
+  it("serves real PV, daily visitors, source priority and deduplicated conversions through the route", async () => {
+    const auth = await headers();
+    const now = Date.now();
+    const visit = (
+      sessionId: string,
+      pathname: string,
+      ip: string,
+      referrer = "",
+      utmSource = "",
+      at = now,
+    ) =>
+      recordPageView(env, {
+        payload: {
+          eventId: crypto.randomUUID(),
+          sessionId,
+          pathname,
+          referrer,
+          utmSource,
+          utmMedium: "",
+          utmCampaign: "",
+        },
+        ip,
+        userAgent: "Mozilla/5.0",
+        country: "CN",
+        now: at,
+      });
+    const signup = (sessionId: string) =>
+      recordSignupConversion(env, {
+        payload: { eventId: crypto.randomUUID(), sessionId },
+        userAgent: "Mozilla/5.0",
+        now,
+      });
+    await visit(
+      "session-google",
+      "/pricing",
+      "203.0.113.1",
+      "https://www.google.com",
+      "",
+      now - 86_400_000,
+    );
+    await visit("session-google", "/pricing", "203.0.113.1", "https://www.google.com");
+    await visit("session-google", "/register", "203.0.113.1", "https://www.google.com");
+    await visit(
+      "session-newsletter",
+      "/docs",
+      "203.0.113.2",
+      "https://www.google.com",
+      "Newsletter",
+    );
+    await visit("session-direct", "/", "203.0.113.1");
+    await visit("session-old", "/old", "203.0.113.3", "", "", now - 100 * 86_400_000);
+    await signup("session-google");
+    await signup("session-google");
+    await signup("session-orphan");
+    const today = await (
+      await request("/api/admin/analytics?days=1", { headers: auth })
+    ).json<AdminAnalytics>();
+    expect(today.traffic.totals).toEqual({
+      pv: 4,
+      visitorDays: 2,
+      sessions: 3,
+      pagesPerSession: 1.33,
+    });
+    expect(today.traffic.daily).toHaveLength(1);
+    expect(today.traffic.sources).toEqual([
+      { label: "google.com", pv: 2, visitorDays: 1 },
+      { label: "（直接访问）", pv: 1, visitorDays: 1 },
+      { label: "utm:newsletter", pv: 1, visitorDays: 1 },
+    ]);
+    expect(today.conversions).toMatchObject({ total: 2, unattributed: 1, sessions: 4, rate: 0.5 });
+    expect(today.conversions.rows).toContainEqual({
+      label: "/pricing",
+      sessions: 1,
+      signups: 1,
+      rate: 1,
+    });
+    const week = await (
+      await request("/api/admin/analytics?days=7", { headers: auth })
+    ).json<AdminAnalytics>();
+    expect(week.traffic.totals).toMatchObject({ pv: 5, visitorDays: 3, sessions: 3 });
+    expect(week.traffic.daily).toHaveLength(2);
+    expect(week.conversions).toEqual(today.conversions);
+    for (const privateValue of [
+      "203.0.113",
+      "session-google",
+      "visitor_hash",
+      "session_id",
+      "event_id",
+    ])
+      expect(JSON.stringify(week)).not.toContain(privateValue);
+  });
+
+  it("reports a storage failure as an error instead of plausible zero statistics", async () => {
+    const auth = await headers();
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await env.DB.exec("ALTER TABLE signup_attributions RENAME TO unavailable_signup_attributions");
+    try {
+      const response = await request("/api/admin/analytics", { headers: auth });
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({ error: "internal_error" });
+    } finally {
+      await env.DB.exec(
+        "ALTER TABLE unavailable_signup_attributions RENAME TO signup_attributions",
+      );
+      logged.mockRestore();
+    }
   });
 });
 

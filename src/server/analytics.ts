@@ -11,12 +11,13 @@ import {
   shanghaiDay,
   shanghaiDaysAgo,
   signupConversionSchema,
-  type LandingConversion,
+  type AdminAnalytics,
+  type SignupConversions,
   type TrafficBucket,
   type TrafficDay,
   type TrafficSummary,
 } from "../shared/analytics";
-import { secret } from "./config";
+import { AppError, secret } from "./config";
 import { signupConversionQueries } from "../shared/analytics-queries";
 
 /**
@@ -129,10 +130,14 @@ const SOURCE_EXPR = `CASE
 type Row = Record<string, unknown>;
 const num = (value: unknown) => (typeof value === "number" ? value : Number(value ?? 0));
 
-export async function getTrafficSummary(env: Env, days: number): Promise<TrafficSummary> {
+export async function getTrafficSummary(
+  env: Env,
+  days: number,
+  at = new Date(),
+): Promise<TrafficSummary> {
   const window = Math.min(Math.max(Math.trunc(days) || 7, 1), ANALYTICS_MAX_DAYS);
-  const to = shanghaiDay();
-  const from = shanghaiDaysAgo(window - 1);
+  const to = shanghaiDay(at);
+  const from = shanghaiDaysAgo(window - 1, at);
   // 全部查询一次发出，避免逐个 await 把 RTT 叠加起来。
   const bucket = (column: string, limit: number) =>
     env.DB.prepare(
@@ -264,10 +269,11 @@ export async function recordSignupConversion(
 export async function getSignupConversions(
   env: Env,
   days: number,
-): Promise<{ total: number; unattributed: number; rows: LandingConversion[] }> {
+  at = new Date(),
+): Promise<SignupConversions> {
   const window = Math.min(Math.max(Math.trunc(days) || 7, 1), ANALYTICS_MAX_DAYS);
-  const to = shanghaiDay();
-  const from = shanghaiDaysAgo(window - 1);
+  const to = shanghaiDay(at);
+  const from = shanghaiDaysAgo(window - 1, at);
   const queries = signupConversionQueries(from, to);
   const [totals, rows] = await env.DB.batch<Row>([
     env.DB.prepare(queries.totals),
@@ -275,6 +281,7 @@ export async function getSignupConversions(
   ]);
   const total = num(totals?.results?.[0]?.total);
   const attributed = num(totals?.results?.[0]?.attributed);
+  const sessions = num(totals?.results?.[0]?.sessions);
   const list = (rows?.results ?? []).map((row) => {
     const sessions = num(row.sessions);
     const signups = num(row.signups);
@@ -285,5 +292,31 @@ export async function getSignupConversions(
       rate: sessions > 0 ? signups / sessions : 0,
     };
   });
-  return { total, unattributed: Math.max(total - attributed, 0), rows: list };
+  return {
+    total,
+    unattributed: Math.max(total - attributed, 0),
+    sessions,
+    rate: sessions > 0 ? total / sessions : 0,
+    rows: list,
+  };
+}
+
+/** 管理员路由调用；同一时刻确定窗口，避免午夜两份报表跨日。 */
+export async function getAdminAnalytics(env: Env, days?: string): Promise<AdminAnalytics> {
+  const window = days === undefined ? 7 : Number(days);
+  if (
+    days !== undefined &&
+    (!/^\d+$/.test(days) || !Number.isInteger(window) || window < 1 || window > ANALYTICS_MAX_DAYS)
+  )
+    throw new AppError(
+      "invalid_analytics_range",
+      `统计天数须为 1–${ANALYTICS_MAX_DAYS} 的整数`,
+      400,
+    );
+  const at = new Date();
+  const [traffic, conversions] = await Promise.all([
+    getTrafficSummary(env, window, at),
+    getSignupConversions(env, window, at),
+  ]);
+  return { traffic, conversions };
 }

@@ -22,7 +22,7 @@ importers:
         version: 1.3.1
       better-auth:
         specifier: ^1.6.26
-        version: 1.6.26(drizzle-orm@0.45.3(kysely@0.29.6))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)))
+        version: 1.6.26(drizzle-orm@0.45.3(kysely@0.29.6))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)))
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.3(kysely@0.29.6)
@@ -80,7 +80,7 @@ importers:
         version: 1.62.0(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))(wrangler@4.147.0(@types/node@26.6.4))
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.22.0
-        version: 0.22.0(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)))
+        version: 0.22.0(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)))
       '@types/node':
         specifier: ^26.0.1
         version: 26.6.4
@@ -102,6 +102,9 @@ importers:
       esbuild:
         specifier: 0.28.1
         version: 0.28.1
+      happy-dom:
+        specifier: 21.0.4
+        version: 21.0.4
       oxfmt:
         specifier: ^0.62.0
         version: 0.62.0
@@ -116,7 +119,7 @@ importers:
         version: 8.3.3(@types/node@26.6.4)(esbuild@0.28.1)
       vitest:
         specifier: ^4.1.10
-        version: 4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))
+        version: 4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))
       wrangler:
         specifier: ^4.119.0
         version: 4.147.0(@types/node@26.6.4)
@@ -1242,6 +1245,12 @@ packages:
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
+  '@types/ws@8.18.2':
+    resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
     engines: {node: '>=16.20.0'}
@@ -1501,6 +1510,10 @@ packages:
   blake3-wasm@2.1.5:
     resolution: {integrity: sha512-F1+K8EbfOZE49dtoPtmxUQrpXaBIl3ICvasLh+nJta0xkz+9kF/7uet9fLnwKqhDrmj6g+6K3Tw9yQPUg2ka5g==}
 
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
+
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
 
@@ -1657,6 +1670,10 @@ packages:
       sqlite3:
         optional: true
 
+  entities@7.0.1:
+    resolution: {integrity: sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==}
+    engines: {node: '>=0.12'}
+
   error-stack-parser-es@1.0.5:
     resolution: {integrity: sha512-5qucVt2XcuGMcEGgWI7i+yZpmpByQ8J1lHhcL7PwqCwu9FPP3VUXzT4ltHe5i2z9dePwEHcDVOAfSnHsOlCXRA==}
 
@@ -1710,6 +1727,10 @@ packages:
 
   gpt-tokenizer@4.0.0:
     resolution: {integrity: sha512-YAWIyzvuVUHEfW7tFfFAxH8qQb+Q3RU9nYOTy7skMNX5qzU6Q8jxTHZLyO56ug1vYvCR7wndzpd3jwD86/mhjQ==}
+
+  happy-dom@21.0.4:
+    resolution: {integrity: sha512-tFm+GaLBgo6o0awHnvHaNoraVo27qJ+2tZEtZ+cIa08hXbeitrxAJajLI05hsUy/2/YTKcUjQYzHe5mCcraLBw==}
+    engines: {node: '>=20.0.0'}
 
   hast-util-to-jsx-runtime@2.3.6:
     resolution: {integrity: sha512-zl6s8LwNyo1P9uw+XJGvZtdFF1GdAkOg8ujOw+4Pyb76874fLps4ueHXDhXWdk6YHQ6OgUtinliG7RsYvCbbBg==}
@@ -2363,6 +2384,10 @@ packages:
       jsdom:
         optional: true
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   why-is-node-running@2.3.0:
     resolution: {integrity: sha512-hUrmaWBdVDcxvYqnyh09zunKzROWjbZTiNy8dBEjkS7ehEDQibXJ7XvlmtbwuTclUiIyN+CyXQD4Vmko8fNm8w==}
     engines: {node: '>=8'}
@@ -2524,14 +2549,14 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@cloudflare/vitest-pool-workers@0.22.0(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)))':
+  '@cloudflare/vitest-pool-workers@0.22.0(@vitest/runner@4.1.11)(@vitest/snapshot@4.1.11)(vitest@4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)))':
     dependencies:
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
       cjs-module-lexer: 1.2.3
       esbuild: 0.28.1
       miniflare: 5.20260815.0-alpha
-      vitest: 4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))
+      vitest: 4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))
       wrangler: 4.124.0
       zod: 4.4.3
     transitivePeerDependencies:
@@ -3120,6 +3145,12 @@ snapshots:
 
   '@types/unist@3.0.3': {}
 
+  '@types/whatwg-mimetype@3.0.2': {}
+
+  '@types/ws@8.18.2':
+    dependencies:
+      '@types/node': 26.6.4
+
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
 
@@ -3243,7 +3274,7 @@ snapshots:
 
   bail@2.0.2: {}
 
-  better-auth@1.6.26(drizzle-orm@0.45.3(kysely@0.29.6))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))):
+  better-auth@1.6.26(drizzle-orm@0.45.3(kysely@0.29.6))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vitest@4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))):
     dependencies:
       '@better-auth/core': 1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.5)
       '@better-auth/drizzle-adapter': 1.6.26(@better-auth/core@1.6.26(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.6.5))(jose@6.2.12)(kysely@0.29.6)(nanostores@1.5.5))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.3(kysely@0.29.6))
@@ -3266,7 +3297,7 @@ snapshots:
       drizzle-orm: 0.45.3(kysely@0.29.6)
       react: 19.3.0
       react-dom: 19.3.0(react@19.3.0)
-      vitest: 4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))
+      vitest: 4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
@@ -3281,6 +3312,10 @@ snapshots:
       zod: 4.6.5
 
   blake3-wasm@2.1.5: {}
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 26.6.4
 
   ccount@2.0.1: {}
 
@@ -3325,6 +3360,8 @@ snapshots:
   drizzle-orm@0.45.3(kysely@0.29.6):
     optionalDependencies:
       kysely: 0.29.6
+
+  entities@7.0.1: {}
 
   error-stack-parser-es@1.0.5: {}
 
@@ -3385,6 +3422,19 @@ snapshots:
     optional: true
 
   gpt-tokenizer@4.0.0: {}
+
+  happy-dom@21.0.4:
+    dependencies:
+      '@types/node': 26.6.4
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.2
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.21.0
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   hast-util-to-jsx-runtime@2.3.6:
     dependencies:
@@ -4301,7 +4351,7 @@ snapshots:
       esbuild: 0.28.1
       fsevents: 2.3.3
 
-  vitest@4.1.11(@types/node@26.6.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)):
+  vitest@4.1.11(@types/node@26.6.4)(happy-dom@21.0.4)(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@8.3.3(@types/node@26.6.4)(esbuild@0.28.1))
@@ -4325,8 +4375,11 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 26.6.4
+      happy-dom: 21.0.4
     transitivePeerDependencies:
       - msw
+
+  whatwg-mimetype@3.0.0: {}
 
   why-is-node-running@2.3.0:
     dependencies:

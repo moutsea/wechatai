@@ -1,9 +1,11 @@
 import { AdminNotices } from "./admin-notices";
 import { AdminServer } from "./admin-server";
+import { AdminAnalytics } from "./admin-analytics";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   Activity,
+  BarChart3,
   ArrowDownLeft,
   ArrowUpRight,
   Check,
@@ -545,7 +547,9 @@ export function Admin() {
         ? "users"
         : params.get("tab") === "server"
           ? "server"
-          : "overview";
+          : params.get("tab") === "analytics"
+            ? "analytics"
+            : "overview";
   const accountTab = tab === "overview" || tab === "users";
   const query = params.get("q") || "";
   const plan = params.get("plan") || "";
@@ -565,7 +569,7 @@ export function Admin() {
   const loadedView = useRef("");
   useEffect(() => setSearch(query), [query]);
   useEffect(() => {
-    if (tab === "notices" || tab === "server") {
+    if (tab === "notices" || tab === "server" || tab === "analytics") {
       setLoading(false);
       setError("");
       return;
@@ -695,7 +699,7 @@ export function Admin() {
               管理员
             </span>
           </h1>
-          <p>查看用户、收入、使用情况与服务器状态。</p>
+          <p>查看流量、用户、收入、使用情况与服务器状态。</p>
         </div>
         {accountTab && (
           <button
@@ -716,6 +720,14 @@ export function Admin() {
         >
           <LayoutDashboard size={16} />
           数据概览
+        </button>
+        <button
+          className={tab === "analytics" ? "active" : ""}
+          aria-current={tab === "analytics" ? "page" : undefined}
+          onClick={() => changeParams({ tab: "analytics", page: "", q: "", plan: "" })}
+        >
+          <BarChart3 size={16} />
+          流量统计
         </button>
         <button
           className={tab === "users" ? "active" : ""}
@@ -743,7 +755,7 @@ export function Admin() {
         </button>
         {overview?.mode === "test" && <span className="admin-test-badge">测试支付环境</span>}
       </nav>
-      {error && (
+      {accountTab && error && (
         <div className="admin-error" role="alert">
           {error}
           <button onClick={() => setRefresh((v) => v + 1)}>重新加载</button>
@@ -771,7 +783,9 @@ export function Admin() {
           <span role="status">{progress || "账户统计自动更新 · 注册与订单数据实时读取"}</span>
         </div>
       )}
-      {tab === "server" ? (
+      {tab === "analytics" ? (
+        <AdminAnalytics />
+      ) : tab === "server" ? (
         <AdminServer />
       ) : tab === "notices" ? (
         <AdminNotices />

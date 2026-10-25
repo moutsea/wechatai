@@ -140,9 +140,18 @@ pnpm analytics --local         # 本地开发库
 - **真实注册链路**（`test/analytics-auth.test.ts`）：从真实客户端 UUID 到 PV 接口、邮箱注册与重复注册、Google/GitHub 首次注册和回访、已有账户关联、DNT/GPC、统计表缺失不影响注册。
 - **保留期真的会执行**：`pruneExpiredPageViews(env, now)` 独立成函数，`test/analytics.test.ts` 直接断言 200 天前的记录（两张表）被删、10 天前的还在；`test/analytics-sql-drift.test.ts` 再盯住 cron 里那一行调用 —— 有人把它删掉时线上没有任何症状，只有这条断言会红。
 
+## 管理后台
+
+`/app/admin?tab=analytics` 提供流量统计，支持今天、近 7 / 30 / 90 天和手动刷新。`GET /api/admin/analytics?days=7` 复用服务端汇总，仅管理员可读，禁止缓存；天数必须为 1–90 的整数。
+
+页面展示 PV、每日去重访客加总、每日趋势、来源和浏览深度、热门页面、落地页注册转化。注册汇总按会话去重，分母是区间内有浏览或注册的全部会话（含未归因），不会用截断后的前 15 个落地页计算总转化率。访客数不代表跨天独立人数，注册会话也不等于全部新增用户。
+
+切换区间会取消旧请求并清空旧结果；请求（含响应体读取）超过 15 秒会取消并显示可重试的超时提示。加载失败不展示为零或“暂无数据”，迟到响应不能覆盖当前结果。进入流量页不触发账户统计同步。
+
+接口与统计回归见 `test/admin.test.ts`、`test/analytics.test.ts`，包含 17 个注册会话和 83 个未注册会话验证全量转化率为 17%。`test/admin-analytics-ui.test.tsx` 检查展示口径；`test/admin-analytics.client.test.tsx` 在 DOM 环境挂载真实 React 组件，覆盖超时、响应体挂起、日期切换、迟到响应、取消、失败重试及权限失效。交互测试可单独运行 `pnpm test:client`，也已包含在 `pnpm test` / CI 中。
+
 ## 这一版没做的
 
-- **后台面板**：查询走脚本。等指标稳定、口径确认后再做 UI，避免先做界面再改口径。
 - **服务端爬虫记账**：本站静态页由 Workers Assets 直接返回，只有 `run_worker_first` 列出的路径会进 Worker；为记爬虫要把大量路径塞进 Worker 首字节路径，性能代价大于收益。改用采集端按 UA 直接拒绝爬虫，代价是「爬虫抓了多少」这个数据拿不到。
 - **付费转化**：注册之后的付费环节要 join 账户与订单表，而且支付回调里没有会话号，链路会断在注册这一步。要做的话得在订单上存注册时的会话号，等注册归因数据积累后再评估。
 - **`ANALYTICS_SALT` 独立密钥**：当前回退到 `BETTER_AUTH_SECRET`，轮换站点密钥会同时改变哈希盐（历史数据不受影响，只是新旧不可比）。需要独立轮换时在 `.production-secrets.local` 里加这一项即可，代码已经支持。
