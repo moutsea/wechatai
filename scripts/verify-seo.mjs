@@ -72,6 +72,11 @@ const landingPages = [
   ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
   ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],
   ["wechat-ai-options.html", "https://wechatai.app/wechat-ai-options", "微信 AI 怎么选：四类方案的真实取舍"],
+  ["wechat-ai-partner.html", "https://wechatai.app/wechat-ai-partner", "微信 AI 搭档：聊天框里的固定搭子"],
+  ["wechat-character-card.html", "https://wechatai.app/wechat-character-card", "微信聊天人物卡：从角色卡到微信对话"],
+  ["wechat-bot.html", "https://wechatai.app/wechat-bot", "微信机器人怎么弄：先选对路线"],
+  ["wechat-ai-image.html", "https://wechatai.app/wechat-ai-image", "在微信里生成图片：配置与计费"],
+  ["wechat-ai-privacy.html", "https://wechatai.app/wechat-ai-privacy", "微信 AI 的隐私：三条链路逐个说清"],
   ["pricing.html", "https://wechatai.app/pricing", "价格：我们不卖 token"],
 ];
 publicPages.push(...landingPages);
@@ -146,7 +151,11 @@ for (const [file, canonical, text] of publicPages) {
 // FAQPage structured data, a breadcrumb, and internal links that all resolve.
 for (const [file, , marker] of landingPages) {
   const html = await read(file);
-  assert(html.includes('class="seopage-answer"'), `${file}: direct answer block`);
+  // 直接回答块可能带修饰类（/pricing 用紧凑版），所以按 class 名匹配而不是整串相等。
+  assert(
+    /class="[^"]*\bseopage-answer\b[^"]*"/.test(html),
+    `${file}: direct answer block`,
+  );
   assert(html.includes('id="faq"'), `${file}: FAQ section`);
   assert(html.includes(`<h1>${marker}</h1>`), `${file}: landing heading from page data`);
   const graph = JSON.parse(
@@ -204,10 +213,13 @@ for (const [file] of publicPages.filter(([file]) => file.startsWith("docs/"))) {
     `${file}: discoverable from docs index`,
   );
 }
-assert(
-  (await read("index.html")).match(/<nav class="landing-nav">[\s\S]*?href="\/docs"[\s\S]*?<\/nav>/),
-  "homepage navigation includes docs",
-);
+// 统一页头之后顶部导航是 .site-header-nav；文档与价格都必须能从首页直接点进去，
+// 否则「价格」只能靠页脚和正文露出。
+for (const target of ['href="/docs"', 'href="/pricing"'])
+  assert(
+    (await read("index.html")).includes(target),
+    `homepage navigation includes ${target}`,
+  );
 for (const slug of ["deepseek-in-wechat", "multiple-openclaw-in-wechat", "hermes-in-wechat"])
   assert(
     (await read("index.html")).includes(`href="/docs/${slug}"`),

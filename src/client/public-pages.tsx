@@ -10,6 +10,7 @@ import {
   Sprout,
   KeyRound,
   ChevronLeft,
+  ChevronDown,
   Ellipsis,
   UserRound,
   AudioLines,
@@ -17,12 +18,16 @@ import {
   CirclePlus,
   MessageSquareText,
 } from "lucide-react";
-import { Brand } from "./ui";
+import { SiteHeader } from "./site-header";
 import { LandingSteps } from "./landing-steps";
 import { SiteFooter } from "./site-footer";
-import { browserPageViewReporter } from "./analytics-client";
+import { LANDING_FAQ } from "../shared/landing-faq";
+import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
+import { PLUGIN_LIMITS } from "../shared/plugin-access";
+import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
+import { PLUS_MONTHLY_YUAN } from "../shared/pricing-copy";
+import { browserPageViewReporter, trackFunnel } from "./analytics-client";
 import { ANALYTICS_SESSION_HEADER } from "../shared/analytics";
-import { UserMenu } from "./user-menu";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
 import {
@@ -36,6 +41,8 @@ import { AuthLayout } from "./auth-layout";
 import { AuthEmailNotice, verificationCallback } from "./pages/auth-recovery";
 type LoginProvider = "google" | "github";
 const providerNames = { google: "Google", github: "GitHub" };
+// 首页价格锚只显示月付价；与 BILLING_OFFERS 的一致性由 test/seo.test.ts 断言保证。
+const plusMonthlyYuan = String(PLUS_MONTHLY_YUAN);
 function oauthError(code: string | null) {
   if (!code) return "";
   return (
@@ -101,29 +108,10 @@ function StartLink({
   );
 }
 export function Landing() {
-  const { data: session, isPending } = useAuth();
+  const { data: session } = useAuth();
   return (
     <div className="landing">
-      <nav className="landing-nav">
-        <Link to="/">
-          <Brand />
-        </Link>
-        <div>
-          <a href="#how">如何使用</a>
-          <Link to="/docs">文档</Link>
-          {session ? (
-            <UserMenu key={session.user.id} user={session.user} />
-          ) : (
-            <>
-              {!isPending && <Link to="/login">登录</Link>}
-              <StartLink className="button small">
-                免费开始
-                <ArrowUpRight size={15} />
-              </StartLink>
-            </>
-          )}
-        </div>
-      </nav>
+      <SiteHeader />
       <main>
         <section className="landing-hero">
           <div className="landing-copy">
@@ -236,6 +224,33 @@ export function Landing() {
           </strong>
         </section>
         <LandingSteps />
+        <section className="landing-preview" aria-labelledby="landing-preview-title">
+          <div className="landing-preview-copy">
+            <p className="eyebrow">工作台</p>
+            <h2 id="landing-preview-title">配置在网页，聊天在微信</h2>
+            <p>
+              模型渠道、插件、微信链接、额度与记录都在同一个页面里；改完即时生效，
+              手机上不用装任何东西，微信那边照常说话就行。
+            </p>
+            <div className="landing-preview-actions">
+              <Link className="button secondary" to="/demo">
+                打开演示工作台
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
+            <p className="landing-preview-note">演示里是可点的真实界面，数据是假的，不用注册。</p>
+          </div>
+          <figure className="landing-preview-shot">
+            <img
+              src="/images/workspace-overview.jpg"
+              width={1440}
+              height={900}
+              loading="lazy"
+              decoding="async"
+              alt="微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是模型渠道卡片和微信链接状态。"
+            />
+          </figure>
+        </section>
         <section className="landing-guides" aria-labelledby="landing-guides-title">
           <h2 id="landing-guides-title">按你的问题找入口</h2>
           <div className="landing-guides-grid">
@@ -268,15 +283,105 @@ export function Landing() {
             也可以直接看 <Link to="/pricing">价格与免费额度</Link>，或从
             <Link to="/docs">文档中心</Link>开始配置。
           </p>
+          <ul className="landing-guides-tags" aria-label="更多主题">
+            <li>
+              <Link to="/wechat-ai-partner">微信 AI 搭档</Link>
+            </li>
+            <li>
+              <Link to="/wechat-character-card">微信聊天人物卡</Link>
+            </li>
+            <li>
+              <Link to="/wechat-bot">微信机器人</Link>
+            </li>
+            <li>
+              <Link to="/wechat-ai-image">微信 AI 生图</Link>
+            </li>
+            <li>
+              <Link to="/wechat-ai-privacy">微信 AI 隐私</Link>
+            </li>
+          </ul>
+        </section>
+        <section className="landing-pricing" aria-labelledby="landing-pricing-title">
+          <div className="landing-pricing-head">
+            <h2 id="landing-pricing-title">免费能用到什么程度</h2>
+            <p>不卖 token：模型费付给你的服务商，我们只收消息中转的 credits。</p>
+          </div>
+          <div className="landing-pricing-grid">
+            <div className="landing-plan">
+              <p className="landing-plan-name">免费版</p>
+              <p className="landing-plan-price">
+                <strong>¥0</strong>
+                <span>永久免费</span>
+              </p>
+              <ul>
+                <li>
+                  <Check size={14} aria-hidden="true" />每天 {DAILY_CREDIT_DEFAULTS.free} credits
+                </li>
+                <li>
+                  <Check size={14} aria-hidden="true" />
+                  {WECHAT_LINK_LIMITS.free} 个微信链接
+                </li>
+                <li>
+                  <Check size={14} aria-hidden="true" />
+                  {PLUGIN_LIMITS.free} 个插件
+                </li>
+              </ul>
+            </div>
+            <div className="landing-plan landing-plan-plus">
+              <p className="landing-plan-name">Plus</p>
+              <p className="landing-plan-price">
+                <strong>¥{plusMonthlyYuan}</strong>
+                <span>/ 月起</span>
+              </p>
+              <ul>
+                <li>
+                  <Check size={14} aria-hidden="true" />每天 {DAILY_CREDIT_DEFAULTS.plus} credits
+                </li>
+                <li>
+                  <Check size={14} aria-hidden="true" />
+                  {WECHAT_LINK_LIMITS.plus} 个微信链接
+                </li>
+                <li>
+                  <Check size={14} aria-hidden="true" />
+                  插件不限 + 附件
+                </li>
+              </ul>
+            </div>
+          </div>
+          <p className="landing-pricing-more">
+            <Link to="/pricing">
+              看完整价格与额度明细
+              <ArrowRight size={15} aria-hidden="true" />
+            </Link>
+          </p>
+        </section>
+        <section className="landing-faq" aria-labelledby="landing-faq-title">
+          <h2 id="landing-faq-title">常见问题</h2>
+          <div className="landing-faq-list">
+            {LANDING_FAQ.map((item) => (
+              <details key={item.question}>
+                <summary>
+                  {item.question}
+                  <ChevronDown size={16} aria-hidden="true" />
+                </summary>
+                <p>{item.answer}</p>
+              </details>
+            ))}
+          </div>
+          <p className="landing-faq-more">
+            更多问题见<Link to="/docs/faq">常见问题文档</Link>。
+          </p>
         </section>
         <section className="landing-cta">
           <Sprout size={30} />
           <h2>免费使用，马上开始</h2>
           <StartLink className="button">
-            开始
+            免费开始
             <ArrowRight size={18} />
           </StartLink>
-          <p>模型调用费用由你的 API 供应商另行收取。</p>
+          <p>
+            免费版每天 {DAILY_CREDIT_DEFAULTS.free} credits；模型调用费用由你的 API 供应商另行收取。
+          </p>
         </section>
       </main>
       <SiteFooter />
@@ -376,6 +481,7 @@ function AuthForm({ register }: { register: boolean }) {
     setBusy(true);
     setError("");
     try {
+      if (register) trackFunnel("signup_submit");
       const attribution = register ? browserPageViewReporter().signupAttribution() : {};
       const response = register
         ? await authClient.signUp.email({
@@ -400,6 +506,7 @@ function AuthForm({ register }: { register: boolean }) {
         throw new Error(authErrorMessage(response.error));
       }
       if (register) {
+        trackFunnel("verify_sent");
         setPassword("");
         setConfirmation("");
         navigate(`/verify-email?returnTo=${encodeURIComponent(returnTo)}`, {

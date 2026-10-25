@@ -10,6 +10,7 @@ dist
 *.log
 .DS_Store
 coverage
+test-results/
 env.d.ts
 *.tsbuildinfo
 __pycache__/

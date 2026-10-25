@@ -5,7 +5,7 @@ import {
   type SessionStorageLike,
   createPageViewReporter,
 } from "../src/client/analytics-client";
-import { analyticsSessionIdSchema, pageViewPayloadSchema } from "../src/shared/analytics";
+import { analyticsSessionIdSchema, pageViewPayloadSchema } from "../src/shared/analytics-schema";
 
 /**
  * 浏览器端埋点的行为测试。

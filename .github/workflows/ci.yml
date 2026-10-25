@@ -23,6 +23,8 @@ jobs:
       - run: pnpm setup:local
       - run: pnpm check:public
       - run: pnpm check
+      - run: pnpm exec playwright install --with-deps --only-shell chromium
+      - run: pnpm test:browser
       - run: pnpm test:openclaw
       - run: pnpm test:receiver
       - run: pnpm test:executor

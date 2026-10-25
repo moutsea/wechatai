@@ -17,6 +17,8 @@ export const wechatGptPage: SeoPage = {
     "微信 chatgpt 机器人",
     "chatgpt-on-wechat 替代",
     "openai api 微信",
+    "微信 用 gpt api",
+    "gpt 微信 助手",
   ],
   highlights: ["不用部署、不用服务器", "OpenAI 两种协议都支持", "可接自建中转地址"],
   sections: [

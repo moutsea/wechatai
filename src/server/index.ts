@@ -8,7 +8,12 @@ import {
   deleteNotice,
 } from "./site-notices";
 import { noticeReadAllSchema } from "../shared/site-notices";
-import { getAdminAnalytics, pruneExpiredPageViews, recordPageView } from "./analytics";
+import {
+  getAdminAnalytics,
+  pruneExpiredPageViews,
+  recordFunnelEvent,
+  recordPageView,
+} from "./analytics";
 import { connectorVersionPattern } from "../shared/openclaw-release";
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
@@ -149,6 +154,24 @@ app.post("/api/analytics/page-view", async (c) => {
     });
   } catch (error) {
     console.error("analytics: page view failed", error);
+    return c.json({ error: "unavailable" }, 503);
+  }
+  return c.body(null, 204);
+});
+// 漏斗事件收集：与页面浏览分开存，因为关键节点（引导、付费墙、结账）发生在 /app 内部，
+// 而 /app 在页面浏览统计里是被排除的。客户端同样忽略上报失败。
+app.post("/api/analytics/event", async (c) => {
+  const rejected = await analyticsPrecheck(c);
+  if (rejected) return rejected;
+  try {
+    await recordFunnelEvent(c.env, {
+      payload: await c.req.json().catch(() => null),
+      ip: c.req.header("cf-connecting-ip") || "local",
+      userAgent: c.req.header("user-agent") || "",
+      country: c.req.header("cf-ipcountry") || "",
+    });
+  } catch (error) {
+    console.error("analytics: funnel event failed", error);
     return c.json({ error: "unavailable" }, 503);
   }
   return c.body(null, 204);

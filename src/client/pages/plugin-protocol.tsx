@@ -4,7 +4,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowUpRight, Check, Code2, Copy, FileJson, FileText, Terminal } from "lucide-react";
 import { Brand } from "../ui";
-import { useAuth } from "../auth";
+import { SiteHeader } from "../site-header";
 import { PLUGIN_PROTOCOL_VERSION } from "../../shared/plugins";
 import {
   PLUGIN_API_PATH,
@@ -67,25 +67,13 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 }
 
 export function PluginProtocol() {
-  const { data: session } = useAuth();
   const { hash } = useLocation();
   useEffect(() => {
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
   }, [hash]);
   return (
     <div className="guide-page protocol-page">
-      <header className="guide-header">
-        <Link to="/" aria-label="微伴首页">
-          <Brand />
-        </Link>
-        <div>
-          <Link to="/docs">文档</Link>
-          <Link className="button small" to={session ? "/app" : "/register"}>
-            {session ? "进入工作台" : "开始使用"}
-            <ArrowUpRight size={15} />
-          </Link>
-        </div>
-      </header>
+      <SiteHeader active="/docs" />
       <main>
         <section className="protocol-hero">
           <div>

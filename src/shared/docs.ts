@@ -53,7 +53,8 @@ export const DOC_GUIDES = [
     slug: "getting-started",
     seoTitle: "微信 AI 使用指南：三步连接自己的模型",
     title: "使用指南",
-    description: "第一次使用微伴：添加自己的模型服务、扫码连接微信，开始 AI 对话。",
+    description:
+      "第一次使用微伴：添加自己的模型服务、扫码连接微信，把第一条消息发出去，再按需配置命令、插件和会话。",
     category: "开始使用",
     group: "start",
     minutes: 3,
@@ -61,7 +62,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "channels-models",
-    seoTitle: "微信 AI 渠道与模型配置：API Key 与输入输出设置",
+    seoTitle: "微信 AI 渠道与模型：API Key 与输入输出设置",
     title: "渠道与模型",
     description:
       "配置 API Key、Base URL 和模型 ID，导入可用模型，设置输入输出上限，在微信切换模型。",
@@ -114,7 +115,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "credits",
-    seoTitle: "微伴会员与 credits：微信 AI 额度、计费与邀请奖励",
+    seoTitle: "微伴会员与 credits：额度、计费与邀请奖励",
     title: "会员与 credits",
     description:
       "了解 Free 与 Plus 会员区别、token 和图片计费、每日赠送、购买 credits 与邀请奖励。",
@@ -182,7 +183,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "notifications",
-    seoTitle: "微信消息提醒 Webhook：HTTP 推送订单、告警与任务结果",
+    seoTitle: "微信消息提醒 Webhook：订单、告警与任务推送",
     title: "消息提醒",
     description: "配置专属 Token，通过 HTTP Webhook 将文字通知推送到微信，查询投递结果和处理重试。",
     category: "插件",

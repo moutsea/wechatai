@@ -23,43 +23,10 @@
   color: #fff;
 }
 
-.seopage-header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(12px);
-}
-
-.seopage-header-inner {
-  width: min(1080px, calc(100% - 36px));
-  height: 64px;
-  margin: auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.seopage-header nav {
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.seopage-header nav a:not(.button) {
-  color: var(--muted);
-}
-
-.seopage-header nav a:not(.button):hover {
-  color: var(--green);
-}
-
+/* 页头由全站 .site-header 提供（见 styles.css），此处只负责正文容器。 */
 .seopage main {
   flex: 1;
-  width: min(1080px, calc(100% - 36px));
+  width: var(--container-w);
   margin: 0 auto;
   padding: 28px 0 80px;
 }
@@ -89,7 +56,7 @@
   margin: 14px 0 0;
   font-size: clamp(30px, 5vw, 46px);
   line-height: 1.16;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.005em;
   font-weight: 850;
   color: var(--ink);
 }
@@ -476,14 +443,6 @@
 
   .seopage-related-grid {
     grid-template-columns: 1fr;
-  }
-
-  .seopage-header nav {
-    gap: 14px;
-  }
-
-  .seopage-header nav a:not(.button):first-child {
-    display: none;
   }
 
   .seopage-cta {

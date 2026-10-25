@@ -1,8 +1,9 @@
 import { NoticeProvider } from "./notices";
 import { Notices } from "./pages/notices";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppProvider } from "./context";
+import { trackFunnel } from "./analytics-client";
 import { Shell } from "./shell";
 import { Dashboard } from "./pages/dashboard";
 import { Channels } from "./pages/channels";
@@ -19,6 +20,10 @@ const Plugins = lazy(() =>
 );
 const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: module.Admin })));
 export function Workspace({ demo = false }: { demo?: boolean }) {
+  // 预览页是落地页的次 CTA 落点，转化率必须可见。
+  useEffect(() => {
+    if (demo) trackFunnel("demo_view");
+  }, [demo]);
   return (
     <AppProvider key={demo ? "demo" : "live"} demo={demo}>
       <NoticeProvider>

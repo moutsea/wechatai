@@ -2,27 +2,12 @@
   background: #fff;
   min-height: 100vh;
 }
-.guide-header,
+/* 页头由全站 .site-header 提供（见 styles.css）。 */
 .guide-hero,
 .guide-layout,
 .guide-footer {
-  max-width: 1180px;
+  width: var(--container-w);
   margin: auto;
-  padding-left: 40px;
-  padding-right: 40px;
-}
-.guide-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 25px;
-  padding-bottom: 25px;
-}
-.guide-header > div {
-  display: flex;
-  align-items: center;
-  gap: 25px;
-  font-size: 13px;
 }
 .guide-hero {
   padding-top: 64px;
@@ -41,7 +26,7 @@
   font-size: clamp(32px, 4vw, 48px);
   line-height: 1.45;
   margin: 19px 0;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.005em;
 }
 .guide-hero > div > p {
   color: var(--muted);
@@ -53,7 +38,7 @@
   gap: 20px;
   margin-top: 25px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .guide-meta span {
   display: flex;
@@ -105,7 +90,7 @@
   padding: 0;
 }
 .guide-preview-note {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 24px;
 }
@@ -125,7 +110,7 @@
 .guide-toc nav > span {
   display: block;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   margin: 0 0 17px;
 }
 .guide-toc a {
@@ -142,7 +127,7 @@
 }
 .guide-toc small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   padding-top: 2px;
 }
 .guide-toc > p {
@@ -161,7 +146,7 @@
 .guide-section-number {
   color: var(--muted);
   letter-spacing: 0.12em;
-  font-size: 10px;
+  font-size: 12px;
 }
 .guide-section h2 {
   font-size: 26px;
@@ -290,7 +275,7 @@
 .guide-command-head {
   background: var(--sage);
   color: var(--muted);
-  font-size: 11px !important;
+  font-size: 12px !important;
 }
 .guide-session-grid,
 .guide-plan-grid {
@@ -325,7 +310,7 @@
 }
 .guide-formula > span {
   color: var(--on-green-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .guide-formula strong {
   display: block;
@@ -392,7 +377,7 @@
 }
 .guide-footer > span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   flex: 1;
 }
 .guide-footer > a {
@@ -412,20 +397,6 @@
   }
 }
 @media (max-width: 700px) {
-  .guide-header,
-  .guide-hero,
-  .guide-layout,
-  .guide-footer {
-    padding-left: 22px;
-    padding-right: 22px;
-  }
-  .guide-header > div {
-    gap: 14px;
-    font-size: 11px;
-  }
-  .guide-header .button {
-    padding: 9px 12px;
-  }
   .guide-hero {
     grid-template-columns: 1fr;
     padding-top: 30px;
@@ -505,4 +476,33 @@
   .guide-footer > a {
     margin-left: auto;
   }
+}
+
+/* 开发者文档正文（Markdown 渲染）：居中窄栏，宽度不再靠内联 style 写死。 */
+.guide-article {
+  width: min(780px, calc(100% - var(--gutter) * 2));
+  margin: 40px auto 72px;
+}
+.guide-article h1 {
+  font-size: clamp(28px, 3.4vw, 38px);
+  margin: 0 0 20px;
+}
+.guide-article h2 {
+  margin: 40px 0 14px;
+}
+.guide-article p,
+.guide-article li {
+  font-size: 15px;
+  line-height: 1.95;
+  color: var(--ink);
+}
+.guide-article pre {
+  overflow-x: auto;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--dark-surface);
+  color: var(--on-green);
+}
+.guide-article code {
+  font-size: 13px;
 }

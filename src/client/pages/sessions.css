@@ -29,7 +29,7 @@
 .sessions-page .session-tabs button span {
   background: #e6ebe7;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .sessions-page .session-search {
   margin: 16px 14px;
@@ -84,12 +84,12 @@
 .sessions-page .session-item time {
   flex-shrink: 0;
   color: #808a83;
-  font-size: 10px;
+  font-size: 12px;
 }
 .sessions-page .session-item p {
   margin: 5px 0 0;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 .sessions-page .session-item p > span:first-child {
   overflow: hidden;
@@ -105,7 +105,7 @@
 }
 .sessions-page .session-sidebar-foot {
   padding: 14px 20px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .sessions-page .session-detail {
   background: #ededed;
@@ -130,7 +130,7 @@
 }
 .sessions-page .session-detail-head p {
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -142,7 +142,7 @@
   gap: 7px;
 }
 .sessions-page .session-head-actions .tag {
-  font-size: 10px;
+  font-size: 12px;
   padding: 5px 8px;
 }
 .sessions-page .session-back {
@@ -158,7 +158,7 @@
   text-align: center;
   margin: 14px 0 24px;
   color: #828a85;
-  font-size: 11px;
+  font-size: 12px;
 }
 .sessions-page .chat-message {
   gap: 10px;
@@ -192,7 +192,7 @@
   margin: 0 0 6px;
   min-height: 18px;
   gap: 10px;
-  font-size: 11px;
+  font-size: 12px;
   color: #748078;
 }
 .sessions-page .message-label > span {
@@ -202,7 +202,7 @@
   white-space: nowrap;
 }
 .sessions-page .message-label time {
-  font-size: 10px;
+  font-size: 12px;
   color: #8b938e;
   flex-shrink: 0;
 }
@@ -260,7 +260,7 @@
   border: 0;
   padding: 2px 0;
   color: #7b857e;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .chat-copy:hover {
@@ -268,7 +268,7 @@
 }
 .sessions-page .message-usage {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
   color: #7b857e;
 }
 .sessions-page .message-usage summary {
@@ -309,7 +309,7 @@
 }
 .sessions-page .session-readonly p {
   margin-top: 3px;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.65;
 }
 .sessions-page .session-readonly > span {
@@ -318,12 +318,12 @@
   border-radius: 4px;
   padding: 3px 6px;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 12px;
 }
 .sessions-page .context-divider {
   background: transparent;
   color: #848c87;
-  font-size: 11px;
+  font-size: 12px;
   margin: 20px auto;
   max-width: 90%;
   text-align: center;
@@ -335,7 +335,7 @@
   background: transparent;
   color: #657a6e;
   padding: 8px 14px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .session-message-error {
   display: grid;
@@ -474,10 +474,10 @@
 .chat-code-head > span {
   font-family: "SFMono-Regular", Consolas, monospace;
   color: #758179;
-  font-size: 10px;
+  font-size: 12px;
 }
 .chat-code-head .chat-copy {
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-code pre {
   margin: 0;
@@ -561,12 +561,12 @@
 .chat-image > a {
   display: block;
   margin-top: 7px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-markdown .footnotes {
   border-top: 1px solid #e1e6e2;
   margin-top: 20px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .chat-markdown .footnotes h2 {
   font-size: 12px;
@@ -610,7 +610,7 @@
     display: none;
   }
   .sessions-page .page-head p {
-    font-size: 11px;
+    font-size: 12px;
     max-width: 205px;
     line-height: 1.65;
   }
@@ -668,7 +668,7 @@
     font-size: 14px;
   }
   .sessions-page .session-detail-head p {
-    font-size: 10px;
+    font-size: 12px;
   }
   .sessions-page .session-heading p {
     display: -webkit-box;
@@ -681,7 +681,7 @@
     gap: 0;
   }
   .sessions-page .session-head-actions .button {
-    font-size: 10px;
+    font-size: 12px;
     padding: 7px;
   }
   .sessions-page .session-head-actions .button svg {
@@ -708,11 +708,11 @@
     font-size: 13px;
   }
   .sessions-page .message-label {
-    font-size: 10px;
+    font-size: 12px;
     gap: 7px;
   }
   .sessions-page .message-label time {
-    font-size: 9px;
+    font-size: 12px;
   }
   .sessions-page .session-readonly {
     padding: 12px 15px;
@@ -731,6 +731,6 @@
   }
   .chat-code pre {
     padding: 11px;
-    font-size: 11px;
+    font-size: 12px;
   }
 }

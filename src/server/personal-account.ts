@@ -1,3 +1,4 @@
+import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { PLUGIN_LIMITS, availablePluginIds } from "../shared/plugin-access";
 import {
   pluginShortcutSchema,
@@ -920,7 +921,7 @@ export class PersonalAccount extends DurableObject<Env> {
     if (id ? !this.pluginAvailable(id) : this.plugins().length >= limit)
       throw new AppError(
         "plugin_limit",
-        `Free 用户最多配置 ${limit} 个插件。${id ? "此配置已暂停，记录仍保留。" : ""}请删除不用的配置后重试，或升级会员。\n\n[管理插件](${new URL("/app/plugins", publicSiteUrl(this.env))})`,
+        `Free 用户最多配置 ${limit} 个插件。${id ? "此配置已暂停，记录仍保留。" : ""}请删除不用的配置后重试，或升级会员。`,
         403,
       );
   }
@@ -1462,6 +1463,7 @@ export class PersonalAccount extends DurableObject<Env> {
         ...flow,
         status: "complete",
         channelId: channel!.id,
+        modelImport: imported ?? undefined,
         message,
       });
       return { channelId: channel!.id, message };
@@ -2030,8 +2032,8 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private dailyGrants() {
     return {
-      free: numberSetting(this.env.FREE_DAILY_CREDITS, 100),
-      plus: numberSetting(this.env.PLUS_DAILY_CREDITS, 1000),
+      free: numberSetting(this.env.FREE_DAILY_CREDITS, DAILY_CREDIT_DEFAULTS.free),
+      plus: numberSetting(this.env.PLUS_DAILY_CREDITS, DAILY_CREDIT_DEFAULTS.plus),
     };
   }
   private refreshWallet() {

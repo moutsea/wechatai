@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { BarChart3, Eye, RefreshCw, UserCheck, Users } from "lucide-react";
 import { api, ApiError } from "../api";
 import type { AdminAnalytics as AnalyticsData, TrafficSummary } from "../../shared/analytics";
+import type { FunnelSummary } from "../../shared/funnel-report";
 import "./admin-analytics.css";
 
 const periods = [1, 7, 30, 90];
@@ -106,8 +107,56 @@ function TrafficTrend({ traffic }: { traffic: TrafficSummary }) {
   );
 }
 
+function FunnelPanel({ funnel }: { funnel: FunnelSummary }) {
+  const max = Math.max(1, ...funnel.steps.map((step) => step.visitorDays));
+  const hasData = [...funnel.steps, ...funnel.side].some((step) => step.events > 0);
+  return (
+    <section className="admin-panel">
+      <div className="admin-panel-heading">
+        <div>
+          <h2>关键事件触达</h2>
+          <p>
+            访客日为每日去重访客之和，非跨天独立人数；各事件独立统计，不代表同一批用户的留存或转化率。
+          </p>
+        </div>
+        <span className="admin-muted">{funnel.range.days} 天</span>
+      </div>
+      {hasData ? (
+        <ol className="funnel-list">
+          {funnel.steps.map((step) => (
+            <li key={step.name}>
+              <span className="funnel-step">{step.label}</span>
+              <span className="funnel-track" aria-hidden="true">
+                <span
+                  style={{ width: `${Math.max(0, Math.round((step.visitorDays / max) * 100))}%` }}
+                />
+              </span>
+              <span className="funnel-value">{number(step.visitorDays)} 访客日</span>
+              <span className="funnel-events">{number(step.events)} 次</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="admin-muted">该时间范围内还没有关键事件。</p>
+      )}
+      <div className="funnel-foot">
+        <div className="funnel-side">
+          {funnel.side.map((step) => (
+            <span key={step.name}>
+              {step.label}{" "}
+              <strong>
+                {number(step.visitorDays)} 访客日 · {number(step.events)} 次
+              </strong>
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function AnalyticsReport({ data }: { data: AnalyticsData }) {
-  const { traffic, conversions } = data;
+  const { traffic, conversions, funnel } = data;
   const depth = new Map(traffic.sourceDepth.map((source) => [source.label, source]));
   return (
     <div className="analytics-report">
@@ -162,6 +211,7 @@ export function AnalyticsReport({ data }: { data: AnalyticsData }) {
           <p>统计只包含开始采集后的数据，可切换更长时间范围查看。</p>
         </div>
       )}
+      <FunnelPanel funnel={funnel} />
       <TrafficTrend traffic={traffic} />
       <section className="admin-panel">
         <div className="admin-panel-heading">

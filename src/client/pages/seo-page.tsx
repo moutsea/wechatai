@@ -2,31 +2,11 @@ import { useEffect, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowRight, ArrowUpRight, Check, ChevronDown, Sprout } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Sprout } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
-import { Brand } from "../ui";
+import { SiteHeader } from "../site-header";
+import { PricingPlans } from "./pricing-plans";
 import { SiteFooter } from "../site-footer";
-
-function SeoHeader() {
-  return (
-    <header className="seopage-header">
-      <div className="seopage-header-inner">
-        <Link to="/" aria-label="微伴首页">
-          <Brand />
-        </Link>
-        <nav aria-label="顶部导航">
-          <Link to="/pricing">价格</Link>
-          <Link to="/docs">文档</Link>
-          <Link to="/login">登录</Link>
-          <Link className="button small" to="/register">
-            免费开始
-            <ArrowUpRight size={15} />
-          </Link>
-        </nav>
-      </div>
-    </header>
-  );
-}
 
 /** Markdown with router-aware links, the same treatment the documentation uses. */
 function SeoMarkdown({ children }: { children: string }) {
@@ -124,7 +104,7 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
       <a className="seopage-skip" href="#seopage-content">
         跳到正文
       </a>
-      <SeoHeader />
+      <SiteHeader active={page.path === "/pricing" ? "/pricing" : undefined} />
       <main id="seopage-content">
         <nav className="seopage-breadcrumb" aria-label="面包屑">
           <Link to="/">首页</Link>
@@ -155,8 +135,17 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
               </li>
             ))}
           </ul>
-          <p className="seopage-answer">{page.answer}</p>
+          {/* 价格页把这段「直接回答」放到方案卡下面：卡已经给了可扫的数字，
+              先念一遍整段会把首屏占满。 */}
+          {page.path !== "/pricing" && <p className="seopage-answer">{page.answer}</p>}
         </header>
+        {page.path === "/pricing" && (
+          <>
+            <PricingPlans />
+            {/* 这段是给摘要/AEO 用的完整句子，排在卡后面，视觉上降级为注释，不再抢卡片。 */}
+            <p className="seopage-answer seopage-answer-compact">{page.answer}</p>
+          </>
+        )}
         {page.steps && <SeoSteps steps={page.steps} />}
         <article className="seopage-prose">
           {page.sections.length > 2 && (

@@ -808,7 +808,7 @@ export function Admin() {
           </div>
           <div className="admin-user-toolbar">
             <form onSubmit={onSearch}>
-              <Search size={17} />
+              <Search size={17} aria-hidden="true" />
               <input
                 type="search"
                 value={search}

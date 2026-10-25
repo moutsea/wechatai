@@ -16,13 +16,15 @@ import { Modal, PageHead, Empty } from "../ui";
 import { ChannelIcon } from "../channel-icon";
 import { ChannelConnectionFields } from "../channel-connection-fields";
 import { saveChannelSetup, modelImportMessage } from "../channel-setup";
+import { trackChannelModelImport, trackFunnel } from "../analytics-client";
 import {
   DEFAULT_CHANNEL_PROVIDER,
   channelProvider,
   detectChannelProvider,
   selectChannelProvider,
 } from "../../shared/channel-providers";
-import { json } from "../api";
+import { json, limitErrorCode } from "../api";
+import { LimitHint } from "../limit-hint";
 import {
   protocolLabels,
   formatCredits,
@@ -71,7 +73,7 @@ const newModel: ModelInput = {
 };
 
 export function Channels() {
-  const { data, base, request, refresh, notify } = useApp();
+  const { data, base, request, refresh, notify, demo } = useApp();
   const [params, setParams] = useSearchParams();
   const [channelEditor, setChannelEditor] = useState<Channel | "new" | null>(null);
   const [modelEditor, setModelEditor] = useState<Assistant | "new" | null>(null);
@@ -92,6 +94,7 @@ export function Channels() {
   const kimiseek = useKimiseekConnect(() => setChannelEditor(null));
   const busy = actionBusy || (kimiseek.busy ? "kimiseek" : "");
   const [error, setError] = useState("");
+  const [limitCode, setLimitCode] = useState<string | undefined>();
   const [importResults, setImportResults] = useState<
     Record<string, { text: string; failed: boolean }>
   >({});
@@ -145,6 +148,12 @@ export function Channels() {
         channelEditor && channelEditor !== "new" ? channelEditor : undefined,
         providerId !== "custom",
       );
+      // 保存配置和成功导入模型是两件事；无效 Key 也可能保存成功。
+      if (!demo) {
+        trackFunnel("channel_saved", { provider: providerId, created: channelEditor === "new" });
+        trackChannelModelImport(providerId, result.models);
+        if (result.importError) trackFunnel("channel_test_failed", { provider: providerId });
+      }
       await refresh();
       setChannelEditor(null);
       if (result.models || result.importError) {
@@ -168,6 +177,7 @@ export function Channels() {
         );
     } catch (e) {
       setError((e as Error).message);
+      setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
     }
@@ -188,6 +198,7 @@ export function Channels() {
       notify("模型已保存");
     } catch (e) {
       setError((e as Error).message);
+      setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
     }
@@ -201,7 +212,11 @@ export function Channels() {
     try {
       const result = await request<ModelImportResult>(`/channels/${channel.id}/models/import`, {
         method: "POST",
+      }).catch((error: unknown) => {
+        if (!demo) trackFunnel("channel_test_failed", { provider: detectChannelProvider(channel) });
+        throw error;
       });
+      if (!demo) trackChannelModelImport(detectChannelProvider(channel), result);
       await refresh();
       setImportResults((results) => ({
         ...results,
@@ -572,6 +587,7 @@ export function Channels() {
                   {error}
                 </div>
               )}
+              <LimitHint code={error ? limitCode : undefined} />
             </div>
             <div className="modal-actions">
               <button
@@ -780,6 +796,7 @@ export function Channels() {
                   {error}
                 </div>
               )}
+              <LimitHint code={error ? limitCode : undefined} />
             </div>
             <div className="modal-actions">
               <button

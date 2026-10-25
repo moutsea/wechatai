@@ -3,7 +3,7 @@ import type { SeoPage } from "../seo-pages";
 export const wechatClawbotPage: SeoPage = {
   path: "/wechat-clawbot",
   kind: "tutorial",
-  title: "微信 ClawBot 插件怎么用：绑定、找不到入口、不回复",
+  title: "微信 ClawBot 插件怎么用：绑定、入口与不回复",
   description:
     "微信 ClawBot 插件是微信对外开放的 AI 接入通道。这篇讲清它在哪、扫一扫怎么绑定、找不到入口怎么办、绑定后不回复怎么排查。",
   eyebrow: "ClawBot 插件",

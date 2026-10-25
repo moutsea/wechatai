@@ -11,6 +11,7 @@ import {
   UserRoundPlus,
 } from "lucide-react";
 import { useApp } from "../context";
+import { trackFunnel } from "../analytics-client";
 import { PageHead, SectionTitle } from "../ui";
 import { formatCredits } from "../../shared/types";
 import { referralStatusLabel, type ReferralSummary } from "../../shared/referrals";
@@ -48,6 +49,7 @@ export function Invite() {
     if (!summary?.url || demo) return;
     try {
       await navigator.clipboard.writeText(summary.url);
+      trackFunnel("invite_share_click");
       notify("邀请链接已复制，发给好友即可");
     } catch {
       input.current?.select();

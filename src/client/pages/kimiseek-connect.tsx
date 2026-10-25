@@ -2,10 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, LoaderCircle, RefreshCw } from "lucide-react";
 import { useApp } from "../context";
 import { json } from "../api";
+import { trackChannelModelImport, trackFunnel } from "../analytics-client";
+import type { ModelImportResult } from "../../shared/types";
 
 export function useKimiseekConnect(onComplete: () => void) {
   const { request, refresh, notify, demo } = useApp();
-  const [pending, setPending] = useState<{ id: string; url: string; expires: number } | null>(null);
+  const [pending, setPending] = useState<{
+    id: string;
+    url: string;
+    expires: number;
+    operation: "connect" | "recharge";
+  } | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const complete = useRef(onComplete);
@@ -16,11 +23,17 @@ export function useKimiseekConnect(onComplete: () => void) {
     let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const result = await request<{ status: string; message?: string }>(
-          `/kimiseek/status/${pending.id}`,
-        );
+        const result = await request<{
+          status: string;
+          message?: string;
+          modelImport?: ModelImportResult;
+        }>(`/kimiseek/status/${pending.id}`);
         if (stopped) return;
         if (result.status === "complete") {
+          if (pending.operation === "connect") {
+            trackFunnel("channel_saved", { provider: "kimiseek" });
+            trackChannelModelImport("kimiseek", result.modelImport);
+          }
           setPending(null);
           complete.current();
           await refresh();
@@ -65,7 +78,7 @@ export function useKimiseekConnect(onComplete: () => void) {
         "/kimiseek/start",
         json({ operation }),
       );
-      setPending({ id: result.flowId, url: result.url, expires: Date.now() + 300000 });
+      setPending({ id: result.flowId, url: result.url, expires: Date.now() + 300000, operation });
       if (popup) popup.location.replace(result.url);
     } catch (e) {
       popup?.close();

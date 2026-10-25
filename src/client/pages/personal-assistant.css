@@ -140,7 +140,7 @@
   font-variant-numeric: tabular-nums;
 }
 .personal-amount small {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
 }
@@ -221,7 +221,7 @@
 }
 .personal-examples > span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .personal-examples p {
   margin: 5px 0;

@@ -1,14 +1,10 @@
 import { Link } from "react-router-dom";
-import { Brand } from "./ui";
+import { SiteHeader } from "./site-header";
 
 export function NotFound() {
   return (
     <div className="guide-page">
-      <header className="guide-header">
-        <Link to="/" aria-label="微伴首页">
-          <Brand />
-        </Link>
-      </header>
+      <SiteHeader />
       <main className="guide-hero">
         <div>
           <span className="eyebrow">404 · PAGE NOT FOUND</span>

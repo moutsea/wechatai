@@ -1,0 +1,164 @@
+/* /pricing 的价格卡：两个纯文本档位 + 可点按钮，替掉「只有对比表、没有购买入口」。 */
+.plans {
+  width: min(880px, 100%);
+  margin: 36px 0 8px;
+}
+
+.plans-head h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.plans-head p {
+  margin: 0 0 22px;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.85;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.plan {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+}
+
+.plan-plus {
+  border-color: var(--green);
+  box-shadow: 0 1px 2px #101a1208, 0 14px 34px #08783e14;
+}
+
+.plan-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plan h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+
+.plan-price strong {
+  font-size: clamp(30px, 4vw, 40px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.plan-price-unit {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.plan-note {
+  margin: 8px 0 0;
+  min-height: 21px;
+  font-size: 13px;
+  color: var(--green);
+}
+
+.plan ul {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.plan li svg {
+  flex: none;
+  color: var(--green);
+}
+
+.plan-cta {
+  margin-top: auto;
+  width: 100%;
+  min-height: 46px;
+  font-size: 14px;
+}
+
+.plan-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--page);
+}
+
+.plan-switch button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.plan-switch button[aria-pressed="true"] {
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 1px 3px #101a1214;
+}
+
+.plan-error {
+  margin: 0;
+  font-size: 13px;
+  color: #a3221b;
+}
+
+.plans-fineprint {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .plans-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 价格页的「直接回答」段落：数字已经由卡片承载，这里只保留可被抓取的完整句子。 */
+.seopage-answer.seopage-answer-compact {
+  margin: 18px 0 40px;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--line);
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.85;
+}

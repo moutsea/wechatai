@@ -150,4 +150,8 @@ export const protocolLabels: Record<Protocol, string> = {
   anthropic: "Anthropic Messages",
 };
 export const formatCredits = (value: number) =>
-  new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 3 }).format(value);
+  // 大额取整、小额保留三位小数：避免统计卡里出现「1,996.272」这种千分位逗号与小数点
+  // 混排、在大字号下被读成「199 万」的歧义。
+  new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: Math.abs(value) >= 100 ? 0 : 3,
+  }).format(value);

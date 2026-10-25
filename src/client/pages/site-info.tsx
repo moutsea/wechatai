@@ -6,9 +6,8 @@ import {
   SUPPORT_EMAIL,
   type InfoPageKind,
 } from "../../shared/site-info";
-import { useAuth } from "../auth";
 import { SiteFooter } from "../site-footer";
-import { Brand } from "../ui";
+import { SiteHeader } from "../site-header";
 
 /** 「2026-10-24」→「2026 年 10 月 24 日」，让显示的日期永远跟随常量。 */
 function formatUpdatedAt(iso: string) {
@@ -327,21 +326,9 @@ function Contact() {
 
 export function SiteInfoPage({ kind }: { kind: InfoPageKind }) {
   const page = INFO_PAGES[kind];
-  const { data: session } = useAuth();
   return (
     <div className="site-info-page">
-      <header className="info-header">
-        <Link to="/" aria-label="微伴首页">
-          <Brand />
-        </Link>
-        <div>
-          <Link to="/">回到首页</Link>
-          <Link className="button small" to={session ? "/app" : "/register"}>
-            {session ? "进入工作台" : "开始使用"}
-            <ArrowUpRight size={15} aria-hidden="true" />
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
       <main className="info-main">
         <div className="info-intro">
           <span className="eyebrow">{page.eyebrow}</span>

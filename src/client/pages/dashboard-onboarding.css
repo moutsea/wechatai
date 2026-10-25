@@ -27,7 +27,7 @@
   font-size: 12px;
 }
 .onboarding-nav button > span {
-  font-size: 11px;
+  font-size: 12px;
   opacity: 0.7;
 }
 .onboarding-nav button[aria-current="step"] {
@@ -79,7 +79,7 @@
   padding: 17px;
 }
 .onboarding-costs span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .onboarding-costs h4 {
@@ -163,7 +163,7 @@
   font-size: 14px;
 }
 .onboarding-provider-title > span {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--green);
   white-space: nowrap;
 }
@@ -172,7 +172,7 @@
 }
 .onboarding-providers .text-link,
 .onboarding-providers small {
-  font-size: 11px;
+  font-size: 12px;
 }
 .onboarding-providers button.text-link {
   border: 0;
@@ -246,7 +246,7 @@
     align-items: flex-end;
   }
   .dashboard-actions .button {
-    font-size: 10px;
+    font-size: 12px;
     padding: 9px 10px;
     gap: 5px;
   }
@@ -258,7 +258,7 @@
     margin-bottom: 20px;
   }
   .onboarding-nav button {
-    font-size: 11px;
+    font-size: 12px;
     gap: 5px;
   }
   .onboarding-intro {

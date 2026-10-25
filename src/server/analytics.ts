@@ -6,17 +6,19 @@ import {
   isBotUserAgent,
   isTrackedPath,
   normalizePath,
-  pageViewPayloadSchema,
   referrerHost,
   shanghaiDay,
   shanghaiDaysAgo,
-  signupConversionSchema,
   type AdminAnalytics,
   type SignupConversions,
   type TrafficBucket,
   type TrafficDay,
   type TrafficSummary,
 } from "../shared/analytics";
+import { pageViewPayloadSchema, signupConversionSchema } from "../shared/analytics-schema";
+import { funnelEventPayloadSchema } from "../shared/funnel";
+import { allowsFunnelEvent } from "../shared/funnel-policy";
+import { summarizeFunnel, type FunnelCount, type FunnelSummary } from "../shared/funnel-report";
 import { AppError, secret } from "./config";
 import { signupConversionQueries } from "../shared/analytics-queries";
 
@@ -103,6 +105,55 @@ export async function recordPageView(
   return { ok: true, stored: result.meta.changes > 0 };
 }
 
+export type RecordFunnelEventResult =
+  | { ok: true; stored: boolean }
+  | { ok: true; ignored: "bot" | "demo" }
+  | { ok: false; reason: "invalid_payload" };
+
+/**
+ * 写一条漏斗事件。与 `recordPageView` 的区别：**不按路径过滤**——
+ * 注册验证、引导、付费墙、结账这些关键节点本来就发生在 `/app` 之内，
+ * 而 `/app` 在页面浏览统计里是被刻意排除的。
+ */
+export async function recordFunnelEvent(
+  env: Env,
+  input: {
+    payload: unknown;
+    ip: string;
+    userAgent: string;
+    country: string;
+    now?: number;
+  },
+): Promise<RecordFunnelEventResult> {
+  if (isBotUserAgent(input.userAgent)) return { ok: true, ignored: "bot" };
+  const parsed = funnelEventPayloadSchema.safeParse(input.payload);
+  if (!parsed.success) return { ok: false, reason: "invalid_payload" };
+  const payload = parsed.data;
+  if (!allowsFunnelEvent(payload.name, payload.path ?? "")) return { ok: true, ignored: "demo" };
+  const now = input.now ?? Date.now();
+  const day = shanghaiDay(new Date(now));
+  const props = JSON.stringify(payload.props ?? {});
+  const result = await env.DB.prepare(
+    `INSERT INTO funnel_events(day,name,props,path,visitor_hash,session_id,country,device,created_at,event_id)
+     VALUES(?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(event_id) DO NOTHING`,
+  )
+    .bind(
+      day,
+      payload.name,
+      props.slice(0, 1000),
+      normalizePath(payload.path ?? ""),
+      visitorHash(env, { ip: input.ip, userAgent: input.userAgent, day }),
+      payload.sessionId ?? "",
+      input.country.trim().toUpperCase().slice(0, 2),
+      classifyDevice(input.userAgent, payload.touch === true),
+      now,
+      payload.eventId,
+    )
+    .run();
+  return { ok: true, stored: result.meta.changes > 0 };
+}
+
 /**
  * 删除超过保留期的明细，由 cron（wrangler.jsonc 的 triggers，每分钟一次）调用。
  *
@@ -117,6 +168,7 @@ export async function pruneExpiredPageViews(env: Env, now: number = Date.now()) 
   const cutoff = shanghaiDay(new Date(now - ANALYTICS_RETENTION_DAYS * 86_400_000));
   await env.DB.batch([
     env.DB.prepare("DELETE FROM page_views WHERE day < ?").bind(cutoff),
+    env.DB.prepare("DELETE FROM funnel_events WHERE day < ?").bind(cutoff),
     env.DB.prepare("DELETE FROM signup_attributions WHERE day < ?").bind(cutoff),
   ]);
 }
@@ -301,7 +353,35 @@ export async function getSignupConversions(
   };
 }
 
-/** 管理员路由调用；同一时刻确定窗口，避免午夜两份报表跨日。 */
+/**
+ * 关键事件触达：按天去重后加总，不把独立事件计数解释为用户留存或付费转化。
+ *
+ * 与 `page_views` 不同，这里保留 `/app` 内的正式操作，只排除演示工作台的模拟操作。
+ * `/app` 在 PV 统计里是被刻意排除的（见 `isTrackedPath`）。
+ */
+export async function getFunnelSummary(
+  env: Env,
+  days: number,
+  at = new Date(),
+): Promise<FunnelSummary> {
+  const window = Math.min(Math.max(Math.trunc(days) || 7, 1), ANALYTICS_MAX_DAYS);
+  const to = shanghaiDay(at);
+  const from = shanghaiDaysAgo(window - 1, at);
+  const rows = await env.DB.prepare(
+    `SELECT name, COUNT(*) AS events, COUNT(DISTINCT day || ':' || visitor_hash) AS visitorDays
+     FROM funnel_events WHERE day BETWEEN ? AND ?
+       AND (name = 'demo_view' OR (LOWER(path) <> '/demo' AND LOWER(path) NOT LIKE '/demo/%'))
+     GROUP BY name`,
+  )
+    .bind(from, to)
+    .all<{ name: string; events: number; visitorDays: number }>();
+  const counts: Partial<Record<string, FunnelCount>> = {};
+  for (const row of rows.results ?? []) {
+    counts[row.name] = { visitorDays: num(row.visitorDays), events: num(row.events) };
+  }
+  return summarizeFunnel({ from, to, days: window }, counts);
+}
+
 export async function getAdminAnalytics(env: Env, days?: string): Promise<AdminAnalytics> {
   const window = days === undefined ? 7 : Number(days);
   if (
@@ -314,9 +394,10 @@ export async function getAdminAnalytics(env: Env, days?: string): Promise<AdminA
       400,
     );
   const at = new Date();
-  const [traffic, conversions] = await Promise.all([
+  const [traffic, conversions, funnel] = await Promise.all([
     getTrafficSummary(env, window, at),
     getSignupConversions(env, window, at),
+    getFunnelSummary(env, window, at),
   ]);
-  return { traffic, conversions };
+  return { traffic, conversions, funnel };
 }

@@ -13,6 +13,7 @@ import { SEO_PAGES } from "../shared/seo-pages";
 import { PageMetadata } from "./seo";
 import { PageViewTracker } from "./page-view-tracker";
 import { NotFound } from "./not-found";
+import { WorkspaceSkeleton } from "./workspace-skeleton";
 import "./styles.css";
 // Included in initial HTML so the prerendered public docs also work without JavaScript.
 import "./pages/plugin-protocol.css";
@@ -26,10 +27,19 @@ const Workspace = lazy(() =>
   import("./workspace").then((module) => ({ default: module.Workspace })),
 );
 function ScrollReset() {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   useEffect(() => {
+    // 带 hash 的跳转（例如页头的「如何使用」→ /#how）要滚到目标区块，
+    // 而不是回到顶部；目标不在本页时仍回到顶部。
+    if (hash) {
+      const target = document.getElementById(hash.slice(1));
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    }
     window.scrollTo(0, 0);
-  }, [pathname]);
+  }, [pathname, hash]);
   return null;
 }
 // Preserve the existing root when Vite refreshes this module during development.
@@ -77,13 +87,7 @@ root.render(
           <Route
             path="/app/*"
             element={
-              <Suspense
-                fallback={
-                  <div className="full-state" role="status">
-                    正在加载工作台…
-                  </div>
-                }
-              >
+              <Suspense fallback={<WorkspaceSkeleton />}>
                 <Workspace />
               </Suspense>
             }
@@ -91,13 +95,7 @@ root.render(
           <Route
             path="/demo/*"
             element={
-              <Suspense
-                fallback={
-                  <div className="full-state" role="status">
-                    正在加载工作台…
-                  </div>
-                }
-              >
+              <Suspense fallback={<WorkspaceSkeleton label="正在加载工作台预览…" />}>
                 <Workspace demo />
               </Suspense>
             }

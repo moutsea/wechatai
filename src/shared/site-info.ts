@@ -21,7 +21,8 @@ export const INFO_PAGES = {
     path: "/contact",
     title: "联系我们",
     eyebrow: "HERE TO HELP",
-    description: "使用中遇到问题，或有想分享的建议？欢迎联系微伴。",
+    description:
+      "使用中遇到问题，或有想分享的建议？写邮件给微伴，说明发生了什么、操作步骤和大致时间，能让我们更快定位问题。",
   },
 } as const;
 export type InfoPageKind = keyof typeof INFO_PAGES;

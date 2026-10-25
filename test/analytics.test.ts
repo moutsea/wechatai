@@ -2,11 +2,14 @@ import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
 import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
+import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
 import worker from "../src/server/index";
 import {
+  getFunnelSummary,
   getSignupConversions,
   getTrafficSummary,
   pruneExpiredPageViews,
+  recordFunnelEvent,
   recordPageView,
   recordSignupConversion,
 } from "../src/server/analytics";
@@ -21,7 +24,7 @@ import {
 
 // D1 的 exec 只吃单行语句，测试里把注释与换行压平成一段脚本。
 async function applyMigration() {
-  for (const migration of [pageViewsMigration, signupMigration])
+  for (const migration of [pageViewsMigration, signupMigration, funnelMigration])
     await env.DB.exec(
       migration
         .replace(/^--.*$/gm, "")
@@ -50,6 +53,7 @@ beforeAll(applyMigration);
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM page_views").run();
   await env.DB.prepare("DELETE FROM signup_attributions").run();
+  await env.DB.prepare("DELETE FROM funnel_events").run();
 });
 
 describe("shared analytics rules", () => {
@@ -739,5 +743,203 @@ describe("retired client signup endpoint", () => {
     await waitOnExecutionContext(ctx);
     expect(response.status).toBe(410);
     expect((await env.DB.prepare("SELECT * FROM signup_attributions").all()).results).toEqual([]);
+  });
+});
+
+const funnelRows = () =>
+  env.DB.prepare(
+    "SELECT day, name, props, path, session_id, country, device, event_id FROM funnel_events ORDER BY id",
+  ).all<Record<string, string>>();
+
+describe("recordFunnelEvent", () => {
+  const funnelEvent = (overrides: Record<string, unknown> = {}) => ({
+    eventId: crypto.randomUUID(),
+    name: "paywall_view",
+    props: { surface: "dashboard_recent" },
+    sessionId: "session-0001",
+    path: "/app",
+    ...overrides,
+  });
+
+  it.each(["/demo", "/demo/channels", "/demo/", "/Demo/wechat"])(
+    "rejects simulated operations at %s but keeps demo_view",
+    async (path) => {
+      const input = { ip: "203.0.113.7", userAgent: "Mozilla/5.0", country: "" };
+      expect(await recordFunnelEvent(env, { ...input, payload: funnelEvent({ path }) })).toEqual({
+        ok: true,
+        ignored: "demo",
+      });
+      expect(
+        await recordFunnelEvent(env, {
+          ...input,
+          payload: funnelEvent({ path, name: "demo_view" }),
+        }),
+      ).toEqual({ ok: true, stored: true });
+      expect((await funnelRows()).results.map((row) => row.name)).toEqual(["demo_view"]);
+    },
+  );
+
+  it("stores workspace events that page views deliberately ignore", async () => {
+    // /app 在 page_views 里是被排除的，而最有价值的漏斗节点恰好都发生在这里。
+    const result = await recordFunnelEvent(env, {
+      payload: funnelEvent(),
+      ip: "203.0.113.7",
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)",
+      country: "cn",
+      now: Date.UTC(2026, 9, 24, 3),
+    });
+    expect(result).toEqual({ ok: true, stored: true });
+    const [row] = (await funnelRows()).results;
+    expect(row).toMatchObject({
+      day: "2026-10-24",
+      name: "paywall_view",
+      path: "/app",
+      session_id: "session-0001",
+      country: "CN",
+      device: "mobile",
+    });
+    expect(JSON.parse(row!.props)).toEqual({ surface: "dashboard_recent" });
+  });
+
+  it("dedupes a retried delivery by event id", async () => {
+    const payload = funnelEvent();
+    await recordFunnelEvent(env, {
+      payload,
+      ip: "203.0.113.7",
+      userAgent: "Mozilla/5.0",
+      country: "",
+    });
+    const again = await recordFunnelEvent(env, {
+      payload,
+      ip: "203.0.113.7",
+      userAgent: "Mozilla/5.0",
+      country: "",
+    });
+    expect(again).toEqual({ ok: true, stored: false });
+    expect((await funnelRows()).results).toHaveLength(1);
+  });
+
+  it("rejects unknown event names and unknown fields", async () => {
+    const unknownName = await recordFunnelEvent(env, {
+      payload: funnelEvent({ name: "made_up_event" }),
+      ip: "203.0.113.7",
+      userAgent: "Mozilla/5.0",
+      country: "",
+    });
+    expect(unknownName).toEqual({ ok: false, reason: "invalid_payload" });
+    const extraField = await recordFunnelEvent(env, {
+      payload: funnelEvent({ email: "someone@example.com" }),
+      ip: "203.0.113.7",
+      userAgent: "Mozilla/5.0",
+      country: "",
+    });
+    expect(extraField).toEqual({ ok: false, reason: "invalid_payload" });
+    expect((await funnelRows()).results).toEqual([]);
+  });
+
+  it("drops bot traffic and honours the retention window", async () => {
+    const bot = await recordFunnelEvent(env, {
+      payload: funnelEvent(),
+      ip: "203.0.113.7",
+      userAgent: "Googlebot/2.1",
+      country: "",
+    });
+    expect(bot).toEqual({ ok: true, ignored: "bot" });
+    await recordFunnelEvent(env, {
+      payload: funnelEvent(),
+      ip: "203.0.113.7",
+      userAgent: "Mozilla/5.0",
+      country: "",
+      now: Date.UTC(2025, 0, 1, 3),
+    });
+    await pruneExpiredPageViews(env, Date.UTC(2026, 9, 24, 3));
+    expect((await funnelRows()).results).toEqual([]);
+  });
+});
+
+describe("key event reach reporting", () => {
+  const at = new Date("2026-10-26T02:00:00Z");
+  const add = async (name: string, sessionId: string, ip: string, now = at.getTime()) => {
+    await recordFunnelEvent(env, {
+      payload: { eventId: crypto.randomUUID(), name, sessionId, path: "/app" },
+      ip,
+      userAgent: "Mozilla/5.0",
+      country: "",
+      now,
+    });
+  };
+
+  it("reports independent visitors without manufacturing conversion from unrelated sessions", async () => {
+    await add("signup_submit", "new-user-session", "203.0.113.1");
+    await add("checkout_success", "old-user-session", "203.0.113.2");
+    const report = await getFunnelSummary(env, 7, at);
+    expect(report.steps.find((step) => step.name === "signup_submit")).toMatchObject({
+      visitorDays: 1,
+      events: 1,
+    });
+    expect(report.steps.find((step) => step.name === "checkout_success")).toMatchObject({
+      visitorDays: 1,
+      events: 1,
+    });
+    expect(report).not.toHaveProperty("overall");
+    for (const step of report.steps) {
+      expect(step).not.toHaveProperty("stepRate");
+      expect(step).not.toHaveProperty("fromStart");
+      expect(step).not.toHaveProperty("users");
+    }
+  });
+
+  it("dedupes within a Beijing day, labels cross-day sums as visitor-days and respects the range", async () => {
+    const midnight = Date.parse("2026-10-25T16:00:00Z");
+    for (const now of [
+      midnight - 2,
+      midnight - 1,
+      midnight,
+      midnight + 1,
+      midnight - 3 * 86_400_000,
+    ])
+      await add("channel_saved", "same-session", "203.0.113.1", now);
+    const report = await getFunnelSummary(env, 2, at);
+    expect(report.range).toEqual({ from: "2026-10-25", to: "2026-10-26", days: 2 });
+    expect(report.steps.find((step) => step.name === "channel_saved")).toMatchObject({
+      visitorDays: 2,
+      events: 4,
+    });
+    const today = await getFunnelSummary(env, 1, at);
+    expect(today.steps.find((step) => step.name === "channel_saved")).toMatchObject({
+      visitorDays: 1,
+      events: 2,
+    });
+  });
+
+  it("excludes previously stored demo operations while retaining demo views and real workspace events", async () => {
+    // 模拟旧客户端已经写入的记录；仅修改采集端不足以修复报表。
+    for (const [name, path] of [
+      ["channel_saved", "/demo"],
+      ["channel_saved", "/demo/channels"],
+      ["onboarding_done", "/Demo"],
+      ["demo_view", "/demo"],
+      ["channel_saved", "/app/channels"],
+    ])
+      await env.DB.prepare(
+        "INSERT INTO funnel_events(day,name,path,visitor_hash,session_id,created_at,event_id) VALUES(?,?,?,?,?,?,?)",
+      )
+        .bind(
+          "2026-10-26",
+          name,
+          path,
+          "visitor",
+          "session-0001",
+          at.getTime(),
+          crypto.randomUUID(),
+        )
+        .run();
+    const report = await getFunnelSummary(env, 1, at);
+    expect(report.steps.find((step) => step.name === "channel_saved")).toMatchObject({
+      events: 1,
+      visitorDays: 1,
+    });
+    expect(report.steps.find((step) => step.name === "onboarding_done")?.events).toBe(0);
+    expect(report.side.find((step) => step.name === "demo_view")?.events).toBe(1);
   });
 });

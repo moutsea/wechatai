@@ -24,7 +24,7 @@
   font-size: clamp(22px, 2.5vw, 30px);
   font-weight: 500;
   margin: 14px 0 10px;
-  letter-spacing: -0.8px;
+  letter-spacing: -0.5px;
 }
 .invite-hero h2 strong {
   color: var(--lime);
@@ -123,7 +123,7 @@
   margin-top: 8px;
 }
 .invite-stats small {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--muted);
   margin-left: 10px;
@@ -173,7 +173,7 @@
   padding: 17px 22px;
 }
 .invite-record-head {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   background: var(--surface-soft);
   border-radius: var(--radius) var(--radius) 0 0;
@@ -213,7 +213,7 @@
 }
 .invite-rules {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.9;
   margin: 18px 0 0;
 }
@@ -288,7 +288,7 @@
     gap: 6px;
   }
   .invite-record .tag {
-    font-size: 10px;
+    font-size: 12px;
   }
   .invite-received {
     flex-wrap: wrap;

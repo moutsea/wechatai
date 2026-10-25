@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Admin } from "../src/client/pages/admin";
 import type { AdminAnalytics } from "../src/shared/analytics";
+import { emptyFunnelSummary } from "../src/shared/funnel-report";
 
 type PendingRequest = {
   url: string;
@@ -28,6 +29,7 @@ const report = (days = 7, pv = 123): AdminAnalytics => ({
     devices: [],
   },
   conversions: { total: 0, unattributed: 0, sessions: pv ? 1 : 0, rate: 0, rows: [] },
+  funnel: emptyFunnelSummary({ from: "2026-10-25", to: "2026-10-25", days }),
 });
 
 let container: HTMLDivElement;

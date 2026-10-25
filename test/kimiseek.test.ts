@@ -36,6 +36,9 @@ describe("KimiSeek import", () => {
     });
     await callKimiseek(account, { action: "claim", id: flow.id });
     await callKimiseek(account, { action: "complete", id: flow.id, result });
+    expect(
+      (await callKimiseek<KimiseekFlow>(account, { action: "status", id: flow.id })).modelImport,
+    ).toMatchObject({ imported: 2, existing: 0 });
     const before = await account.snapshot();
     expect(before.channels).toHaveLength(1);
     expect(before.channels[0]).toMatchObject({ integration: "kimiseek", hasKey: true });
@@ -57,6 +60,9 @@ describe("KimiSeek import", () => {
     });
     await callKimiseek(account, { action: "claim", id: again.id });
     await callKimiseek(account, { action: "complete", id: again.id, result });
+    expect(
+      (await callKimiseek<KimiseekFlow>(account, { action: "status", id: again.id })).modelImport,
+    ).toMatchObject({ imported: 0, existing: 2 });
     const after = await account.snapshot();
     expect(after.channels[0].id).toBe(before.channels[0].id);
     expect(after.assistants).toHaveLength(2);
@@ -68,6 +74,23 @@ describe("KimiSeek import", () => {
     });
     expect(after.currentSession).toEqual(before.currentSession);
     await expect(callKimiseek(account, { action: "claim", id: again.id })).rejects.toThrow();
+  });
+  it("reports empty catalogs honestly and does not attach import counts to recharge flows", async () => {
+    const account = env.ACCOUNTS.getByName(crypto.randomUUID());
+    for (const operation of ["connect", "recharge"] as const) {
+      const flow = await callKimiseek<KimiseekFlow>(account, { action: "start", operation });
+      await callKimiseek(account, { action: "claim", id: flow.id });
+      await callKimiseek(account, {
+        action: "complete",
+        id: flow.id,
+        result: { ...result, models: [] },
+      });
+      const finished = await callKimiseek<KimiseekFlow>(account, { action: "status", id: flow.id });
+      expect(finished.status).toBe("complete");
+      if (operation === "connect")
+        expect(finished.modelImport).toMatchObject({ imported: 0, existing: 0 });
+      else expect(finished.modelImport).toBeUndefined();
+    }
   });
   it("rejects expired, cross-account and unclaimed flows and enforces channel limits", async () => {
     const a = env.ACCOUNTS.getByName(crypto.randomUUID());

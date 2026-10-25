@@ -10,7 +10,8 @@ import { registrationReferrer } from "./referrals";
 import { authEmailSender } from "./auth-email";
 import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "../shared/auth";
 import { authReturnPath } from "../shared/auth";
-import { ANALYTICS_SESSION_HEADER, analyticsSessionIdSchema } from "../shared/analytics";
+import { ANALYTICS_SESSION_HEADER } from "../shared/analytics";
+import { analyticsSessionIdSchema } from "../shared/analytics-schema";
 import { recordSignupConversion } from "./analytics";
 import {
   issuePasswordRecovery,

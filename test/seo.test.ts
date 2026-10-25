@@ -14,6 +14,7 @@ import {
   pageLastModified,
   replaceSeoHead,
 } from "../src/shared/seo";
+import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN } from "../src/shared/pricing-copy";
 import { SEO_PAGES } from "../src/shared/seo-pages";
 import { FAQ_DOC_SECTIONS, faqAnswerText } from "../src/shared/faq-doc";
 import { BILLING_OFFERS } from "../src/shared/billing";
@@ -79,8 +80,16 @@ describe("search indexing boundaries", () => {
     expect(sitemap).toContain(
       `<loc>https://wechatai.app/privacy</loc><lastmod>${pageLastModified("/privacy")}</lastmod>`,
     );
-    expect(pageLastModified("/developers/plugins")).toBeUndefined();
     expect(pageLastModified("/not-a-page")).toBeUndefined();
+    // 开发者页的日期是 seo.ts 里手工维护的内容日期，和 DOCS_UPDATED_AT 同一套做法，
+    // 断言只钉形状与 sitemap 是否真的带上，具体哪天由内容改动决定。
+    for (const path of ["/developers/plugins", "/developers/openclaw", "/developers/hermes"]) {
+      const modified = pageLastModified(path);
+      expect(modified, path).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(sitemap).toContain(
+        `<loc>https://wechatai.app${path}</loc><lastmod>${modified}</lastmod>`,
+      );
+    }
     expect(sitemap).not.toContain("<priority>");
     expect(sitemap).not.toContain("<changefreq>");
   });
@@ -126,6 +135,11 @@ describe("search indexing boundaries", () => {
       "https://wechatai.app/wechat-gpt",
       "https://wechatai.app/wechat-agent",
       "https://wechatai.app/wechat-ai-options",
+      "https://wechatai.app/wechat-ai-partner",
+      "https://wechatai.app/wechat-character-card",
+      "https://wechatai.app/wechat-bot",
+      "https://wechatai.app/wechat-ai-image",
+      "https://wechatai.app/wechat-ai-privacy",
       "https://wechatai.app/pricing",
       "https://wechatai.app/developers/plugins",
       "https://wechatai.app/developers/openclaw",
@@ -250,6 +264,77 @@ describe("query landing pages", () => {
   });
 });
 
+describe("developer guide pages", () => {
+  const paths = ["/developers/plugins", "/developers/openclaw", "/developers/hermes"];
+  const graphOf = (path: string) =>
+    (getPageSeo(path).structuredData?.["@graph"] ?? []) as Array<Record<string, unknown>>;
+  const nodeOf = (path: string, type: string) =>
+    graphOf(path).find((node) => node["@type"] === type) as Record<string, unknown> | undefined;
+
+  it("uses the same title suffix as the rest of the site", () => {
+    for (const path of paths) expect(getPageSeo(path).title).toContain(" | 微伴 Wechatai");
+  });
+
+  it("publishes a two-level breadcrumb because there is no /developers index page", () => {
+    for (const path of paths) {
+      expect(nodeOf(path, "BreadcrumbList")?.itemListElement).toEqual([
+        { "@type": "ListItem", position: 1, name: "首页", item: "https://wechatai.app/" },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: expect.any(String),
+          item: `https://wechatai.app${path}`,
+        },
+      ]);
+    }
+  });
+
+  it("dates the WebPage and reuses the shared Organization node", () => {
+    for (const path of paths) {
+      const page = nodeOf(path, "WebPage");
+      expect(page?.dateModified).toBe(pageLastModified(path));
+      const publisher = (page?.publisher ?? {}) as Record<string, unknown>;
+      expect(publisher["@id"]).toBe("https://wechatai.app/#organization");
+      expect(publisher.logo).toBeTruthy();
+    }
+  });
+});
+
+describe("organization and application structured data", () => {
+  const graphOf = (path: string) =>
+    (getPageSeo(path).structuredData?.["@graph"] ?? []) as Array<Record<string, unknown>>;
+  const nodeOf = (path: string, type: string) =>
+    graphOf(path).find((node) => node["@type"] === type) as Record<string, unknown> | undefined;
+
+  it("keeps a square logo and only verifiable profiles", () => {
+    const organization = nodeOf("/", "Organization")!;
+    expect(organization.url).toBe("https://wechatai.app/");
+    // og-image.png is a 1200×630 banner, so the logo has to be the square vector favicon.
+    expect(organization.logo).toMatchObject({
+      "@type": "ImageObject",
+      url: "https://wechatai.app/favicon.svg",
+    });
+    expect(organization.sameAs).toEqual(["https://github.com/moutsea/wechatai"]);
+  });
+
+  it("derives offers from BILLING_OFFERS instead of hard-coded prices", () => {
+    const offers = nodeOf("/", "SoftwareApplication")?.offers as Array<Record<string, unknown>>;
+    expect(offers[0]).toMatchObject({ name: "免费版", price: 0, priceCurrency: "CNY" });
+    expect(String(offers[0].description)).toContain(`${WECHAT_LINK_LIMITS.free} 个微信链接`);
+    expect(String(offers[0].description)).toContain(`${PLUGIN_LIMITS.free} 个插件`);
+    const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus");
+    const paid = offers.filter((offer) => offer.price !== 0);
+    expect(paid).toHaveLength(plans.length);
+    plans.forEach((plan, index) => {
+      expect(paid[index]).toMatchObject({
+        name: plan.name,
+        price: plan.amount / 100,
+        priceCurrency: "CNY",
+      });
+    });
+  });
+});
+
 describe("published prices stay in sync with billing", () => {
   // A price change in BILLING_OFFERS must not leave public copy quoting the old number.
   const yuan = (cents: number) => {
@@ -262,6 +347,16 @@ describe("published prices stay in sync with billing", () => {
     return JSON.stringify(page);
   };
   const pricingText = planText(SEO_PAGES.find((page) => page.path === "/pricing"));
+
+  it("keeps the landing price copy aligned without importing billing into the bundle", () => {
+    // 首页与落地页用 src/shared/pricing-copy.ts 的字面量，避免把账单模块预加载到首屏；
+    // 一致性靠这条断言兜底。
+    const monthly = offers.find((offer) => offer.id === "plus_monthly");
+    const yearly = offers.find((offer) => offer.id === "plus_yearly");
+    expect(monthly && yearly).toBeTruthy();
+    expect(PLUS_MONTHLY_YUAN).toBe(monthly!.amount / 100);
+    expect(PLUS_YEARLY_YUAN).toBe(yearly!.amount / 100);
+  });
 
   it("quotes the current Plus prices on the pricing page", () => {
     const monthly = offers.find((offer) => offer.id === "plus_monthly");
@@ -324,7 +419,10 @@ describe("/docs/faq structured data", () => {
     for (const article of DOC_ARTICLES.filter((item) => item.slug !== "faq")) {
       const seo = getPageSeo(docPath(article.slug));
       const graph = seo.structuredData?.["@graph"] as Array<Record<string, unknown>>;
-      expect(graph.some((item) => item["@type"] === "FAQPage"), article.slug).toBe(false);
+      expect(
+        graph.some((item) => item["@type"] === "FAQPage"),
+        article.slug,
+      ).toBe(false);
     }
   });
 });

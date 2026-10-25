@@ -7,7 +7,8 @@ import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
 import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
 import worker from "../src/server/index";
 import { createPageViewReporter } from "../src/client/analytics-client";
-import { ANALYTICS_SESSION_HEADER, signupConversionSchema } from "../src/shared/analytics";
+import { ANALYTICS_SESSION_HEADER } from "../src/shared/analytics";
+import { signupConversionSchema } from "../src/shared/analytics-schema";
 
 const send = vi.fn(async () => ({ messageId: "test-message" }));
 const bindings = {

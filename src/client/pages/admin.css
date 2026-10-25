@@ -86,7 +86,7 @@
   align-items: center;
   gap: 5px;
   padding: 5px 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
   background: var(--green-soft);
@@ -128,7 +128,7 @@
   background: #fff1d3;
   padding: 4px 8px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .admin-sync-info {
   display: flex;
@@ -136,7 +136,7 @@
   align-items: center;
   gap: 12px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   margin: 16px 0 20px;
   flex-wrap: wrap;
 }
@@ -182,7 +182,7 @@
   font-variant-numeric: tabular-nums;
 }
 .admin-kpis article p {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin: 0;
 }
@@ -207,7 +207,7 @@
 .admin-today span:not(.tiny-dot),
 .admin-today small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .admin-today strong {
   font-size: 18px;
@@ -255,11 +255,11 @@
   color: var(--muted);
 }
 .admin-panel-heading p {
-  font-size: 11px;
+  font-size: 12px;
 }
 .admin-muted {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .admin-metric-tabs {
   display: flex;
@@ -271,7 +271,7 @@
   border: 0;
   border-radius: 6px;
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .admin-metric-tabs button.active {
@@ -292,7 +292,7 @@
   letter-spacing: -0.5px;
 }
 .admin-chart-value span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .admin-bars {
@@ -332,13 +332,13 @@
 .admin-chart-axis {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 10px;
 }
 .admin-daily-details {
   margin-top: 20px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .admin-daily-details summary {
@@ -396,7 +396,7 @@
 }
 .admin-ranking-title small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
 }
 .admin-ranking-track {
@@ -415,7 +415,7 @@
 .admin-ranking-item p {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin: 0;
   gap: 10px;
@@ -462,7 +462,7 @@
   font-weight: 500;
 }
 .admin-assets span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .admin-referrals {
@@ -478,7 +478,7 @@
   margin-left: auto;
 }
 .admin-footnote {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.9;
   max-width: 980px;
@@ -516,7 +516,7 @@
   border-radius: 5px;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 7px;
   margin-left: 6px;
 }
@@ -530,7 +530,7 @@
   font-size: 12px;
 }
 .admin-page th {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 500;
   background: var(--surface-soft);
@@ -545,7 +545,7 @@
 }
 .admin-page td small {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 5px;
 }
@@ -597,7 +597,7 @@
 }
 .admin-user-identity > div > span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .admin-user-identity small {
   margin-top: 0 !important;
@@ -607,7 +607,7 @@
   background: #f1f3f2;
   padding: 4px 7px;
   border-radius: 5px;
-  font-size: 11px;
+  font-size: 12px;
 }
 .admin-plan.plus {
   background: #e3f9eb;

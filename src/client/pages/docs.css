@@ -30,34 +30,7 @@
 .docs-skip-link:focus {
   top: 12px;
 }
-.docs-header {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  border-bottom: 1px solid var(--docs-border);
-  background: #fffffff5;
-  backdrop-filter: blur(12px);
-}
-.docs-header-inner {
-  max-width: 1280px;
-  height: 80px;
-  padding: 0 36px;
-  margin: auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-}
-.docs-header nav {
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  font-size: 13px;
-}
-.docs-header nav > a[aria-current] {
-  color: var(--docs-green);
-  font-weight: 650;
-}
+/* 页头由全站 .site-header 提供（见 styles.css）。 */
 .docs-page a:focus-visible,
 .docs-page summary:focus-visible,
 .docs-table-scroll:focus-visible {
@@ -65,17 +38,16 @@
   outline-offset: 4px;
 }
 .docs-layout {
-  max-width: 1280px;
+  width: var(--container-w);
   margin: 0 auto;
-  padding: 0 36px;
   display: grid;
   grid-template-columns: 234px minmax(0, 1fr);
   gap: 64px;
 }
 .docs-sidebar {
   position: sticky;
-  top: 80px;
-  height: calc(100dvh - 80px);
+  top: 64px;
+  height: calc(100dvh - 64px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 30px 22px 36px 0;
@@ -175,7 +147,7 @@
 .docs-article-header h1 {
   font-size: clamp(28px, 3.1vw, 38px);
   line-height: 1.45;
-  letter-spacing: -1px;
+  letter-spacing: -0.5px;
   margin: 14px 0 16px;
   font-weight: 650;
 }
@@ -344,7 +316,7 @@
   border-radius: 5px;
   padding: 4px 8px;
   color: #687c6e;
-  font-size: 10px;
+  font-size: 12px;
   background: #f6faf6;
 }
 .docs-article-meta {
@@ -353,7 +325,7 @@
   align-items: center;
   gap: 22px;
   color: #88918a;
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 20px;
 }
 .docs-article-meta > span {
@@ -418,7 +390,7 @@
 }
 .docs-pagination small {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--docs-muted);
   margin-bottom: 6px;
 }
@@ -569,10 +541,6 @@
   .docs-layout {
     grid-template-columns: 220px minmax(0, 1fr);
     gap: 36px;
-    padding: 0 28px;
-  }
-  .docs-header-inner {
-    padding: 0 28px;
   }
   .docs-sidebar {
     padding-right: 16px;
@@ -583,18 +551,8 @@
   }
 }
 @media (max-width: 760px) {
-  .docs-header-inner {
-    height: 68px;
-    padding: 0 20px;
-    gap: 14px;
-  }
-  .docs-header nav {
-    gap: 18px;
-    font-size: 12px;
-  }
   .docs-layout {
     display: block;
-    padding: 0 22px;
   }
   .docs-sidebar {
     display: none;
@@ -662,7 +620,7 @@
     font-size: 16px;
   }
   .docs-start-card small {
-    font-size: 11px;
+    font-size: 12px;
   }
   .docs-quick-grid {
     grid-template-columns: 1fr;
@@ -680,11 +638,11 @@
     font-size: 14px;
   }
   .docs-tutorial-list small {
-    font-size: 11px;
+    font-size: 12px;
   }
   .docs-article-meta {
     gap: 14px;
-    font-size: 10px;
+    font-size: 12px;
   }
   .docs-prose {
     font-size: 14px;
@@ -705,4 +663,49 @@
   .docs-pagination strong {
     font-size: 12px;
   }
+}
+
+/* 文档侧栏搜索：只过滤本地已知的二十来篇，不做全文检索。 */
+.docs-search {
+  display: flex;
+  /* 全局 `label` 是竖排表单标签，这里要横排，必须显式覆盖。 */
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  margin: 0 0 16px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 400;
+}
+.docs-search:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px #08783e14;
+}
+.docs-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 15px;
+}
+.docs-search input:focus {
+  outline: none;
+}
+.docs-search input::placeholder {
+  color: var(--muted);
+}
+.docs-search-empty {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
 }

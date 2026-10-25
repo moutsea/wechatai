@@ -1,4 +1,7 @@
 import { isTrackedPath, normalizePath } from "../shared/analytics";
+import type { FunnelEvent } from "../shared/funnel";
+import { allowsFunnelEvent } from "../shared/funnel-policy";
+import type { ModelImportResult } from "../shared/types";
 
 /**
  * 第一方访问统计的浏览器端核心。
@@ -233,4 +236,43 @@ let singleton: PageViewReporter | null = null;
 export function browserPageViewReporter(): PageViewReporter {
   if (!singleton) singleton = browserReporter();
   return singleton;
+}
+
+/**
+ * 上报一条漏斗事件。和页面浏览共用同一个 sessionStorage 会话号，
+ * 于是「这一次访问里看了几页、走到哪一步」能在后台对上。
+ *
+ * 约定与页面浏览一致：拒绝统计（DNT/GPC）、非安全上下文、网络失败都不抛错，
+ * 绝不因为埋点让页面出问题。
+ */
+export function trackFunnel(name: FunnelEvent, props?: Record<string, string | number | boolean>) {
+  try {
+    const nav = window.navigator as AnalyticsNavigator;
+    if (optedOut(nav) || !allowsFunnelEvent(name, window.location.pathname)) return;
+    const { analyticsSessionId } = browserPageViewReporter().signupAttribution();
+    const payload = {
+      eventId: fallbackRandomId(),
+      name,
+      props,
+      sessionId: analyticsSessionId,
+      path: window.location.pathname,
+      touch: nav.maxTouchPoints ? nav.maxTouchPoints > 0 : undefined,
+    };
+    void fetch("/api/analytics/event", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    }).catch(() => undefined);
+  } catch {
+    // 埋点是旁路，任何异常都不该影响交互。
+  }
+}
+
+/** 列表请求成功且至少有一个模型落地，才记录导入；不代表已完成模型调用测试。 */
+export function trackChannelModelImport(provider: string, result?: ModelImportResult) {
+  if (result && result.imported + result.existing > 0)
+    trackFunnel("channel_models_imported", { provider, models: result.imported + result.existing });
 }

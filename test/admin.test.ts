@@ -9,6 +9,7 @@ import adminMigration from "../migrations/0005_admin.sql?raw";
 import serverStatusMigration from "../migrations/0013_server_status.sql?raw";
 import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
 import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
+import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
 import { recordPageView, recordSignupConversion } from "../src/server/analytics";
 import type { AdminAnalytics } from "../src/shared/analytics";
 import worker from "../src/server/index";
@@ -29,6 +30,7 @@ beforeAll(async () => {
     serverStatusMigration,
     pageViewsMigration,
     signupMigration,
+    funnelMigration,
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });

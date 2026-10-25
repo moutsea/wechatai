@@ -24,7 +24,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, FlaskConical, Power } from "lucide-react";
 import { useApp } from "../context";
 import { Modal, PageHead } from "../ui";
-import { json } from "../api";
+import { json, limitErrorCode } from "../api";
+import { LimitHint } from "../limit-hint";
 import { formatCredits } from "../../shared/types";
 import {
   searchProviderLabels,
@@ -71,6 +72,7 @@ export function Plugins() {
   const [viewedId, setViewedId] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [limitCode, setLimitCode] = useState<string | undefined>();
   const [deleting, setDeleting] = useState<UserPlugin | null>(null);
   const [testing, setTesting] = useState<UserPlugin | null>(null);
   const [query, setQuery] = useState("");
@@ -187,6 +189,7 @@ export function Plugins() {
       );
     } catch (e) {
       setError((e as Error).message);
+      setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
     }
@@ -214,6 +217,7 @@ export function Plugins() {
       await refresh();
     } catch (e) {
       setError((e as Error).message);
+      setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
     }
@@ -551,6 +555,7 @@ export function Plugins() {
                   {error}
                 </div>
               )}
+              <LimitHint code={error ? limitCode : undefined} />
             </div>
             <div className="modal-actions">
               <button
@@ -612,6 +617,7 @@ export function Plugins() {
                   {error}
                 </div>
               )}
+              <LimitHint code={error ? limitCode : undefined} />
               {reply && (
                 <div className="research-test-result">
                   <MessageMarkdown content={reply.text} id="research-test" />

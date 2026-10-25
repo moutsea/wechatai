@@ -22,6 +22,7 @@
     "format": "oxfmt --write .",
     "test": "vitest run && pnpm test:client",
     "test:client": "vitest run --config vitest.client.config.ts",
+    "test:browser": "playwright test --config test/browser/playwright.config.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "cf-typegen": "wrangler types env.d.ts --strict-vars false",
     "db:migrate:local": "wrangler d1 migrations apply wechatai-db --local",
@@ -73,6 +74,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.62.0",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@playwright/test": "1.64.1",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

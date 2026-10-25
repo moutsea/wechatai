@@ -1,5 +1,5 @@
 .landing-steps {
-  max-width: 1120px;
+  width: var(--container-w);
   margin: 76px auto 48px;
   scroll-margin-top: 30px;
 }
@@ -44,7 +44,7 @@
   border-radius: 50%;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .steps-tabs button:hover {
   border-color: var(--green);
@@ -80,7 +80,7 @@
 }
 .steps-page-number {
   color: var(--green);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 1.5px;
 }
@@ -160,13 +160,13 @@
 }
 .steps-config-field > span {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
   margin-bottom: 7px;
 }
 .steps-config-field > div {
   padding: 10px 12px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -188,7 +188,7 @@
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 5px;
-  font-size: 10px;
+  font-size: 12px;
 }
 .steps-config-models > span:first-child {
   border-color: var(--line-strong);
@@ -201,7 +201,7 @@
   justify-content: center;
   gap: 7px;
   margin-top: 20px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--green);
 }
 .steps-connect {
@@ -213,7 +213,7 @@
 }
 .steps-preview-label {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   margin-bottom: 12px;
 }
 .steps-connect > strong {
@@ -230,7 +230,7 @@
 }
 .steps-connect > span:not(.steps-preview-label) {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .steps-chat {
   overflow: hidden;
@@ -249,7 +249,7 @@
 }
 .steps-chat-heading > span {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--muted);
 }
 .steps-chat-body {
@@ -282,7 +282,7 @@
   width: 100%;
   text-align: center;
   color: #737373;
-  font-size: 10px;
+  font-size: 12px;
 }
 .steps-controls {
   display: flex;
@@ -346,7 +346,7 @@
     flex-direction: column;
     gap: 9px;
     padding: 12px 5px;
-    font-size: 10px;
+    font-size: 12px;
     line-height: 1.6;
   }
   .steps-slide {
@@ -363,7 +363,7 @@
     font-size: 13px;
   }
   .steps-copy li {
-    font-size: 11px;
+    font-size: 12px;
   }
   .steps-preview {
     border-left: none;

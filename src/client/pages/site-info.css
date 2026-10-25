@@ -1,28 +1,11 @@
 .site-info-page {
   background: #fff;
 }
-.info-header {
-  max-width: 1220px;
-  margin: auto;
-  padding: 27px 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-}
-.info-header > div {
-  display: flex;
-  align-items: center;
-  gap: 26px;
-  font-size: 13px;
-}
-.info-header > div > a:first-child {
-  color: var(--muted);
-}
+/* 页头由全站 .site-header 提供（见 styles.css）。 */
 .info-main {
-  max-width: 920px;
+  width: var(--container-w);
   margin: auto;
-  padding: 66px 40px 96px;
+  padding: 66px 0 96px;
 }
 .info-intro {
   max-width: 680px;
@@ -30,7 +13,7 @@
 .info-intro h1 {
   margin: 18px 0;
   font-size: clamp(32px, 4vw, 44px);
-  letter-spacing: -0.04em;
+  letter-spacing: -0.005em;
 }
 .info-intro p {
   color: var(--muted);
@@ -181,7 +164,7 @@
 }
 .auth-form .auth-policies {
   margin-top: 18px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.8;
   color: var(--muted);
 }
@@ -191,16 +174,8 @@
   text-underline-offset: 3px;
 }
 @media (max-width: 760px) {
-  .info-header {
-    padding: 22px 24px;
-    gap: 16px;
-  }
-  .info-header > div {
-    gap: 14px;
-    font-size: 12px;
-  }
   .info-main {
-    padding: 42px 24px 64px;
+    padding: 42px 0 64px;
   }
   .info-navigation {
     gap: 24px;
@@ -217,9 +192,6 @@
   }
 }
 @media (max-width: 400px) {
-  .info-header > div > a:first-child {
-    display: none;
-  }
   .contact-address {
     gap: 6px;
     font-size: 17px;

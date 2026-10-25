@@ -53,7 +53,7 @@
 }
 .connector-update-links small {
   font-weight: 400;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .connector-update-links .text-link {
@@ -84,7 +84,7 @@
   background: var(--green);
   color: white;
   border: 2px solid var(--white);
-  font-size: 9px;
+  font-size: 12px;
   line-height: 13px;
   font-weight: 700;
 }
@@ -196,7 +196,7 @@
 }
 .notice-item-date {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 .notice-chevron {
   color: var(--muted);
@@ -380,7 +380,7 @@
 }
 .notice-priority {
   display: inline-flex;
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 7px;
   border-radius: 5px;
   color: var(--muted);
@@ -415,16 +415,23 @@
     grid-template-columns: 1fr;
     padding: 18px;
   }
+  /* 窄屏改成三行：标签 / 标题 / 查看详情。原来换行后「查看详情」会跑到第一行，
+     变成「重要通知 查看详情 →」下面才是标题，读起来是断的。 */
   .notice-banner-title {
     flex-wrap: wrap;
     gap: 4px 8px;
   }
-  .notice-banner-title > strong {
-    flex-basis: 100%;
+  .notice-banner-title span:first-child {
     order: 1;
   }
+  .notice-banner-title > strong {
+    flex-basis: 100%;
+    order: 2;
+  }
   .notice-banner-title span:last-child {
+    flex-basis: 100%;
     margin-left: 0;
+    order: 3;
   }
   .notice-detail {
     padding: 20px;

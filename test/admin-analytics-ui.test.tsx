@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Admin } from "../src/client/pages/admin";
 import { AnalyticsReport, AnalyticsResult } from "../src/client/pages/admin-analytics";
 import type { AdminAnalytics } from "../src/shared/analytics";
+import { emptyFunnelSummary, summarizeFunnel } from "../src/shared/funnel-report";
 
 const report = (): AdminAnalytics => ({
   traffic: {
@@ -23,6 +24,7 @@ const report = (): AdminAnalytics => ({
     rate: 0.4,
     rows: [{ label: "/pricing", sessions: 4, signups: 1, rate: 0.25 }],
   },
+  funnel: emptyFunnelSummary({ from: "2026-10-23", to: "2026-10-25", days: 3 }),
 });
 
 describe("admin analytics presentation", () => {
@@ -37,6 +39,50 @@ describe("admin analytics presentation", () => {
     expect(html).toContain("正在加载流量统计");
     expect(html).not.toContain("同步最新数据");
     expect(html).not.toContain("账户统计已覆盖");
+  });
+
+  it("labels independent event reach as visitor-days without implying retention or conversion", () => {
+    const data = report();
+    data.funnel = summarizeFunnel(
+      { from: "2026-10-23", to: "2026-10-25", days: 3 },
+      {
+        signup_submit: { visitorDays: 20, events: 21 },
+        verify_sent: { visitorDays: 20, events: 20 },
+        verify_done: { visitorDays: 9, events: 9 },
+        channel_saved: { visitorDays: 5, events: 6 },
+        channel_models_imported: { visitorDays: 2, events: 2 },
+        wechat_connected: { visitorDays: 4, events: 4 },
+        paywall_view: { visitorDays: 3, events: 5 },
+        checkout_start: { visitorDays: 1, events: 1 },
+        checkout_success: { visitorDays: 1, events: 1 },
+        channel_test_failed: { visitorDays: 6, events: 8 },
+      },
+    );
+    const html = renderToStaticMarkup(<AnalyticsReport data={data} />);
+    for (const text of [
+      "关键事件触达",
+      "提交注册",
+      "邮箱已验证",
+      "非跨天独立人数",
+      "渠道配置已保存",
+      "渠道模型已导入",
+      "拉模型失败",
+      "跳过引导",
+    ])
+      expect(html).toContain(text);
+    expect(html).not.toContain("留存 45.0%");
+    expect(html).not.toContain("整体 5.0%");
+    expect(html).not.toContain("模型渠道可用");
+    expect(html).not.toContain("同一个人重复触发只算一次");
+    expect(data.funnel).not.toHaveProperty("overall");
+    expect(data.funnel.steps[0]).not.toHaveProperty("stepRate");
+
+    data.funnel = emptyFunnelSummary({ from: "2026-10-23", to: "2026-10-25", days: 3 });
+    expect(renderToStaticMarkup(<AnalyticsReport data={data} />)).toContain(
+      "该时间范围内还没有关键事件",
+    );
+    data.funnel = summarizeFunnel(data.funnel.range, { demo_view: { visitorDays: 1, events: 2 } });
+    expect(renderToStaticMarkup(<AnalyticsReport data={data} />)).not.toContain("还没有关键事件");
   });
 
   it("labels daily UV totals and renders full conversion totals rather than summing visible rows", () => {

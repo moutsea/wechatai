@@ -10,6 +10,7 @@ import {
   Link2,
 } from "lucide-react";
 import { useApp } from "../context";
+import { trackFunnel } from "../analytics-client";
 import { Modal } from "../ui";
 import { dashboardSetupProgress, shouldShowDashboardOnboarding } from "../../shared/onboarding";
 import type { Snapshot } from "../../shared/types";
@@ -265,7 +266,14 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
             )}
           </div>
           <div className="onboarding-footer">
-            <button className="text-button muted" disabled={saving} onClick={() => void dismiss()}>
+            <button
+              className="text-button muted"
+              disabled={saving}
+              onClick={() => {
+                if (!demo) trackFunnel("onboarding_skip", { step: step + 1 });
+                void dismiss();
+              }}
+            >
               {saving ? "正在保存…" : "稍后设置"}
             </button>
             <div>
@@ -283,7 +291,10 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                 <button
                   className="button small"
                   disabled={saving}
-                  onClick={() => setStep(step + 1)}
+                  onClick={() => {
+                    if (!demo) trackFunnel("onboarding_step", { step: step + 1 });
+                    setStep(step + 1);
+                  }}
                 >
                   {step === 0 ? "我了解了，下一步" : "下一步"}
                   <ArrowRight size={15} />
@@ -292,7 +303,10 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                 <button
                   className="button secondary small"
                   disabled={saving}
-                  onClick={() => void dismiss()}
+                  onClick={() => {
+                    if (!demo) trackFunnel("onboarding_done");
+                    void dismiss();
+                  }}
                 >
                   完成引导
                   <Check size={15} />

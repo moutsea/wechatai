@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
@@ -21,15 +21,24 @@ import { membershipExpiry } from "../membership";
 import { formatCredits, type ChatSession } from "../../shared/types";
 import { DashboardOnboarding } from "./dashboard-onboarding";
 import { dashboardSetupProgress } from "../../shared/onboarding";
+import { trackFunnel } from "../analytics-client";
 export function Dashboard() {
   const { data, user, base, request, demo } = useApp();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  /** 付费墙曝光只报一次：这个面板在免费用户的工作台里长期存在。 */
+  const paywallSeen = useRef(false);
   useEffect(() => {
     if (data?.plan === "plus")
       void request<ChatSession[]>("/sessions")
         .then(setSessions)
         .catch(() => {});
   }, [request, data?.plan]);
+  useEffect(() => {
+    if (!data || demo || data.plan === "plus" || !data.stats.sessions) return;
+    if (paywallSeen.current) return;
+    paywallSeen.current = true;
+    trackFunnel("paywall_view", { surface: "dashboard_recent" });
+  }, [data, demo]);
   if (!data) return null;
   const selectedLink = data.connections.find((l) => l.id === data.selectedConnectionId);
   const connected = data.connection.status === "connected" && !selectedLink?.paused;
@@ -230,7 +239,20 @@ export function Dashboard() {
           <div className="recent-section">
             <SectionTitle title="最近的对话" link="查看全部" to={`${base}/sessions`} />
             <div className="panel recent-panel">
-              {data.plan !== "plus" ? (
+              {!data.stats.sessions ? (
+                // 一次对话都没有的人，先看到「下一步做什么」，而不是升级广告。
+                <Empty
+                  icon={<MessagesSquare />}
+                  title="第一段对话，从微信开始"
+                  description="连接微信后发送消息，历史记录会出现在这里。"
+                  action={
+                    <Link className="text-link" to={`${base}/wechat`}>
+                      连接微信
+                      <ArrowRight size={15} />
+                    </Link>
+                  }
+                />
+              ) : data.plan !== "plus" ? (
                 <div className="history-locked">
                   <span className="lock-icon">
                     <LockKeyhole size={23} />
@@ -239,12 +261,16 @@ export function Dashboard() {
                     <h3>让聊过的灵感，有处可寻。</h3>
                     <p>升级 Plus，在网页回看和整理微信里的对话。</p>
                   </div>
-                  <Link className="button secondary small" to={`${base}/billing`}>
+                  <Link
+                    className="button secondary small"
+                    to={`${base}/billing`}
+                    onClick={() => trackFunnel("paywall_click", { surface: "dashboard_recent" })}
+                  >
                     了解 Plus
                     <ArrowUpRight size={14} />
                   </Link>
                 </div>
-              ) : sessions.length ? (
+              ) : (
                 sessions.slice(0, 4).map((s) => {
                   const a = data.assistants.find((a) => a.id === s.assistantId);
                   return (
@@ -266,18 +292,6 @@ export function Dashboard() {
                     </Link>
                   );
                 })
-              ) : (
-                <Empty
-                  icon={<MessagesSquare />}
-                  title="第一段对话，从微信开始"
-                  description="连接微信后发送消息，历史记录会出现在这里。"
-                  action={
-                    <Link className="text-link" to={`${base}/wechat`}>
-                      连接微信
-                      <ArrowRight size={15} />
-                    </Link>
-                  }
-                />
               )}
             </div>
           </div>

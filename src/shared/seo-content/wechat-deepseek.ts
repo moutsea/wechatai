@@ -17,6 +17,8 @@ export const wechatDeepseekPage: SeoPage = {
     "微信接入 deepseek 教程",
     "deepseek 微信 机器人",
     "微信 用 deepseek api",
+    "微信 deepseek 免费吗",
+    "deepseek 微信 助手",
   ],
   highlights: ["托管聊天与本机 Agent 对比", "先配模型，再连接微信", "常见报错与处理"],
   sections: [

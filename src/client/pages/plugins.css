@@ -22,7 +22,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-soft);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.9;
   color: var(--muted);
 }
@@ -96,7 +96,7 @@
   border-radius: 6px;
   background: #f3f4f3;
   color: #7c857f;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
   font-weight: 500;
 }
@@ -115,7 +115,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
-  font-size: 11px;
+  font-size: 12px;
   color: #526359;
 }
 .plugin-entry-tags span + span::before {
@@ -126,7 +126,7 @@
 .plugin-attribution {
   display: block;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.8;
   margin-top: 9px;
 }
@@ -139,7 +139,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: #64766b;
   margin-top: 17px;
 }
@@ -168,7 +168,7 @@
 .research-billing {
   margin: 0 2px;
   max-width: 780px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.9;
   color: var(--muted);
 }
@@ -221,7 +221,7 @@
 .plugin-model-id {
   display: block;
   margin-top: 4px;
-  font-size: 11px;
+  font-size: 12px;
   color: #6a7c70;
 }
 .plugin-config-usage {
@@ -375,7 +375,7 @@
   place-items: center;
   background: #edf5ef;
   color: #34714a;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 .claw-steps strong {
@@ -384,7 +384,7 @@
 .claw-steps p {
   margin: 5px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.7;
 }
 .claw-command-panel {
@@ -426,7 +426,7 @@
 }
 .claw-command-heading small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 .claw-command-panel pre {
   margin: 14px 0;
@@ -443,7 +443,7 @@
 .claw-command-panel p,
 .claw-install-note {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.8;
   margin: 12px 0 0;
 }
@@ -456,7 +456,7 @@
   gap: 7px;
   margin-top: 14px;
   color: #537260;
-  font-size: 11px;
+  font-size: 12px;
 }
 .claw-spin {
   animation: claw-spin 2s linear infinite;
@@ -481,7 +481,7 @@
   display: inline-flex;
   gap: 5px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 .claw-preferences {
   border-top: 1px solid var(--line);
@@ -493,7 +493,7 @@
 }
 .claw-preferences summary span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-left: 12px;
 }
 .claw-preferences-body {
@@ -512,7 +512,7 @@
 }
 .claw-deliveries {
   padding-left: 18px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   line-height: 1.9;
 }

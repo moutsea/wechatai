@@ -11,6 +11,7 @@ import {
   Gift,
 } from "lucide-react";
 import { useApp } from "../context";
+import { trackFunnel } from "../analytics-client";
 import { PageHead, SectionTitle } from "../ui";
 import { json } from "../api";
 import { formatCredits } from "../../shared/types";
@@ -73,6 +74,7 @@ export function Billing() {
           if (cancelled) return;
           setSubscription(sub);
           setPaymentState("paid");
+          trackFunnel("checkout_success", { kind: result.kind });
           setPaymentMessage(
             result.kind === "plus"
               ? "支付成功，Plus 会员有效期已更新。"
@@ -118,6 +120,7 @@ export function Billing() {
       : "暂未开放";
   const buy = async (kind: BillingOfferId | "portal") => {
     setBusy(kind);
+    if (kind !== "portal") trackFunnel("checkout_start", { offer: kind });
     try {
       const r = await request<{ url: string }>(
         kind === "portal" ? "/billing/portal" : "/billing/checkout",

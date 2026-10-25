@@ -2,6 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { AppError, secret } from "./config";
 import { readJson } from "./security";
+import type { ModelImportResult } from "../shared/types";
 
 export type KimiseekIdentity = { id: string; email: string; emailVerified: boolean; name: string };
 export type KimiseekFlow = {
@@ -11,6 +12,7 @@ export type KimiseekFlow = {
   operation: "connect" | "recharge";
   message?: string;
   channelId?: string;
+  modelImport?: ModelImportResult;
 };
 export const balanceSchema = z.object({
   amount: z.number().finite().nonnegative(),

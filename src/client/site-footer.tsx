@@ -2,6 +2,10 @@ import { Link } from "react-router-dom";
 import { Brand } from "./ui";
 import { DOC_TUTORIALS, docPath } from "../shared/docs";
 
+// 页脚五列并肩，长标题会换行把整列撑高；优先用文档自带的短标题（navTitle）。
+const footerLabel = (article: { title: string; navTitle?: string }) =>
+  article.navTitle ?? article.title;
+
 export function SiteFooter() {
   return (
     <footer className="landing-footer">
@@ -49,7 +53,7 @@ export function SiteFooter() {
           <p className="landing-footer-title">实操教程</p>
           {DOC_TUTORIALS.map((article) => (
             <Link key={article.slug} to={docPath(article.slug)}>
-              {article.title}
+              {footerLabel(article)}
             </Link>
           ))}
         </nav>

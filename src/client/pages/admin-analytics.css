@@ -59,3 +59,91 @@
 .analytics-empty.admin-panel {
   padding: 28px 20px;
 }
+
+/* 事件触达：条形按最多访客日归一，不表示转化或留存。 */
+.funnel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.funnel-list li {
+  display: grid;
+  grid-template-columns: minmax(96px, 132px) minmax(0, 1fr) 96px 78px;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.funnel-step {
+  color: var(--ink);
+  white-space: nowrap;
+}
+.funnel-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--page);
+  overflow: hidden;
+}
+.funnel-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--lime));
+}
+.funnel-value {
+  text-align: right;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.funnel-events {
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.funnel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 20px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+.funnel-foot p {
+  margin: 0;
+}
+.funnel-side {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.funnel-side strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 720px) {
+  .funnel-list li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "step value"
+      "track events";
+    row-gap: 4px;
+  }
+  .funnel-step {
+    grid-area: step;
+  }
+  .funnel-track {
+    grid-area: track;
+  }
+  .funnel-value {
+    grid-area: value;
+  }
+  .funnel-events {
+    grid-area: events;
+  }
+}

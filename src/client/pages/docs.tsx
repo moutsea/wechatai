@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -11,6 +11,7 @@ import {
   List,
   MessageSquare,
   Coins,
+  Search,
   Terminal,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -25,37 +26,40 @@ import {
   guideSectionRedirect,
 } from "../../shared/docs";
 import type { DocArticle } from "../../shared/docs";
-import { useAuth } from "../auth";
-import { Brand } from "../ui";
+import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import { NotFound } from "../not-found";
 import { DOC_CONTENT } from "./docs-content";
 
-function DocsHeader() {
-  const { data: session } = useAuth();
-  return (
-    <header className="docs-header">
-      <div className="docs-header-inner">
-        <Link to="/" aria-label="微伴首页">
-          <Brand />
-        </Link>
-        <nav aria-label="顶部导航">
-          <Link to="/docs" aria-current="true">
-            文档
-          </Link>
-          <Link className="button small" to={session ? "/app" : "/register"}>
-            {session ? "进入工作台" : "开始使用"}
-            <ArrowUpRight size={15} />
-          </Link>
-        </nav>
-      </div>
-    </header>
-  );
-}
-
 function DocsNavigation({ activePath }: { activePath: string }) {
+  // 文档一共二十来篇，本地过滤就够；不做全文检索，只匹配标题、分类和摘要，
+  // 免得给出一个「搜得到但答不上」的结果。
+  const [query, setQuery] = useState("");
+  const keyword = query.trim().toLowerCase();
+  const matches = (article: DocArticle) =>
+    !keyword ||
+    `${article.title} ${article.navTitle ?? ""} ${article.category} ${article.description}`
+      .toLowerCase()
+      .includes(keyword);
+  const groups = DOC_GROUPS.map((group) => ({
+    group,
+    articles: DOC_ARTICLES.filter(
+      (article) => article.group === group.id && matches(article as DocArticle),
+    ).map((article): DocArticle => article),
+  }));
+  const hits = groups.reduce((total, item) => total + item.articles.length, 0);
   return (
     <nav aria-label="文档导航">
+      <label className="docs-search">
+        <Search size={15} aria-hidden="true" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="搜索文档"
+          aria-label="搜索文档"
+        />
+      </label>
       <Link
         className="docs-nav-overview"
         to="/docs"
@@ -64,26 +68,31 @@ function DocsNavigation({ activePath }: { activePath: string }) {
         <BookOpen size={16} />
         文档概览
       </Link>
-      {DOC_GROUPS.map((group) => (
-        <div className="docs-nav-group" key={group.id}>
-          <p>{group.title}</p>
-          <ul>
-            {DOC_ARTICLES.filter((article) => article.group === group.id).map((item) => {
-              const article: DocArticle = item;
-              return (
+      {groups.map(({ group, articles }) =>
+        articles.length === 0 ? null : (
+          <div className="docs-nav-group" key={group.id}>
+            <p>{group.title}</p>
+            <ul>
+              {articles.map((article) => (
                 <li key={article.slug}>
                   <Link
                     to={docPath(article.slug)}
                     aria-current={activePath === docPath(article.slug) ? "page" : undefined}
+                    onClick={() => setQuery("")}
                   >
                     {article.navTitle ?? article.title}
                   </Link>
                 </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+              ))}
+            </ul>
+          </div>
+        ),
+      )}
+      {keyword && hits === 0 && (
+        <p className="docs-search-empty" role="status">
+          没有匹配「{query.trim()}」的文档，可以试试「渠道」或「插件」。
+        </p>
+      )}
       <div className="docs-nav-developer">
         <Link to="/developers/plugins">
           <Terminal size={15} />
@@ -103,7 +112,7 @@ function DocsLayout({ article, children }: { article?: DocArticle; children: Rea
       <a className="docs-skip-link" href="#doc-content">
         跳到正文
       </a>
-      <DocsHeader />
+      <SiteHeader active="/docs" />
       <div className="docs-layout">
         <aside className="docs-sidebar">
           <DocsNavigation activePath={activePath} />

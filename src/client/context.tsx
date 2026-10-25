@@ -13,6 +13,7 @@ import { api, ApiError } from "./api";
 import { createDemo } from "./demo";
 import { useAuth } from "./auth";
 import { authReturnPath } from "../shared/auth";
+import { useWechatConnectionTracker } from "./wechat-connection-tracker";
 type AppState = {
   data: Snapshot | null;
   refresh: () => Promise<void>;
@@ -32,6 +33,7 @@ export function useApp() {
 export function AppProvider({ demo, children }: { demo: boolean; children: ReactNode }) {
   const request = useMemo(() => (demo ? createDemo() : api), [demo]);
   const [data, setData] = useState<Snapshot | null>(null);
+  useWechatConnectionTracker(data, demo);
   const [isAdmin, setIsAdmin] = useState(false);
   const { data: session, refetch: refreshSession } = useAuth();
   const user = demo

@@ -4,6 +4,7 @@ import { ArrowRight, Check, Mail, KeyRound } from "lucide-react";
 import { authClient, useAuth } from "../auth";
 import { AuthLayout } from "../auth-layout";
 import { api } from "../api";
+import { trackFunnel } from "../analytics-client";
 import {
   AUTH_EMAIL_COOLDOWN_SECONDS,
   PASSWORD_MIN_LENGTH,
@@ -69,6 +70,10 @@ export function VerifyEmailPage() {
   );
   const cooldown = useCooldown(pending?.sent ? AUTH_EMAIL_COOLDOWN_SECONDS : 0);
   const verified = params.get("verified") === "1" && !tokenError;
+  // 验证成功落地页：这一跳是「注册漏斗」最关键的完成信号，页面本身没有别的动作可抓。
+  useEffect(() => {
+    if (verified) trackFunnel("verify_done");
+  }, [verified]);
   async function resend(event: FormEvent) {
     event.preventDefault();
     if (busy || cooldown.remaining) return;

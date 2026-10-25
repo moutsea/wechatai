@@ -35,6 +35,13 @@ pnpm dev
 
 ## 测试边界
 
+浏览器布局回归使用独立的 Chromium headless shell，加载真实组件和 CSS，登录态与 API 使用测试数据。检查窄屏账号菜单边界、滚动和短视口行为，CI 也会执行：
+
+```sh
+pnpm exec playwright install --only-shell chromium  # 首次运行时安装独立浏览器
+pnpm test:browser
+```
+
 应用测试运行于 Cloudflare workerd，使用实际的 D1 / SQLite Durable Object 存储模拟，外部模型、微信和 Stripe 返回由测试替身提供，不发送真实微信消息、不扣真实款。支付和通知测试覆盖重试、幂等、账户隔离与失败恢复。
 
 ```sh

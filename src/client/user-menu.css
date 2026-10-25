@@ -79,7 +79,7 @@
   font-size: 14px;
 }
 .account-dropdown-profile > div > span {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .account-menu-item {
@@ -163,7 +163,7 @@
   color: var(--green);
 }
 .account-plan-badge {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   padding: 3px 6px;
   border: 1px solid var(--line);
@@ -177,11 +177,11 @@
 .account-membership p {
   margin: 9px 0 13px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.65;
 }
 .account-membership p small {
-  font-size: 10px;
+  font-size: 12px;
 }
 .account-dropdown .account-membership .button {
   font-size: 12px;
