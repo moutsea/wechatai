@@ -1,6 +1,6 @@
 // Authentication foundation adapted from AgentFlowing (MIT); see licenses/agentflowing.txt.
 import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware, getOAuthState } from "better-auth/api";
 import { z } from "zod";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { drizzle } from "drizzle-orm/d1";
@@ -10,6 +10,8 @@ import { registrationReferrer } from "./referrals";
 import { authEmailSender } from "./auth-email";
 import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "../shared/auth";
 import { authReturnPath } from "../shared/auth";
+import { ANALYTICS_SESSION_HEADER, analyticsSessionIdSchema } from "../shared/analytics";
+import { recordSignupConversion } from "./analytics";
 import {
   issuePasswordRecovery,
   passwordRecoveryRequired,
@@ -188,6 +190,33 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
           before: async (user, context) => ({
             data: { ...user, referrerId: await registrationReferrer(env, context?.headers) },
           }),
+          after: async (_user, context) => {
+            // 仅真实的新账户触发；重复邮箱注册、登录、账号关联均不记为注册。
+            // 不保存账户 ID，OAuth 会话号使用框架校验过的 state 传递。
+            try {
+              const headers = context?.headers;
+              if (
+                ["1", "yes"].includes(headers?.get("dnt") ?? "") ||
+                headers?.get("sec-gpc") === "1"
+              )
+                return;
+              const sessionId =
+                context?.path === "/sign-up/email"
+                  ? headers?.get(ANALYTICS_SESSION_HEADER)
+                  : context?.path.startsWith("/callback/")
+                    ? (await getOAuthState())?.analyticsSessionId
+                    : undefined;
+              const parsed = analyticsSessionIdSchema.safeParse(sessionId);
+              if (!parsed.success) return;
+              await recordSignupConversion(env, {
+                payload: { eventId: crypto.randomUUID(), sessionId: parsed.data },
+                userAgent: headers?.get("user-agent") ?? "",
+              });
+            } catch {
+              // 统计故障（包括迁移尚未执行）不能影响注册，也不记录身份或请求内容。
+              console.error(JSON.stringify({ event: "analytics.signup_failed" }));
+            }
+          },
         },
       },
     },

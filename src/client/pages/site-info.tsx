@@ -2,13 +2,19 @@ import { ArrowUpRight, BookOpen, Mail, MessageSquareText } from "lucide-react";
 import { Link, NavLink } from "react-router-dom";
 import {
   INFO_PAGES,
-  POLICY_UPDATED_AT,
+  INFO_PAGE_UPDATED_AT,
   SUPPORT_EMAIL,
   type InfoPageKind,
 } from "../../shared/site-info";
 import { useAuth } from "../auth";
 import { SiteFooter } from "../site-footer";
 import { Brand } from "../ui";
+
+/** 「2026-10-24」→「2026 年 10 月 24 日」，让显示的日期永远跟随常量。 */
+function formatUpdatedAt(iso: string) {
+  const [year, month, day] = iso.split("-");
+  return `${year} 年 ${Number(month)} 月 ${Number(day)} 日`;
+}
 
 function Terms() {
   return (
@@ -216,7 +222,30 @@ function Privacy() {
         </p>
       </section>
       <section>
-        <h2>6. 如何管理你的数据</h2>
+        <h2>6. 访问统计</h2>
+        <p>
+          本站自己记录页面访问，用来判断哪些页面（例如各篇指南和落地页）真的有人看、流量从哪里来。这项统计不接入第三方统计服务，记录的内容限于：
+          访问的页面路径、这次访问的来源站点主机名与推广参数（<code>utm_source</code>、
+          <code>utm_medium</code>、<code>utm_campaign</code>
+          ，只在会话开始时记录一次）、国家或地区、设备类别（手机、平板、桌面，依据 User-Agent
+          与是否支持触摸判断）、访问时间，以及一个仅用于区分会话的随机编号。
+        </p>
+        <p>
+          我们<strong>不保存</strong>你的原始 IP 地址、User-Agent
+          字符串、完整网址或查询串，也不记录你在页面上的点击、输入和聊天内容。为了统计「有多少个不同的人看过」，服务端会把
+          IP、User-Agent、当天日期与一段站点密钥一起做哈希，只保存哈希值；因为日期参与哈希，同一个人每天都会得到一个新值，所以本站只有「当日去重数」，没有能跨天追踪你的访客编号。
+        </p>
+        <p>
+          会话编号保存在浏览器的 sessionStorage，关闭标签页即失效。统计数据保留 180
+          天后自动清理，只用于了解页面使用情况和改进内容，不用于广告投放、用户画像或跨站追踪。登录后的工作台页面，以及验证邮箱、重置密码这类一次性链接页面，不计入统计。你的浏览器开启「请勿追踪（DNT）」或全局隐私控制（GPC）时，页面不会上报访问。
+        </p>
+        <p>
+          注册时，浏览器会随邮箱注册请求或第三方授权流程传递当次访问的会话编号；服务端只在实际创建新账户后记录归因，用来判断哪些页面带来了注册。重复注册和已有账户登录不计为新注册。这条归因记录包含会话编号、落地页及来源信息，不含邮箱、姓名或账户
+          ID，与其他统计数据一同在 180 天后清理。开启 DNT 或 GPC 时不传递这项归因信息。
+        </p>
+      </section>
+      <section>
+        <h2>7. 如何管理你的数据</h2>
         <ul>
           <li>
             在工作台修改或删除渠道、模型和插件，断开微信或外部 Agent，停止对应连接。撤销上游 API Key
@@ -238,7 +267,7 @@ function Privacy() {
         </ul>
       </section>
       <section>
-        <h2>7. 未成年人、政策更新与反馈</h2>
+        <h2>8. 未成年人、政策更新与反馈</h2>
         <p>
           本服务不面向不满 14
           周岁的儿童。若你发现儿童在未取得监护人适当同意的情况下向本站提供个人信息，请联系我们处理。其他未成年用户应在监护人指导下使用。
@@ -319,7 +348,9 @@ export function SiteInfoPage({ kind }: { kind: InfoPageKind }) {
           <h1>{page.title}</h1>
           <p>{page.description}</p>
           {kind !== "contact" && (
-            <time dateTime={POLICY_UPDATED_AT}>更新日期：2026 年 10 月 10 日</time>
+            <time dateTime={INFO_PAGE_UPDATED_AT[kind]}>
+              更新日期：{formatUpdatedAt(INFO_PAGE_UPDATED_AT[kind])}
+            </time>
           )}
         </div>
         <nav className="info-navigation" aria-label="支持与政策导航">

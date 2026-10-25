@@ -51,6 +51,8 @@ pnpm db:migrate:remote
 
 本地数据不会自动迁移到生产。D1 迁移和账户 SQLite 升级是两套机制，均需保持兼容。
 
+访问统计使用 `0014_page_views.sql` 与 `0015_signup_attributions.sql` 建表。没有这张表时页面照常工作（上报接口的失败不会影响页面），只是数据不会写入，`pnpm analytics` 会提示先执行迁移。迁移后可用 `pnpm analytics --days 7` 查看 PV、去重访客、会话数、来源深度和「落地页 → 注册」的转化；采集口径与隐私边界见 `design/analytics.md`。这套统计不依赖第三方脚本，也不需要额外配置项。
+
 邮箱验证升级包含 `0007_auth_email_limits.sql`，发布前先执行远程迁移。不要批量把已有用户的 `emailVerified` 改成已验证；原会话继续有效，未验证的邮箱账号在下次登录时完成验证。
 
 ## 3. 首次部署顺序

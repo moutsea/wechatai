@@ -188,3 +188,5 @@ pnpm build       # vite + prerender 34 页 + verify-seo 全绿
 5. **监测**：Search Console 分 query 看 10 页的曝光与排名；重点看 `/wechat-clawbot-models` 是否吃到「支持哪些模型」的全量。
 6. **品牌防护**：`/contact` 与首页加实体声明；考虑注册 `wechatai` 相关社交媒体账号做实体信号。
 7. ~~**构建改脏 `public/downloads/`**~~ —— **已修**（2026-10-24）：`scripts/package-hermes.mjs` 改为自行拼 tar 头（固定 mtime/uid/gid/mode）再用 `zlib.gzipSync` 压缩，同样的源码产出逐字节相同的 tgz。之前 `tar -czf` 会把源文件 mtime 和本机用户名写进归档，导致每次 `pnpm build` 都产生二进制 diff，Hermes 安装器的 SHA256 也随机变化。
+8. ~~**接入流量分析**~~ —— **已做第一版**（2026-10-24）：自建第一方统计，不引第三方脚本。`page_views` 表 + `POST /api/analytics/page-view` + 浏览器上报，`pnpm analytics [--days N] [--local]` 出 PV、按天去重的访客、会话数、人均浏览页数、热门页面、来源及其深度、国家与设备，以及「落地页 → 注册」的转化率（`signup_attributions` 表，注册成功时按会话号反查落地页）。口径与隐私边界见 `design/analytics.md`。**上线前提：先执行 `pnpm db:migrate:remote` 应用 `0014_page_views.sql` 与 `0015_signup_attributions.sql`。**
+   这一版让第 2.1 节的四个判断第一次可以被自家数据检验：看 `/wechat-clawbot-models` 与 `/bring-your-own-api-key` 的 PV、来源构成、会话深度，以及它们各自的注册转化率，再决定下一批页面写什么。GSC/Bing 仍然只回答 search 侧的 query 与排名，两者互补、不能互相替代。

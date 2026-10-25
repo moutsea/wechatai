@@ -20,6 +20,8 @@ import {
 import { Brand } from "./ui";
 import { LandingSteps } from "./landing-steps";
 import { SiteFooter } from "./site-footer";
+import { browserPageViewReporter } from "./analytics-client";
+import { ANALYTICS_SESSION_HEADER } from "../shared/analytics";
 import { UserMenu } from "./user-menu";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
@@ -348,6 +350,7 @@ function AuthForm({ register }: { register: boolean }) {
         callbackURL: returnTo,
         newUserCallbackURL: returnTo,
         errorCallbackURL: `/login${returnQuery}`,
+        additionalData: browserPageViewReporter().signupAttribution(),
       });
       if (response.error || !response.data?.url)
         throw new Error("快捷登录暂时不可用，请稍后重试或使用邮箱登录。");
@@ -373,12 +376,18 @@ function AuthForm({ register }: { register: boolean }) {
     setBusy(true);
     setError("");
     try {
+      const attribution = register ? browserPageViewReporter().signupAttribution() : {};
       const response = register
         ? await authClient.signUp.email({
             name: name.trim(),
             email: email.trim(),
             password,
             callbackURL: verificationCallback(returnTo),
+            fetchOptions: {
+              headers: attribution.analyticsSessionId
+                ? { [ANALYTICS_SESSION_HEADER]: attribution.analyticsSessionId }
+                : {},
+            },
           })
         : await authClient.signIn.email({ email: email.trim(), password });
       if (response.error) {

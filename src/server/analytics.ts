@@ -1,0 +1,289 @@
+import { createHash } from "node:crypto";
+import {
+  ANALYTICS_MAX_DAYS,
+  ANALYTICS_RETENTION_DAYS,
+  classifyDevice,
+  isBotUserAgent,
+  isTrackedPath,
+  normalizePath,
+  pageViewPayloadSchema,
+  referrerHost,
+  shanghaiDay,
+  shanghaiDaysAgo,
+  signupConversionSchema,
+  type LandingConversion,
+  type TrafficBucket,
+  type TrafficDay,
+  type TrafficSummary,
+} from "../shared/analytics";
+import { secret } from "./config";
+import { signupConversionQueries } from "../shared/analytics-queries";
+
+/**
+ * 第一方访问统计的写入与汇总。
+ *
+ * 隐私边界（与 /privacy 的「访问统计」一节一一对应）：
+ * - 原始 IP 与 User-Agent 只在内存里参与哈希，不落库；
+ * - visitor_hash = sha256(ip|ua|day|salt)，day 参与哈希，所以同一个人每天都是新值，
+ *   只能做「当日去重」，不构成跨天的访客 ID；
+ * - session_id 由浏览器存在 sessionStorage，关标签页即失效；
+ * - 查询串一律不入库，推广参数只取 utm_source/utm_medium/utm_campaign；
+ * - referrer 只保留主机名。
+ */
+
+function analyticsSalt(env: Env) {
+  // 盐只影响哈希，不影响功能；没配独立盐时退回站点密钥，保证不同站点的哈希不能互相碰撞比较。
+  return (
+    secret(env, "ANALYTICS_SALT", false) || secret(env, "BETTER_AUTH_SECRET", false) || "wechatai"
+  );
+}
+
+export function visitorHash(env: Env, parts: { ip: string; userAgent: string; day: string }) {
+  return createHash("sha256")
+    .update(`${parts.ip}|${parts.userAgent}|${parts.day}|${analyticsSalt(env)}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+export type RecordPageViewInput = {
+  payload: unknown;
+  ip: string;
+  userAgent: string;
+  country: string;
+  /** Host serving the page; a referrer from this host is internal navigation, not a source. */
+  siteHost?: string;
+  now?: number;
+};
+
+export type RecordPageViewResult =
+  | { ok: true; stored: boolean }
+  | { ok: true; ignored: "bot" | "untracked_path" }
+  | { ok: false; reason: "invalid_payload" };
+
+export async function recordPageView(
+  env: Env,
+  input: RecordPageViewInput,
+): Promise<RecordPageViewResult> {
+  // 爬虫直接丢弃：Googlebot 之类会执行 JS，放行会把 PV 灌高。
+  if (isBotUserAgent(input.userAgent)) return { ok: true, ignored: "bot" };
+  const parsed = pageViewPayloadSchema.safeParse(input.payload);
+  if (!parsed.success) return { ok: false, reason: "invalid_payload" };
+  const payload = parsed.data;
+  const path = normalizePath(payload.pathname);
+  if (!isTrackedPath(path)) return { ok: true, ignored: "untracked_path" };
+
+  const now = input.now ?? Date.now();
+  const day = shanghaiDay(new Date(now));
+  const utmSource = payload.utmSource.trim().toLowerCase().slice(0, 60);
+  const utmMedium = payload.utmMedium.trim().toLowerCase().slice(0, 60);
+  const utmCampaign = payload.utmCampaign.trim().toLowerCase().slice(0, 60);
+  const result = await env.DB.prepare(
+    `INSERT INTO page_views(day,path,referrer_host,utm_source,utm_medium,utm_campaign,
+       visitor_hash,session_id,country,device,created_at,event_id)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(event_id) DO NOTHING`,
+  )
+    .bind(
+      day,
+      path,
+      referrerHost(payload.referrer, input.siteHost ?? ""),
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      visitorHash(env, { ip: input.ip, userAgent: input.userAgent, day }),
+      payload.sessionId,
+      input.country.trim().toUpperCase().slice(0, 2),
+      classifyDevice(input.userAgent, payload.touch === true),
+      now,
+      payload.eventId,
+    )
+    .run();
+
+  return { ok: true, stored: result.meta.changes > 0 };
+}
+
+/**
+ * 删除超过保留期的明细，由 cron（wrangler.jsonc 的 triggers，每分钟一次）调用。
+ *
+ * 早先是「写入时按 1% 概率顺带清理」，省掉定时任务；但那样只能保证「有访问就会清」，
+ * 站点安静下来后旧数据会一直留着，与隐私政策承诺的 180 天不符。既然 Worker 本来
+ * 就有每分钟的 cron（在清理 auth_email_limit），把保留期交给它更实在也更简单：
+ * 到期即删，不依赖有没有流量。
+ *
+ * 两张表都要清：访问记录与注册归因同属一套口径。
+ */
+export async function pruneExpiredPageViews(env: Env, now: number = Date.now()) {
+  const cutoff = shanghaiDay(new Date(now - ANALYTICS_RETENTION_DAYS * 86_400_000));
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM page_views WHERE day < ?").bind(cutoff),
+    env.DB.prepare("DELETE FROM signup_attributions WHERE day < ?").bind(cutoff),
+  ]);
+}
+
+/** 来源归类：有 UTM 用 UTM，其次 referrer 主机名，都没有算直接访问。 */
+const SOURCE_EXPR = `CASE
+  WHEN utm_source <> '' THEN 'utm:' || utm_source
+  WHEN referrer_host <> '' THEN referrer_host
+  ELSE '' END`;
+
+type Row = Record<string, unknown>;
+const num = (value: unknown) => (typeof value === "number" ? value : Number(value ?? 0));
+
+export async function getTrafficSummary(env: Env, days: number): Promise<TrafficSummary> {
+  const window = Math.min(Math.max(Math.trunc(days) || 7, 1), ANALYTICS_MAX_DAYS);
+  const to = shanghaiDay();
+  const from = shanghaiDaysAgo(window - 1);
+  // 全部查询一次发出，避免逐个 await 把 RTT 叠加起来。
+  const bucket = (column: string, limit: number) =>
+    env.DB.prepare(
+      `SELECT ${column} AS label, COUNT(*) AS pv,
+         COUNT(DISTINCT day || ':' || visitor_hash) AS visitorDays
+       FROM page_views WHERE day BETWEEN ? AND ?
+       GROUP BY label ORDER BY pv DESC, label LIMIT ${limit}`,
+    ).bind(from, to);
+  const results = await env.DB.batch<Row>([
+    env.DB.prepare(
+      `SELECT COUNT(*) AS pv, COUNT(DISTINCT day || ':' || visitor_hash) AS visitorDays,
+         COUNT(DISTINCT session_id) AS sessions
+       FROM page_views WHERE day BETWEEN ? AND ?`,
+    ).bind(from, to),
+    env.DB.prepare(
+      `SELECT day, COUNT(*) AS pv, COUNT(DISTINCT visitor_hash) AS uv,
+         COUNT(DISTINCT session_id) AS sessions
+       FROM page_views WHERE day BETWEEN ? AND ? GROUP BY day ORDER BY day`,
+    ).bind(from, to),
+    bucket("path", 20),
+    bucket(SOURCE_EXPR, 15),
+    bucket("country", 12),
+    bucket("device", 4),
+    // 每个来源带来的浏览深度：pv / sessions。
+    env.DB.prepare(
+      `SELECT ${SOURCE_EXPR} AS label, COUNT(*) AS pv,
+         COUNT(DISTINCT session_id) AS sessions
+       FROM page_views WHERE day BETWEEN ? AND ?
+       GROUP BY label ORDER BY pv DESC, label LIMIT 15`,
+    ).bind(from, to),
+  ]);
+
+  const totalsRow = results[0]?.results?.[0] ?? {};
+  const pv = num(totalsRow.pv);
+  const sessions = num(totalsRow.sessions);
+  // 空标签的含义随维度而变：来源为空是「直接访问」，国家/设备为空只是没取到值，
+  // 一律标成「直接访问」会让报表读起来像是所有未知地区的访问都来自直接访问。
+  const bucketRows = (index: number, emptyLabel: string): TrafficBucket[] =>
+    (results[index]?.results ?? []).map((row) => ({
+      label: String(row.label ?? "") || emptyLabel,
+      pv: num(row.pv),
+      visitorDays: num(row.visitorDays),
+    }));
+
+  return {
+    range: { from, to, days: window },
+    totals: {
+      pv,
+      visitorDays: num(totalsRow.visitorDays),
+      sessions,
+      pagesPerSession: sessions > 0 ? Math.round((pv / sessions) * 100) / 100 : 0,
+    },
+    daily: (results[1]?.results ?? []).map<TrafficDay>((row) => ({
+      day: String(row.day ?? ""),
+      pv: num(row.pv),
+      uv: num(row.uv),
+      sessions: num(row.sessions),
+    })),
+    topPages: bucketRows(2, "（未知）"),
+    sources: bucketRows(3, "（直接访问）"),
+    countries: bucketRows(4, "（未知）"),
+    devices: bucketRows(5, "（未知）"),
+    sourceDepth: (results[6]?.results ?? []).map((row) => {
+      const sourcePv = num(row.pv);
+      const sourceSessions = num(row.sessions);
+      return {
+        label: String(row.label ?? "") || "（直接访问）",
+        pv: sourcePv,
+        sessions: sourceSessions,
+        pagesPerSession:
+          sourceSessions > 0 ? Math.round((sourcePv / sourceSessions) * 100) / 100 : 0,
+      };
+    }),
+  };
+}
+
+export type RecordSignupInput = {
+  payload: unknown;
+  userAgent: string;
+  now?: number;
+};
+
+export type RecordSignupResult =
+  | { ok: true; stored: boolean }
+  | { ok: true; ignored: "bot" }
+  | { ok: false; reason: "invalid_payload" };
+
+/**
+ * 记一次注册，并把它归因到该会话的落地页。
+ *
+ * 落地页不是客户端告诉我们的，而是按 session_id 找这个会话在 page_views 里最早的一条；
+ * 找不到（会话开始时统计还没上线、或上报丢了）就留空，报表里算作「未归因」，不猜。
+ */
+export async function recordSignupConversion(
+  env: Env,
+  input: RecordSignupInput,
+): Promise<RecordSignupResult> {
+  if (isBotUserAgent(input.userAgent)) return { ok: true, ignored: "bot" };
+  const parsed = signupConversionSchema.safeParse(input.payload);
+  if (!parsed.success) return { ok: false, reason: "invalid_payload" };
+
+  const now = input.now ?? Date.now();
+  const day = shanghaiDay(new Date(now));
+  const first = await env.DB.prepare(
+    "SELECT path, referrer_host, utm_source FROM page_views WHERE session_id = ? ORDER BY created_at ASC, id ASC LIMIT 1",
+  )
+    .bind(parsed.data.sessionId)
+    .first<{ path: string; referrer_host: string; utm_source: string }>();
+
+  const result = await env.DB.prepare(
+    `INSERT INTO signup_attributions (day, session_id, landing_path, referrer_host, utm_source, created_at, event_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(event_id) DO NOTHING`,
+  )
+    .bind(
+      day,
+      parsed.data.sessionId,
+      first?.path ?? "",
+      first?.referrer_host ?? "",
+      first?.utm_source ?? "",
+      now,
+      parsed.data.eventId,
+    )
+    .run();
+
+  return { ok: true, stored: (result.meta.changes ?? 0) > 0 };
+}
+
+/** 按落地页聚合的转化：只统计区间内产生的注册与会话。 */
+export async function getSignupConversions(
+  env: Env,
+  days: number,
+): Promise<{ total: number; unattributed: number; rows: LandingConversion[] }> {
+  const window = Math.min(Math.max(Math.trunc(days) || 7, 1), ANALYTICS_MAX_DAYS);
+  const to = shanghaiDay();
+  const from = shanghaiDaysAgo(window - 1);
+  const queries = signupConversionQueries(from, to);
+  const [totals, rows] = await env.DB.batch<Row>([
+    env.DB.prepare(queries.totals),
+    env.DB.prepare(queries.funnel),
+  ]);
+  const total = num(totals?.results?.[0]?.total);
+  const attributed = num(totals?.results?.[0]?.attributed);
+  const list = (rows?.results ?? []).map((row) => {
+    const sessions = num(row.sessions);
+    const signups = num(row.signups);
+    return {
+      label: String(row.label ?? "") || "（未知）",
+      sessions,
+      signups,
+      rate: sessions > 0 ? signups / sessions : 0,
+    };
+  });
+  return { total, unattributed: Math.max(total - attributed, 0), rows: list };
+}

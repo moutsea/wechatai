@@ -11,6 +11,7 @@ import { DocsIndex, DocArticlePage } from "./pages/docs";
 import { SeoPageView } from "./pages/seo-page";
 import { SEO_PAGES } from "../shared/seo-pages";
 import { PageMetadata } from "./seo";
+import { PageViewTracker } from "./page-view-tracker";
 import { NotFound } from "./not-found";
 import "./styles.css";
 // Included in initial HTML so the prerendered public docs also work without JavaScript.
@@ -40,6 +41,7 @@ root.render(
       <AuthProvider>
         <ScrollReset />
         <PageMetadata />
+        <PageViewTracker />
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<AuthPage />} />

@@ -8,6 +8,7 @@ import {
   deleteNotice,
 } from "./site-notices";
 import { noticeReadAllSchema } from "../shared/site-notices";
+import { pruneExpiredPageViews, recordPageView } from "./analytics";
 import { connectorVersionPattern } from "../shared/openclaw-release";
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
@@ -119,6 +120,41 @@ app.post("/api/internal/executor/:accountId/:action", async (c) => {
   });
 });
 app.get("/api/health", (c) => c.json({ ok: true, service: "wechatai" }));
+/** 公开 PV 上报的格式、来源和限流校验。 */
+async function analyticsPrecheck(c: import("hono").Context<App>): Promise<Response | null> {
+  c.header("Cache-Control", "no-store");
+  if (!c.req.header("content-type")?.toLowerCase().startsWith("application/json"))
+    return c.json({ error: "invalid_content_type", message: "请使用 application/json" }, 415);
+  if (c.req.header("sec-fetch-site") === "cross-site") return c.json({ error: "cross_site" }, 403);
+  const origin = c.req.header("origin") || "";
+  const requestOrigin = new URL(c.req.url).origin;
+  if (origin && origin !== requestOrigin && !trustedAppOrigins(c.env).includes(origin))
+    return c.json({ error: "origin_not_allowed" }, 403);
+  const ip = c.req.header("cf-connecting-ip") || "local";
+  if (!(await c.env.API_LIMIT.limit({ key: `analytics-page-view:${ip}` })).success)
+    return c.json({ error: "rate_limited" }, 429);
+  return null;
+}
+// First-party page-view collection; the client ignores reporting failures.
+app.post("/api/analytics/page-view", async (c) => {
+  const rejected = await analyticsPrecheck(c);
+  if (rejected) return rejected;
+  try {
+    await recordPageView(c.env, {
+      payload: await c.req.json().catch(() => null),
+      ip: c.req.header("cf-connecting-ip") || "local",
+      userAgent: c.req.header("user-agent") || "",
+      country: c.req.header("cf-ipcountry") || "",
+      siteHost: new URL(c.req.url).hostname,
+    });
+  } catch (error) {
+    console.error("analytics: page view failed", error);
+    return c.json({ error: "unavailable" }, 503);
+  }
+  return c.body(null, 204);
+});
+// 旧客户端的公开注册上报已退役；仅账户创建钩子可以记录注册。
+app.post("/api/analytics/signup", (c) => c.body(null, 410));
 // A dedicated write-only monitor credential; browser sessions cannot publish metrics.
 app.post("/api/internal/server-status", async (c) => {
   c.header("Cache-Control", "no-store");
@@ -782,6 +818,14 @@ export default {
         .bind(Date.now() - 2 * 86_400_000)
         .run()
         .catch(() => console.error(JSON.stringify({ event: "auth.email.cleanup_failed" }))),
+      // 访问统计的保留期（180 天）由这里执行：删除语句走 (day) 索引，绝大多数次
+      // 运行都删不到东西，代价远小于「让数据无限期留着」。
+      // 表还没建（先发代码、后跑迁移的那段时间）是预期内的，不必每分钟刷一条日志；
+      // 其他失败照旧记下来。
+      pruneExpiredPageViews(env).catch((error: unknown) => {
+        if (/no such table/i.test(String(error))) return;
+        console.error(JSON.stringify({ event: "analytics.retention_failed" }));
+      }),
     ]);
   },
 } satisfies ExportedHandler<Env>;

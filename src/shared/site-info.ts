@@ -1,5 +1,8 @@
 export const SUPPORT_EMAIL = "cfjwlchangji@gmail.com";
-export const POLICY_UPDATED_AT = "2026-10-10";
+/** 隐私政策最近一次实质修改的日期。 */
+export const POLICY_UPDATED_AT = "2026-10-25";
+/** 服务协议最近一次实质修改的日期（改访问统计没有动条款正文）。 */
+export const TERMS_UPDATED_AT = "2026-10-10";
 export const INFO_PAGES = {
   terms: {
     path: "/terms",
@@ -22,3 +25,11 @@ export const INFO_PAGES = {
   },
 } as const;
 export type InfoPageKind = keyof typeof INFO_PAGES;
+
+/** 每个信息页各自显示的更新日期：条款与隐私分开，谁改了谁更新。 */
+export const INFO_PAGE_UPDATED_AT: Record<InfoPageKind, string> = {
+  terms: TERMS_UPDATED_AT,
+  privacy: POLICY_UPDATED_AT,
+  // 联系页正文在这次改访问统计时没有改动，沿用上一次的日期，不假报更新。
+  contact: TERMS_UPDATED_AT,
+};

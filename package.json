@@ -39,6 +39,7 @@
     "test:hermes": "node scripts/test-hermes.mjs",
     "cf:production": "node scripts/production.mjs",
     "check:public": "node scripts/check-public.mjs",
+    "analytics": "node scripts/analytics-report.mjs",
     "test:receiver": "npm --prefix integrations/wechat-receiver ci --ignore-scripts --no-audit --no-fund && npm --prefix integrations/wechat-receiver test",
     "build:executor": "esbuild src/server/executor/attachments.ts --bundle --platform=node --format=esm --target=node22 --outfile=integrations/wechat-executor/attachments.bundle.mjs",
     "test:executor": "pnpm build:executor && node --test integrations/wechat-executor/executor.test.mjs",

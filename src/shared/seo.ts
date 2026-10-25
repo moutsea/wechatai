@@ -1,4 +1,4 @@
-import { INFO_PAGES, POLICY_UPDATED_AT } from "./site-info";
+import { INFO_PAGES, INFO_PAGE_UPDATED_AT, type InfoPageKind } from "./site-info";
 import {
   DOC_ARTICLES,
   DOCS_TITLE,
@@ -414,7 +414,10 @@ export function pageLastModified(path: string): string | undefined {
     return DOCS_UPDATED_AT;
   const landing = findSeoPage(path);
   if (landing) return landing.updatedAt;
-  if (Object.values(INFO_PAGES).some((page) => page.path === path)) return POLICY_UPDATED_AT;
+  const infoKind = (Object.keys(INFO_PAGES) as InfoPageKind[]).find(
+    (kind) => INFO_PAGES[kind].path === path,
+  );
+  if (infoKind) return INFO_PAGE_UPDATED_AT[infoKind];
   // Omit unknown dates rather than presenting the build time as a content update.
   return undefined;
 }
