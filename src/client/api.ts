@@ -10,7 +10,7 @@ export class ApiError extends Error {
 }
 
 /** 套餐限额类错误：命中这些错误码时不只报错，还要给一条升级出口。 */
-const LIMIT_CODES = new Set(["plugin_limit", "channel_limit", "wechat_link_limit"]);
+const LIMIT_CODES = new Set(["plugin_limit", "channel_limit", "connection_limit"]);
 
 export function limitErrorCode(error: unknown): string | undefined {
   return error instanceof ApiError && error.code && LIMIT_CODES.has(error.code)

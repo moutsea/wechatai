@@ -1,6 +1,9 @@
 import Stripe from "stripe";
 import { AppError, secret } from "./config";
 import { paymentNoticeStatements } from "./billing-notifications";
+import { recordServerFunnelEvent } from "./analytics";
+import { ANALYTICS_RETENTION_DAYS, ANALYTICS_SESSION_HEADER } from "../shared/analytics";
+import { analyticsSessionIdSchema } from "../shared/analytics-schema";
 import {
   BILLING_OFFERS,
   BILLING_SERVICE,
@@ -28,6 +31,7 @@ type Order = {
   membership_months: number;
   status: string;
   created_at: number;
+  paid_at: number | null;
 };
 const objectId = (value: string | { id: string } | null | undefined) =>
   typeof value === "string" ? value : value?.id;
@@ -448,6 +452,7 @@ export async function checkoutStatus(
   env: Env,
   userId: string,
   sessionId: string,
+  analytics?: { request: Request; context: Pick<ExecutionContext, "waitUntil"> },
 ): Promise<CheckoutStatus> {
   const order = await env.DB.prepare(
     "SELECT * FROM billing_order WHERE session_id = ? AND user_id = ? AND mode = ?",
@@ -455,12 +460,37 @@ export async function checkoutStatus(
     .bind(sessionId, userId, billingMode(env))
     .first<Order>();
   if (!order) throw new AppError("not_found", "没有找到这个支付订单", 404);
-  if (order.status === "paid") return { status: "paid", kind: order.kind, credits: order.credits };
+  const recordReturn = (paidAt: number | null) => {
+    // 只记浏览器自愿携带统计上下文的成功回跳；过保留期的旧订单不重新写入。
+    if (
+      !analytics ||
+      !analyticsSessionIdSchema.safeParse(analytics.request.headers.get(ANALYTICS_SESSION_HEADER))
+        .success ||
+      !paidAt ||
+      paidAt < Date.now() - ANALYTICS_RETENTION_DAYS * 86_400_000
+    )
+      return;
+    // 写入由请求上下文接管；统计变慢或挂起不能拖住已确认的支付结果。
+    analytics.context.waitUntil(
+      recordServerFunnelEvent(env, {
+        name: "checkout_success",
+        key: `${order.mode}:${order.id}`,
+        request: analytics.request,
+        path: "/app/billing",
+        props: { kind: order.kind },
+      }),
+    );
+  };
+  if (order.status === "paid") {
+    recordReturn(order.paid_at);
+    return { status: "paid", kind: order.kind, credits: order.credits };
+  }
   const session = await stripeClient(env).checkout.sessions.retrieve(sessionId);
   await fulfillSession(env, session);
-  const updated = await env.DB.prepare("SELECT status FROM billing_order WHERE id = ?")
+  const updated = await env.DB.prepare("SELECT status, paid_at FROM billing_order WHERE id = ?")
     .bind(order.id)
-    .first<{ status: string }>();
+    .first<{ status: string; paid_at: number | null }>();
+  if (updated?.status === "paid") recordReturn(updated.paid_at);
   return {
     status:
       updated?.status === "paid"

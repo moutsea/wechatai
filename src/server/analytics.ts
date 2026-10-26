@@ -1,7 +1,8 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import {
   ANALYTICS_MAX_DAYS,
   ANALYTICS_RETENTION_DAYS,
+  ANALYTICS_SESSION_HEADER,
   classifyDevice,
   isBotUserAgent,
   isTrackedPath,
@@ -15,9 +16,13 @@ import {
   type TrafficDay,
   type TrafficSummary,
 } from "../shared/analytics";
-import { pageViewPayloadSchema, signupConversionSchema } from "../shared/analytics-schema";
-import { funnelEventPayloadSchema } from "../shared/funnel";
-import { allowsFunnelEvent } from "../shared/funnel-policy";
+import {
+  analyticsSessionIdSchema,
+  pageViewPayloadSchema,
+  signupConversionSchema,
+} from "../shared/analytics-schema";
+import { funnelEventPayloadSchema, type FunnelEventPayload } from "../shared/funnel";
+import { allowsFunnelEvent, isServerFunnelEvent } from "../shared/funnel-policy";
 import { summarizeFunnel, type FunnelCount, type FunnelSummary } from "../shared/funnel-report";
 import { AppError, secret } from "./config";
 import { signupConversionQueries } from "../shared/analytics-queries";
@@ -107,7 +112,7 @@ export async function recordPageView(
 
 export type RecordFunnelEventResult =
   | { ok: true; stored: boolean }
-  | { ok: true; ignored: "bot" | "demo" }
+  | { ok: true; ignored: "bot" | "demo" | "server_event" }
   | { ok: false; reason: "invalid_payload" };
 
 /**
@@ -129,7 +134,16 @@ export async function recordFunnelEvent(
   const parsed = funnelEventPayloadSchema.safeParse(input.payload);
   if (!parsed.success) return { ok: false, reason: "invalid_payload" };
   const payload = parsed.data;
+  if (isServerFunnelEvent(payload.name)) return { ok: true, ignored: "server_event" };
   if (!allowsFunnelEvent(payload.name, payload.path ?? "")) return { ok: true, ignored: "demo" };
+  return insertFunnelEvent(env, payload, input);
+}
+
+async function insertFunnelEvent(
+  env: Env,
+  payload: FunnelEventPayload,
+  input: Omit<RecordPageViewInput, "payload" | "siteHost">,
+): Promise<RecordFunnelEventResult> {
   const now = input.now ?? Date.now();
   const day = shanghaiDay(new Date(now));
   const props = JSON.stringify(payload.props ?? {});
@@ -152,6 +166,51 @@ export async function recordFunnelEvent(
     )
     .run();
   return { ok: true, stored: result.meta.changes > 0 };
+}
+
+/**
+ * 已确认的业务成功事件。业务键只参与带密钥的幂等 UUID，不保存账户/订单 ID。
+ * 统计失败不能使验证或支付状态查询失败；公开采集接口不接受这两类事件。
+ */
+export async function recordServerFunnelEvent(
+  env: Env,
+  input: {
+    name: "verify_done" | "checkout_success";
+    key: string;
+    request?: Request;
+    path: string;
+    props?: Record<string, string | number | boolean>;
+  },
+) {
+  const headers = input.request?.headers;
+  if (!headers || ["1", "yes"].includes(headers.get("dnt") ?? "") || headers.get("sec-gpc") === "1")
+    return;
+  const userAgent = headers.get("user-agent") ?? "";
+  if (isBotUserAgent(userAgent)) return;
+  try {
+    const hex = createHmac("sha256", analyticsSalt(env))
+      .update(`funnel:${input.name}:${input.key}`)
+      .digest("hex");
+    const eventId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+    const session = analyticsSessionIdSchema.safeParse(headers.get(ANALYTICS_SESSION_HEADER));
+    await insertFunnelEvent(
+      env,
+      {
+        eventId,
+        name: input.name,
+        path: input.path,
+        props: input.props,
+        sessionId: session.success ? session.data : undefined,
+      },
+      {
+        ip: headers.get("cf-connecting-ip") || "local",
+        userAgent,
+        country: headers.get("cf-ipcountry") ?? "",
+      },
+    );
+  } catch {
+    console.error(JSON.stringify({ event: "analytics.server_event_failed", name: input.name }));
+  }
 }
 
 /**

@@ -560,8 +560,9 @@
   .docs-mobile-navigation {
     display: block;
     border-bottom: 1px solid var(--docs-border);
-    margin: 0 -22px;
-    padding: 0 22px;
+    /* 出血量必须等于 --gutter，否则比视口宽出几个像素，窄屏会出现横向滚动条。 */
+    margin: 0 calc(-1 * var(--gutter));
+    padding: 0 var(--gutter);
     background: #fbfdfb;
   }
   .docs-mobile-navigation > summary {

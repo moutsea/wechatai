@@ -1,9 +1,12 @@
-import { env } from "cloudflare:test";
+import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import prepaidMigration from "../migrations/0004_prepaid_membership.sql?raw";
 import notificationMigration from "../migrations/0006_billing_notifications.sql?raw";
+import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
+import { ANALYTICS_SESSION_HEADER } from "../src/shared/analytics";
+import { pauseAnalyticsWrites } from "./helpers/analytics-write";
 import { dispatchPaymentNotices } from "../src/server/billing-notifications";
 import {
   webhook,
@@ -23,6 +26,7 @@ const testEnv = {
 };
 beforeAll(async () => {
   await env.DB.exec(authMigration);
+  await env.DB.exec(funnelMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   await env.DB.batch(
     (billingMigration + "\n" + prepaidMigration + "\n" + notificationMigration)
       .split(";")
@@ -30,13 +34,17 @@ beforeAll(async () => {
       .map((s) => env.DB.prepare(s)),
   );
 });
-beforeEach(() =>
+beforeEach(async () => {
+  await env.DB.prepare("DELETE FROM funnel_events").run();
   vi.stubGlobal(
     "fetch",
     vi.fn(() => Promise.reject(new Error("Unexpected external request"))),
-  ),
-);
-afterEach(() => vi.unstubAllGlobals());
+  );
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 const metadata = (order: Awaited<ReturnType<typeof seed>>) => ({
   service: "wechatai",
   app: "wechatai",
@@ -79,6 +87,171 @@ async function seed(offerId: BillingOfferId = "credits_5000") {
   return { userId, id, offer, customer, session };
 }
 type Order = Awaited<ReturnType<typeof seed>>;
+const successEvents = async () =>
+  (await env.DB.prepare("SELECT * FROM funnel_events WHERE name='checkout_success'").all()).results;
+const analyticsRequest = (extra: Record<string, string> = {}) =>
+  new Request("https://example.test/api/billing/checkout-status", {
+    headers: {
+      [ANALYTICS_SESSION_HEADER]: "billing-analytics-session",
+      "cf-connecting-ip": "203.0.113.1",
+      "user-agent": "Mozilla/5.0",
+      ...extra,
+    },
+  });
+
+async function trackedCheckoutStatus(
+  userId: string,
+  sessionId: string,
+  request = analyticsRequest(),
+) {
+  const context = createExecutionContext();
+  const result = await checkoutStatus(testEnv, userId, sessionId, { request, context });
+  await waitOnExecutionContext(context);
+  return result;
+}
+
+describe("checkout return analytics", () => {
+  it("counts a real paid order once across concurrent and next-day revisits", async () => {
+    const order = await seed();
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      Response.json(String(url).includes("line_items") ? items(order) : paidSession(order)),
+    );
+    expect((await trackedCheckoutStatus(order.userId, order.session)).status).toBe("paid");
+    const first = await successEvents();
+    expect(first).toHaveLength(1);
+    const now = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(now + 86400_000);
+    await Promise.all(
+      Array.from({ length: 3 }, () => trackedCheckoutStatus(order.userId, order.session)),
+    );
+    expect(await successEvents()).toEqual(first);
+    expect(JSON.stringify(first)).not.toContain(order.id);
+    expect(JSON.stringify(first)).not.toContain(order.session);
+    expect(JSON.stringify(first)).not.toContain(order.userId);
+  });
+
+  it("ignores unpaid and other-user orders", async () => {
+    const order = await seed();
+    vi.mocked(fetch).mockResolvedValue(
+      Response.json({ ...paidSession(order), status: "open", payment_status: "unpaid" }),
+    );
+    expect((await trackedCheckoutStatus(order.userId, order.session)).status).toBe("pending");
+    await expect(trackedCheckoutStatus("other-user", order.session)).rejects.toThrow("没有找到");
+    expect(await successEvents()).toEqual([]);
+  });
+
+  it.each(["missing-context", "dnt", "sec-gpc", "bot"])(
+    "does not record %s requests",
+    async (mode) => {
+      const order = await seed();
+      await env.DB.prepare("UPDATE billing_order SET status='paid',paid_at=? WHERE id=?")
+        .bind(Date.now(), order.id)
+        .run();
+      const request =
+        mode === "missing-context"
+          ? new Request("https://example.test")
+          : analyticsRequest(mode === "bot" ? { "user-agent": "Googlebot/2.1" } : { [mode]: "1" });
+      expect((await trackedCheckoutStatus(order.userId, order.session, request)).status).toBe(
+        "paid",
+      );
+      expect(await successEvents()).toEqual([]);
+    },
+  );
+
+  it("does not reinsert a historical order after analytics retention expires", async () => {
+    const order = await seed();
+    const now = Date.now();
+    await env.DB.prepare("UPDATE billing_order SET status='paid',paid_at=? WHERE id=?")
+      .bind(now, order.id)
+      .run();
+    await trackedCheckoutStatus(order.userId, order.session);
+    expect(await successEvents()).toHaveLength(1);
+    // Match the retention deletion while keeping this test independent of PV migrations.
+    await env.DB.prepare("DELETE FROM funnel_events").run();
+    vi.spyOn(Date, "now").mockReturnValue(now + 181 * 86400_000);
+    await trackedCheckoutStatus(order.userId, order.session);
+    expect(await successEvents()).toEqual([]);
+  });
+
+  it("keeps paid status available if analytics storage fails", async () => {
+    const order = await seed();
+    await env.DB.prepare("UPDATE billing_order SET status='paid',paid_at=? WHERE id=?")
+      .bind(Date.now(), order.id)
+      .run();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await env.DB.prepare("DROP TABLE funnel_events").run();
+    try {
+      expect((await trackedCheckoutStatus(order.userId, order.session)).status).toBe("paid");
+      expect(log).toHaveBeenCalledWith(
+        JSON.stringify({ event: "analytics.server_event_failed", name: "checkout_success" }),
+      );
+    } finally {
+      await env.DB.exec(funnelMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
+    }
+  });
+
+  it.each([
+    ["paid", "resolve"],
+    ["paid", "reject"],
+    ["open", "resolve"],
+    ["open", "reject"],
+  ])("returns %s orders while analytics hangs, then handles a late %s", async (state, outcome) => {
+    const order = await seed();
+    if (state === "paid") {
+      await env.DB.prepare("UPDATE billing_order SET status='paid',paid_at=? WHERE id=?")
+        .bind(Date.now(), order.id)
+        .run();
+    } else {
+      vi.mocked(fetch).mockImplementation(async (url) =>
+        Response.json(String(url).includes("line_items") ? items(order) : paidSession(order)),
+      );
+    }
+    const paused = pauseAnalyticsWrites(env.DB);
+    const context = createExecutionContext();
+    const waitUntil = vi.spyOn(context, "waitUntil");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    let status: Awaited<ReturnType<typeof checkoutStatus>> | undefined;
+    const reading = checkoutStatus(
+      { ...testEnv, DB: paused.database },
+      order.userId,
+      order.session,
+      {
+        request: analyticsRequest(),
+        context,
+      },
+    ).then((result) => {
+      status = result;
+    });
+    let background: Promise<void> | undefined;
+    try {
+      await paused.started;
+      await expect.poll(() => status).toEqual({ status: "paid", kind: "credits", credits: 5000 });
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      expect(await successEvents()).toEqual([]);
+      let backgroundFinished = false;
+      background = waitOnExecutionContext(context).then(() => {
+        backgroundFinished = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(backgroundFinished).toBe(false);
+    } finally {
+      paused.release(outcome === "reject" ? new Error("Delayed analytics failure") : undefined);
+      await reading;
+      await (background ?? waitOnExecutionContext(context));
+    }
+    expect(await successEvents()).toHaveLength(outcome === "resolve" ? 1 : 0);
+    if (outcome === "reject")
+      expect(log).toHaveBeenCalledWith(
+        JSON.stringify({ event: "analytics.server_event_failed", name: "checkout_success" }),
+      );
+    else expect(log).not.toHaveBeenCalled();
+    expect(
+      await env.DB.prepare("SELECT status FROM billing_order WHERE id=?")
+        .bind(order.id)
+        .first("status"),
+    ).toBe("paid");
+  });
+});
 function paidSession(o: Order) {
   return {
     id: o.session,

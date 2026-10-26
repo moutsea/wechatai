@@ -56,7 +56,7 @@ export async function resetPasswordAtomically(env: Env, token: string, hash: str
   // Use one timestamp throughout the batch, even if a token expires between statements.
   const now = Math.floor(Date.now() / 1000);
   const owner = "SELECT value FROM verification WHERE identifier=? AND expiresAt>? LIMIT 1";
-  const results = await env.DB.batch([
+  const results = await env.DB.batch<{ id: string }>([
     env.DB.prepare(`INSERT INTO account
       (id,userId,providerId,accountId,password,createdAt,updatedAt)
       SELECT ?,id,'credential',id,?,unixepoch(),unixepoch() FROM user WHERE id=(${owner})
@@ -67,7 +67,7 @@ export async function resetPasswordAtomically(env: Env, token: string, hash: str
       now,
     ),
     env.DB.prepare(
-      `UPDATE user SET emailVerified=1,updatedAt=unixepoch() WHERE id=(${owner})`,
+      `UPDATE user SET emailVerified=1,updatedAt=unixepoch() WHERE id=(${owner}) AND emailVerified=0 RETURNING id`,
     ).bind(identifier, now),
     env.DB.prepare(`DELETE FROM session WHERE userId=(${owner})`).bind(identifier, now),
     env.DB.prepare(`DELETE FROM verification WHERE value=(${owner})
@@ -87,4 +87,7 @@ export async function resetPasswordAtomically(env: Env, token: string, hash: str
       code: "INVALID_TOKEN",
       message: "链接无效或已过期，请重新发送邮件。",
     });
+  // 同一事务中只有真正由未验证变为已验证的账户会被返回。
+  const verifiedId = results[1].results[0]?.id;
+  return typeof verifiedId === "string" ? verifiedId : undefined;
 }

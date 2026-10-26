@@ -761,6 +761,25 @@ describe("recordFunnelEvent", () => {
     ...overrides,
   });
 
+  it.each(["verify_done", "checkout_success"])(
+    "ignores forged or old-client %s reports at the public endpoint",
+    async (name) => {
+      const ctx = createExecutionContext();
+      const response = await worker.fetch(
+        new Request("https://wechatai.app/api/analytics/event", {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "https://wechatai.app" },
+          body: JSON.stringify(funnelEvent({ name })),
+        }),
+        env,
+        ctx,
+      );
+      await waitOnExecutionContext(ctx);
+      expect(response.status).toBe(204);
+      expect((await funnelRows()).results).toEqual([]);
+    },
+  );
+
   it.each(["/demo", "/demo/channels", "/demo/", "/Demo/wechat"])(
     "rejects simulated operations at %s but keeps demo_view",
     async (path) => {
@@ -871,13 +890,13 @@ describe("key event reach reporting", () => {
 
   it("reports independent visitors without manufacturing conversion from unrelated sessions", async () => {
     await add("signup_submit", "new-user-session", "203.0.113.1");
-    await add("checkout_success", "old-user-session", "203.0.113.2");
+    await add("channel_saved", "old-user-session", "203.0.113.2");
     const report = await getFunnelSummary(env, 7, at);
     expect(report.steps.find((step) => step.name === "signup_submit")).toMatchObject({
       visitorDays: 1,
       events: 1,
     });
-    expect(report.steps.find((step) => step.name === "checkout_success")).toMatchObject({
+    expect(report.steps.find((step) => step.name === "channel_saved")).toMatchObject({
       visitorDays: 1,
       events: 1,
     });

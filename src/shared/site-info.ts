@@ -1,6 +1,6 @@
 export const SUPPORT_EMAIL = "cfjwlchangji@gmail.com";
 /** 隐私政策最近一次实质修改的日期。 */
-export const POLICY_UPDATED_AT = "2026-10-25";
+export const POLICY_UPDATED_AT = "2026-10-27";
 /** 服务协议最近一次实质修改的日期（改访问统计没有动条款正文）。 */
 export const TERMS_UPDATED_AT = "2026-10-10";
 export const INFO_PAGES = {

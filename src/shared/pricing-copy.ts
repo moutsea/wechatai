@@ -9,3 +9,12 @@
  */
 export const PLUS_MONTHLY_YUAN = 9.9;
 export const PLUS_YEARLY_YUAN = 88;
+
+/**
+ * 折合月价（¥7.3）与正式价（¥9.90）用的是两套精度：折合价只保留一位小数，
+ * 否则同一页里会同时出现「¥7.33」和「约 ¥7.3」，读者会以为不是同一个数。
+ * 入参单位是「分」，与 `BILLING_OFFERS.amount` 一致。
+ */
+export function approxYuan(cents: number) {
+  return `¥${Number((cents / 100).toFixed(1))}`;
+}

@@ -24,15 +24,26 @@ import { dashboardSetupProgress } from "../../shared/onboarding";
 import { trackFunnel } from "../analytics-client";
 export function Dashboard() {
   const { data, user, base, request, demo } = useApp();
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  // null = 还没拿到列表。不能拿空数组当初始值，否则「加载中」会被画成「一条都没有」。
+  const [sessions, setSessions] = useState<ChatSession[] | null>(null);
+  const [sessionsError, setSessionsError] = useState(false);
+  const [sessionsRetry, setSessionsRetry] = useState(0);
   /** 付费墙曝光只报一次：这个面板在免费用户的工作台里长期存在。 */
   const paywallSeen = useRef(false);
   useEffect(() => {
-    if (data?.plan === "plus")
-      void request<ChatSession[]>("/sessions")
-        .then(setSessions)
-        .catch(() => {});
-  }, [request, data?.plan]);
+    setSessions(null);
+    setSessionsError(false);
+    if (data?.plan !== "plus") return;
+    const controller = new AbortController();
+    void request<ChatSession[]>("/sessions", { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setSessions(result);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSessionsError(true);
+      });
+    return () => controller.abort();
+  }, [request, data?.plan, data?.stats.sessions, sessionsRetry]);
   useEffect(() => {
     if (!data || demo || data.plan === "plus" || !data.stats.sessions) return;
     if (paywallSeen.current) return;
@@ -115,7 +126,7 @@ export function Dashboard() {
                 <>
                   <time
                     dateTime={new Date(data.planUntil).toISOString()}
-                      title={`${membershipExpiry(data.planUntil, true)} 到期（北京时间）`}
+                    title={`${membershipExpiry(data.planUntil, true)} 到期（北京时间）`}
                   >
                     {membershipExpiry(data.planUntil)}
                   </time>{" "}
@@ -188,11 +199,7 @@ export function Dashboard() {
       {(!setup.model || !setup.wechat || !setup.message) && (
         <div className="onboarding-strip">
           {[
-            [
-              setup.model,
-              "添加渠道和模型",
-              data.channels.length ? "/channels" : "/channels?new=1",
-            ],
+            [setup.model, "添加渠道和模型", data.channels.length ? "/channels" : "/channels?new=1"],
             [setup.wechat, "扫码连接微信", "/wechat"],
             [setup.message, "发送第一条消息", "/wechat"],
           ].map(([done, label, path], i) => (
@@ -270,6 +277,29 @@ export function Dashboard() {
                     <ArrowUpRight size={14} />
                   </Link>
                 </div>
+              ) : sessionsError ? (
+                <div className="recent-error" role="alert">
+                  <p>暂时读不到对话记录，请重试。</p>
+                  <button className="text-link" onClick={() => setSessionsRetry((n) => n + 1)}>
+                    重新加载对话
+                  </button>
+                </div>
+              ) : sessions === null ? (
+                <p className="recent-error" role="status">
+                  正在加载对话记录…
+                </p>
+              ) : !sessions.length ? (
+                <Empty
+                  icon={<MessagesSquare />}
+                  title="还没有可回看的对话"
+                  description="在微信里发一条消息，这里就会出现记录。"
+                  action={
+                    <Link className="text-link" to={`${base}/wechat`}>
+                      查看微信连接
+                      <ArrowRight size={15} />
+                    </Link>
+                  }
+                />
               ) : (
                 sessions.slice(0, 4).map((s) => {
                   const a = data.assistants.find((a) => a.id === s.assistantId);

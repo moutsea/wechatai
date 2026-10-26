@@ -42,3 +42,29 @@
   line-height: 1.7;
   margin-top: 8px;
 }
+
+/* 验证页的「接下来三步」：给刚注册的人一个明确的完成预期，降低半途消失。 */
+.auth-next-steps {
+  margin: 18px 0 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--page);
+}
+.auth-next-steps > p {
+  margin: 0 0 8px;
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+.auth-next-steps ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.75;
+}
+.auth-next-steps li {
+  text-wrap: pretty;
+}

@@ -815,7 +815,10 @@ app.post("/api/billing/checkout", async (c) => {
   return c.json(await checkout(c.env, c.var.user, data.offerId));
 });
 app.get("/api/billing/checkout-status", async (c) => {
-  const status = await checkoutStatus(c.env, c.var.user.id, c.req.query("session_id") || "");
+  const status = await checkoutStatus(c.env, c.var.user.id, c.req.query("session_id") || "", {
+    request: c.req.raw,
+    context: c.executionCtx,
+  });
   c.executionCtx.waitUntil(dispatchBillingNotices(c.env, c.executionCtx));
   return c.json(status);
 });

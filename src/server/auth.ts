@@ -12,7 +12,7 @@ import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from "../shared/auth";
 import { authReturnPath } from "../shared/auth";
 import { ANALYTICS_SESSION_HEADER } from "../shared/analytics";
 import { analyticsSessionIdSchema } from "../shared/analytics-schema";
-import { recordSignupConversion } from "./analytics";
+import { recordServerFunnelEvent, recordSignupConversion } from "./analytics";
 import {
   issuePasswordRecovery,
   passwordRecoveryRequired,
@@ -87,6 +87,16 @@ export function availableAuthProviders(env: Env): ("google" | "github")[] {
 }
 export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil">) {
   const send = authEmailSender(env, context);
+  const recordVerification = async (userId: string, request?: Request) => {
+    const recording = recordServerFunnelEvent(env, {
+      name: "verify_done",
+      key: userId,
+      request,
+      path: "/verify-email",
+    });
+    if (context) context.waitUntil(recording);
+    else await recording;
+  };
   const recover = async (user: { id: string; email: string }, request?: Request) => {
     await requirePasswordRecovery(env, user.id);
     const url = await issuePasswordRecovery(env, user.id, await recoveryReturnTo(env, request));
@@ -119,6 +129,7 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
       sendOnSignIn: false,
       autoSignInAfterVerification: true,
       expiresIn: 60 * 60,
+      afterEmailVerification: (user, request) => recordVerification(user.id, request),
       sendVerificationEmail: async ({ user, url }, request) => {
         // Resends can be requested without knowing the originally chosen password.
         // Only the first signup's email takes the ordinary verification path.
@@ -172,11 +183,12 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
             code: "PASSWORD_TOO_LONG",
             message: "密码不能超过 128 个字符。",
           });
-        await resetPasswordAtomically(
+        const verifiedId = await resetPasswordAtomically(
           env,
           token,
           await ctx.context.password.hash(body.data.newPassword),
         );
+        if (verifiedId) await recordVerification(verifiedId, ctx.request);
         return ctx.json({ status: true });
       }),
     },

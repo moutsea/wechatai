@@ -1,6 +1,6 @@
-import { isTrackedPath, normalizePath } from "../shared/analytics";
+import { ANALYTICS_SESSION_HEADER, isTrackedPath, normalizePath } from "../shared/analytics";
 import type { FunnelEvent } from "../shared/funnel";
-import { allowsFunnelEvent } from "../shared/funnel-policy";
+import { allowsFunnelEvent, isServerFunnelEvent } from "../shared/funnel-policy";
 import type { ModelImportResult } from "../shared/types";
 
 /**
@@ -238,6 +238,17 @@ export function browserPageViewReporter(): PageViewReporter {
   return singleton;
 }
 
+/** 业务请求可选择附带统计会话；统计环境故障不能阻止业务请求。 */
+export function browserAnalyticsHeaders(): Record<string, string> {
+  try {
+    if (optedOut(window.navigator as AnalyticsNavigator)) return {};
+    const { analyticsSessionId } = browserPageViewReporter().signupAttribution();
+    return analyticsSessionId ? { [ANALYTICS_SESSION_HEADER]: analyticsSessionId } : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * 上报一条漏斗事件。和页面浏览共用同一个 sessionStorage 会话号，
  * 于是「这一次访问里看了几页、走到哪一步」能在后台对上。
@@ -248,7 +259,12 @@ export function browserPageViewReporter(): PageViewReporter {
 export function trackFunnel(name: FunnelEvent, props?: Record<string, string | number | boolean>) {
   try {
     const nav = window.navigator as AnalyticsNavigator;
-    if (optedOut(nav) || !allowsFunnelEvent(name, window.location.pathname)) return;
+    if (
+      isServerFunnelEvent(name) ||
+      optedOut(nav) ||
+      !allowsFunnelEvent(name, window.location.pathname)
+    )
+      return;
     const { analyticsSessionId } = browserPageViewReporter().signupAttribution();
     const payload = {
       eventId: fallbackRandomId(),

@@ -957,6 +957,13 @@ code {
 .recent-panel {
   overflow: hidden;
 }
+.recent-error {
+  margin: 0;
+  padding: 18px 17px;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.75;
+}
 .recent-row {
   display: flex;
   gap: 12px;
@@ -1486,6 +1493,17 @@ code {
   min-height: 34px;
   padding: 0 14px;
   font-size: var(--text-sm);
+}
+/* Plus 用户撞到链接上限：没有升级可卖，只说清楚下一步（按钮此刻是 disabled 的）。 */
+.wechat-link-limit-note {
+  margin: 10px 0 0;
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.75;
 }
 .toast {
   position: fixed;
@@ -2546,14 +2564,18 @@ code {
   align-items: center;
 }
 .landing-copy h1 {
-  font-size: clamp(38px, 4.3vw, 52px);
-  line-height: 1.35;
+  font-size: clamp(36px, 3.9vw, 48px);
+  line-height: 1.38;
   letter-spacing: -0.5px;
   font-weight: 550;
   margin: 23px 0;
+  /* 中文标题按字数折行容易把最后两三个字挤到下一行，balance 让两行长度接近。 */
+  text-wrap: balance;
 }
 .landing-copy h1 span {
   color: var(--green);
+  /* balance 会在任意两字之间断行，把动词「用上」切成「用 / 上」；绿色短语整体不可断。 */
+  white-space: nowrap;
 }
 .landing-copy > p {
   font-size: 14px;
@@ -2564,13 +2586,37 @@ code {
 .hero-actions {
   display: flex;
   align-items: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px;
 }
 .hero-actions .button {
-  padding: 15px 20px;
+  padding: 15px 22px;
+  /* 主次按钮同尺寸：零门槛入口不该被做成一行小字，主按钮也不该比它轻。 */
+  font-size: var(--text-base);
+  min-height: 52px;
 }
-.hero-actions .text-link {
-  font-size: 12px;
+/* 选择器要和 `.landing-copy > p`（0,1,1）同权或更高，否则字号/行高/外边距全被它覆盖。 */
+.landing-copy > p.hero-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin: 14px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  color: var(--muted);
+}
+/* 三句各自成块：窄屏换行时按句折，不会把「不绑卡」或「删除」拆开。 */
+.hero-note > span {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+/* 分隔符是句子里的真实节点（见 public-pages.tsx），不是伪元素——
+   伪元素的 content 会进可访问性树，读屏会念出「·」。颜色也别用 --line（1.29:1 看不见）。 */
+.hero-note-dot {
+  margin-left: 8px;
+  color: var(--muted);
+  opacity: 0.7;
 }
 .hero-trust {
   display: flex;
@@ -2961,7 +3007,8 @@ code {
   outline-color: var(--lime);
 }
 .landing-footer-bottom {
-  max-width: 1180px;
+  /* 和 .landing-footer-main 用同一个容器宽度，否则 1440 下底栏分割线比内容窄 20px。 */
+  width: var(--container-w);
   margin: 0 auto;
   padding: 24px 0;
   border-top: 1px solid var(--dark-line);
@@ -3220,7 +3267,7 @@ code {
     gap: 40px;
   }
   .landing-copy h1 {
-    font-size: 47px;
+    font-size: 44px;
   }
   .landing-strip {
     gap: 33px;
@@ -3347,12 +3394,16 @@ code {
     padding: 15px 18px;
   }
   .landing-copy h1 {
-    font-size: 41px;
+    font-size: 38px;
   }
-  .hero-actions {
-    align-items: flex-start;
+  .landing .hero-actions {
+    align-items: stretch;
     flex-direction: column;
-    gap: 15px;
+    gap: 10px;
+  }
+  .landing .hero-actions .button {
+    width: 100%;
+    justify-content: center;
   }
   .hero-trust {
     gap: 12px;
@@ -3366,7 +3417,8 @@ code {
     gap: 20px 35px;
   }
   .landing-footer {
-    padding: 0 30px;
+    /* 横向 gutter 由子级 .landing-footer-main 的 --container-w 负责，父级不能再加。 */
+    padding: 0;
   }
   .landing-footer-main {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3747,7 +3799,8 @@ code {
   }
   .landing-hero {
     grid-template-columns: 1fr;
-    padding: 48px 27px 70px;
+    /* 横向内边距交给 --container-w；这里再补 27px 会让 hero 内容比同页其它区块更靠里。 */
+    padding: 48px 0 70px;
     gap: 50px;
   }
   .landing-copy {
@@ -3756,6 +3809,7 @@ code {
   .landing-copy .eyebrow {
     justify-content: center;
     font-size: 12px;
+    letter-spacing: 1.1px;
   }
   .landing-copy h1 {
     font-size: clamp(28px, 7.6vw, 44px);
@@ -3764,9 +3818,17 @@ code {
   .landing-copy > p {
     font-size: 12px;
   }
-  .hero-actions {
-    align-items: center;
-    gap: 19px;
+  .landing .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .landing .hero-actions .button {
+    justify-content: center;
+  }
+  /* 选择器要带上 .landing-copy 前缀，否则被上面那条 0,2,1 的规则压住，窄屏会整块左对齐。 */
+  .landing-copy > p.hero-note {
+    justify-content: center;
   }
   .hero-trust {
     justify-content: center;
@@ -3809,7 +3871,7 @@ code {
     line-height: 1.6;
   }
   .landing-footer {
-    padding: 0 25px;
+    padding: 0;
   }
   .landing-footer-main {
     padding: 44px 0 36px;

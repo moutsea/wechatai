@@ -5,6 +5,7 @@ import { api, json } from "../api";
 import { useAuth } from "../auth";
 import { trackFunnel } from "../analytics-client";
 import { BILLING_OFFERS } from "../../shared/billing-offers";
+import { approxYuan } from "../../shared/pricing-copy";
 import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../../shared/wechat-links";
@@ -16,6 +17,8 @@ const yearly = BILLING_OFFERS.find((offer) => offer.id === "plus_yearly")!;
 const yearlySaving = (monthly.amount * 12 - yearly.amount) / 100;
 
 const yuan = (amount: number) => `¥${Number((amount / 100).toFixed(2))}`;
+/** 折合月价只留一位小数：和 /pricing 正文、账单页说同一个数（见 shared/pricing-copy）。 */
+const approx = approxYuan;
 
 /**
  * /pricing 的价格卡。
@@ -121,8 +124,8 @@ export function PricingPlans() {
             </p>
             <p className="plan-note">
               {interval === "year"
-                ? `折合 ${yuan(perMonth * 100)} / 月，比按月付省 ${yuan(yearlySaving * 100)}`
-                : `年付 ${yuan(yearly.amount)}，折合 ${yuan(perMonth * 100)} / 月`}
+                ? `折合 ${approx(perMonth * 100)} / 月，比按月付省 ${yuan(yearlySaving * 100)}`
+                : `年付 ${yuan(yearly.amount)}，折合 ${approx(perMonth * 100)} / 月`}
             </p>
           </header>
           <ul>

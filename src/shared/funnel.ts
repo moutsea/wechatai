@@ -13,7 +13,7 @@ export const FUNNEL_EVENTS = [
   "signup_submit",
   /** 验证邮件已发出。 */
   "verify_sent",
-  /** 邮箱验证完成。 */
+  /** 服务端确认邮箱由未验证变为已验证（含密码恢复路径）。 */
   "verify_done",
   /** 引导第 n 步完成，props.step = 1|2|3。 */
   "onboarding_step",
@@ -35,12 +35,26 @@ export const FUNNEL_EVENTS = [
   "paywall_click",
   /** 发起 Stripe 结账。 */
   "checkout_start",
-  /** 结账成功回跳。 */
+  /** 服务端校验的结账成功回跳，同一订单只记一次。 */
   "checkout_success",
   /** 邀请链接被复制/分享。 */
   "invite_share_click",
   /** 打开工作台演示。 */
   "demo_view",
+  /**
+   * 首屏 CTA 被点击。props.cta 区分 primary（去注册）与 demo（去看演示）。
+   * 没有这一步，就无法区分「首页没人感兴趣」和「点了但没注册成功」。
+   */
+  "hero_cta_click",
+  /** 到达注册页。与 signup_submit 之间的落差＝表单劝退率。 */
+  "register_view",
+  /** 点快捷登录（props.provider）。OAuth 路径不经过邮箱验证，是漏斗旁路。 */
+  "oauth_click",
+  /**
+   * 发验证邮件。props.first 区分首发送出（y）与重发（n）：
+   * 重发占比高说明送达或找信环节有问题，首发送出量大而 verify_done 少则是根本没打开邮件。
+   */
+  "verify_send",
 ] as const;
 
 export type FunnelEvent = (typeof FUNNEL_EVENTS)[number];

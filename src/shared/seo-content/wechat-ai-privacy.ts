@@ -87,7 +87,7 @@ export const wechatAiPrivacyPage: SeoPage = {
 4. 是否知道清空聊天在哪里、怎么清（以及它清不掉助理记录）？
 5. 需要长期保留的图或文件，是否已下载到本地？
 
-本站做的事写在[隐私政策](/privacy)与[服务条款](/terms)里：基础设施使用 Cloudflare，支付使用 Stripe；访问统计只保存当日哈希，不保存原始 IP、User-Agent 或完整网址，但运行与安全日志仍会记录请求时间、IP 地址与浏览器信息。账号封禁与平台规则是另一类风险，见[微信用 AI 会不会封号](/wechat-ai-ban-risk)。`,
+本站做的事写在[隐私政策](/privacy)与[服务条款](/terms)里：基础设施使用 Cloudflare，支付使用 Stripe。本站记录公开页面访问，以及首页按钮、快捷登录、配置和支付等部分关键操作；统计不保存原始 IP、User-Agent、完整网址或聊天内容，每日访客使用按天变化的哈希区分，验证与支付成功事件另使用带密钥计算的去重标识。统计保留 180 天，并尊重 DNT/GPC；具体事件与字段见隐私政策。运行与安全日志仍会记录请求时间、IP 地址与浏览器信息。账号封禁与平台规则是另一类风险，见[微信用 AI 会不会封号](/wechat-ai-ban-risk)。`,
     },
   ],
   faq: [
@@ -124,5 +124,5 @@ export const wechatAiPrivacyPage: SeoPage = {
     { label: "微信用 AI 会不会封号", href: "/wechat-ai-ban-risk" },
     { label: "常见问题（文档）", href: "/docs/faq" },
   ],
-  updatedAt: "2026-10-25",
+  updatedAt: "2026-10-27",
 };

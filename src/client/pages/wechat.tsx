@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { useApp } from "../context";
 import { Modal, PageHead, relativeTime } from "../ui";
-import { json } from "../api";
+import { json, limitErrorCode } from "../api";
+import { LimitHint } from "../limit-hint";
 import { COMMANDS_GUIDE_PATH } from "../../shared/guide";
 import { wechatSetupIssue } from "../../shared/wechat-readiness";
 export function Wechat() {
@@ -25,11 +26,15 @@ export function Wechat() {
   const [disconnect, setDisconnect] = useState(false);
   const [editor, setEditor] = useState<"create" | "rename" | "delete" | null>(null);
   const [name, setName] = useState("");
+  // 撞到链接上限时不再只把按钮置灰——那一刻正是该告诉用户 Plus 能给什么的地方。
+  const [limitCode, setLimitCode] = useState<string>();
   if (!data) return null;
   const connection = data.connection;
   const selected = data.connections.find((l) => l.id === data.selectedConnectionId);
   const paused = selected?.paused ?? false;
   const atLimit = data.connections.length >= data.limits.connections;
+  // 升级出口只在免费版有意义：撞限这件事成立时（atLimit）或刚被服务端拒过（limitCode）都该说一次。
+  const upgradeHint = data.plan === "free" ? (limitCode ?? (atLimit ? "connection_limit" : undefined)) : undefined;
   const connected = connection.status === "connected" && !paused;
   const waiting = ["waiting", "scanned"].includes(connection.status) && !paused;
   const setupIssue = wechatSetupIssue(data);
@@ -55,10 +60,12 @@ export function Wechat() {
           method: "POST",
         });
       await refresh();
+      setLimitCode(undefined);
       setDisconnect(false);
       setEditor(null);
       if (type === "disconnect") notify("微信已断开，可以随时重新绑定");
     } catch (e) {
+      setLimitCode(limitErrorCode(e));
       notify((e as Error).message, true);
       await refresh();
     } finally {
@@ -85,6 +92,13 @@ export function Wechat() {
           </button>
         }
       />
+      {/* 免费用户撞限给升级出口；Plus 撞到 10 条上限时升级没意义，只说清楚该怎么办。 */}
+      {upgradeHint && <LimitHint code={upgradeHint} />}
+      {data.plan !== "free" && atLimit && (
+        <p className="wechat-link-limit-note" role="status">
+          已达 {data.limits.connections} 条链接上限：先删掉不用的链接再创建新的。
+        </p>
+      )}
       <div className="panel wechat-link-toolbar">
         <label htmlFor="wechat-link-select">
           管理链接

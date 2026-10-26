@@ -73,7 +73,7 @@ export function PluginProtocol() {
   }, [hash]);
   return (
     <div className="guide-page protocol-page">
-      <SiteHeader active="/docs" />
+      <SiteHeader />
       <main>
         <section className="protocol-hero">
           <div>

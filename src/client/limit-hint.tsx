@@ -12,7 +12,8 @@ const pluginText = PLUGIN_LIMITS.plus === null ? "插件不限" : `${PLUGIN_LIMI
 const LIMIT_LABELS: Record<string, string> = {
   channel_limit: "渠道数量",
   plugin_limit: "插件数量",
-  wechat_link_limit: "微信链接数量",
+  // 服务端 personal-account.ts 的 createLink 抛的是 connection_limit。
+  connection_limit: "微信链接数量",
 };
 
 /**

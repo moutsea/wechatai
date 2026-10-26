@@ -5,10 +5,14 @@ import referralMigration from "../migrations/0003_referrals.sql?raw";
 import emailMigration from "../migrations/0007_auth_email_limits.sql?raw";
 import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
 import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
+import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
+import billingMigration from "../migrations/0002_billing.sql?raw";
+import billingNoticesMigration from "../migrations/0006_billing_notifications.sql?raw";
 import worker from "../src/server/index";
 import { createPageViewReporter } from "../src/client/analytics-client";
 import { ANALYTICS_SESSION_HEADER } from "../src/shared/analytics";
 import { signupConversionSchema } from "../src/shared/analytics-schema";
+import { pauseAnalyticsWrites } from "./helpers/analytics-write";
 
 const send = vi.fn(async () => ({ messageId: "test-message" }));
 const bindings = {
@@ -83,12 +87,16 @@ beforeAll(async () => {
     emailMigration,
     pageViewsMigration,
     signupMigration,
+    funnelMigration,
+    billingMigration,
+    billingNoticesMigration,
   ])
     await migrate(migration);
 });
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM page_views").run();
   await env.DB.prepare("DELETE FROM signup_attributions").run();
+  await env.DB.prepare("DELETE FROM funnel_events").run();
   vi.stubGlobal(
     "fetch",
     vi.fn(() => Promise.reject(new Error("Unexpected network request"))),
@@ -166,7 +174,89 @@ async function oauth(
   expect(finish.headers.get("location")).toBe("/app");
 }
 
+async function paidCheckout() {
+  const address = email();
+  const registration = await signup(address);
+  const { user } = await registration.json<{ user: { id: string } }>();
+  await env.DB.prepare("UPDATE user SET emailVerified=1 WHERE id=?").bind(user.id).run();
+  const login = await request("/api/auth/sign-in/email", { email: address, password });
+  expect(login.status).toBe(200);
+  const cookie = cookies(login);
+  const orderId = crypto.randomUUID();
+  const sessionId = `cs_${orderId}`;
+  await env.DB.prepare(`INSERT INTO billing_order
+      (id,user_id,mode,offer_id,kind,price_id,amount,currency,credits,customer_id,session_id,status,created_at,paid_at)
+      VALUES (?,?,'test','credits_5000','credits','price_test',1000,'cny',5000,'cus_test',?,'paid',?,?)`)
+    .bind(orderId, user.id, sessionId, Date.now(), Date.now())
+    .run();
+  return { cookie, path: `/api/billing/checkout-status?session_id=${sessionId}` };
+}
+
 describe("signup analytics follows actual account creation", () => {
+  it("records authenticated checkout returns through the real route, once per owned order", async () => {
+    const { cookie, path } = await paidCheckout();
+    const rows = async () =>
+      (await env.DB.prepare("SELECT * FROM funnel_events WHERE name='checkout_success'").all())
+        .results;
+    expect(
+      (await request(path, undefined, { [ANALYTICS_SESSION_HEADER]: "checkout-session" })).status,
+    ).toBe(401);
+    expect((await request(path, undefined, { cookie })).status).toBe(200);
+    expect(await rows()).toEqual([]);
+    for (let i = 0; i < 2; i++) {
+      const response = await request(path, undefined, {
+        cookie,
+        [ANALYTICS_SESSION_HEADER]: "checkout-session",
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: "paid", kind: "credits" });
+    }
+    expect(await rows()).toHaveLength(1);
+    expect((await rows())[0]).toMatchObject({
+      session_id: "checkout-session",
+      path: "/app/billing",
+    });
+  });
+
+  it("returns HTTP 200 and paid before a stalled analytics write finishes in waitUntil", async () => {
+    const { cookie, path } = await paidCheckout();
+    const paused = pauseAnalyticsWrites(env.DB);
+    const context = createExecutionContext();
+    let returned: { status: number; body: unknown } | undefined;
+    const reading = Promise.resolve(
+      worker.fetch(
+        new Request(new URL(path, env.APP_URL), {
+          headers: {
+            cookie,
+            "user-agent": "Mozilla/5.0",
+            [ANALYTICS_SESSION_HEADER]: "checkout-session",
+          },
+        }),
+        { ...bindings, DB: paused.database },
+        context,
+      ),
+    ).then(async (response) => {
+      returned = { status: response.status, body: await response.json() };
+    });
+    try {
+      await paused.started;
+      await expect
+        .poll(() => returned)
+        .toEqual({
+          status: 200,
+          body: { status: "paid", kind: "credits", credits: 5000 },
+        });
+      expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM funnel_events").first("n")).toBe(0);
+    } finally {
+      paused.release();
+      await reading;
+      await waitOnExecutionContext(context);
+    }
+    expect(await env.DB.prepare("SELECT name,session_id FROM funnel_events").all()).toMatchObject({
+      results: [{ name: "checkout_success", session_id: "checkout-session" }],
+    });
+  });
+
   it("accepts real browser IDs and attributes only the first email registration", async () => {
     const sessionId = await landing("/pricing");
     const address = email();

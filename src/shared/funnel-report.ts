@@ -11,7 +11,7 @@ import type { FunnelEvent } from "./funnel";
 /** 按产品流程展示独立事件，不要求访客按这个顺序完成。 */
 export const FUNNEL_STEPS: readonly { name: FunnelEvent; label: string }[] = [
   { name: "signup_submit", label: "提交注册" },
-  { name: "verify_sent", label: "验证邮件发出" },
+  { name: "verify_sent", label: "注册信已自动发出" },
   { name: "verify_done", label: "邮箱已验证" },
   { name: "onboarding_done", label: "引导完成" },
   { name: "channel_saved", label: "渠道配置已保存" },
@@ -29,6 +29,10 @@ export const FUNNEL_SIDE_EVENTS: readonly { name: FunnelEvent; label: string }[]
   { name: "onboarding_skip", label: "跳过引导" },
   { name: "invite_share_click", label: "复制邀请链接" },
   { name: "demo_view", label: "打开演示工作台" },
+  { name: "hero_cta_click", label: "首屏 CTA 点击" },
+  { name: "register_view", label: "到达注册页" },
+  { name: "oauth_click", label: "快捷登录点击" },
+  { name: "verify_send", label: "手动发送/重发验证信" },
 ];
 
 export type FunnelCount = { visitorDays: number; events: number };

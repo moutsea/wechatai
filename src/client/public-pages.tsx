@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
@@ -43,6 +43,12 @@ type LoginProvider = "google" | "github";
 const providerNames = { google: "Google", github: "GitHub" };
 // 首页价格锚只显示月付价；与 BILLING_OFFERS 的一致性由 test/seo.test.ts 断言保证。
 const plusMonthlyYuan = String(PLUS_MONTHLY_YUAN);
+/** 首屏三句 microcopy：拆成数组是为了让分隔符能按「非末项」渲染。 */
+const HOMEPAGE_HERO_NOTES = [
+  `每天 ${DAILY_CREDIT_DEFAULTS.free} credits 免费`,
+  "不绑卡",
+  "聊天记录可随时删除",
+];
 function oauthError(code: string | null) {
   if (!code) return "";
   return (
@@ -89,10 +95,12 @@ function StartLink({
   className,
   children,
   authenticatedTo = "/app",
+  onClick,
 }: {
   className: string;
   children: ReactNode;
   authenticatedTo?: string;
+  onClick?: () => void;
 }) {
   const { data: session, isPending } = useAuth();
   if (isPending)
@@ -102,7 +110,7 @@ function StartLink({
       </button>
     );
   return (
-    <Link className={className} to={session ? authenticatedTo : "/register"}>
+    <Link className={className} to={session ? authenticatedTo : "/register"} onClick={onClick}>
       {children}
     </Link>
   );
@@ -119,35 +127,63 @@ export function Landing() {
               <span className="tiny-dot" /> WECHAT AI · YOUR MODELS, IN WECHAT
             </span>
             <h1>
-              把你的 AI <span>接入微信</span>
+              在微信里，<span>用上你的大模型</span>
             </h1>
             <p>
-              用自己的 API Key 和服务地址，开启微信 AI 对话。
+              3 分钟配好，之后就在微信里说话。
               <br />
-              连接喜欢的大模型，随时切换，继续你的话题。
+              自备 API Key，DeepSeek / Claude / GPT 随时切换。
             </p>
             <div className="hero-actions">
-              <StartLink className="button" authenticatedTo="/app/channels">
-                {session ? "配置我的模型" : "连接我的大模型"}
+              <StartLink
+                className="button"
+                authenticatedTo="/app/channels"
+                onClick={() =>
+                  trackFunnel("hero_cta_click", { cta: "primary", auth: session ? "in" : "out" })
+                }
+              >
+                {session ? "配置我的模型" : "免费开始，3 分钟上手"}
                 <ArrowRight size={18} />
               </StartLink>
-              <Link className="text-link" to="/demo">
-                先看看工作台
+              <Link
+                className="button secondary hero-secondary"
+                to="/demo"
+                onClick={() =>
+                  trackFunnel("hero_cta_click", {
+                    cta: "demo",
+                    auth: session ? "in" : "out",
+                  })
+                }
+              >
+                不注册，先点开看看
                 <ArrowUpRight size={16} />
               </Link>
             </div>
+            {/* 分隔符用真实节点 + aria-hidden：伪元素的 content 会进可访问性树，读屏会念出「·」。 */}
+            <p className="hero-note">
+              {HOMEPAGE_HERO_NOTES.map((line, index) => (
+                <span key={line}>
+                  {line}
+                  {index < HOMEPAGE_HERO_NOTES.length - 1 && (
+                    <span className="hero-note-dot" aria-hidden="true">
+                      ·
+                    </span>
+                  )}
+                </span>
+              ))}
+            </p>
             <div className="hero-trust">
               <span>
                 <Check size={14} />
-                自定义渠道与模型
+                自带 API Key，我们不卖 token
               </span>
               <span>
                 <Check size={14} />
-                微信内随时切换
+                三种协议一次配通
               </span>
               <span>
                 <Check size={14} />
-                每日免费额度
+                开源仓库可查
               </span>
             </div>
           </div>
@@ -315,7 +351,8 @@ export function Landing() {
               </p>
               <ul>
                 <li>
-                  <Check size={14} aria-hidden="true" />每天 {DAILY_CREDIT_DEFAULTS.free} credits
+                  <Check size={14} aria-hidden="true" />
+                  每天 {DAILY_CREDIT_DEFAULTS.free} credits
                 </li>
                 <li>
                   <Check size={14} aria-hidden="true" />
@@ -335,7 +372,8 @@ export function Landing() {
               </p>
               <ul>
                 <li>
-                  <Check size={14} aria-hidden="true" />每天 {DAILY_CREDIT_DEFAULTS.plus} credits
+                  <Check size={14} aria-hidden="true" />
+                  每天 {DAILY_CREDIT_DEFAULTS.plus} credits
                 </li>
                 <li>
                   <Check size={14} aria-hidden="true" />
@@ -413,6 +451,13 @@ export function AuthPage({ register = false }: { register?: boolean }) {
   return <AuthForm key={register ? "register" : "login"} register={register} />;
 }
 function AuthForm({ register }: { register: boolean }) {
+  // 只在实际展示注册表单时记录，排除会话加载、失败和已登录跳转。
+  const viewReported = useRef(false);
+  useEffect(() => {
+    if (!register || viewReported.current) return;
+    viewReported.current = true;
+    trackFunnel("register_view");
+  }, [register]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -447,6 +492,7 @@ function AuthForm({ register }: { register: boolean }) {
   }, []);
   const startSocial = async (provider: LoginProvider) => {
     if (!providers?.includes(provider) || busy || socialBusy !== null) return;
+    trackFunnel("oauth_click", { provider });
     setSocialBusy(provider);
     setError("");
     try {
@@ -526,7 +572,11 @@ function AuthForm({ register }: { register: boolean }) {
       <form className="auth-form" onSubmit={(e) => void submit(e)}>
         <span className="eyebrow">YOUR PERSONAL AI SPACE</span>
         <h1>{register ? "从这里，开启微伴。" : "欢迎回来。"}</h1>
-        <p>{register ? "创建账户，连接你的第一个模型。" : "你的模型和未完的对话，都在这里。"}</p>
+        <p>
+          {register
+            ? `创建账户，3 分钟连上微信。每天 ${DAILY_CREDIT_DEFAULTS.free} credits 免费，不绑卡。`
+            : "你的模型和未完的对话，都在这里。"}
+        </p>
         <p className="auth-policies">
           注册或使用前，请阅读<Link to="/terms">服务协议</Link>和<Link to="/privacy">隐私政策</Link>
           。

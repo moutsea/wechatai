@@ -11,7 +11,7 @@ import {
   Gift,
 } from "lucide-react";
 import { useApp } from "../context";
-import { trackFunnel } from "../analytics-client";
+import { browserAnalyticsHeaders, trackFunnel } from "../analytics-client";
 import { PageHead, SectionTitle } from "../ui";
 import { json } from "../api";
 import { formatCredits } from "../../shared/types";
@@ -23,6 +23,14 @@ import {
   type CheckoutStatus,
   type SubscriptionInfo,
 } from "../../shared/billing";
+import { approxYuan } from "../../shared/pricing-copy";
+
+/** 年付省多少、折合月价多少，都从 BILLING_OFFERS 推导：写死的「省 ¥49」早就和 990/8800 不符了。 */
+const plusMonthlyAmount = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")?.amount ?? 0;
+const plusYearlyAmount = BILLING_OFFERS.find((offer) => offer.id === "plus_yearly")?.amount ?? 0;
+const plusYearlySaving = (plusMonthlyAmount * 12 - plusYearlyAmount) / 100;
+const plusYearlyPerMonth = approxYuan(plusYearlyAmount / 12);
+
 export function Billing() {
   const { data, request, refresh, notify, demo, base } = useApp();
   const [offers, setOffers] = useState<BillingOffer[]>(
@@ -66,6 +74,7 @@ export function Billing() {
       try {
         const result = await request<CheckoutStatus>(
           `/billing/checkout-status?session_id=${encodeURIComponent(sessionId!)}`,
+          { headers: browserAnalyticsHeaders() },
         );
         if (cancelled) return;
         if (result.status === "paid") {
@@ -74,7 +83,6 @@ export function Billing() {
           if (cancelled) return;
           setSubscription(sub);
           setPaymentState("paid");
-          trackFunnel("checkout_success", { kind: result.kind });
           setPaymentMessage(
             result.kind === "plus"
               ? "支付成功，Plus 会员有效期已更新。"
@@ -330,7 +338,7 @@ export function Billing() {
               aria-pressed={interval === "year"}
               onClick={() => setInterval("year")}
             >
-              年付 · 省 ¥49
+              年付 · 省 ¥{plusYearlySaving}
             </button>
           </div>
           <div className="plan-price">
@@ -338,7 +346,7 @@ export function Billing() {
             <small>/ {interval === "year" ? "年" : "月"}</small>
           </div>
           <p className="billing-renewal-note">
-            {interval === "year" ? "约 ¥7.33 / 月，按年付费" : "按月付费"}
+            {interval === "year" ? `约 ${plusYearlyPerMonth} / 月，按年付费` : "按月付费"}
             ，单次购买，不自动续费。支持微信支付、支付宝和银行卡。
           </p>
           <ul>

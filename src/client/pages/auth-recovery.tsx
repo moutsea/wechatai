@@ -70,10 +70,10 @@ export function VerifyEmailPage() {
   );
   const cooldown = useCooldown(pending?.sent ? AUTH_EMAIL_COOLDOWN_SECONDS : 0);
   const verified = params.get("verified") === "1" && !tokenError;
-  // 验证成功落地页：这一跳是「注册漏斗」最关键的完成信号，页面本身没有别的动作可抓。
-  useEffect(() => {
-    if (verified) trackFunnel("verify_done");
-  }, [verified]);
+  // 这里曾经放过一个「用 Google 登录，跳过邮箱验证」的按钮，后来去掉了：
+  // `accountLinking.requireLocalEmailVerified = true`（src/server/auth.ts）意味着
+  // 本账号邮箱还没验证时，同邮箱的第三方登录会被拒绝（account_not_linked），
+  // 不同邮箱则会另建一个账号——两条路都不是坐在这个页面上的人想要的。
   async function resend(event: FormEvent) {
     event.preventDefault();
     if (busy || cooldown.remaining) return;
@@ -89,6 +89,7 @@ export function VerifyEmailPage() {
         if (result.error.status === 429) cooldown.restart();
         return;
       }
+      trackFunnel("verify_send", { first: sent ? "n" : "y" });
       setSent(true);
       cooldown.restart();
     } catch {
@@ -159,6 +160,17 @@ export function VerifyEmailPage() {
                   : "发送验证邮件"}
           </button>
           <AuthEmailNotice />
+          <div className="auth-next-steps">
+            <p>验证完成后，接下来只有三步：</p>
+            <ol>
+              <li>配置模型（填 API Key 与服务地址）</li>
+              <li>扫码连接微信</li>
+              <li>之后直接在微信里说话，额度每天重置</li>
+            </ol>
+          </div>
+          <p className="auth-switch">
+            一直收不到？<Link to="/contact">联系我们</Link>
+          </p>
           <p className="auth-switch">
             已经验证？<Link to={`/login?returnTo=${encodeURIComponent(returnTo)}`}>去登录</Link>
           </p>

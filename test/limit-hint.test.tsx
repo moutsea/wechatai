@@ -27,7 +27,7 @@ describe("LimitHint", () => {
     // 文案里的额度必须来自常量，避免和 billing/plugin-access 漂移。
     const plugin = render("plugin_limit");
     expect(plugin).toContain("插件不限");
-    const links = render("wechat_link_limit");
+    const links = render("connection_limit");
     expect(links).toContain("10 个微信链接");
   });
 });

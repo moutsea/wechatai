@@ -4,6 +4,7 @@ import { createHmac } from "node:crypto";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
 import emailMigration from "../migrations/0007_auth_email_limits.sql?raw";
+import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
 import worker from "../src/server/index";
 import {
   authEmailContent,
@@ -101,15 +102,112 @@ async function requestReset(address: string) {
   return new URL(mailLink()).pathname.split("/").at(-1)!;
 }
 beforeAll(async () => {
-  for (const migration of [authMigration, referralMigration, emailMigration])
+  for (const migration of [authMigration, referralMigration, emailMigration, funnelMigration])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
-beforeEach(() => {
+beforeEach(async () => {
+  await env.DB.prepare("DELETE FROM funnel_events").run();
   messages = [];
   send.mockClear();
   vi.stubGlobal(
     "fetch",
     vi.fn(() => Promise.reject(new Error("Unexpected external request"))),
+  );
+});
+
+const verificationEvents = async () =>
+  (await env.DB.prepare("SELECT * FROM funnel_events WHERE name='verify_done'").all()).results;
+
+describe("verification success analytics", () => {
+  it("records real verification once across concurrent requests and replay", async () => {
+    const registered = await signup();
+    expect(await verificationEvents()).toEqual([]);
+    await Promise.all([request(registered.link), request(registered.link)]);
+    expect(await verificationEvents()).toHaveLength(1);
+    await request(registered.link);
+    const events = await verificationEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ name: "verify_done", path: "/verify-email" });
+    expect(JSON.stringify(events)).not.toContain(registered.data.user.id);
+    expect(JSON.stringify(events)).not.toContain(registered.address);
+  });
+
+  it("counts recovery after a resend, but not failed resets or resetting an already verified account", async () => {
+    const registered = await signup();
+    await unlock();
+    expect(
+      (await request("/api/auth/send-verification-email", { email: registered.address })).status,
+    ).toBe(200);
+    const token = new URL(mailLink()).pathname.split("/").at(-1)!;
+    expect(
+      (await request("/api/auth/reset-password", { token: "bad", newPassword: password })).status,
+    ).toBe(400);
+    expect(await verificationEvents()).toEqual([]);
+    expect(
+      (await request("/api/auth/reset-password", { token, newPassword: password })).status,
+    ).toBe(200);
+    expect(
+      await env.DB.prepare("SELECT emailVerified FROM user WHERE id=?")
+        .bind(registered.data.user.id)
+        .first("emailVerified"),
+    ).toBe(1);
+    expect(await verificationEvents()).toHaveLength(1);
+    expect(
+      (await request("/api/auth/reset-password", { token, newPassword: password })).status,
+    ).toBe(400);
+    const nextToken = await requestReset(registered.address);
+    expect(
+      (await request("/api/auth/reset-password", { token: nextToken, newPassword: password }))
+        .status,
+    ).toBe(200);
+    expect(await verificationEvents()).toHaveLength(1);
+  });
+
+  it.each([
+    ["email", "dnt"],
+    ["email", "sec-gpc"],
+    ["recovery", "dnt"],
+    ["recovery", "sec-gpc"],
+  ])("honours %s verification opt-out via %s", async (path, header) => {
+    const registered = await signup();
+    const response =
+      path === "email"
+        ? await request(registered.link, undefined, { [header]: "1" })
+        : await request(
+            "/api/auth/reset-password",
+            { token: await requestReset(registered.address), newPassword: password },
+            { [header]: "1" },
+          );
+    expect(response.status).toBe(path === "email" ? 302 : 200);
+    expect(await verificationEvents()).toEqual([]);
+  });
+
+  it.each(["email", "recovery"])(
+    "does not let unavailable analytics break %s verification",
+    async (path) => {
+      const registered = await signup();
+      const token = path === "recovery" ? await requestReset(registered.address) : "";
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      await env.DB.prepare("DROP TABLE funnel_events").run();
+      try {
+        const response =
+          path === "email"
+            ? await request(registered.link)
+            : await request("/api/auth/reset-password", { token, newPassword: password });
+        expect(response.status).toBe(path === "email" ? 302 : 200);
+        expect(
+          await env.DB.prepare("SELECT emailVerified FROM user WHERE id=?")
+            .bind(registered.data.user.id)
+            .first("emailVerified"),
+        ).toBe(1);
+        expect(log).toHaveBeenCalledWith(
+          JSON.stringify({ event: "analytics.server_event_failed", name: "verify_done" }),
+        );
+      } finally {
+        await env.DB.exec(funnelMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
+        log.mockRestore();
+      }
+    },
   );
 });
 afterEach(() => {
