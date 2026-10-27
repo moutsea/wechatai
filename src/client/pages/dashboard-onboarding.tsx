@@ -20,9 +20,9 @@ import "./dashboard-onboarding.css";
 const steps = ["了解费用", "配置模型", "连接微信"];
 
 export function DashboardOnboarding({ data }: { data: Snapshot }) {
-  const { base, demo, request, refresh } = useApp();
+  const { base, request, refresh } = useApp();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(() => !demo && shouldShowDashboardOnboarding(data));
+  const [open, setOpen] = useState(() => shouldShowDashboardOnboarding(data));
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -41,10 +41,10 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
     setSaving(true);
     setError("");
     try {
-      if (!demo && !data.onboardingDismissedAt)
+      if (!data.onboardingDismissedAt)
         await request("/onboarding/dismiss", { method: "POST" });
       setOpen(false);
-      if (!demo) await refresh();
+      await refresh();
       if (path) navigate(path);
     } catch {
       setError("暂时没能保存引导状态，请重试。");
@@ -270,7 +270,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
               className="text-button muted"
               disabled={saving}
               onClick={() => {
-                if (!demo) trackFunnel("onboarding_skip", { step: step + 1 });
+                trackFunnel("onboarding_skip", { step: step + 1 });
                 void dismiss();
               }}
             >
@@ -292,7 +292,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                   className="button small"
                   disabled={saving}
                   onClick={() => {
-                    if (!demo) trackFunnel("onboarding_step", { step: step + 1 });
+                    trackFunnel("onboarding_step", { step: step + 1 });
                     setStep(step + 1);
                   }}
                 >
@@ -304,7 +304,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                   className="button secondary small"
                   disabled={saving}
                   onClick={() => {
-                    if (!demo) trackFunnel("onboarding_done");
+                    trackFunnel("onboarding_done");
                     void dismiss();
                   }}
                 >

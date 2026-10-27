@@ -15,7 +15,9 @@ test.beforeAll(async () => {
         import { SiteHeader } from './src/client/site-header';
         import './src/client/styles.css';
         createRoot(document.getElementById('root')).render(
-          <MemoryRouter><SiteHeader /><main style={{height: 2000}}>Page content</main></MemoryRouter>
+          <MemoryRouter initialEntries={[window.location.pathname + window.location.hash]}>
+            <SiteHeader /><main style={{height: 2000}}>Page content</main>
+          </MemoryRouter>
         );
       `,
       resolveDir: fileURLToPath(new URL("../../", import.meta.url)),
@@ -52,7 +54,7 @@ test.beforeEach(async ({ page }) => {
   // No application server, credentials or production requests are needed for layout checks.
   await page.route("**/*", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === "/")
+    if (["/", "/pricing", "/docs"].includes(path))
       return route.fulfill({
         contentType: "text/html",
         body: '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module" src="/app.js"></script>',
@@ -115,3 +117,29 @@ test("the menu fits a short viewport after scrolling and can scroll to sign out"
   await expect(signOut).toBeInViewport();
   await signOut.click();
 });
+
+for (const [path, label] of [
+  ["/#how", "如何使用"],
+  ["/pricing", "价格"],
+  ["/docs", "文档"],
+]) {
+  test(`mobile navigation closes when selecting the current destination ${path}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`http://layout.test${path}`);
+    for (const keyboard of [false, true]) {
+      const toggle = page.getByRole("button", { name: "打开菜单", exact: true });
+      await toggle.click();
+      const menu = page.locator(".site-mobile-menu");
+      const link = menu.getByRole("link", { name: label, exact: true });
+      await expect(link).toBeVisible();
+      if (keyboard) {
+        await link.focus();
+        await page.keyboard.press("Enter");
+      } else await link.click();
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+      await expect(menu).toBeHidden();
+    }
+  });
+}

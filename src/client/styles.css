@@ -576,16 +576,6 @@ code {
   border-radius: 5px;
   border-color: var(--line-strong);
 }
-.preview-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #795729;
-  background: #f5e8d2;
-  border-radius: 4px;
-  padding: 4px 7px;
-  font-size: 12px;
-}
 .main-content {
   width: 100%;
   max-width: 1480px;
@@ -1520,6 +1510,7 @@ code {
   align-items: center;
   gap: 20px;
   font-size: 12px;
+  width: max-content;
   max-width: calc(100vw - 30px);
   animation: page-in 0.2s ease;
 }
@@ -1531,6 +1522,11 @@ code {
 }
 .toast.error {
   background: #925d50;
+}
+.toast .toast-retry {
+  font-size: inherit;
+  white-space: nowrap;
+  text-decoration: underline;
 }
 .empty {
   padding: 44px 24px;
@@ -1791,15 +1787,6 @@ code {
   color: var(--muted);
   line-height: 1.9;
   padding: 20px 5px;
-}
-.demo-inline {
-  font-size: 12px;
-  color: var(--muted);
-  border: 1px solid #eae8d7;
-  padding: 8px;
-  border-radius: 5px;
-  background: var(--surface-soft);
-  margin-top: 14px;
 }
 .sessions-workspace {
   display: grid;
@@ -3144,15 +3131,6 @@ code {
   border-top: 1px solid var(--line);
   padding-top: 23px;
 }
-.demo-link {
-  font-size: 12px;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  justify-content: center;
-  margin-top: 30px;
-  color: var(--muted);
-}
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -3475,11 +3453,6 @@ code {
   }
   .breadcrumb > svg {
     display: none;
-  }
-  .preview-label {
-    font-size: 12px;
-    max-width: 115px;
-    line-height: 1.5;
   }
   .connection-pill {
     font-size: 12px;
@@ -4198,11 +4171,6 @@ code {
 .connection-pill {
   font-size: 12px;
 }
-.preview-label {
-  font-size: 12px;
-  background: #f5e8d2;
-  color: #795729;
-}
 .dashboard-greeting p {
   font-size: 12px;
 }
@@ -4374,9 +4342,6 @@ code {
   font-size: 12px !important;
 }
 @media (max-width: 760px) {
-  .preview-label {
-    font-size: 12px;
-  }
   .connection-pill {
     font-size: 12px;
   }
@@ -4740,16 +4705,7 @@ code {
     font-size: 12px;
   }
 }
-.preview-label-short {
-  display: none;
-}
 @media (max-width: 760px) {
-  .preview-label-full {
-    display: none;
-  }
-  .preview-label-short {
-    display: inline;
-  }
   .breadcrumb strong,
   .connection-pill {
     white-space: nowrap;
@@ -5516,6 +5472,8 @@ code {
   gap: 44px;
   width: var(--container-w);
   margin: 64px auto 0;
+  /* 真实截图区里链到 #workspace，页头 64px 是 sticky 的，留出高度再滚。 */
+  scroll-margin-top: 88px;
 }
 .landing-preview-copy h2 {
   margin: 6px 0 14px;

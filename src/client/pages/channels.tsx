@@ -73,7 +73,7 @@ const newModel: ModelInput = {
 };
 
 export function Channels() {
-  const { data, base, request, refresh, notify, demo } = useApp();
+  const { data, base, request, refresh, notify } = useApp();
   const [params, setParams] = useSearchParams();
   const [channelEditor, setChannelEditor] = useState<Channel | "new" | null>(null);
   const [modelEditor, setModelEditor] = useState<Assistant | "new" | null>(null);
@@ -149,11 +149,9 @@ export function Channels() {
         providerId !== "custom",
       );
       // 保存配置和成功导入模型是两件事；无效 Key 也可能保存成功。
-      if (!demo) {
-        trackFunnel("channel_saved", { provider: providerId, created: channelEditor === "new" });
-        trackChannelModelImport(providerId, result.models);
-        if (result.importError) trackFunnel("channel_test_failed", { provider: providerId });
-      }
+      trackFunnel("channel_saved", { provider: providerId, created: channelEditor === "new" });
+      trackChannelModelImport(providerId, result.models);
+      if (result.importError) trackFunnel("channel_test_failed", { provider: providerId });
       await refresh();
       setChannelEditor(null);
       if (result.models || result.importError) {
@@ -213,10 +211,10 @@ export function Channels() {
       const result = await request<ModelImportResult>(`/channels/${channel.id}/models/import`, {
         method: "POST",
       }).catch((error: unknown) => {
-        if (!demo) trackFunnel("channel_test_failed", { provider: detectChannelProvider(channel) });
+        trackFunnel("channel_test_failed", { provider: detectChannelProvider(channel) });
         throw error;
       });
-      if (!demo) trackChannelModelImport(detectChannelProvider(channel), result);
+      trackChannelModelImport(detectChannelProvider(channel), result);
       await refresh();
       setImportResults((results) => ({
         ...results,

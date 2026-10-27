@@ -18,7 +18,7 @@ import { referralStatusLabel, type ReferralSummary } from "../../shared/referral
 import "./invite.css";
 
 export function Invite() {
-  const { request, notify, demo, base, data } = useApp();
+  const { request, notify, base, data } = useApp();
   const [summary, setSummary] = useState<ReferralSummary | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
@@ -46,7 +46,7 @@ export function Invite() {
     };
   }, [request, retry, data?.wallet.referral]);
   const copy = async () => {
-    if (!summary?.url || demo) return;
+    if (!summary?.url) return;
     try {
       await navigator.clipboard.writeText(summary.url);
       trackFunnel("invite_share_click");
@@ -96,10 +96,10 @@ export function Invite() {
               ref={input}
               readOnly
               value={summary?.url || ""}
-              placeholder={demo ? "注册后即可获得你的专属链接" : "正在生成邀请链接…"}
+              placeholder="正在生成邀请链接…"
               onFocus={(e) => e.target.select()}
             />
-            <button className="button" disabled={!summary?.url || demo} onClick={() => void copy()}>
+            <button className="button" disabled={!summary?.url} onClick={() => void copy()}>
               <Copy size={16} />
               复制链接
             </button>

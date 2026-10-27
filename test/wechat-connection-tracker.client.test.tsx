@@ -4,8 +4,7 @@ import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppProvider, useApp } from "../src/client/context";
 import { Wechat } from "../src/client/pages/wechat";
-import { useWechatConnectionTracker } from "../src/client/wechat-connection-tracker";
-import { createDemo } from "../src/client/demo";
+import { createFakeApi } from "./support/fake-api";
 import type { Connection, Snapshot, WechatLink } from "../src/shared/types";
 
 const auth = vi.hoisted(() => ({ refetch: vi.fn(async () => {}) }));
@@ -18,7 +17,7 @@ let events: string[];
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
-  snapshot = await createDemo()<Snapshot>("/dashboard");
+  snapshot = await createFakeApi()<Snapshot>("/dashboard");
   window.history.replaceState({}, "", "/app/wechat");
   events = [];
   vi.stubGlobal(
@@ -62,7 +61,7 @@ async function mount(key = "live") {
   await act(async () =>
     root.render(
       <MemoryRouter key={key} initialEntries={["/app/wechat"]}>
-        <AppProvider demo={false}>
+        <AppProvider>
           <Views />
         </AppProvider>
       </MemoryRouter>,
@@ -142,18 +141,5 @@ describe("workspace WeChat connection events", () => {
     links({ a: "connected", b: "connected" }, "b");
     await click("refresh");
     expect(events).toEqual(["wechat_connected"]);
-  });
-
-  it("never emits for demo transitions or for a fresh baseline after leaving demo mode", async () => {
-    function Probe({ demo }: { demo: boolean }) {
-      useWechatConnectionTracker(structuredClone(snapshot), demo);
-      return null;
-    }
-    links({ a: "waiting" });
-    await act(async () => root.render(<Probe demo />));
-    links({ a: "connected" });
-    await act(async () => root.render(<Probe demo />));
-    await act(async () => root.render(<Probe demo={false} />));
-    expect(events).toEqual([]);
   });
 });

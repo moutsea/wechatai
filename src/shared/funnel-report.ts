@@ -23,12 +23,11 @@ export const FUNNEL_STEPS: readonly { name: FunnelEvent; label: string }[] = [
   { name: "checkout_success", label: "结账成功" },
 ];
 
-/** 辅助事件：失败、跳过与演示入口独立列示。 */
+/** 辅助事件：失败、跳过与入口事件独立列示。 */
 export const FUNNEL_SIDE_EVENTS: readonly { name: FunnelEvent; label: string }[] = [
   { name: "channel_test_failed", label: "拉模型失败" },
   { name: "onboarding_skip", label: "跳过引导" },
   { name: "invite_share_click", label: "复制邀请链接" },
-  { name: "demo_view", label: "打开演示工作台" },
   { name: "hero_cta_click", label: "首屏 CTA 点击" },
   { name: "register_view", label: "到达注册页" },
   { name: "oauth_click", label: "快捷登录点击" },

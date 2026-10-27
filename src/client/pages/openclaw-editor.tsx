@@ -42,7 +42,7 @@ export function OpenClawEditor({
   onSaved: (id: string) => void;
   onComplete: (id: string) => void;
 }) {
-  const { request, refresh, notify, demo } = useApp();
+  const { request, refresh, notify } = useApp();
   const agentName = remoteAgentName(`wechatai/${kind}`);
   const [saved, setSaved] = useState(plugin === "new" ? null : plugin);
   const editSchema = openClawInputSchema.safeExtend({
@@ -70,7 +70,7 @@ export function OpenClawEditor({
   helpers.current = { request, refresh, notify, onComplete, busy };
   const id = saved?.id;
   useEffect(() => {
-    if (!id || demo) return;
+    if (!id) return;
     const pluginId = id;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -108,7 +108,7 @@ export function OpenClawEditor({
       stopped = true;
       clearTimeout(timer);
     };
-  }, [id, demo, pairing, kind, agentName]);
+  }, [id, pairing, kind, agentName]);
   useEffect(() => {
     if (!pairing) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -228,11 +228,9 @@ export function OpenClawEditor({
             <div className="claw-command-heading">
               <strong>在命令行终端粘贴并执行</strong>
               <small>
-                {demo
-                  ? "演示命令"
-                  : secondsLeft
-                    ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} 后过期`
-                    : "命令已过期"}
+                {secondsLeft
+                  ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} 后过期`
+                  : "命令已过期"}
               </small>
             </div>
             <p>请在运行 {agentName} 的电脑或服务器上打开命令行终端，再执行下方命令。</p>
@@ -240,7 +238,7 @@ export function OpenClawEditor({
             <button
               type="button"
               className="button small"
-              disabled={demo || secondsLeft === 0}
+              disabled={secondsLeft === 0}
               onClick={() =>
                 void run(async () => {
                   await navigator.clipboard.writeText(pairing.command);
@@ -251,11 +249,7 @@ export function OpenClawEditor({
               {copied ? <Check size={15} /> : <Copy size={15} />}
               {copied ? "已复制" : "复制连接命令"}
             </button>
-            <p>
-              {demo
-                ? "这是演示预览。登录账号后可以生成真实连接命令。"
-                : "命令仅用于本次连接，请勿转发。支持 macOS、Linux 和 WSL。"}
-            </p>
+            <p>命令仅用于本次连接，请勿转发。支持 macOS、Linux 和 WSL。</p>
             <div className="claw-waiting">
               <LoaderCircle size={14} className={secondsLeft ? "claw-spin" : ""} />
               {status?.pairingClaimed
@@ -267,7 +261,7 @@ export function OpenClawEditor({
           </div>
         )}
         {kind === "openclaw" && status?.hasKey && !pairing && (
-          <OpenClawUpgrade status={status} demo={demo} initiallyExpanded={showUpgrade} />
+          <OpenClawUpgrade status={status} initiallyExpanded={showUpgrade} />
         )}
         {kind === "hermes" && status?.hasKey && !status.nativeCommands && !pairing && (
           <p className="muted">

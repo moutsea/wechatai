@@ -1,0 +1,104 @@
+/* 首页「它在微信里，是这样工作的」：真实使用截图区。
+   存在的理由：hero 里那张对话是插画，用户看不到真的长什么样；这里放真实截图补上信任缺口，
+   也顺手替代了被删掉的 demo 入口（用户当时点 demo 就是想看「真的能干嘛」）。 */
+.landing-real {
+  width: var(--container-w);
+  margin: 72px auto 0;
+}
+.landing-real-head {
+  max-width: 640px;
+}
+.landing-real-head h2 {
+  margin: 17px 0 14px;
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 550;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+.landing-real-head > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+  line-height: 1.85;
+}
+.landing-real-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 34px;
+}
+.landing-real-card {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+/* 主图占满整行：桌面版微信截图里的字，卡片宽度不够时会被缩到看不清。 */
+.landing-real-card.is-wide {
+  grid-column: 1 / -1;
+}
+.landing-real-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--line);
+}
+.landing-real-card figcaption {
+  padding: 18px 22px 22px;
+}
+.landing-real-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--sage);
+  color: var(--green);
+  font-size: var(--text-xs);
+  letter-spacing: 0.5px;
+}
+.landing-real-card figcaption strong {
+  display: block;
+  margin: 11px 0 7px;
+  font-size: var(--text-lg);
+  font-weight: 550;
+}
+.landing-real-card figcaption p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.8;
+}
+.landing-real-note {
+  margin: 20px 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.landing-real-note a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* 平板宽度下两列会把界面截图压到 400px 出头，弹窗里的字就看不清了；
+   宁可早点变成单列，让截图保持可读。 */
+@media (max-width: 980px) {
+  .landing-real-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 820px) {
+  .landing-real {
+    margin-top: 48px;
+  }
+  .landing-real-grid {
+    gap: 16px;
+    margin-top: 26px;
+  }
+  .landing-real-card figcaption {
+    padding: 16px 18px 18px;
+  }
+}

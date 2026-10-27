@@ -67,7 +67,7 @@ export function PersonalRecords({
   plugin: PersonalAssistantPlugin;
   onClose: () => void;
 }) {
-  const { data, request, notify, demo } = useApp();
+  const { data, request, notify } = useApp();
   const [kind, setKind] = useState<PersonalRecordInput["kind"]>("note"),
     [query, setQuery] = useState(""),
     [search, setSearch] = useState(""),
@@ -125,7 +125,7 @@ export function PersonalRecords({
       .finally(() => {
         if (id === sequence.current) setLoading(false);
       });
-  }, [plugin.id, kind, search, queryFrom, queryTo, offset, refresh, demo, request]);
+  }, [plugin.id, kind, search, queryFrom, queryTo, offset, refresh, request]);
   const update = <K extends keyof PersonalRecordInput>(key: K, value: PersonalRecordInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const open = (record: PersonalRecord | "new") => {
@@ -271,11 +271,7 @@ export function PersonalRecords({
     <Modal
       wide
       title={`${plugin.name} · 我的记录`}
-      description={
-        demo
-          ? "演示数据仅本次预览有效，不调用模型、不发送提醒。"
-          : "同一份助理配置跨会话共用。时间按北京时间，账目按币种分别统计。"
-      }
+      description="同一份助理配置跨会话共用。时间按北京时间，账目按币种分别统计。"
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -565,7 +561,7 @@ export function PersonalRecords({
               <button
                 className="button secondary small"
                 onClick={() => void exportRecords()}
-                disabled={busy || loading || !page.total || demo}
+                disabled={busy || loading || !page.total}
               >
                 <Download size={15} />
                 导出
@@ -708,7 +704,7 @@ export function PersonalRecords({
                         <button
                           className="icon-button"
                           aria-label={`删除${r.title}`}
-                          disabled={busy || demo}
+                          disabled={busy}
                           onClick={() => setDeleting(r)}
                         >
                           <Trash2 size={15} />
@@ -767,11 +763,9 @@ export function PersonalRecords({
                 下一页
               </button>
             </div>
-            {(!writable || demo) && (
+            {!writable && (
               <p className="form-hint">
-                {demo
-                  ? "演示数据只在本次预览有效，不调用模型、不发送微信提醒。"
-                  : "记录仍可查看、导出或删除；启用助理且配置未超出套餐上限时，可继续新增、编辑和使用提醒。"}
+                记录仍可查看、导出或删除；启用助理且配置未超出套餐上限时，可继续新增、编辑和使用提醒。
               </p>
             )}
           </>

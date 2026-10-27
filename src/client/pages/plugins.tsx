@@ -53,7 +53,7 @@ const initial: WebResearchInput = {
   maxReads: 3,
 };
 export function Plugins() {
-  const { data, request, refresh, notify, demo } = useApp();
+  const { data, request, refresh, notify } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editor, setEditor] = useState<WebResearchPlugin | "new" | null>(null);
   const [notificationEditor, setNotificationEditor] = useState<NotificationPlugin | "new" | null>(
@@ -579,15 +579,13 @@ export function Plugins() {
           wide
           title={`测试 · ${testing.name}`}
           description={
-            demo
-              ? "预览模式仅展示示例，不发送真实请求。"
-              : testing.pluginId === "wechatai/personal-assistant"
-                ? "会实际调用你的模型并消耗 credits；仅演练操作，不保存笔记、账目或提醒，不发送提醒。"
-                : testing.pluginId === "wechatai/image-generation"
-                  ? "会实际生成一张图片，消耗 5 credits 加描述文字的输入费用；图片保留 30 天。"
-                  : testing.pluginId === "wechatai/roleplay"
-                    ? "会实际调用你的模型，按角色设定、输入和最终回复消耗 credits；测试不写入故事会话。"
-                    : "会实际调用你的模型和搜索服务，并按输入与最终回复消耗 credits。"
+            testing.pluginId === "wechatai/personal-assistant"
+              ? "会实际调用你的模型并消耗 credits；仅演练操作，不保存笔记、账目或提醒，不发送提醒。"
+              : testing.pluginId === "wechatai/image-generation"
+                ? "会实际生成一张图片，消耗 5 credits 加描述文字的输入费用；图片保留 30 天。"
+                : testing.pluginId === "wechatai/roleplay"
+                  ? "会实际调用你的模型，按角色设定、输入和最终回复消耗 credits；测试不写入故事会话。"
+                  : "会实际调用你的模型和搜索服务，并按输入与最终回复消耗 credits。"
           }
           onClose={() => {
             if (!busy) setTesting(null);

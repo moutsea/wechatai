@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
-  ArrowUpRight,
   Check,
   ShieldCheck,
   Sparkles,
@@ -20,6 +19,7 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "./site-header";
 import { LandingSteps } from "./landing-steps";
+import { LandingReal } from "./landing-real";
 import { SiteFooter } from "./site-footer";
 import { LANDING_FAQ } from "../shared/landing-faq";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
@@ -130,9 +130,9 @@ export function Landing() {
               在微信里，<span>用上你的大模型</span>
             </h1>
             <p>
-              3 分钟配好，之后就在微信里说话。
+              选好服务商、粘贴你的 API Key，3 分钟配完。
               <br />
-              自备 API Key，DeepSeek / Claude / GPT 随时切换。
+              之后就在微信里说话，DeepSeek / Claude / GPT 随时切换。
             </p>
             <div className="hero-actions">
               <StartLink
@@ -145,18 +145,20 @@ export function Landing() {
                 {session ? "配置我的模型" : "免费开始，3 分钟上手"}
                 <ArrowRight size={18} />
               </StartLink>
+              {/* 次按钮不离开首页：直接滚到下面三步，用户看完就知道要做什么，
+                  比跳到一个陌生页面再让用户自己找更清楚。 */}
               <Link
                 className="button secondary hero-secondary"
-                to="/demo"
+                to="/#how"
                 onClick={() =>
                   trackFunnel("hero_cta_click", {
-                    cta: "demo",
+                    cta: "how",
                     auth: session ? "in" : "out",
                   })
                 }
               >
-                不注册，先点开看看
-                <ArrowUpRight size={16} />
+                看看三步怎么配
+                <ChevronDown size={16} />
               </Link>
             </div>
             {/* 分隔符用真实节点 + aria-hidden：伪元素的 content 会进可访问性树，读屏会念出「·」。 */}
@@ -260,7 +262,8 @@ export function Landing() {
           </strong>
         </section>
         <LandingSteps />
-        <section className="landing-preview" aria-labelledby="landing-preview-title">
+        <LandingReal />
+        <section className="landing-preview" id="workspace" aria-labelledby="landing-preview-title">
           <div className="landing-preview-copy">
             <p className="eyebrow">工作台</p>
             <h2 id="landing-preview-title">配置在网页，聊天在微信</h2>
@@ -269,16 +272,16 @@ export function Landing() {
               手机上不用装任何东西，微信那边照常说话就行。
             </p>
             <div className="landing-preview-actions">
-              <Link className="button secondary" to="/demo">
-                打开演示工作台
-                <ArrowUpRight size={16} aria-hidden="true" />
-              </Link>
+              <StartLink className="button secondary" authenticatedTo="/app/channels">
+                开始配置我的模型
+                <ArrowRight size={16} aria-hidden="true" />
+              </StartLink>
             </div>
-            <p className="landing-preview-note">演示里是可点的真实界面，数据是假的，不用注册。</p>
+            <p className="landing-preview-note">截图来自真实工作台，图中数据为示例。</p>
           </div>
           <figure className="landing-preview-shot">
             <img
-              src="/images/workspace-overview.jpg"
+              src="/images/real/workspace-overview.jpg"
               width={1440}
               height={900}
               loading="lazy"
@@ -451,6 +454,14 @@ export function AuthPage({ register = false }: { register?: boolean }) {
   return <AuthForm key={register ? "register" : "login"} register={register} />;
 }
 function AuthForm({ register }: { register: boolean }) {
+  const { completeSignIn } = useAuth();
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   // 只在实际展示注册表单时记录，排除会话加载、失败和已登录跳转。
   const viewReported = useRef(false);
   useEffect(() => {
@@ -541,7 +552,11 @@ function AuthForm({ register }: { register: boolean }) {
                 : {},
             },
           })
-        : await authClient.signIn.email({ email: email.trim(), password });
+        : await authClient.signIn.email({
+            email: email.trim(),
+            password,
+            fetchOptions: { disableSignal: true },
+          });
       if (response.error) {
         if (response.error.code === "EMAIL_NOT_VERIFIED") {
           navigate(`/verify-email?returnTo=${encodeURIComponent(returnTo)}`, {
@@ -560,7 +575,9 @@ function AuthForm({ register }: { register: boolean }) {
         });
         return;
       }
-      navigate(returnTo, { replace: true });
+      if (!response.data?.token) throw new Error("暂时无法确认新的登录会话，请重新登录。");
+      await completeSignIn({ userId: response.data.user.id, token: response.data.token });
+      if (active.current) navigate(returnTo, { replace: true });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -695,10 +712,8 @@ function AuthForm({ register }: { register: boolean }) {
           <ShieldCheck size={16} />
           <span>API Key 加密保存在服务端，仅在调用你的模型时使用。</span>
         </div>
-        <Link className="demo-link" to="/demo">
-          暂不注册，先浏览界面预览
-          <ArrowUpRight size={14} />
-        </Link>
+        {/* 注册/登录页曾经挂过一个「先浏览界面预览」的 demo 入口，用户会以为还有别的使用方式；
+            现在配置路径就是「选服务商 → 粘贴 API Key」，不需要第二入口，所以整块去掉。 */}
       </form>
     </AuthLayout>
   );

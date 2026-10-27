@@ -27,10 +27,12 @@ const Workspace = lazy(() =>
   import("./workspace").then((module) => ({ default: module.Workspace })),
 );
 function ScrollReset() {
-  const { pathname, hash } = useLocation();
+  const { pathname, hash, key } = useLocation();
   useEffect(() => {
     // 带 hash 的跳转（例如页头的「如何使用」→ /#how）要滚到目标区块，
     // 而不是回到顶部；目标不在本页时仍回到顶部。
+    // 依赖里必须带 location.key：停在 /#how 之后又点一次同一个链接不会改变
+    // pathname/hash，只靠这两个值去重会让这次点击什么都不做。
     if (hash) {
       const target = document.getElementById(hash.slice(1));
       if (target) {
@@ -39,7 +41,7 @@ function ScrollReset() {
       }
     }
     window.scrollTo(0, 0);
-  }, [pathname, hash]);
+  }, [pathname, hash, key]);
   return null;
 }
 // Preserve the existing root when Vite refreshes this module during development.
@@ -89,14 +91,6 @@ root.render(
             element={
               <Suspense fallback={<WorkspaceSkeleton />}>
                 <Workspace />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/demo/*"
-            element={
-              <Suspense fallback={<WorkspaceSkeleton label="正在加载工作台预览…" />}>
-                <Workspace demo />
               </Suspense>
             }
           />

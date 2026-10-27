@@ -3,14 +3,13 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Dashboard } from "../src/client/pages/dashboard";
-import { createDemo } from "../src/client/demo";
+import { createFakeApi } from "./support/fake-api";
 import type { ChatSession, Snapshot } from "../src/shared/types";
 
 const state = vi.hoisted(() => ({
   data: null as Snapshot | null,
   user: { name: "Tester", email: "test@example.test" },
   base: "/app",
-  demo: false,
   request: vi.fn(),
   refresh: vi.fn(),
   notify: vi.fn(),
@@ -25,9 +24,9 @@ beforeEach(async () => {
     "fetch",
     vi.fn(async () => new Response(null, { status: 204 })),
   );
-  const demo = createDemo();
-  state.data = await demo<Snapshot>("/dashboard");
-  sessions = await demo<ChatSession[]>("/sessions");
+  const fakeApi = createFakeApi();
+  state.data = await fakeApi<Snapshot>("/dashboard");
+  sessions = await fakeApi<ChatSession[]>("/sessions");
   state.data.plan = "plus";
   state.data.planUntil = Date.now() + 86400_000;
   state.data.onboardingDismissedAt = 1;

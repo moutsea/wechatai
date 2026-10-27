@@ -38,20 +38,18 @@ export const PRIVATE_PATHS = [
   "/verify-email",
   "/forgot-password",
   "/reset-password",
-  ...["/app", "/demo"].flatMap((base) =>
-    [
-      "",
-      "/channels",
-      "/assistants",
-      "/plugins",
-      "/wechat",
-      "/sessions",
-      "/billing",
-      "/credits",
-      "/invite",
-      "/notices",
-    ].map((section) => `${base}${section}`),
-  ),
+  ...[
+    "",
+    "/channels",
+    "/assistants",
+    "/plugins",
+    "/wechat",
+    "/sessions",
+    "/billing",
+    "/credits",
+    "/invite",
+    "/notices",
+  ].map((section) => `/app${section}`),
 ];
 
 const ORGANIZATION_ID = `${SITE_URL}/#organization`;
@@ -469,9 +467,7 @@ export function getPageSeo(pathname: string): PageSeo {
               ? "重设密码"
               : path === "/app" || path.startsWith("/app/")
                 ? "工作台"
-                : path === "/demo" || path.startsWith("/demo/")
-                  ? "工作台演示"
-                  : "页面未找到";
+                : "页面未找到";
   return {
     title: `${label} | ${SITE_NAME}`,
     description: "微伴 Wechatai 个人微信 AI 工作台。",

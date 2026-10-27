@@ -6,14 +6,13 @@ import { AuthPage } from "../src/client/public-pages";
 import { VerifyEmailPage, ResetPasswordPage } from "../src/client/pages/auth-recovery";
 import { Billing } from "../src/client/pages/billing";
 import { browserPageViewReporter, trackFunnel } from "../src/client/analytics-client";
-import { createDemo } from "../src/client/demo";
+import { createFakeApi } from "./support/fake-api";
 import { ANALYTICS_SESSION_HEADER } from "../src/shared/analytics";
 import type { Snapshot } from "../src/shared/types";
 
 const state = vi.hoisted(() => ({
   data: null as Snapshot | null,
   base: "/app",
-  demo: false,
   request: vi.fn(),
   refresh: vi.fn(async () => {}),
   notify: vi.fn(),
@@ -36,11 +35,10 @@ let events: { name: string }[];
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   events = [];
-  state.data = await createDemo()<Snapshot>("/dashboard");
+  state.data = await createFakeApi()<Snapshot>("/dashboard");
   state.auth.data = null;
   state.auth.isPending = false;
   state.auth.error = null;
-  state.demo = false;
   state.request.mockReset();
   state.resetPassword.mockClear();
   vi.stubGlobal(

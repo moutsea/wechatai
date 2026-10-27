@@ -23,7 +23,7 @@
 - 文档中心 `/docs` + 16 篇（3 篇 tutorial + 13 篇 guide）
 - 开发者 3 页：`/developers/plugins`、`/developers/openclaw`、`/developers/hermes`
 - 信息页 3 个：`/terms`、`/privacy`、`/contact`
-- 私有（noindex）：`/app*`、`/demo*`、登录注册与找回密码 5 页
+- 私有（noindex）：`/app*`、登录注册与找回密码 5 页
 
 **结构性问题（改造前）**：
 

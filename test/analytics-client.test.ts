@@ -144,7 +144,6 @@ describe("page view reporter", () => {
     const { reporter, sent } = setup();
     for (const pathname of [
       "/app/wechat",
-      "/demo/wechat",
       "/verify-email",
       "/reset-password",
       "/assets/index-abc.js",
@@ -230,6 +229,46 @@ describe("page view reporter", () => {
     expect(sent).toHaveLength(1);
   });
 
+  it.each(["", "#how"])("ignores repeated anchor navigation after landing at hash %j", (hash) => {
+    const { reporter, sent } = setup();
+    expect(reporter.reportPageView(view("/", "initial", { hash }))).toBe(true);
+    for (const [key, nextHash] of [
+      ["hero-first", "#how"],
+      ["hero-again", "#how"],
+      ["menu", "#how"],
+      ["workspace", "#workspace"],
+      ["back-to-how", "#how"],
+      ["back-to-top", ""],
+    ])
+      expect(reporter.reportPageView(view("/", key, { hash: nextHash }))).toBe(false);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("counts a BFCache restore with an anchor once and still ignores later anchor clicks", () => {
+    const { reporter, sent } = setup();
+    reporter.reportPageView(view("/", "initial", { hash: "#how" }));
+    reporter.resetBackForward();
+    expect(reporter.reportPageView(view("/", "initial", { hash: "#how", visible: false }))).toBe(
+      false,
+    );
+    expect(reporter.reportPageView(view("/", "initial", { hash: "#how" }))).toBe(true);
+    expect(reporter.reportPageView(view("/", "initial", { hash: "#how" }))).toBe(false);
+    expect(reporter.reportPageView(view("/", "menu", { hash: "#how" }))).toBe(false);
+    expect(sent).toHaveLength(2);
+  });
+
+  it("counts another page, query and return visit even when the anchor stays the same", () => {
+    const { reporter, sent } = setup();
+    for (const [pathname, key, search] of [
+      ["/", "initial", ""],
+      ["/pricing", "pricing", ""],
+      ["/", "return", ""],
+      ["/", "campaign", "?utm_source=newsletter"],
+    ])
+      expect(reporter.reportPageView(view(pathname, key, { search, hash: "#how" }))).toBe(true);
+    expect(sent).toHaveLength(4);
+  });
+
   it("still counts a page again after the visitor went somewhere else", () => {
     const { reporter, sent } = setup();
     reporter.reportPageView(view("/wechat-ai", "k1"));
@@ -289,6 +328,18 @@ describe("page view reporter", () => {
     };
     const { reporter, sent } = setup({ storage: hostile });
     expect(reporter.reportPageView(view("/pricing", "k1"))).toBe(true);
+    expect(sent).toHaveLength(1);
+  });
+
+  it("counts a retired /demo link as an ordinary visit and keeps /app private", () => {
+    // /demo 下线后不再有任何特殊处理：老外链打到 404 页，但那次访问仍然算一次浏览。
+    // 这是刻意的 —— 坏掉的外链要么在这里可见，要么永远不可见。
+    // 反方向同样要守住：删掉 demo 过滤不能顺手把工作台或静态资源也放进统计。
+    const { reporter, sent } = setup();
+    expect(reporter.reportPageView(view("/demo", "k1"))).toBe(true);
+    expect(sent[0]?.payload.pathname).toBe("/demo");
+    expect(reporter.reportPageView(view("/app/demo", "k2"))).toBe(false);
+    expect(reporter.reportPageView(view("/images/real/wechat-reminder.jpg", "k3"))).toBe(false);
     expect(sent).toHaveLength(1);
   });
 });

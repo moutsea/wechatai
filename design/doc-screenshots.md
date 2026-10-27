@@ -1,6 +1,7 @@
 # `/docs/wechat-connection` 的截图：拍摄与接入
 
 > 状态（2026-10-24 更新）：连接微信教程已接入 **4 张截图**，其他功能教程本轮新增 **10 张真实演示界面截图**；尚未发布。手机端截图来自用户提供的素材，网页端截图来自 `/demo`，不包含真实账号数据或密钥。A3 使用 ClawBot 详情页代替，B2 不伪造失效提示，B3 通过渠道列表图与文字说明测试入口。
+> **2026-10-27 补注**：`/demo` 演示工作台已从产品中移除（用户反馈入口含义不清）。本文里出现的「演示界面 / 演示数据」指的是**当时用于拍摄的预览环境**，现有图片继续沿用；之后再补截图请在登录状态下拍真实工作台，并在 caption 里标注「图中数据为示例」。
 > 本文给出：为什么必须真截图、每张拍什么、隐私怎么挡、拍完怎么接进代码。
 
 ## 已接入的四张（本轮完成）
@@ -10,7 +11,7 @@
 | `public/images/docs/wechat-settings-plugin.jpg` | 496×764（已裁掉「切换账号/退出登录」等无关行） | `/docs/wechat-connection` `#connect` | 证明「插件」在「设置 → 功能」分组里 |
 | `public/images/docs/wechat-plugin-list.jpg` | 496×569（已裁掉「微信输入法」卡片） | `/docs/wechat-connection` `#connect` | 证明插件页是卡片式，要点右侧「详情」 |
 | `public/images/docs/clawbot-detail.jpg` | 496×615 | `/docs/wechat-connection` `#reconnect` | 展示 24 小时回复窗口的原始说明 |
-| `public/images/docs/wechat-link-status.jpg` | 450×768 | `/docs/wechat-connection` `#multiple` | 展示「已连接」状态卡片（演示数据，caption 已注明「（演示界面）」） |
+| `public/images/docs/wechat-link-status.jpg` | 450×768 | `/docs/wechat-connection` `#multiple` | 展示「已连接」状态卡片（拍摄于当时的预览环境；caption 已改为「图中数据为示例」） |
 
 > 三张手机端截图没有个人信息（无头像、无昵称、无二维码、无 Key），未做遮挡。
 > `DocSection.screenshot`（单图）已重构为 `screenshots: readonly DocScreenshot[]`（多图，按顺序渲染），因此 `#connect` 一节可以并列两张。
@@ -104,7 +105,7 @@
 | 遮挡 | 二维码、链接名称里的个人信息 |
 | 文件名 | `wechat-link-status.jpg` |
 | alt | 微伴「微信连接」页面：连接状态、当前渠道与模型、切换入口 |
-| caption | 连接成功后状态显示为「已连接」，可在此切换渠道与模型。（演示数据） |
+| caption | 连接成功后状态显示为「已连接」，可在此切换渠道与模型。（图中数据为示例） |
 
 ### B2 · 微信侧的失效提示 —— ⬜ 待补拍（可省：24 小时机制已由 `clawbot-detail.jpg` 证明）
 
@@ -126,7 +127,7 @@
 | 遮挡 | **API Key 必须完全打码**（只留前 4 位也不行，直接全遮） |
 | 文件名 | `app-channel-test.jpg` |
 | alt | 微伴「渠道与模型」页面的模型测试结果与错误提示 |
-| caption | 测试失败时按提示核对 API Key、余额和模型 ID。（演示数据） |
+| caption | 测试失败时按提示核对 API Key、余额和模型 ID。（图中数据为示例） |
 
 ## 四、隐私遮挡清单（拍完先过一遍）
 

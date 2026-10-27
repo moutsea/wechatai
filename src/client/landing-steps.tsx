@@ -5,22 +5,32 @@ import "./landing-steps.css";
 
 const steps = [
   {
-    title: "配置渠道与模型",
-    description: "填入自己的服务地址和 API Key，选择接口协议，再添加想使用的大模型。",
+    title: "选择服务商并配置模型",
+    // 胶囊标签在 390px 一分三列，超过 5 个字就折成两行，把三个 tab 的高度拉得参差不齐。
+    // 标签用短名，完整含义交给面板里的 h3 与描述。
+    tab: "配置模型",
+    // 现在添加渠道是「选服务商 → 粘 Key」，协议和地址会自动填好；
+    // 旧文案还要求用户自己填服务地址和协议，会让第一次用的人以为要懂 API 细节。
+    description:
+      "在「添加渠道」里选好服务商（DeepSeek、OpenAI、Anthropic 等），粘贴你自己的 API Key，接口协议与请求地址会自动填好，再添加想用的模型。",
     details: ["支持三种常见 LLM 协议", "一键获取可用模型，也可以手动添加"],
     guide: "/docs/channels-models",
     guideLabel: "查看模型配置教程",
   },
   {
     title: "连接你的微信",
-    description: "在工作台获取二维码。打开微信设置，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫码并确认连接。",
+    tab: "连接微信",
+    description:
+      "在工作台获取二维码。打开微信设置，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫码并确认连接。",
     details: ["个人专属连接，只回应你绑定的微信", "连接后发出第一条消息，收到欢迎和教程入口"],
     guide: "/docs/wechat-connection#connect",
     guideLabel: "查看微信连接教程",
   },
   {
     title: "像平常一样聊天",
-    description: "打开微信里的对话，直接向模型提问。想换一个模型或开启新话题，发送命令就能完成。",
+    tab: "开始聊天",
+    description:
+      "打开微信里的对话，直接向模型提问。想换一个模型或开启新话题，发送命令就能完成。",
     details: ["发送 /models 查看模型，按需切换", "发送 /new 开始新话题，保留旧记录"],
     guide: "/docs/commands",
     guideLabel: "查看微信命令速查",
@@ -39,13 +49,15 @@ function StepPreview({ step }: { step: number }) {
             <strong>我的模型渠道</strong>
           </div>
           <div className="steps-config-field">
-            <span>服务地址</span>
-            <div>https://api.example.com</div>
+            <span>服务商</span>
+            <div>DeepSeek</div>
           </div>
           <div className="steps-config-field">
             <span>API Key</span>
             <div className="steps-key-placeholder">••••••••••••••••••••</div>
           </div>
+          {/* 地址与协议是选完服务商后自动补的，示意里降级成一行说明，避免用户以为要自己填 URL。 */}
+          <p className="steps-config-hint">协议与请求地址自动填好 · api.deepseek.com</p>
           <div className="steps-config-models">
             <span>
               <Check size={14} /> DeepSeek
@@ -148,7 +160,7 @@ export function LandingSteps() {
             onKeyDown={(event) => onTabKeyDown(event, index)}
           >
             <span>{String(index + 1).padStart(2, "0")}</span>
-            {step.title}
+            {step.tab}
           </button>
         ))}
       </div>

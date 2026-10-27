@@ -1,6 +1,6 @@
 import { ANALYTICS_SESSION_HEADER, isTrackedPath, normalizePath } from "../shared/analytics";
 import type { FunnelEvent } from "../shared/funnel";
-import { allowsFunnelEvent, isServerFunnelEvent } from "../shared/funnel-policy";
+import { isServerFunnelEvent } from "../shared/funnel-policy";
 import type { ModelImportResult } from "../shared/types";
 
 /**
@@ -84,7 +84,7 @@ export function createPageViewReporter(deps: PageViewDeps) {
   const randomId = deps.randomId ?? fallbackRandomId;
   /** 上一次处理过的 location.key，用来保证一次导航只记一次。 */
   let reportedKey = "";
-  /** 上一次算作浏览的页面（path + search）与锚点，用来识别同页内的锚点跳转。 */
+  /** 上一次处理过的页面（path + search）与锚点，用来识别同页内的定位。 */
   let lastRoute = "";
   let lastHash = "";
   /** 内存里的会话号：storage 可用时与它保持一致，不可用时它就是唯一的会话身份。 */
@@ -172,11 +172,10 @@ export function createPageViewReporter(deps: PageViewDeps) {
       // 只在页面可见时记数：后台标签页里打开的链接等用户真的切过来再补记。
       if (!visible) return false;
       if (reportedKey === key) return false;
-      // 站点所有文档页和落地页都有目录锚点（<a href="#faq">）。点锚点会留下一段
-      // 历史记录，从锚点按后退回到同一页时 pathname 与 search 都没变、只有 hash 变，
-      // 这是同一页的另一次定位而不是新的浏览 —— 否则 PV 会被目录点击抬高。
+      // 同页切换锚点、重复点击同一锚点或从锚点退回页顶都只是重新定位。
+      // 重复点击也会生成新的 location.key，不能只靠 hash 是否改变来排除。
       const route = `${pathname}${search}`;
-      const anchorOnly = route === lastRoute && hash !== lastHash;
+      const anchorOnly = route === lastRoute && Boolean(hash || lastHash);
       reportedKey = key;
       lastRoute = route;
       lastHash = hash;
@@ -186,6 +185,9 @@ export function createPageViewReporter(deps: PageViewDeps) {
     /** 从往返缓存（后退/前进）恢复时算一次新的浏览。 */
     resetBackForward() {
       reportedKey = "";
+      // 缓存恢复是新浏览，即使页面仍停留在同一个锚点，也不能按同页定位过滤。
+      lastRoute = "";
+      lastHash = "";
     },
     /** 随注册请求传递，由服务端在真实创建账户后记账，不自行上报注册成功。 */
     signupAttribution(): { analyticsSessionId?: string } {
@@ -259,12 +261,7 @@ export function browserAnalyticsHeaders(): Record<string, string> {
 export function trackFunnel(name: FunnelEvent, props?: Record<string, string | number | boolean>) {
   try {
     const nav = window.navigator as AnalyticsNavigator;
-    if (
-      isServerFunnelEvent(name) ||
-      optedOut(nav) ||
-      !allowsFunnelEvent(name, window.location.pathname)
-    )
-      return;
+    if (isServerFunnelEvent(name) || optedOut(nav)) return;
     const { analyticsSessionId } = browserPageViewReporter().signupAttribution();
     const payload = {
       eventId: fallbackRandomId(),

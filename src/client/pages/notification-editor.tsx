@@ -135,7 +135,7 @@ const stateLabels = {
   cancelled: "已取消",
 };
 export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
-  const { request, refresh, notify, data, demo } = useApp();
+  const { request, refresh, notify, data } = useApp();
   const [status, setStatus] = useState<NotificationStatus | null>(null);
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false),
@@ -227,7 +227,6 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
             className={`button small ${hasToken ? "secondary" : ""}`}
             disabled={
               busy ||
-              demo ||
               !data ||
               !pluginAvailable(data.plan, data.plugins ?? [], plugin.id) ||
               !status
@@ -243,7 +242,6 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
             </button>
           )}
         </div>
-        {demo && <p>演示模式不生成真实 Token，请登录账号使用。</p>}
         {error && (
           <div className="form-error" role="alert">
             <p>{error}</p>

@@ -6,7 +6,7 @@ import { trackChannelModelImport, trackFunnel } from "../analytics-client";
 import type { ModelImportResult } from "../../shared/types";
 
 export function useKimiseekConnect(onComplete: () => void) {
-  const { request, refresh, notify, demo } = useApp();
+  const { request, refresh, notify } = useApp();
   const [pending, setPending] = useState<{
     id: string;
     url: string;
@@ -60,11 +60,6 @@ export function useKimiseekConnect(onComplete: () => void) {
   }, [pending, request, refresh, notify]);
   const start = async (operation: "connect" | "recharge") => {
     setError("");
-    if (demo) {
-      setError("体验模式不关联真实账户，请登录后使用");
-      notify("体验模式不关联真实账户，请登录后使用", true);
-      return;
-    }
     if (pending || starting) return;
     const popup = window.open("about:blank", "_blank");
     if (popup) {

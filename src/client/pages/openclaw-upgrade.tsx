@@ -5,11 +5,9 @@ import { openClawUpgradeState } from "../remote-agent-status";
 
 export function OpenClawUpgrade({
   status,
-  demo = false,
   initiallyExpanded = false,
 }: {
   status: OpenClawStatus;
-  demo?: boolean;
   initiallyExpanded?: boolean;
 }) {
   const [copiedAt, setCopiedAt] = useState(0);
@@ -48,7 +46,6 @@ export function OpenClawUpgrade({
           <button
             type="button"
             className="button small"
-            disabled={demo}
             onClick={async () => {
               try {
                 await navigator.clipboard.writeText(release.command);

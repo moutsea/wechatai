@@ -36,7 +36,7 @@ const items = [
   { path: "/invite", label: "邀请好友", en: "Invite friends", icon: Gift },
 ];
 export function Shell({ children }: { children: ReactNode }) {
-  const { data, base, demo, isAdmin, user, request, refresh, notify } = useApp();
+  const { data, base, isAdmin, user, request, refresh, notify } = useApp();
   const navigation = isAdmin
     ? [...items, { path: "/admin", label: "管理后台", en: "Admin", icon: ShieldCheck }]
     : items;
@@ -135,13 +135,6 @@ export function Shell({ children }: { children: ReactNode }) {
             <strong>{page.label}</strong>
           </div>
           <div className="topbar-actions">
-            {demo && (
-              <Link className="preview-label" to="/register">
-                <span className="preview-label-full">界面预览 · 注册开始使用</span>
-                <span className="preview-label-short">预览</span>
-                <ArrowUpRight size={13} />
-              </Link>
-            )}
             <Link
               to={`${base}/wechat`}
               className={`connection-pill ${data?.connection.status === "connected" ? "connected" : ""}`}
@@ -193,10 +186,8 @@ export function Shell({ children }: { children: ReactNode }) {
               onClick={async () => {
                 setBusy(true);
                 try {
-                  if (!demo) {
-                    const result = await authClient.signOut();
-                    if (result.error) throw new Error("退出登录失败，请重试。");
-                  }
+                  const result = await authClient.signOut();
+                  if (result.error) throw new Error("退出登录失败，请重试。");
                   navigate("/", { replace: true });
                 } catch {
                   notify("退出登录失败，请重试。", true);
@@ -206,7 +197,7 @@ export function Shell({ children }: { children: ReactNode }) {
               }}
             >
               <LogOut size={16} />
-              {demo ? "退出预览" : "退出登录"}
+              退出登录
             </button>
           </div>
         </Modal>

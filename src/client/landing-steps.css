@@ -1,7 +1,8 @@
 .landing-steps {
   width: var(--container-w);
   margin: 76px auto 48px;
-  scroll-margin-top: 30px;
+  /* 页头 64px 是 sticky 的，锚点滚过来时标题会被压在下面；留出页头高度再滚。 */
+  scroll-margin-top: 88px;
 }
 .steps-heading {
   text-align: center;
@@ -174,6 +175,12 @@
 }
 .steps-key-placeholder {
   letter-spacing: 2px;
+}
+.steps-config-hint {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .steps-config-models {
   display: flex;

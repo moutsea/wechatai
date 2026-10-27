@@ -138,7 +138,7 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
           {
             src: "/images/docs/openclaw-connect.jpg",
             alt: "OpenClaw 连接弹窗中的连接命令和复制按钮",
-            caption: "连接命令的位置（演示界面）。请复制自己账号生成的命令，不要使用截图内容。",
+            caption: "连接命令的位置（示例截图）。请复制自己账号生成的命令，不要使用截图内容。",
             width: 496,
             height: 746,
           },
@@ -158,7 +158,7 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
           {
             src: "/images/docs/openclaw-configs.jpg",
             alt: "OpenClaw 配置管理：顶部选择配置，底部添加另一组配置",
-            caption: "顶部选择要修改的配置，底部「添加另一组配置」新增助手。图中使用演示数据。",
+            caption: "顶部选择要修改的配置，底部「添加另一组配置」新增助手。图中使用示例数据。",
             width: 496,
             height: 748,
           },
@@ -242,7 +242,7 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
           {
             src: "/images/docs/hermes-connect.jpg",
             alt: "Hermes 连接弹窗：复制连接命令，到安装 Hermes 的设备上执行",
-            caption: "Hermes 连接界面（演示数据）。登录自己的账号后生成并复制连接命令。",
+            caption: "Hermes 连接界面（示例截图）。登录自己的账号后生成并复制连接命令。",
             width: 496,
             height: 746,
           },

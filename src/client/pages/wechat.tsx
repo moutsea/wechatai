@@ -21,7 +21,7 @@ import { LimitHint } from "../limit-hint";
 import { COMMANDS_GUIDE_PATH } from "../../shared/guide";
 import { wechatSetupIssue } from "../../shared/wechat-readiness";
 export function Wechat() {
-  const { data, base, request, refresh, notify, demo } = useApp();
+  const { data, base, request, refresh, notify } = useApp();
   const [busy, setBusy] = useState(false);
   const [disconnect, setDisconnect] = useState(false);
   const [editor, setEditor] = useState<"create" | "rename" | "delete" | null>(null);
@@ -42,10 +42,6 @@ export function Wechat() {
     type: "bind" | "disconnect" | "select" | "create" | "rename" | "delete",
     id = data.selectedConnectionId,
   ) => {
-    if (demo) {
-      notify("演示页面仅供预览，注册后即可管理自己的微信链接");
-      return;
-    }
     if (type === "bind" && setupIssue) {
       notify(setupIssue.message, true);
       return;
@@ -204,7 +200,6 @@ export function Wechat() {
                 ? "现在就可以在微信里与你选择的模型对话。"
                 : "使用你自己的微信扫码，在手机上完成连接确认。"}
           </p>
-          {demo && <div className="demo-inline">预览连接状态，仅用于展示界面。</div>}
           {!connected && !paused && (
             <div className="qr-area">
               {waiting && connection.qrUrl && !setupIssue ? (

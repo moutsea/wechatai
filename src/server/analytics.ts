@@ -22,7 +22,7 @@ import {
   signupConversionSchema,
 } from "../shared/analytics-schema";
 import { funnelEventPayloadSchema, type FunnelEventPayload } from "../shared/funnel";
-import { allowsFunnelEvent, isServerFunnelEvent } from "../shared/funnel-policy";
+import { isServerFunnelEvent } from "../shared/funnel-policy";
 import { summarizeFunnel, type FunnelCount, type FunnelSummary } from "../shared/funnel-report";
 import { AppError, secret } from "./config";
 import { signupConversionQueries } from "../shared/analytics-queries";
@@ -112,7 +112,7 @@ export async function recordPageView(
 
 export type RecordFunnelEventResult =
   | { ok: true; stored: boolean }
-  | { ok: true; ignored: "bot" | "demo" | "server_event" }
+  | { ok: true; ignored: "bot" | "server_event" }
   | { ok: false; reason: "invalid_payload" };
 
 /**
@@ -135,7 +135,6 @@ export async function recordFunnelEvent(
   if (!parsed.success) return { ok: false, reason: "invalid_payload" };
   const payload = parsed.data;
   if (isServerFunnelEvent(payload.name)) return { ok: true, ignored: "server_event" };
-  if (!allowsFunnelEvent(payload.name, payload.path ?? "")) return { ok: true, ignored: "demo" };
   return insertFunnelEvent(env, payload, input);
 }
 
@@ -415,8 +414,8 @@ export async function getSignupConversions(
 /**
  * 关键事件触达：按天去重后加总，不把独立事件计数解释为用户留存或付费转化。
  *
- * 与 `page_views` 不同，这里保留 `/app` 内的正式操作，只排除演示工作台的模拟操作。
- * `/app` 在 PV 统计里是被刻意排除的（见 `isTrackedPath`）。
+ * 与 `page_views` 不同，这里保留 `/app` 内的正式操作。
+ * 演示工作台虽已下线，保留期内的历史模拟操作仍须排除。
  */
 export async function getFunnelSummary(
   env: Env,
@@ -429,7 +428,7 @@ export async function getFunnelSummary(
   const rows = await env.DB.prepare(
     `SELECT name, COUNT(*) AS events, COUNT(DISTINCT day || ':' || visitor_hash) AS visitorDays
      FROM funnel_events WHERE day BETWEEN ? AND ?
-       AND (name = 'demo_view' OR (LOWER(path) <> '/demo' AND LOWER(path) NOT LIKE '/demo/%'))
+       AND LOWER(path) <> '/demo' AND LOWER(path) NOT LIKE '/demo/%'
      GROUP BY name`,
   )
     .bind(from, to)

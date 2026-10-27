@@ -15,11 +15,10 @@ export const ANALYTICS_SESSION_HEADER = "x-wechatai-analytics-session";
  * 不进入统计的路径。
  *
  * - `/app` 是登录后的工作台，属于产品内部使用，不混进页面流量；
- * - `/demo` 是带演示数据的工作台预览，不是真实访问；
  * - 带一次性令牌的页面（校验邮箱、重置密码）连路径都不记录；
  * - 静态资源与接口不算页面浏览。
  */
-const UNTRACKED_PREFIXES = ["/app", "/demo", "/api", "/assets", "/images", "/_"];
+const UNTRACKED_PREFIXES = ["/app", "/api", "/assets", "/images", "/_"];
 
 export function isTrackedPath(pathname: string): boolean {
   if (!pathname.startsWith("/") || pathname.startsWith("//")) return false;

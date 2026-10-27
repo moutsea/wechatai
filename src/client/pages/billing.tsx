@@ -32,7 +32,7 @@ const plusYearlySaving = (plusMonthlyAmount * 12 - plusYearlyAmount) / 100;
 const plusYearlyPerMonth = approxYuan(plusYearlyAmount / 12);
 
 export function Billing() {
-  const { data, request, refresh, notify, demo, base } = useApp();
+  const { data, request, refresh, notify, base } = useApp();
   const [offers, setOffers] = useState<BillingOffer[]>(
     BILLING_OFFERS.map((o) => ({ ...o, price: o.amount / 100, currency: "cny", enabled: false })),
   );
@@ -64,7 +64,7 @@ export function Billing() {
       setPaymentMessage("已返回工作台，你可以重新选择方案继续支付。");
       return;
     }
-    if (checkoutResult !== "success" || !sessionId || demo) return;
+    if (checkoutResult !== "success" || !sessionId) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let attempts = 0;
@@ -110,7 +110,7 @@ export function Billing() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [checkoutResult, sessionId, retry, request, refresh, demo]);
+  }, [checkoutResult, sessionId, retry, request, refresh]);
   if (!data) return null;
   const plus = offers.find((o) => o.kind === "plus" && o.interval === interval);
   const hasRecurringSubscription =
@@ -163,7 +163,7 @@ export function Billing() {
               <ReceiptText size={16} />
               额度明细
             </Link>
-            {subscription && !demo && (
+            {subscription && (
               <button
                 className="button secondary"
                 disabled={Boolean(busy)}
@@ -393,9 +393,7 @@ export function Billing() {
                     : data.plan === "plus"
                       ? "续费 Plus"
                       : "升级 Plus"
-                  : demo
-                    ? "注册后购买"
-                    : "暂未开放购买"}
+                  : "暂未开放购买"}
               {data.plan !== "plus" && <ArrowRight size={17} />}
             </button>
           </div>
@@ -452,9 +450,7 @@ export function Billing() {
                 ? "正在跳转…"
                 : topup?.enabled
                   ? "补充额度"
-                  : demo
-                    ? "注册后购买"
-                    : "充值暂未开放"}
+                  : "充值暂未开放"}
               <ArrowUpRight size={16} />
             </button>
           </div>

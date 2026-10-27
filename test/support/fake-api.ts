@@ -1,6 +1,15 @@
-import { pluginShortcutForEdit } from "../shared/plugin-shortcut";
-import { type UserNotice } from "../shared/site-notices";
-import { notificationInputSchema } from "../shared/notification";
+/**
+ * 仅测试用的内存 API 夹具。
+ *
+ * 客户端测试需要一份「形状完整、不碰网络」的 Snapshot 与接口响应：`createFakeApi()`
+ * 返回的函数行为等价于 `api`，可以直接注入 `AppProvider` 或当作 mock 数据来源。
+ * （它最初是 `/demo` 演示工作台的数据源，演示工作台下线后搬到了 `test/`。）
+ *
+ * 放在 `test/` 下是刻意的：生产 bundle 不应该再打进测试数据。
+ */
+import { pluginShortcutForEdit } from "../../src/shared/plugin-shortcut";
+import { type UserNotice } from "../../src/shared/site-notices";
+import { notificationInputSchema } from "../../src/shared/notification";
 import {
   personalAssistantInputSchema,
   personalRecordInputSchema,
@@ -8,26 +17,43 @@ import {
   amountCents,
   centsAmount,
   type PersonalRecord,
-} from "../shared/personal-assistant";
-import { roleplayInputSchema, roleVariables } from "../shared/roleplay";
-import { isRemoteAgent } from "../shared/remote-agent";
-import { openClawInputSchema } from "../shared/openclaw";
-import { BILLING_OFFERS } from "../shared/billing";
-import type { Assistant, Channel, ChatSession, ChatMessage, Snapshot } from "../shared/types";
-import { imageGenerationInputSchema, type UserPlugin } from "../shared/image-generation";
-import { webResearchInputSchema, type WebResearchPlugin } from "../shared/web-research";
-const now = Date.now();
-const defaults = {
-  systemPrompt: "你是一个友好可靠的助手，用清晰自然的中文回答。",
-  baseUrl: "https://api.openai.com",
-  maxOutputTokens: 1024,
-  maxInputTokens: 8000,
-  contextTokens: 8000,
-  maxCredits: 30,
-  createdAt: now,
-  hasKey: true,
-};
-export function createDemo() {
+} from "../../src/shared/personal-assistant";
+import { roleplayInputSchema, roleVariables } from "../../src/shared/roleplay";
+import { isRemoteAgent } from "../../src/shared/remote-agent";
+import { openClawInputSchema } from "../../src/shared/openclaw";
+import { BILLING_OFFERS } from "../../src/shared/billing";
+import type { Assistant, Channel, ChatSession, ChatMessage, Snapshot } from "../../src/shared/types";
+import { imageGenerationInputSchema, type UserPlugin } from "../../src/shared/image-generation";
+import { webResearchInputSchema, type WebResearchPlugin } from "../../src/shared/web-research";
+/**
+ * `now` 是注入的时钟：`planUntil` / `resetsAt` / `activity[].day` / 各类 `createdAt`
+ * 全部由它派生，夹具内部没有任何 `Date.now()` 直调，所以 `createFakeApi({ now })`
+ * 之后整个夹具完全确定（不受 `vi.setSystemTime` 影响）。
+ * `connections` 是连接条数，用于验证「超出套餐上限即暂停」这类规则。
+ */
+export function createFakeApi({
+  now = Date.now(),
+  connections = 1,
+}: { now?: number; connections?: number } = {}) {
+  // 与真实服务端 `limits()` 同形（见 src/server/personal-account.ts）。
+  // `connections` 上限还是下面 `paused` 的派生规则来源。
+  const limits = {
+    connections: 10,
+    assistants: 20,
+    channels: 20,
+    modelsPerChannel: 50,
+    sessions: 200,
+  };
+  const defaults = {
+    systemPrompt: "你是一个友好可靠的助手，用清晰自然的中文回答。",
+    baseUrl: "https://api.openai.com",
+    maxOutputTokens: 1024,
+    maxInputTokens: 8000,
+    contextTokens: 8000,
+    maxCredits: 30,
+    createdAt: now,
+    hasKey: true,
+  };
   let notices: UserNotice[] = [
     {
       id: "demo-welcome",
@@ -261,18 +287,18 @@ export function createDemo() {
       tokens: 182460,
     },
     selectedConnectionId: "default",
-    connections: [
-      {
-        id: "default",
-        name: "我的微信",
-        createdAt: now,
-        paused: false,
-        status: connected ? "connected" : "disconnected",
-        lastSeen: now - 600000,
-        currentSessionId: current,
-      },
-    ],
-    limits: { connections: 10, assistants: 20, channels: 20, modelsPerChannel: 50, sessions: 200 },
+    // `paused` 与真实实现同规则：src/server/personal-account.ts 的
+    // `paused: index >= this.limits().connections`，超出套餐上限的连接只是被暂停，仍然列出。
+    connections: Array.from({ length: connections }, (_, index) => ({
+      id: index === 0 ? "default" : `conn-${index + 1}`,
+      name: index === 0 ? "我的微信" : `我的微信 ${index + 1}`,
+      createdAt: now,
+      paused: index >= limits.connections,
+      status: connected ? "connected" : "disconnected",
+      lastSeen: now - 600000,
+      currentSessionId: current,
+    })),
+    limits,
     ledger: [
       {
         id: "l1",
@@ -319,8 +345,8 @@ export function createDemo() {
       title,
       archived: false,
       resetAt: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
       messageCount: 0,
     };
     sessions = [s, ...sessions];
@@ -331,11 +357,11 @@ export function createDemo() {
     if (plugin?.pluginId === "wechatai/roleplay" && plugin.firstMessage) {
       messages[s.id] = [
         {
-          id: Date.now(),
+          id: now,
           sessionId: s.id,
           role: "assistant",
           content: roleVariables(plugin.firstMessage, plugin),
-          createdAt: Date.now(),
+          createdAt: now,
           inputTokens: 0,
           outputTokens: 0,
           cost: 0,
@@ -421,8 +447,8 @@ export function createDemo() {
             ...personalRecordInputSchema.parse({ ...old, ...body.record }),
             id: old?.id ?? crypto.randomUUID(),
             revision: (old?.revision ?? 0) + 1,
-            createdAt: old?.createdAt ?? Date.now(),
-            updatedAt: Date.now(),
+            createdAt: old?.createdAt ?? now,
+            updatedAt: now,
           };
           personal.set(id, [r, ...records.filter((v) => v.id !== r.id)]);
           result = r;
@@ -440,7 +466,7 @@ export function createDemo() {
       } else if (/\/(openclaw|hermes)\/pair$/.test(path)) {
         result = {
           command: "# 演示预览：登录 Plus 账号后生成专属连接命令。",
-          expiresAt: Date.now() + 600000,
+          expiresAt: now + 600000,
         };
       } else if (/\/(openclaw|hermes)\/status$/.test(path) && isRemoteAgent(previous)) {
         result = {
@@ -450,8 +476,16 @@ export function createDemo() {
           agentId: previous.agentId,
           deliveries: [],
         };
-      } else if (method === "GET") result = plugins;
-      else if (method === "DELETE") {
+      } else if (method === "GET") {
+        // 真实服务端只有列表用的 `GET /api/plugins`（src/server/index.ts:626），
+        // 单个插件只有 PATCH / DELETE 与各类子路由，没有 `GET /api/plugins/:id`。
+        // 以前这里对 `/plugins/<id>` 直接返回整个 plugins 数组，属于幽灵路由。
+        // 判据必须限定在 `/plugins/` 前缀内：若只写 `path !== "/plugins"`，像 `/settings`
+        // 这类与插件无关的单段 GET 也会被当成幽灵路由报错。
+        if (path.startsWith("/plugins/") && !path.slice("/plugins/".length).includes("/"))
+          throw new Error("不支持：GET /plugins/:id");
+        result = plugins;
+      } else if (method === "DELETE") {
         personal.delete(id);
         plugins = plugins.filter((p) => p.id !== id);
         result = snapshot();
@@ -486,7 +520,7 @@ export function createDemo() {
           id: id || crypto.randomUUID(),
           pluginId: body.pluginId ?? previous?.pluginId,
           version: "1.0.0",
-          createdAt: previous?.createdAt ?? Date.now(),
+          createdAt: previous?.createdAt ?? now,
           hasKey: false,
         };
         plugins = [...plugins.filter((p) => p.id !== id), p];
@@ -498,7 +532,7 @@ export function createDemo() {
           pluginId: "wechatai/notification",
           version: "1.0.0",
           shortcut: "notice_demo",
-          createdAt: previous?.createdAt ?? Date.now(),
+          createdAt: previous?.createdAt ?? now,
           hasKey: false,
         };
         plugins = [...plugins.filter((p) => p.id !== id), p];
@@ -511,7 +545,7 @@ export function createDemo() {
           id: id || crypto.randomUUID(),
           pluginId: "wechatai/personal-assistant",
           version: "1.0.0",
-          createdAt: previous?.createdAt ?? Date.now(),
+          createdAt: previous?.createdAt ?? now,
           hasKey: true,
         };
         if (plugins.some((other) => other.id !== id && other.shortcut === p.shortcut))
@@ -534,7 +568,7 @@ export function createDemo() {
           id: id || crypto.randomUUID(),
           pluginId: "wechatai/roleplay",
           version: "1.0.0",
-          createdAt: previous?.createdAt ?? Date.now(),
+          createdAt: previous?.createdAt ?? now,
           hasKey: true,
         };
         plugins = [...plugins.filter((p) => p.id !== id), p];
@@ -556,7 +590,7 @@ export function createDemo() {
           id: id || crypto.randomUUID(),
           pluginId: "wechatai/image-generation",
           version: "1.2.0",
-          createdAt: previous?.createdAt ?? Date.now(),
+          createdAt: previous?.createdAt ?? now,
           hasKey: true,
         };
         plugins = [...plugins.filter((p) => p.id !== id), p];
@@ -575,7 +609,7 @@ export function createDemo() {
           id: id || crypto.randomUUID(),
           pluginId: "wechatai/web-research",
           version: "1.3.0",
-          createdAt: previous?.createdAt ?? Date.now(),
+          createdAt: previous?.createdAt ?? now,
           hasKey: Boolean(apiKey || previous?.hasKey),
         };
         plugins = [...plugins.filter((p) => p.id !== id), p];
@@ -595,7 +629,7 @@ export function createDemo() {
           apiKey: undefined,
           id: crypto.randomUUID(),
           hasKey: true,
-          createdAt: Date.now(),
+          createdAt: now,
         };
         channels.push(saved);
         result = saved;
@@ -679,7 +713,7 @@ export function createDemo() {
       if (method === "PATCH")
         summaries.set(id, {
           text: body.text,
-          updatedAt: Date.now(),
+          updatedAt: now,
           throughId: 0,
           contextStart: 0,
           resetAt: 0,
@@ -708,11 +742,11 @@ export function createDemo() {
       if (body.action === "restore") s.archived = false;
       if (body.action === "reset")
         messages[s.id].push({
-          id: Date.now(),
+          id: now,
           sessionId: s.id,
           role: "system",
           content: "上下文已重置，之前的消息不会再发送给模型。",
-          createdAt: Date.now(),
+          createdAt: now,
           inputTokens: 0,
           outputTokens: 0,
           cost: 0,
@@ -741,7 +775,7 @@ export function createDemo() {
         apiKey: undefined,
         id: crypto.randomUUID(),
         hasKey: true,
-        createdAt: Date.now(),
+        createdAt: now,
       };
       assistants = [...assistants, a];
       if (!current) create(a.id);
@@ -804,7 +838,11 @@ export function createDemo() {
       for (const id of Object.keys(messages)) delete messages[id];
       current = "";
       result = snapshot();
-    } else throw new Error("预览模式不执行支付或账号操作。");
+    } else throw new Error("测试夹具不支持支付或账号操作。");
     return structuredClone(result) as T;
   };
 }
+
+// 类型锁：夹具的签名必须与真实的 `api` 一致，漂移时这一行就编译不过。
+// （之前没有任何一处把夹具当 `typeof api` 用，签名变了 tsc 也不会报警。）
+export const apiTypeLock: typeof import("../../src/client/api").api = createFakeApi();

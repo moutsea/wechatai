@@ -23,7 +23,7 @@ import { DashboardOnboarding } from "./dashboard-onboarding";
 import { dashboardSetupProgress } from "../../shared/onboarding";
 import { trackFunnel } from "../analytics-client";
 export function Dashboard() {
-  const { data, user, base, request, demo } = useApp();
+  const { data, user, base, request } = useApp();
   // null = 还没拿到列表。不能拿空数组当初始值，否则「加载中」会被画成「一条都没有」。
   const [sessions, setSessions] = useState<ChatSession[] | null>(null);
   const [sessionsError, setSessionsError] = useState(false);
@@ -45,11 +45,11 @@ export function Dashboard() {
     return () => controller.abort();
   }, [request, data?.plan, data?.stats.sessions, sessionsRetry]);
   useEffect(() => {
-    if (!data || demo || data.plan === "plus" || !data.stats.sessions) return;
+    if (!data || data.plan === "plus" || !data.stats.sessions) return;
     if (paywallSeen.current) return;
     paywallSeen.current = true;
     trackFunnel("paywall_view", { surface: "dashboard_recent" });
-  }, [data, demo]);
+  }, [data]);
   if (!data) return null;
   const selectedLink = data.connections.find((l) => l.id === data.selectedConnectionId);
   const connected = data.connection.status === "connected" && !selectedLink?.paused;
@@ -66,7 +66,7 @@ export function Dashboard() {
         <div>
           <div className="eyebrow">A LITTLE CLOSER, EVERY DAY</div>
           <h1>
-            你好，{demo ? "好奇的朋友" : user.name || "朋友"}
+            你好，{user.name || "朋友"}
             <span className="greeting-dot">.</span>
           </h1>
           <p>让喜欢的 AI，陪你聊聊日常里的大小事。</p>

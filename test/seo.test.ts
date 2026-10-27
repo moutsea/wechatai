@@ -24,7 +24,7 @@ import { llmsText } from "../src/shared/plugin-docs";
 
 describe("search indexing boundaries", () => {
   it("includes notification routes in the deployable private pages", () => {
-    for (const path of ["/app/notices", "/demo/notices"]) {
+    for (const path of ["/app/notices"]) {
       expect(PRIVATE_PATHS).toContain(path);
       expect(getPageSeo(path).indexable).toBe(false);
       expect(renderSitemap()).not.toContain(`https://wechatai.app${path}`);
@@ -94,7 +94,7 @@ describe("search indexing boundaries", () => {
     expect(sitemap).not.toContain("<changefreq>");
   });
 
-  it("never indexes account, demo, auth callback or unknown pages", () => {
+  it("never indexes account, auth callback or unknown pages", () => {
     for (const path of [
       ...PRIVATE_PATHS,
       "/app/sessions/private-id",

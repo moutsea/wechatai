@@ -81,7 +81,9 @@ describe("admin analytics presentation", () => {
     expect(renderToStaticMarkup(<AnalyticsReport data={data} />)).toContain(
       "该时间范围内还没有关键事件",
     );
-    data.funnel = summarizeFunnel(data.funnel.range, { demo_view: { visitorDays: 1, events: 2 } });
+    data.funnel = summarizeFunnel(data.funnel.range, {
+      invite_share_click: { visitorDays: 1, events: 2 },
+    });
     expect(renderToStaticMarkup(<AnalyticsReport data={data} />)).not.toContain("还没有关键事件");
   });
 

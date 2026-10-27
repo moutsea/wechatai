@@ -39,10 +39,8 @@ export const FUNNEL_EVENTS = [
   "checkout_success",
   /** 邀请链接被复制/分享。 */
   "invite_share_click",
-  /** 打开工作台演示。 */
-  "demo_view",
   /**
-   * 首屏 CTA 被点击。props.cta 区分 primary（去注册）与 demo（去看演示）。
+   * 首屏 CTA 被点击。props.cta 区分是哪个按钮（例如 primary 去注册、how 看配置步骤）。
    * 没有这一步，就无法区分「首页没人感兴趣」和「点了但没注册成功」。
    */
   "hero_cta_click",
@@ -78,7 +76,7 @@ export const funnelEventPayloadSchema = z
       .max(64)
       .regex(/^[A-Za-z0-9_-]+$/)
       .optional(),
-    /** 引导/预览等内部页也会上报，这里只用来在后台区分来源页。 */
+    /** 引导等内部页也会上报，这里只用来在后台区分来源页。 */
     path: z.string().max(512).optional(),
     touch: z.boolean().optional(),
   })

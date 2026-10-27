@@ -63,7 +63,6 @@ describe("shared analytics rules", () => {
     for (const path of [
       "/app",
       "/app/channels",
-      "/demo/wechat",
       "/api/health",
       "/assets/index.js",
       "/images/docs/a.jpg",
@@ -176,6 +175,23 @@ describe("recordPageView", () => {
     // 哈希里不含原始 IP 或 UA 明文。
     expect(JSON.stringify(stored)).not.toContain("198.51.100.9");
     expect(JSON.stringify(stored)).not.toContain("Windows NT");
+  });
+
+  it("records a retired /demo link as a normal page view and still ignores /app", async () => {
+    // 客户端与服务端共用同一套 `isTrackedPath`：/demo 下线后既不该被当成私有路径丢掉，
+    // 也不该带来任何特例。这条守住两端口径一致（这里走的是服务端那一份判断）。
+    const input = (pathname: string) => ({
+      payload: event({ pathname }),
+      ip: "203.0.113.7",
+      userAgent: "Mozilla/5.0",
+      country: "CN",
+    });
+    expect(await recordPageView(env, input("/demo"))).toEqual({ ok: true, stored: true });
+    expect(await recordPageView(env, input("/app/demo"))).toEqual({
+      ok: true,
+      ignored: "untracked_path",
+    });
+    expect((await rows()).results.map((row) => row.path)).toEqual(["/demo"]);
   });
 
   it("refuses crawlers, untracked paths and malformed payloads", async () => {
@@ -780,24 +796,6 @@ describe("recordFunnelEvent", () => {
     },
   );
 
-  it.each(["/demo", "/demo/channels", "/demo/", "/Demo/wechat"])(
-    "rejects simulated operations at %s but keeps demo_view",
-    async (path) => {
-      const input = { ip: "203.0.113.7", userAgent: "Mozilla/5.0", country: "" };
-      expect(await recordFunnelEvent(env, { ...input, payload: funnelEvent({ path }) })).toEqual({
-        ok: true,
-        ignored: "demo",
-      });
-      expect(
-        await recordFunnelEvent(env, {
-          ...input,
-          payload: funnelEvent({ path, name: "demo_view" }),
-        }),
-      ).toEqual({ ok: true, stored: true });
-      expect((await funnelRows()).results.map((row) => row.name)).toEqual(["demo_view"]);
-    },
-  );
-
   it("stores workspace events that page views deliberately ignore", async () => {
     // /app 在 page_views 里是被排除的，而最有价值的漏斗节点恰好都发生在这里。
     const result = await recordFunnelEvent(env, {
@@ -931,34 +929,38 @@ describe("key event reach reporting", () => {
     });
   });
 
-  it("excludes previously stored demo operations while retaining demo views and real workspace events", async () => {
-    // 模拟旧客户端已经写入的记录；仅修改采集端不足以修复报表。
-    for (const [name, path] of [
-      ["channel_saved", "/demo"],
-      ["channel_saved", "/demo/channels"],
-      ["onboarding_done", "/Demo"],
-      ["demo_view", "/demo"],
-      ["channel_saved", "/app/channels"],
+  it("excludes historical demo operations without excluding real paths containing demo", async () => {
+    // 直接插入旧记录，验证报表本身，不依赖已经下线的演示客户端。
+    for (const [name, path, visitor] of [
+      ["channel_saved", "/demo", "demo-root"],
+      ["channel_saved", "/demo/", "demo-slash"],
+      ["channel_saved", "/DeMo/channels", "demo-channel"],
+      ["onboarding_done", "/Demo", "demo-onboarding"],
+      ["channel_test_failed", "/demo/channels", "demo-failure"],
+      ["channel_saved", "/app/channels", "real"],
+      ["channel_saved", "/app/channels", "real"],
+      ["channel_saved", "/demo-help", "real-prefix"],
+      ["channel_saved", "/app/demo", "real-segment"],
+      ["channel_test_failed", "/app/channels", "real"],
     ])
       await env.DB.prepare(
         "INSERT INTO funnel_events(day,name,path,visitor_hash,session_id,created_at,event_id) VALUES(?,?,?,?,?,?,?)",
       )
-        .bind(
-          "2026-10-26",
-          name,
-          path,
-          "visitor",
-          "session-0001",
-          at.getTime(),
-          crypto.randomUUID(),
-        )
+        .bind("2026-10-26", name, path, visitor, "session-0001", at.getTime(), crypto.randomUUID())
         .run();
+
     const report = await getFunnelSummary(env, 1, at);
     expect(report.steps.find((step) => step.name === "channel_saved")).toMatchObject({
+      events: 4,
+      visitorDays: 3,
+    });
+    expect(report.steps.find((step) => step.name === "onboarding_done")).toMatchObject({
+      events: 0,
+      visitorDays: 0,
+    });
+    expect(report.side.find((step) => step.name === "channel_test_failed")).toMatchObject({
       events: 1,
       visitorDays: 1,
     });
-    expect(report.steps.find((step) => step.name === "onboarding_done")?.events).toBe(0);
-    expect(report.side.find((step) => step.name === "demo_view")?.events).toBe(1);
   });
 });

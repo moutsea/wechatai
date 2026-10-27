@@ -1,9 +1,8 @@
 import { NoticeProvider } from "./notices";
 import { Notices } from "./pages/notices";
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppProvider } from "./context";
-import { trackFunnel } from "./analytics-client";
 import { Shell } from "./shell";
 import { Dashboard } from "./pages/dashboard";
 import { Channels } from "./pages/channels";
@@ -19,13 +18,9 @@ const Plugins = lazy(() =>
   import("./pages/plugins").then((module) => ({ default: module.Plugins })),
 );
 const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: module.Admin })));
-export function Workspace({ demo = false }: { demo?: boolean }) {
-  // 预览页是落地页的次 CTA 落点，转化率必须可见。
-  useEffect(() => {
-    if (demo) trackFunnel("demo_view");
-  }, [demo]);
+export function Workspace() {
   return (
-    <AppProvider key={demo ? "demo" : "live"} demo={demo}>
+    <AppProvider>
       <NoticeProvider>
         <Shell>
           <Routes>
@@ -65,17 +60,15 @@ export function Workspace({ demo = false }: { demo?: boolean }) {
             <Route path="credits" element={<Credits />} />
             <Route path="invite" element={<Invite />} />
             <Route path="notices" element={<Notices />} />
-            {!demo && (
-              <Route
-                path="admin"
-                element={
-                  <Suspense fallback={<div className="full-state">正在加载管理后台…</div>}>
-                    <Admin />
-                  </Suspense>
-                }
-              />
-            )}
-            <Route path="*" element={<Navigate to={demo ? "/demo" : "/app"} replace />} />
+            <Route
+              path="admin"
+              element={
+                <Suspense fallback={<div className="full-state">正在加载管理后台…</div>}>
+                  <Admin />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<Navigate to="/app" replace />} />
           </Routes>
         </Shell>
       </NoticeProvider>

@@ -234,14 +234,9 @@ for (const file of [
   "app.html",
   "app/sessions.html",
   "app/plugins.html",
-  "demo/plugins.html",
   "app/notices.html",
-  "demo/notices.html",
   "app/credits.html",
   "app/admin.html",
-  "demo.html",
-  "demo/channels.html",
-  "demo/credits.html",
   "404.html",
 ]) {
   const html = await read(file);
@@ -280,14 +275,9 @@ if (process.argv[2]) {
     "/app/wechat",
     "/app/sessions",
     "/app/plugins",
-    "/demo/plugins",
     "/app/notices",
-    "/demo/notices",
     "/app/billing",
     "/app/credits",
-    "/demo",
-    "/demo/sessions",
-    "/demo/credits",
   ]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);

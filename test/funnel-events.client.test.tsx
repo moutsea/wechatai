@@ -3,17 +3,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { trackFunnel } from "../src/client/analytics-client";
-import { FUNNEL_EVENTS } from "../src/shared/funnel";
 import { Channels } from "../src/client/pages/channels";
 import { DashboardOnboarding } from "../src/client/pages/dashboard-onboarding";
 import { useKimiseekConnect } from "../src/client/pages/kimiseek-connect";
-import { createDemo } from "../src/client/demo";
+import { createFakeApi } from "./support/fake-api";
 import type { api } from "../src/client/api";
 import type { Snapshot } from "../src/shared/types";
 
 const state = vi.hoisted(() => ({
   data: null as Snapshot | null,
-  demo: false,
   base: "/app",
   request: vi.fn<typeof api>(),
   refresh: vi.fn(async () => {}),
@@ -39,9 +37,8 @@ beforeEach(async () => {
   );
   window.history.replaceState({}, "", "/app/channels");
   window.sessionStorage.clear();
-  state.data = await createDemo()<Snapshot>("/dashboard");
+  state.data = await createFakeApi()<Snapshot>("/dashboard");
   state.data.onboardingDismissedAt = 1;
-  state.demo = false;
   state.base = "/app";
   state.request.mockReset();
   state.refresh.mockClear();
@@ -93,13 +90,7 @@ async function saveChannel() {
 }
 const names = () => events.map((event) => event.name);
 
-describe("demo event isolation", () => {
-  it.each(["/demo", "/demo/channels", "/Demo/"])("only sends demo_view from %s", (path) => {
-    window.history.replaceState({}, "", path);
-    for (const name of FUNNEL_EVENTS) trackFunnel(name);
-    expect(names()).toEqual(["demo_view"]);
-  });
-
+describe("funnel event reporting", () => {
   it("keeps live events and respects DNT and GPC", () => {
     trackFunnel("channel_saved");
     expect(names()).toEqual(["channel_saved"]);
@@ -111,7 +102,7 @@ describe("demo event isolation", () => {
     vi.spyOn(window, "navigator", "get").mockReturnValue(
       Object.create(navigator, { globalPrivacyControl: { value: true } }),
     );
-    trackFunnel("demo_view");
+    trackFunnel("invite_share_click");
     expect(names()).toEqual(["channel_saved"]);
   });
 
@@ -126,10 +117,7 @@ describe("demo event isolation", () => {
     expect(events[1].sessionId).toBe(events[0].sessionId);
   });
 
-  it("does not emit setup events from real demo onboarding and channel controls", async () => {
-    state.demo = true;
-    state.base = "/demo";
-    window.history.replaceState({}, "", "/demo");
+  it("tracks every onboarding step, completion and skip in the real workspace", async () => {
     await mount(<DashboardOnboarding data={state.data!} />);
     await click("新手引导");
     await click("我了解了，下一步");
@@ -137,12 +125,12 @@ describe("demo event isolation", () => {
     await click("完成引导");
     await click("新手引导");
     await click("稍后设置");
-    window.history.replaceState({}, "", "/demo/channels");
-    state.request.mockResolvedValueOnce(state.data!.channels[0]).mockResolvedValueOnce(imported);
-    await mount(<Channels />);
-    await saveChannel();
-    expect(names()).toEqual([]);
-    expect(state.request).toHaveBeenCalledTimes(2);
+    expect(names()).toEqual([
+      "onboarding_step",
+      "onboarding_step",
+      "onboarding_done",
+      "onboarding_skip",
+    ]);
   });
 });
 

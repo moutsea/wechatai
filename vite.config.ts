@@ -33,4 +33,23 @@ export default defineConfig(({ command, isPreview }) => ({
     },
   ],
   server: { port: 5173, strictPort: true, headers: { "Referrer-Policy": "no-referrer" } },
+  environments: {
+    client: {
+      build: {
+        rolldownOptions: {
+          output: {
+            codeSplitting: {
+              groups: [
+                {
+                  name: "react",
+                  test: /node_modules[\\/](?:react|react-dom|react-router|react-router-dom|scheduler|nanostores)[\\/]/,
+                },
+                { name: "auth", test: /node_modules[\\/](?:better-auth|@better-auth)[\\/]/ },
+              ],
+            },
+          },
+        },
+      },
+    },
+  },
 }));

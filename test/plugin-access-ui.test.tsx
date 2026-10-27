@@ -8,7 +8,7 @@ import { imageGenerationInputSchema } from "../src/shared/image-generation";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createDemo } from "../src/client/demo";
+import { createFakeApi } from "./support/fake-api";
 import { useApp } from "../src/client/context";
 import { PluginLibrary, PluginConfiguration } from "../src/client/pages/plugin-library";
 import { Channels } from "../src/client/pages/channels";
@@ -70,16 +70,15 @@ const editButton = (html: string) =>
     .at(-1);
 
 beforeEach(async () => {
-  data = await createDemo()<Snapshot>("/dashboard");
+  data = await createFakeApi()<Snapshot>("/dashboard");
   data.plan = "free";
   data.plugins = [];
   vi.mocked(useApp).mockReturnValue({
     data,
     base: "/app",
-    demo: false,
     isAdmin: false,
     refresh: async () => {},
-    request: createDemo(),
+    request: createFakeApi(),
     user: { name: "测试", email: "test@example.test" },
     notify: noop,
   });

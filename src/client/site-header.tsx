@@ -98,7 +98,14 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           </button>
         </div>
       </div>
-      <div id={menuId} className={`site-mobile-menu${open ? " is-open" : ""}`}>
+      <div
+        id={menuId}
+        className={`site-mobile-menu${open ? " is-open" : ""}`}
+        onClick={(event) => {
+          // 同一页面或锚点不会改变 pathname/hash；普通链接与附加链接都在点击时收起。
+          if (event.target instanceof Element && event.target.closest("a[href]")) setOpen(false);
+        }}
+      >
         {NAV.map((item) => (
           <Link
             key={item.to}

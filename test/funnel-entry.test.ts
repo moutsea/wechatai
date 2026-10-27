@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FUNNEL_EVENTS, funnelEventPayloadSchema } from "../src/shared/funnel";
 import { FUNNEL_SIDE_EVENTS, FUNNEL_STEPS } from "../src/shared/funnel-report";
-import { allowsFunnelEvent } from "../src/shared/funnel-policy";
 
 /**
  * 入口侧事件的契约测试：这几个事件是「首屏 CTA → 注册页 → 表单提交」这条
@@ -15,7 +14,6 @@ const sessionId = "9b1d7f0a2c";
 describe("入口事件载荷", () => {
   it.each([
     ["hero_cta_click", { cta: "primary", auth: "out" }, "/"],
-    ["hero_cta_click", { cta: "demo", auth: "in" }, "/"],
     ["register_view", undefined, "/register"],
     ["oauth_click", { provider: "google" }, "/register"],
     ["verify_send", { first: "y" }, "/verify-email"],
@@ -76,18 +74,5 @@ describe("侧栏清单与事件表保持一致", () => {
     for (const { name, label } of [...FUNNEL_STEPS, ...FUNNEL_SIDE_EVENTS]) {
       expect(label.trim().length, `${name} 缺少标签`).toBeGreaterThan(1);
     }
-  });
-});
-
-describe("演示工作台不污染正式漏斗", () => {
-  it("首页与注册页放行", () => {
-    expect(allowsFunnelEvent("hero_cta_click", "/")).toBe(true);
-    expect(allowsFunnelEvent("register_view", "/register")).toBe(true);
-  });
-
-  it("/demo 只允许 demo_view", () => {
-    expect(allowsFunnelEvent("hero_cta_click", "/demo")).toBe(false);
-    expect(allowsFunnelEvent("register_view", "/demo/dashboard")).toBe(false);
-    expect(allowsFunnelEvent("demo_view", "/demo/dashboard")).toBe(true);
   });
 });
