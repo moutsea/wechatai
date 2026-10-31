@@ -22,7 +22,13 @@ import { roleplayInputSchema, roleVariables } from "../../src/shared/roleplay";
 import { isRemoteAgent } from "../../src/shared/remote-agent";
 import { openClawInputSchema } from "../../src/shared/openclaw";
 import { BILLING_OFFERS } from "../../src/shared/billing";
-import type { Assistant, Channel, ChatSession, ChatMessage, Snapshot } from "../../src/shared/types";
+import type {
+  Assistant,
+  Channel,
+  ChatSession,
+  ChatMessage,
+  Snapshot,
+} from "../../src/shared/types";
 import { imageGenerationInputSchema, type UserPlugin } from "../../src/shared/image-generation";
 import { webResearchInputSchema, type WebResearchPlugin } from "../../src/shared/web-research";
 /**
@@ -406,7 +412,18 @@ export function createFakeApi({
       const previous = plugins.find((p) => p.id === id);
       if (path.includes("/records")) {
         if (previous?.pluginId !== "wechatai/personal-assistant") throw new Error("配置不存在");
-        const records = personal.get(id) ?? [];
+        if (path.endsWith("/scopes"))
+          return [...personal.keys()]
+            .filter((key) => key === id || key.startsWith(`${id}:`))
+            .map((key) => (key === id ? "" : key.slice(id.length + 1))) as T;
+        const scope =
+          typeof body.connectionId === "string"
+            ? body.connectionId
+            : previous.recordScope === "connection"
+              ? "default"
+              : "";
+        const recordKey = scope ? `${id}:${scope}` : id;
+        const records = personal.get(recordKey) ?? [];
         const recordId = path.split("/")[4];
         if (path.endsWith("/query")) {
           const q = personalQuerySchema.parse(body);
@@ -437,7 +454,7 @@ export function createFakeApi({
           };
         } else if (method === "DELETE") {
           personal.set(
-            id,
+            recordKey,
             records.filter((r) => r.id !== recordId),
           );
           result = { deleted: true };
@@ -450,7 +467,7 @@ export function createFakeApi({
             createdAt: old?.createdAt ?? now,
             updatedAt: now,
           };
-          personal.set(id, [r, ...records.filter((v) => v.id !== r.id)]);
+          personal.set(recordKey, [r, ...records.filter((v) => v.id !== r.id)]);
           result = r;
         }
       } else if (path.endsWith("/notification")) {

@@ -8,16 +8,22 @@ export function dailyTasksMessage(
   pluginId: string,
   dueAt: number,
   now = Date.now(),
+  connectionId = "",
 ) {
   const date = beijingDate(now);
   if (beijingDate(dueAt) !== date) return null;
-  const tasks = store.query(pluginId, {
-    kind: "task",
-    from: date,
-    to: date,
-    completed: false,
-    limit: 20,
-  });
+  const tasks = store.query(
+    pluginId,
+    {
+      kind: "task",
+      from: date,
+      to: date,
+      completed: false,
+      limit: 20,
+    },
+    undefined,
+    connectionId,
+  );
   if (!tasks.total) return null;
   const lines = tasks.records.map(
     (r) => `- ${r.title.replace(/[\r\n\t]+/g, " ").replace(/([\\`*_{}[\]<>])/g, "\\$1")}`,

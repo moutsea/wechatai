@@ -13,6 +13,7 @@ import {
 
 export function DailyTasksReminder({
   plugin,
+  connectionId,
   writable,
   busy,
   setBusy,
@@ -20,6 +21,7 @@ export function DailyTasksReminder({
   onSaved,
 }: {
   plugin: PersonalAssistantPlugin;
+  connectionId: string;
   writable: boolean;
   busy: boolean;
   setBusy: (value: boolean) => void;
@@ -40,7 +42,7 @@ export function DailyTasksReminder({
     setLoaded(false);
     request<PersonalRecords>(
       `/plugins/${plugin.id}/records/query`,
-      json({ kind: "reminder", reminderType: "daily_tasks", limit: 1 }),
+      json({ kind: "reminder", reminderType: "daily_tasks", limit: 1, connectionId }),
     )
       .then((page) => {
         if (cancelled) return;
@@ -63,7 +65,7 @@ export function DailyTasksReminder({
     return () => {
       cancelled = true;
     };
-  }, [plugin.id, refreshKey, request]);
+  }, [plugin.id, connectionId, refreshKey, request]);
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
@@ -81,6 +83,7 @@ export function DailyTasksReminder({
       await request(
         `/plugins/${plugin.id}/records`,
         json({
+          connectionId,
           record: enabled
             ? {
                 kind: "reminder",
@@ -139,7 +142,9 @@ export function DailyTasksReminder({
         </button>
       </div>
       {record?.reminderEnabled && record.reminderError && <p>发送状态：{record.reminderError}</p>}
-      {!plugin.reminderConnectionId && <p>请先在助理配置中选择接收提醒的微信链接。</p>}
+      {!connectionId && !plugin.reminderConnectionId && (
+        <p>请先在助理配置中选择接收共享提醒的微信链接。</p>
+      )}
       {error && (
         <p role="alert" className="form-error">
           {error}

@@ -9,6 +9,7 @@ export const personalAssistantInputSchema = z.object({
   enabled: z.boolean().default(true),
   currency: z.enum(["CNY", "USD", "HKD", "EUR", "GBP", "JPY"]).default("CNY"),
   reminderConnectionId: z.string().max(200).default(""),
+  recordScope: z.enum(["shared", "connection"]).default("shared"),
 });
 export type PersonalAssistantInput = z.infer<typeof personalAssistantInputSchema>;
 export type PersonalAssistantPlugin = PersonalAssistantInput & {

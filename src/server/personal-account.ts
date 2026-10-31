@@ -190,6 +190,14 @@ type StoredPlugin = (
 ) & {
   encryptedKey: string;
 };
+function recoveryPluginConfig(plugin?: StoredPlugin) {
+  if (!plugin) return "";
+  if (plugin.pluginId !== "wechatai/personal-assistant") return JSON.stringify(plugin);
+  // Old checkpoints omitted recordScope. Normalize its default and position on
+  // both sides without ignoring actual scope or other configuration changes.
+  const { recordScope, ...rest } = plugin;
+  return JSON.stringify({ ...rest, recordScope: recordScope ?? "shared" });
+}
 type GuideDelivery = {
   clientId: string;
   userId: string;
@@ -936,6 +944,8 @@ export class PersonalAccount extends DurableObject<Env> {
     if (isRemoteAgent(p)) return { ...waitingMessageDefaults(OPENCLAW_WAITING_MESSAGE), ...p };
     if (p.pluginId === "wechatai/image-generation")
       return { ...waitingMessageDefaults(IMAGE_WAITING_MESSAGE), ...p };
+    if (p.pluginId === "wechatai/personal-assistant")
+      return { ...p, recordScope: p.recordScope ?? "shared" };
     return p;
   }
   private findPlugin(id: string) {
@@ -1093,7 +1103,8 @@ export class PersonalAccount extends DurableObject<Env> {
         .safeExtend({ shortcut: editableShortcut.default("助理") })
         .parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
       this.textAssistant(input.modelId);
-      if (input.reminderConnectionId) this.requireLink(input.reminderConnectionId);
+      if (input.recordScope === "shared" && input.reminderConnectionId)
+        this.requireLink(input.reminderConnectionId);
       if (!previous || input.shortcut !== previous.shortcut)
         this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       const plugin: StoredPlugin = {
@@ -1110,6 +1121,27 @@ export class PersonalAccount extends DurableObject<Env> {
           plugin.id,
           JSON.stringify(plugin),
         );
+        if (
+          previous?.pluginId === "wechatai/personal-assistant" &&
+          previous.recordScope !== plugin.recordScope
+        ) {
+          // Also reset conversations where this assistant was invoked with @.
+          // The transcript remains available, but old shared records and summaries
+          // must not enter model input after changing the privacy boundary.
+          const used = new Set(
+            this.sql
+              .exec<{ sessionId: string }>(
+                "SELECT DISTINCT r.sessionId FROM runs r JOIN platform_metering m ON m.id=r.id WHERE m.instanceId=? AND r.sessionId IS NOT NULL",
+                plugin.id,
+              )
+              .toArray()
+              .map((r) => r.sessionId),
+          );
+          for (const session of this.sessions()) {
+            if (session.pluginInstanceId === plugin.id || used.has(session.id))
+              this.changeSession(session.id, "reset");
+          }
+        }
         for (const session of this.sessions().filter((s) => s.pluginInstanceId === plugin.id))
           this.saveSession({ ...session, assistantId: input.modelId, pluginName: input.name });
       });
@@ -1782,8 +1814,17 @@ export class PersonalAccount extends DurableObject<Env> {
       }
     }
   }
-  private personalReminderTarget(plugin: Pick<PersonalAssistantPlugin, "reminderConnectionId">) {
-    const id = plugin.reminderConnectionId;
+  private personalRecordConnection(
+    plugin: Pick<PersonalAssistantPlugin, "recordScope">,
+    connectionId = this.selectedLink(),
+  ) {
+    return plugin.recordScope === "connection" ? connectionId : "";
+  }
+  private personalReminderTarget(
+    plugin: Pick<PersonalAssistantPlugin, "reminderConnectionId">,
+    recordConnectionId = "",
+  ) {
+    const id = recordConnectionId || plugin.reminderConnectionId;
     if (!id || !this.links().some((l) => l.id === id) || !this.linkEnabled(id)) return null;
     const link = this.connection(id);
     return link.status === "connected" ? { connectionId: id, generation: link.generation } : null;
@@ -1846,7 +1887,7 @@ export class PersonalAccount extends DurableObject<Env> {
         continue;
       }
       if (
-        plugin.reminderConnectionId !== reminder.connectionId ||
+        (reminder.recordConnectionId || plugin.reminderConnectionId) !== reminder.connectionId ||
         !this.links().some((l) => l.id === reminder.connectionId)
       ) {
         this.personalRecords.defer(reminder, "blocked", "提醒链接已变更，请重新设置提醒时间");
@@ -1869,7 +1910,11 @@ export class PersonalAccount extends DurableObject<Env> {
         this.personalRecords.defer(reminder, "waiting_context", "请先在微信发送一条消息");
         continue;
       }
-      const record = this.personalRecords.get(plugin.id, reminder.recordId);
+      const record = this.personalRecords.get(
+        plugin.id,
+        reminder.recordId,
+        reminder.recordConnectionId,
+      );
       if (record.kind !== "reminder" || !record.reminderEnabled) {
         this.personalRecords.finish(reminder, true);
         continue;
@@ -1883,7 +1928,8 @@ export class PersonalAccount extends DurableObject<Env> {
         const latest = this.connection(reminder.connectionId);
         if (
           latest.generation !== reminder.generation ||
-          this.personalRecords.get(plugin.id, record.id).revision !== reminder.revision
+          this.personalRecords.get(plugin.id, record.id, reminder.recordConnectionId).revision !==
+            reminder.revision
         )
           continue;
         const latestPlugin = this.plugin(plugin.id);
@@ -1891,12 +1937,19 @@ export class PersonalAccount extends DurableObject<Env> {
           !this.pluginAvailable(plugin.id) ||
           !latestPlugin.enabled ||
           latestPlugin.pluginId !== "wechatai/personal-assistant" ||
-          latestPlugin.reminderConnectionId !== reminder.connectionId
+          (reminder.recordConnectionId || latestPlugin.reminderConnectionId) !==
+            reminder.connectionId
         )
           continue;
         const reminderText =
           record.reminderType === "daily_tasks"
-            ? dailyTasksMessage(this.personalRecords, plugin.id, reminder.dueAt)
+            ? dailyTasksMessage(
+                this.personalRecords,
+                plugin.id,
+                reminder.dueAt,
+                Date.now(),
+                reminder.recordConnectionId,
+              )
             : `⏰ 提醒\n\n${record.title}\n时间：${beijingTime(reminder.dueAt)}（北京时间）${record.content ? `\n\n${record.content.slice(0, 500)}` : ""}`;
         if (!reminderText) {
           this.personalRecords.finish(reminder, true);
@@ -2224,7 +2277,26 @@ export class PersonalAccount extends DurableObject<Env> {
         const plugin = this.plugin(String(p.pluginId));
         if (plugin.pluginId !== "wechatai/personal-assistant")
           throw new AppError("plugin_type", "不是个人助理配置");
-        if (action === "personal.list") data = this.personalRecords.query(plugin.id, p.query ?? {});
+        // Web management may explicitly select either library. Model calls derive
+        // their scope from the trusted session instead, never from tool arguments.
+        const recordConnectionId =
+          typeof p.connectionId === "string"
+            ? p.connectionId
+            : this.personalRecordConnection(plugin);
+        if (
+          action !== "personal.scopes" &&
+          recordConnectionId &&
+          !this.personalRecords.scopes(plugin.id).includes(recordConnectionId)
+        )
+          this.requireLink(recordConnectionId);
+        if (action === "personal.scopes") data = this.personalRecords.scopes(plugin.id);
+        else if (action === "personal.list")
+          data = this.personalRecords.query(
+            plugin.id,
+            p.query ?? {},
+            undefined,
+            recordConnectionId,
+          );
         else {
           this.busy();
           if (action === "personal.save") {
@@ -2234,8 +2306,9 @@ export class PersonalAccount extends DurableObject<Env> {
           }
           const draft = this.personalRecords.draft(
             plugin.id,
-            !!this.personalReminderTarget(plugin),
+            !!this.personalReminderTarget(plugin, recordConnectionId),
             plugin.currency,
+            recordConnectionId,
           );
           if (action === "personal.save")
             data = draft.save(
@@ -2250,8 +2323,9 @@ export class PersonalAccount extends DurableObject<Env> {
             this.personalRecords.commit(
               plugin.id,
               draft.changes,
-              this.personalReminderTarget(plugin),
+              this.personalReminderTarget(plugin, recordConnectionId),
               "web",
+              recordConnectionId,
             ),
           );
           this.wechatWakeVersion++;
@@ -3013,12 +3087,17 @@ export class PersonalAccount extends DurableObject<Env> {
         onImagePending,
       );
     this.textAssistant(a.id);
+    const personalConnectionId =
+      plugin?.pluginId === "wechatai/personal-assistant"
+        ? this.personalRecordConnection(plugin, s?.connectionId ?? this.selectedLink())
+        : "";
     const personalDraft =
       plugin?.pluginId === "wechatai/personal-assistant"
         ? this.personalRecords.draft(
             plugin.id,
-            !!this.personalReminderTarget(plugin),
+            !!this.personalReminderTarget(plugin, personalConnectionId),
             plugin.currency,
+            personalConnectionId,
           )
         : undefined;
     const startedAt = recovery?.startedAt ?? Date.now();
@@ -3059,7 +3138,7 @@ export class PersonalAccount extends DurableObject<Env> {
         outputLimit,
         reminderTarget:
           plugin?.pluginId === "wechatai/personal-assistant"
-            ? this.personalReminderTarget(plugin)
+            ? this.personalReminderTarget(plugin, personalConnectionId)
             : null,
         attachmentBatch,
         external: executionId() === id,
@@ -3381,7 +3460,9 @@ export class PersonalAccount extends DurableObject<Env> {
           this.personalRecords.commit(
             plugin.id,
             personalDraft.changes,
-            this.personalReminderTarget(plugin),
+            this.personalReminderTarget(plugin, personalConnectionId),
+            "assistant",
+            personalConnectionId,
           );
         }
         const units = this.wallet.charge(id, result.units, cap);
@@ -3787,10 +3868,13 @@ export class PersonalAccount extends DurableObject<Env> {
         );
       const session = this.session(saved.sessionId);
       const plugin = saved.pluginId ? this.plugin(saved.pluginId, true) : undefined;
+      const savedPlugin: StoredPlugin | undefined = saved.pluginConfig
+        ? JSON.parse(saved.pluginConfig)
+        : undefined;
       const model = this.assistant(saved.modelId);
       if (
         (!saved.external && plugin?.pluginId !== "wechatai/personal-assistant") ||
-        (plugin ? JSON.stringify(plugin) : "") !== saved.pluginConfig ||
+        recoveryPluginConfig(plugin) !== recoveryPluginConfig(savedPlugin) ||
         JSON.stringify(model) !== saved.modelConfig ||
         session.archived ||
         (session.connectionId ?? DEFAULT_WECHAT_LINK) !== connectionId ||
@@ -3802,7 +3886,10 @@ export class PersonalAccount extends DurableObject<Env> {
         this.connection(connectionId).status !== "connected" ||
         JSON.stringify(
           plugin?.pluginId === "wechatai/personal-assistant"
-            ? this.personalReminderTarget(plugin)
+            ? this.personalReminderTarget(
+                plugin,
+                this.personalRecordConnection(plugin, session.connectionId),
+              )
             : null,
         ) !== JSON.stringify(saved.reminderTarget)
       )

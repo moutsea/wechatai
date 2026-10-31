@@ -636,12 +636,16 @@ app.delete(
   "/api/plugins/:id/notification/token",
   invoke("notification.revoke", (c) => ({ id: c.req.param("id") })),
 );
+app.get(
+  "/api/plugins/:id/records/scopes",
+  invoke("personal.scopes", (c) => ({ pluginId: c.req.param("id") })),
+);
 app.post(
   "/api/plugins/:id/records/query",
-  invoke("personal.list", async (c) => ({
-    pluginId: c.req.param("id"),
-    query: await c.req.json(),
-  })),
+  invoke("personal.list", async (c) => {
+    const body = await c.req.json();
+    return { pluginId: c.req.param("id"), query: body, connectionId: body?.connectionId };
+  }),
 );
 app.post(
   "/api/plugins/:id/records",

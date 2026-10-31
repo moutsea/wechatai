@@ -33,6 +33,7 @@ export type Reminder = {
   dueAt: number;
   repeatMs: number;
   connectionId: string;
+  recordConnectionId: string;
   generation: string;
   state: string;
   retryAt: number;
@@ -45,6 +46,7 @@ export type PersonalDraftState = {
   seen: string[];
   recordsRevision?: number;
   recordModelVersion?: number;
+  connectionId?: string;
 };
 type RecordChange = {
   id: string;
@@ -113,15 +115,38 @@ export class PersonalRecordsStore {
         INSERT INTO personal_record_migrations VALUES (2);
       `);
     }
+    if (
+      !this.sql.exec("SELECT 1 FROM personal_record_migrations WHERE version=3").toArray().length
+    ) {
+      // Existing records stay in the shared library. Never guess a note's originating link.
+      this.sql.exec(`
+        ALTER TABLE personal_records ADD COLUMN connectionId TEXT NOT NULL DEFAULT '';
+        ALTER TABLE personal_reminders ADD COLUMN recordConnectionId TEXT NOT NULL DEFAULT '';
+        DROP INDEX personal_daily_tasks_unique;
+        CREATE UNIQUE INDEX personal_daily_tasks_unique ON personal_records(pluginId,connectionId)
+          WHERE kind='reminder' AND json_extract(data,'$.reminderType')='daily_tasks';
+        CREATE INDEX personal_records_scope ON personal_records(pluginId,connectionId,kind,date);
+        ALTER TABLE personal_record_state RENAME TO personal_record_state_legacy;
+        CREATE TABLE personal_record_state (
+          pluginId TEXT NOT NULL, connectionId TEXT NOT NULL DEFAULT '',
+          revision INTEGER NOT NULL, changes TEXT NOT NULL, PRIMARY KEY(pluginId,connectionId)
+        );
+        INSERT INTO personal_record_state(pluginId,revision,changes)
+          SELECT pluginId,revision,changes FROM personal_record_state_legacy;
+        DROP TABLE personal_record_state_legacy;
+        INSERT INTO personal_record_migrations VALUES (3);
+      `);
+    }
   }
   private changedSchedule() {
     this.sql.exec("UPDATE personal_reminder_schedule SET revision=revision+1 WHERE id=1");
   }
-  recordState(pluginId: string) {
+  recordState(pluginId: string, connectionId = "") {
     const row = this.sql
       .exec<{ revision: number; changes: string }>(
-        "SELECT revision,changes FROM personal_record_state WHERE pluginId=?",
+        "SELECT revision,changes FROM personal_record_state WHERE pluginId=? AND connectionId=?",
         pluginId,
+        connectionId,
       )
       .toArray()[0];
     return {
@@ -133,6 +158,18 @@ export class PersonalRecordsStore {
   }
   forgetContextChanges() {
     this.sql.exec("UPDATE personal_record_state SET changes='[]',revision=revision+1");
+  }
+  scopes(pluginId: string) {
+    // State survives deletion of the last record, so an emptied historical
+    // library remains readable even after its WeChat link has been removed.
+    return this.sql
+      .exec<{ connectionId: string }>(
+        "SELECT connectionId FROM personal_records WHERE pluginId=? UNION SELECT connectionId FROM personal_record_state WHERE pluginId=? ORDER BY connectionId",
+        pluginId,
+        pluginId,
+      )
+      .toArray()
+      .map((row) => row.connectionId);
   }
   schedule(): ReminderSchedule {
     const { revision } = this.sql
@@ -156,21 +193,27 @@ export class PersonalRecordsStore {
       revision,
     );
   }
-  get(pluginId: string, id: string) {
+  get(pluginId: string, id: string, connectionId = "") {
     const row = this.sql
       .exec<Row>(
-        "SELECT r.*,m.state reminderState,m.error reminderError,m.dueAt nextReminderAt FROM personal_records r LEFT JOIN personal_reminders m ON m.recordId=r.id WHERE r.pluginId=? AND r.id=?",
+        "SELECT r.*,m.state reminderState,m.error reminderError,m.dueAt nextReminderAt FROM personal_records r LEFT JOIN personal_reminders m ON m.recordId=r.id WHERE r.pluginId=? AND r.id=? AND r.connectionId=?",
         pluginId,
         id,
+        connectionId,
       )
       .toArray()[0];
     if (!row) throw new AppError("record_missing", "没有找到这条记录，请重新查询", 404);
     return decode(row);
   }
-  query(pluginId: string, raw: unknown, changes = new Map<string, Change>()): PersonalRecords {
+  query(
+    pluginId: string,
+    raw: unknown,
+    changes = new Map<string, Change>(),
+    connectionId = "",
+  ): PersonalRecords {
     const q = personalQuerySchema.parse(raw);
-    const conditions = ["r.pluginId=?"],
-      values: (string | number)[] = [pluginId];
+    const conditions = ["r.pluginId=?", "r.connectionId=?"],
+      values: (string | number)[] = [pluginId, connectionId];
     if (q.kind) {
       conditions.push("r.kind=?");
       values.push(q.kind);
@@ -251,14 +294,20 @@ export class PersonalRecordsStore {
       })),
     };
   }
-  draft(pluginId: string, reminderAvailable = false, currency: PersonalRecord["currency"] = "CNY") {
-    return new PersonalDraft(this, pluginId, reminderAvailable, currency);
+  draft(
+    pluginId: string,
+    reminderAvailable = false,
+    currency: PersonalRecord["currency"] = "CNY",
+    connectionId = "",
+  ) {
+    return new PersonalDraft(this, pluginId, reminderAvailable, currency, connectionId);
   }
   commit(
     pluginId: string,
     changes: Map<string, Change>,
     target: { connectionId: string; generation: string } | null,
     source: RecordChange["source"] = "assistant",
+    connectionId = "",
   ) {
     // Called inside the same synchronous transaction as the run receipt and billing.
     const count = this.sql
@@ -276,10 +325,15 @@ export class PersonalRecordsStore {
       );
     if (changes.size) this.changedSchedule();
     for (const [id, { before, after }] of changes) {
-      if (before && this.get(pluginId, id).revision !== before.revision)
+      if (before && this.get(pluginId, id, connectionId).revision !== before.revision)
         throw new AppError("record_changed", "记录已修改，请重新查询后再操作", 409);
       if (!after) {
-        this.sql.exec("DELETE FROM personal_records WHERE id=? AND pluginId=?", id, pluginId);
+        this.sql.exec(
+          "DELETE FROM personal_records WHERE id=? AND pluginId=? AND connectionId=?",
+          id,
+          pluginId,
+          connectionId,
+        );
         this.sql.exec(
           "DELETE FROM personal_reminders WHERE recordId=? AND pluginId=?",
           id,
@@ -289,7 +343,7 @@ export class PersonalRecordsStore {
       }
       const data = personalRecordInputSchema.parse(after);
       this.sql.exec(
-        "INSERT INTO personal_records VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,kind=excluded.kind,date=excluded.date,amountCents=excluded.amountCents,data=excluded.data,updatedAt=excluded.updatedAt",
+        "INSERT INTO personal_records (id,pluginId,revision,kind,date,amountCents,data,createdAt,updatedAt,connectionId) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,kind=excluded.kind,date=excluded.date,amountCents=excluded.amountCents,data=excluded.data,updatedAt=excluded.updatedAt",
         id,
         pluginId,
         after.revision,
@@ -299,6 +353,7 @@ export class PersonalRecordsStore {
         JSON.stringify(data),
         after.createdAt,
         after.updatedAt,
+        connectionId,
       );
       const reminderChanged =
         !before ||
@@ -313,18 +368,24 @@ export class PersonalRecordsStore {
       const targetChanged =
         target &&
         previous &&
-        (previous.connectionId !== target.connectionId || previous.generation !== target.generation);
+        (previous.connectionId !== target.connectionId ||
+          previous.generation !== target.generation);
       if (data.kind !== "reminder" || !data.remindAt || !data.reminderEnabled)
         this.sql.exec("DELETE FROM personal_reminders WHERE recordId=?", id);
-      else if (!target)
-        throw new AppError("reminder_link", "请在个人助理配置中选择已连接的微信链接，再设置提醒");
+      else if (!target || (connectionId && target.connectionId !== connectionId))
+        throw new AppError(
+          "reminder_link",
+          connectionId
+            ? "这份记录所属的微信链接尚未连接，请连接后再设置提醒"
+            : "请在个人助理配置中选择已连接的微信链接，再设置提醒",
+        );
       else if (reminderChanged || !previous || targetChanged) {
         const dueAt = Date.parse(data.remindAt);
         if (dueAt <= Date.now() || dueAt > Date.now() + 2 * 366 * 86400000)
           throw new AppError("reminder_time", "提醒时间需在未来两年内，请明确日期和时间");
         this.sql.exec("DELETE FROM personal_reminders WHERE recordId=?", id);
         this.sql.exec(
-          "INSERT INTO personal_reminders (id,pluginId,recordId,revision,dueAt,repeatMs,connectionId,generation,state,retryAt) VALUES (?,?,?,?,?,?,?,?,'scheduled',?)",
+          "INSERT INTO personal_reminders (id,pluginId,recordId,revision,dueAt,repeatMs,connectionId,generation,state,retryAt,recordConnectionId) VALUES (?,?,?,?,?,?,?,?,'scheduled',?,?)",
           crypto.randomUUID(),
           pluginId,
           id,
@@ -334,6 +395,7 @@ export class PersonalRecordsStore {
           target.connectionId,
           target.generation,
           dueAt,
+          connectionId,
         );
       } else
         this.sql.exec(
@@ -343,7 +405,7 @@ export class PersonalRecordsStore {
         );
     }
     if (changes.size) {
-      const state = this.recordState(pluginId);
+      const state = this.recordState(pluginId, connectionId);
       const recent: RecordChange[] = [...changes].flatMap(([id, { before, after }]) => {
         const record = after ?? before;
         // Keep only a short change receipt, never deleted note/file contents or amounts.
@@ -368,12 +430,13 @@ export class PersonalRecordsStore {
           : [];
       });
       this.sql.exec(
-        "INSERT INTO personal_record_state VALUES (?,?,?) ON CONFLICT(pluginId) DO UPDATE SET revision=excluded.revision,changes=excluded.changes",
+        "INSERT INTO personal_record_state (pluginId,revision,changes,connectionId) VALUES (?,?,?,?) ON CONFLICT(pluginId,connectionId) DO UPDATE SET revision=excluded.revision,changes=excluded.changes",
         pluginId,
         state.revision + 1,
         JSON.stringify(
           [...recent, ...state.changes.filter((c) => !changes.has(c.id))].slice(0, 20),
         ),
+        connectionId,
       );
     }
   }
@@ -441,11 +504,12 @@ export class PersonalDraft {
     readonly pluginId: string,
     private reminderAvailable: boolean,
     private currency: PersonalRecord["currency"],
+    readonly connectionId = "",
   ) {
-    this.recordsRevision = store.recordState(pluginId).revision;
+    this.recordsRevision = store.recordState(pluginId, connectionId).revision;
   }
   assertCurrent() {
-    if (this.recordsRevision !== this.store.recordState(this.pluginId).revision)
+    if (this.recordsRevision !== this.store.recordState(this.pluginId, this.connectionId).revision)
       throw new AppError(
         "personal_records_changed",
         "记录已修改或删除，本轮操作未保存、未扣 credits，请重新发送以读取最新记录",
@@ -464,10 +528,20 @@ export class PersonalDraft {
     // This mandatory read does not grant write permission: updates/deletions still
     // require an explicit personal_query, preserving the existing ID/revision gate.
     return {
-      ...this.store.recordState(this.pluginId),
-      records: this.store.query(this.pluginId, { limit: 12 }, this.changes),
-      tasks: this.store.query(this.pluginId, { kind: "task", limit: 20 }, this.changes),
-      reminders: this.store.query(this.pluginId, { kind: "reminder", limit: 20 }, this.changes),
+      ...this.store.recordState(this.pluginId, this.connectionId),
+      records: this.store.query(this.pluginId, { limit: 12 }, this.changes, this.connectionId),
+      tasks: this.store.query(
+        this.pluginId,
+        { kind: "task", limit: 20 },
+        this.changes,
+        this.connectionId,
+      ),
+      reminders: this.store.query(
+        this.pluginId,
+        { kind: "reminder", limit: 20 },
+        this.changes,
+        this.connectionId,
+      ),
     };
   }
   snapshot(): PersonalDraftState {
@@ -476,10 +550,11 @@ export class PersonalDraft {
       seen: [...this.seen],
       recordsRevision: this.recordsRevision,
       recordModelVersion: 2,
+      connectionId: this.connectionId,
     };
   }
   restore(state: PersonalDraftState) {
-    if (state.recordModelVersion !== 2)
+    if (state.recordModelVersion !== 2 || (state.connectionId ?? "") !== this.connectionId)
       throw new AppError(
         "personal_records_changed",
         "记录分类已更新，本次未扣 credits，请重新发送",
@@ -494,7 +569,7 @@ export class PersonalDraft {
   query(raw: unknown) {
     const q = personalQuerySchema.parse(raw);
     if (q.offset) throw new AppError("query_offset", "微信查询请缩小日期或关键词范围");
-    const result = this.store.query(this.pluginId, q, this.changes);
+    const result = this.store.query(this.pluginId, q, this.changes, this.connectionId);
     result.records.forEach((r) => this.seen.add(r.id));
     return result;
   }
@@ -528,7 +603,7 @@ export class PersonalDraft {
     const original = id
       ? this.changes.has(id)
         ? this.changes.get(id)!.before
-        : this.store.get(this.pluginId, id)
+        : this.store.get(this.pluginId, id, this.connectionId)
       : null;
     const current = id ? (this.changes.has(id) ? this.changes.get(id)!.after : original) : null;
     if (id && (!current || current.revision !== revision))
@@ -551,6 +626,7 @@ export class PersonalDraft {
             limit: 2,
           },
           this.changes,
+          this.connectionId,
         )
         .records.some((r) => r.id !== id)
     )
@@ -560,7 +636,12 @@ export class PersonalDraft {
       );
     if (data.kind === "reminder" && data.remindAt && data.reminderEnabled) {
       if (!this.reminderAvailable)
-        throw new AppError("reminder_link", "请在个人助理配置中选择已连接的微信链接，再设置提醒");
+        throw new AppError(
+          "reminder_link",
+          this.connectionId
+            ? "当前微信链接尚未连接，请连接后再设置提醒"
+            : "请在个人助理配置中选择已连接的微信链接，再设置提醒",
+        );
       if (
         !current ||
         current.remindAt !== data.remindAt ||
@@ -588,7 +669,7 @@ export class PersonalDraft {
       throw new AppError("record_lookup_required", "删除前请先查询并确认准确记录，不可猜测");
     const original = this.changes.has(id)
       ? this.changes.get(id)!.before
-      : this.store.get(this.pluginId, id);
+      : this.store.get(this.pluginId, id, this.connectionId);
     const current = this.changes.has(id) ? this.changes.get(id)!.after : original;
     if (!current || current.revision !== revision)
       throw new AppError("record_changed", "记录已变更，请重新查询", 409);

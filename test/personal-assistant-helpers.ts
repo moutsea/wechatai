@@ -8,6 +8,7 @@ import type { Protocol } from "../src/shared/types";
 import type { WxMessage } from "../src/server/wechat";
 import { encrypt } from "../src/server/security";
 import { deferAutomaticAlarms } from "./helpers/wechat-delivery";
+import { wechatLinkKey } from "../src/shared/wechat-links";
 const accounts: DurableObjectStub<import("../src/server/personal-account").PersonalAccount>[] = [];
 type Account = (typeof accounts)[number];
 const scheduler = (stub: Account) =>
@@ -86,13 +87,18 @@ const save = (stub: Account, pluginId: string, record: unknown, existing?: Perso
     recordId: existing?.id,
     revision: existing?.revision,
   });
-const send = (stub: Account, text: string, id: string = crypto.randomUUID()) =>
+const send = (
+  stub: Account,
+  text: string,
+  id: string = crypto.randomUUID(),
+  connectionId = "default",
+) =>
   runInDurableObject(stub, (instance) =>
     (
       instance as unknown as {
         processWechat(id: string, message: WxMessage, connectionId: string): Promise<string>;
       }
-    ).processWechat(id, { item_list: [{ type: 1, text_item: { text } }] }, "default"),
+    ).processWechat(id, { item_list: [{ type: 1, text_item: { text } }] }, connectionId),
   );
 function response(
   protocol: Protocol,
@@ -159,7 +165,7 @@ function modelNetwork(protocol: Protocol, replies: unknown[]) {
 const systemText = (body: Record<string, unknown>) =>
   String(body.system ?? body.instructions ?? (body.messages as { content: string }[])[0].content);
 const contextData = (text: string) => JSON.parse(text.slice(text.indexOf('{"revision":')));
-async function connect(stub: Account, overrides = {}) {
+async function connect(stub: Account, overrides = {}, connectionId = "default") {
   await runInDurableObject(stub, async (_, state) => {
     const encryptedCredentials = await encrypt(
       env,
@@ -172,7 +178,8 @@ async function connect(stub: Account, overrides = {}) {
       `${state.id}:wechat`,
     );
     state.storage.sql.exec(
-      "UPDATE settings SET value=? WHERE key='connection'",
+      "INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+      wechatLinkKey(connectionId, "connection"),
       JSON.stringify({
         status: "connected",
         generation: "g1",

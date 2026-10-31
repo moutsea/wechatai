@@ -1,6 +1,12 @@
 .personal-workspace {
   padding: 20px 24px 24px;
 }
+.personal-scope-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
 .personal-tabs {
   display: flex;
   gap: 6px;

@@ -68,6 +68,51 @@ export function PersonalRecords({
   onClose: () => void;
 }) {
   const { data, request, notify } = useApp();
+  const [connectionId, setConnectionId] = useState(
+    plugin.recordScope === "connection" && data?.connections.length
+      ? data.selectedConnectionId
+      : "",
+  );
+  const [savedScopes, setSavedScopes] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void request<string[]>(`/plugins/${plugin.id}/records/scopes`)
+      .then((scopes) => {
+        if (!cancelled) setSavedScopes(scopes);
+      })
+      .catch((error) => {
+        if (!cancelled) notify(error.message, true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [plugin.id, request, notify]);
+  return (
+    <ScopedPersonalRecords
+      key={`${plugin.id}:${connectionId}`}
+      plugin={plugin}
+      onClose={onClose}
+      connectionId={connectionId}
+      onConnectionChange={setConnectionId}
+      savedScopes={savedScopes}
+    />
+  );
+}
+
+function ScopedPersonalRecords({
+  plugin,
+  onClose,
+  connectionId,
+  onConnectionChange,
+  savedScopes,
+}: {
+  plugin: PersonalAssistantPlugin;
+  onClose: () => void;
+  connectionId: string;
+  onConnectionChange: (id: string) => void;
+  savedScopes: string[];
+}) {
+  const { data, request, notify } = useApp();
   const [kind, setKind] = useState<PersonalRecordInput["kind"]>("note"),
     [query, setQuery] = useState(""),
     [search, setSearch] = useState(""),
@@ -108,6 +153,7 @@ export function PersonalRecords({
     request<RecordPage>(
       `/plugins/${plugin.id}/records/query`,
       json({
+        connectionId,
         kind,
         query: search,
         from: queryFrom || undefined,
@@ -125,7 +171,7 @@ export function PersonalRecords({
       .finally(() => {
         if (id === sequence.current) setLoading(false);
       });
-  }, [plugin.id, kind, search, queryFrom, queryTo, offset, refresh, request]);
+  }, [plugin.id, connectionId, kind, search, queryFrom, queryTo, offset, refresh, request]);
   const update = <K extends keyof PersonalRecordInput>(key: K, value: PersonalRecordInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const open = (record: PersonalRecord | "new") => {
@@ -147,6 +193,7 @@ export function PersonalRecords({
       await request(
         `/plugins/${plugin.id}/records`,
         json({
+          connectionId,
           record,
           recordId: editing !== "new" ? editing?.id : undefined,
           revision: editing !== "new" ? editing?.revision : undefined,
@@ -167,6 +214,7 @@ export function PersonalRecords({
       await request(
         `/plugins/${plugin.id}/records`,
         json({
+          connectionId,
           record: { completed: !record.completed },
           recordId: record.id,
           revision: record.revision,
@@ -185,7 +233,7 @@ export function PersonalRecords({
     try {
       await request(
         `/plugins/${plugin.id}/records/${deleting.id}`,
-        json({ revision: deleting.revision }, "DELETE"),
+        json({ revision: deleting.revision, connectionId }, "DELETE"),
       );
       setDeleting(null);
       setOffset(0);
@@ -207,6 +255,7 @@ export function PersonalRecords({
         const result = await request<RecordPage>(
           `/plugins/${plugin.id}/records/query`,
           json({
+            connectionId,
             kind,
             query: search,
             from: queryFrom || undefined,
@@ -271,12 +320,46 @@ export function PersonalRecords({
     <Modal
       wide
       title={`${plugin.name} · 我的记录`}
-      description="同一份助理配置跨会话共用。时间按北京时间，账目按币种分别统计。"
+      description={
+        plugin.recordScope === "connection"
+          ? "微信按链接使用各自的记录。时间按北京时间，账目按币种分别统计。"
+          : "微信使用共享记录。时间按北京时间，账目按币种分别统计。"
+      }
       onClose={() => {
         if (!busy) onClose();
       }}
     >
       <div className="personal-workspace" ref={workspace}>
+        <label className="personal-scope-selector">
+          记录范围
+          <select
+            aria-label="记录范围"
+            value={connectionId}
+            disabled={busy}
+            onChange={(e) => onConnectionChange(e.target.value)}
+          >
+            <option value="">
+              共享记录{plugin.recordScope === "connection" ? "（当前微信不使用）" : ""}
+            </option>
+            {data?.connections.map((link) => (
+              <option key={link.id} value={link.id}>
+                {link.name} · 独立记录
+              </option>
+            ))}
+            {savedScopes
+              .filter((id) => id && !data?.connections.some((link) => link.id === id))
+              .map((id) => (
+                <option key={id} value={id}>
+                  已删除的微信链接 · {id.slice(0, 8)}
+                </option>
+              ))}
+          </select>
+        </label>
+        {(plugin.recordScope === "connection") !== !!connectionId && (
+          <p className="personal-section-hint">
+            此范围的记录已保留，微信当前不会读取。已有提醒仍会按原接收链接发送。
+          </p>
+        )}
         <nav className="personal-tabs" aria-label="记录类型">
           {(
             [
@@ -339,6 +422,7 @@ export function PersonalRecords({
           <>
             <DailyTasksReminder
               plugin={plugin}
+              connectionId={connectionId}
               writable={!!writable}
               busy={busy}
               setBusy={setBusy}

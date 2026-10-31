@@ -130,6 +130,23 @@ export function PersonalAssistantEditor({
             支持三种 LLM 协议；所选模型需要支持工具调用。沿用模型的输入、输出和 credits 上限。
           </small>
         </label>
+        <label>
+          记录共享方式
+          <select
+            value={form.recordScope}
+            onChange={(e) =>
+              update("recordScope", e.target.value as PersonalAssistantInput["recordScope"])
+            }
+          >
+            <option value="shared">所有微信链接共享</option>
+            <option value="connection">按微信链接隔离</option>
+          </select>
+          <small>
+            {form.recordScope === "connection"
+              ? "每条微信链接只读写自己的笔记、待办、账目和提醒；提醒发回创建记录的链接。"
+              : "使用这份助理配置的微信链接，共用同一批笔记、待办、账目和提醒。"}
+          </small>
+        </label>
         <div className="form-grid">
           <label>
             默认记账币种
@@ -144,20 +161,28 @@ export function PersonalAssistantEditor({
               ))}
             </select>
           </label>
-          <label>
-            提醒发送到
-            <select
-              value={form.reminderConnectionId}
-              onChange={(e) => update("reminderConnectionId", e.target.value)}
-            >
-              <option value="">暂不设置提醒</option>
-              {data.connections.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {form.recordScope === "shared" && (
+            <label>
+              提醒发送到
+              <select
+                value={form.reminderConnectionId}
+                onChange={(e) => update("reminderConnectionId", e.target.value)}
+              >
+                <option value="">暂不设置提醒</option>
+                {form.reminderConnectionId &&
+                  !data.connections.some((c) => c.id === form.reminderConnectionId) && (
+                    <option value={form.reminderConnectionId} disabled>
+                      原接收链接已删除，请重新选择
+                    </option>
+                  )}
+                {data.connections.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <p className="form-hint">
           时间均按北京时间。支持一次性、每天和每周提醒；提醒不调用模型、不扣
@@ -179,8 +204,9 @@ export function PersonalAssistantEditor({
           <p>“每天早上九点提醒我今日待办”</p>
         </div>
         <p className="form-hint">
-          同一配置的记录跨聊天会话保存。每份配置有独立的笔记、账本和提醒，最多 10,000
-          条；清空聊天不会删除这些记录。
+          共享记录与各链接的独立记录分别保存，不会随设置切换自动复制或合并；可在「我的记录」切换范围查看。
+          修改共享方式会重置曾调用这份助理的会话上下文，聊天记录仍保留，已有提醒继续按原接收链接发送。
+          每份配置最多保存 10,000 条记录；清空聊天不会删除记录。
         </p>
         {error && <p className="form-error">{error}</p>}
         <div className="modal-actions">
