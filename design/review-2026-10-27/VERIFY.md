@@ -190,7 +190,7 @@ prerender 出的 HTML 里每张 `<img>` 都带与文件**完全一致**的 `widt
 复现命令（`pnpm dev` 需在 5173 上跑着，供 `/api` 代理；静态服务端口自选 5300+）：
 
 ```bash
-cd /Users/liang/Documents/code/react/no_hard_thing/tools/wechatai
+cd /path/to/wechatai
 pnpm lint && pnpm typecheck && pnpm test && pnpm build
 node scripts/verify-layout.local.mjs --port 5321 --out design/review-2026-10-27/verify
 node scripts/verify-layout.local.mjs --port 5322 --widths 1200,1000,981,980,900,860 --pages / --shotWidths "" --sections "" --out design/review-2026-10-27/verify/breakpoint
