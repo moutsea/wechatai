@@ -21,10 +21,12 @@ import {
   personalAssistantManifest,
   beijingTime,
   type PersonalAssistantPlugin,
+  type PersonalRecord,
 } from "../shared/personal-assistant";
-import { PersonalRecordsStore } from "./personal-records";
+import { PersonalRecordsStore, type Reminder } from "./personal-records";
+import { reminderFailureReason } from "./personal-reminder-errors";
 import { PERSONAL_CONTEXT_TOKENS } from "./plugins/personal-context";
-import { dailyTasksMessage } from "./plugins/personal-daily";
+import { dailyTasksExpiry, dailyTasksMessage } from "./plugins/personal-daily";
 import { PersonalRunStore, type PersonalRun, type PersonalRunInput } from "./personal-runs";
 import type { ReminderSchedule, ReminderScheduler } from "./reminder-scheduler";
 import {
@@ -1871,131 +1873,190 @@ export class PersonalAccount extends DurableObject<Env> {
     await this.requireReminderSchedule(true);
     return this.personalRecords.schedule();
   }
+  private personalReminderDeliveryTarget(reminder: Reminder) {
+    const plugin = this.findPlugin(reminder.pluginId);
+    if (!plugin || plugin.pluginId !== "wechatai/personal-assistant") {
+      this.personalRecords.block(reminder, "blocked", {
+        code: "reminder_plugin_missing",
+        message: "助理配置已删除",
+      });
+      return null;
+    }
+    if (!this.pluginAvailable(plugin.id) || !plugin.enabled) {
+      this.personalRecords.block(reminder, "paused", {
+        code: "reminder_plugin_paused",
+        message: "助理已停用或超出当前套餐的插件上限，请启用助理或恢复套餐后重试。",
+      });
+      return null;
+    }
+    if (
+      (reminder.recordConnectionId || plugin.reminderConnectionId) !== reminder.connectionId ||
+      !this.links().some((l) => l.id === reminder.connectionId)
+    ) {
+      this.personalRecords.block(reminder, "blocked", {
+        code: "reminder_target_changed",
+        message: "提醒链接已变更，请重新设置提醒时间",
+      });
+      return null;
+    }
+    const link = this.connection(reminder.connectionId);
+    if (link.generation !== reminder.generation) {
+      this.personalRecords.block(reminder, "blocked", {
+        code: "reminder_binding_changed",
+        message: "微信已重新绑定，请重新设置提醒时间",
+      });
+      return null;
+    }
+    if (!this.linkEnabled(reminder.connectionId)) {
+      this.personalRecords.block(reminder, "paused", {
+        code: "reminder_link_paused",
+        message: "接收微信链接超出当前套餐上限，请恢复套餐后重试。",
+      });
+      return null;
+    }
+    if (link.status === "expired") {
+      this.personalRecords.block(reminder, "paused", {
+        code: "wechat_expired",
+        message: "微信登录凭据已失效，请重新扫码连接，再编辑并重新保存提醒。",
+      });
+      return null;
+    }
+    if (link.status !== "connected" || !link.encryptedCredentials) {
+      this.personalRecords.block(reminder, "paused", {
+        code: "reminder_link_paused",
+        message: "微信未连接，请检查接收微信的连接。",
+      });
+      return null;
+    }
+    if (!link.contextToken) {
+      this.personalRecords.block(reminder, "waiting_context", {
+        code: "wechat_context_missing",
+        message: "缺少微信会话凭据。",
+      });
+      return null;
+    }
+    return { plugin, link };
+  }
+  private expirePersonalReminder(reminder: Reminder, record?: PersonalRecord) {
+    const now = Date.now();
+    const cutoff =
+      record?.reminderType === "daily_tasks" ? dailyTasksExpiry(reminder.dueAt, now) : null;
+    if (cutoff !== null) {
+      this.personalRecords.expire(reminder, cutoff, "每日待办提醒已跨天，未再补发");
+      return true;
+    }
+    if (
+      now - reminder.dueAt > 86400000 ||
+      (reminder.repeatMs > 0 && now >= reminder.dueAt + reminder.repeatMs)
+    ) {
+      this.personalRecords.expire(reminder);
+      return true;
+    }
+    return false;
+  }
   private async deliverPersonalReminders() {
     for (const reminder of this.personalRecords.due()) {
-      const plugin = this.findPlugin(reminder.pluginId);
-      if (!plugin || plugin.pluginId !== "wechatai/personal-assistant") {
-        this.personalRecords.defer(reminder, "blocked", "助理配置已删除");
-        continue;
-      }
-      if (Date.now() - reminder.dueAt > 86400000) {
-        this.personalRecords.finish(reminder, false);
-        continue;
-      }
-      if (!this.pluginAvailable(plugin.id) || !plugin.enabled) {
-        this.personalRecords.defer(reminder, "paused", "助理已停用或超出当前套餐的插件上限");
-        continue;
-      }
-      if (
-        (reminder.recordConnectionId || plugin.reminderConnectionId) !== reminder.connectionId ||
-        !this.links().some((l) => l.id === reminder.connectionId)
-      ) {
-        this.personalRecords.defer(reminder, "blocked", "提醒链接已变更，请重新设置提醒时间");
-        continue;
-      }
-      const link = this.connection(reminder.connectionId);
-      if (link.generation !== reminder.generation) {
-        this.personalRecords.defer(reminder, "blocked", "微信已重新绑定，请重新设置提醒时间");
-        continue;
-      }
-      if (
-        !this.linkEnabled(reminder.connectionId) ||
-        link.status !== "connected" ||
-        !link.encryptedCredentials
-      ) {
-        this.personalRecords.defer(reminder, "paused", "微信未连接");
-        continue;
-      }
-      if (!link.contextToken) {
-        this.personalRecords.defer(reminder, "waiting_context", "请先在微信发送一条消息");
-        continue;
-      }
-      const record = this.personalRecords.get(
-        plugin.id,
-        reminder.recordId,
-        reminder.recordConnectionId,
-      );
-      if (record.kind !== "reminder" || !record.reminderEnabled) {
-        this.personalRecords.finish(reminder, true);
-        continue;
-      }
-      // Persist the delivery lease before I/O. Retries reuse one occurrence ID.
-      this.personalRecords.defer(reminder, "retry", "正在发送提醒", 30000);
+      let attempts = reminder.attempts;
       try {
-        const credentials = JSON.parse(
-          await decrypt(this.env, link.encryptedCredentials, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
-        const latest = this.connection(reminder.connectionId);
-        if (
-          latest.generation !== reminder.generation ||
-          this.personalRecords.get(plugin.id, record.id, reminder.recordConnectionId).revision !==
-            reminder.revision
-        )
-          continue;
-        const latestPlugin = this.plugin(plugin.id);
-        if (
-          !this.pluginAvailable(plugin.id) ||
-          !latestPlugin.enabled ||
-          latestPlugin.pluginId !== "wechatai/personal-assistant" ||
-          (reminder.recordConnectionId || latestPlugin.reminderConnectionId) !==
-            reminder.connectionId
-        )
-          continue;
-        const reminderText =
-          record.reminderType === "daily_tasks"
-            ? dailyTasksMessage(
-                this.personalRecords,
-                plugin.id,
-                reminder.dueAt,
-                Date.now(),
-                reminder.recordConnectionId,
-              )
-            : `⏰ 提醒\n\n${record.title}\n时间：${beijingTime(reminder.dueAt)}（北京时间）${record.content ? `\n\n${record.content.slice(0, 500)}` : ""}`;
-        if (!reminderText) {
-          this.personalRecords.finish(reminder, true);
+        // Earlier sends yield to web edits. Discard deleted, cancelled or
+        // rescheduled entries from this batch's snapshot before reading records.
+        if (!this.personalRecords.isCurrent(reminder)) continue;
+        // The generic cutoff also settles old rows whose record cannot be decoded.
+        if (this.expirePersonalReminder(reminder)) continue;
+        const record = this.personalRecords.get(
+          reminder.pluginId,
+          reminder.recordId,
+          reminder.recordConnectionId,
+        );
+        if (record.kind !== "reminder" || !record.reminderEnabled) {
+          this.personalRecords.finish(reminder);
           continue;
         }
-        const text = pluginNotificationText(personalAssistantManifest, plugin, reminderText);
+        if (this.expirePersonalReminder(reminder, record)) continue;
+        const target = this.personalReminderDeliveryTarget(reminder);
+        if (!target) continue;
+        const { plugin, link } = target;
+        const credentials = JSON.parse(
+          await decrypt(this.env, link.encryptedCredentials!, `${this.ctx.id}:wechat`),
+        ) as WxCredentials;
+        if (!this.personalRecords.isCurrent(reminder)) continue;
+        if (this.expirePersonalReminder(reminder, record)) continue;
+        // Reuse every prerequisite check after async preparation, immediately
+        // before the lease and send. Plan, login and context can change meanwhile.
+        const latest = this.personalReminderDeliveryTarget(reminder);
+        if (!latest || latest.link.encryptedCredentials !== link.encryptedCredentials) continue;
+        if (
+          this.personalRecords.get(plugin.id, record.id, reminder.recordConnectionId).revision !==
+          reminder.revision
+        )
+          continue;
+        let reminderText: string;
+        if (record.reminderType === "daily_tasks") {
+          const digest = dailyTasksMessage(
+            this.personalRecords,
+            plugin.id,
+            reminder.dueAt,
+            Date.now(),
+            reminder.recordConnectionId,
+          );
+          if (digest.status === "expired") {
+            this.personalRecords.expire(reminder, digest.notBefore, "每日待办提醒已跨天，未再补发");
+            continue;
+          }
+          if (digest.status === "empty") {
+            this.personalRecords.finish(reminder);
+            continue;
+          }
+          reminderText = digest.text;
+        } else {
+          reminderText = `⏰ 提醒\n\n${record.title}\n时间：${beijingTime(reminder.dueAt)}（北京时间）${record.content ? `\n\n${record.content.slice(0, 500)}` : ""}`;
+        }
+        const text = pluginNotificationText(personalAssistantManifest, latest.plugin, reminderText);
+        attempts = this.personalRecords.startAttempt(reminder);
         await sendText(
           credentials,
-          latest.contextToken!,
+          latest.link.contextToken!,
           `personal:${reminder.id}:${reminder.dueAt}`,
           text,
           5000,
         );
-        this.personalRecords.finish(reminder, true);
+        this.personalRecords.finish(reminder);
         console.info(
           JSON.stringify({
             event: "personal.reminder_delivered",
             reminderId: reminder.id,
             dueAt: reminder.dueAt,
             delayMs: Math.max(0, Date.now() - reminder.dueAt),
-            attempts: reminder.attempts + 1,
+            attempts,
           }),
         );
       } catch (error) {
+        if (error instanceof AppError && error.code === "record_missing") {
+          this.personalRecords.block(reminder, "blocked", {
+            code: "record_missing",
+            message: "提醒记录已删除或变更，请重新设置提醒。",
+          });
+          continue;
+        }
+        const failure = reminderFailureReason(error);
         console.warn(
           JSON.stringify({
             event: "personal.reminder_delivery_failed",
             reminderId: reminder.id,
             dueAt: reminder.dueAt,
             delayMs: Math.max(0, Date.now() - reminder.dueAt),
-            attempts: reminder.attempts + 1,
-            code:
-              error instanceof AppError
-                ? error.code
-                : error instanceof Error
-                  ? error.name
-                  : "unknown",
+            attempts,
+            code: failure.code,
+            upstreamStatus: failure.upstreamStatus,
+            ret: failure.ret,
+            errcode: failure.errcode,
           }),
         );
-        this.personalRecords.defer(
+        this.personalRecords.fail(
           reminder,
-          reminder.attempts >= 4 ? "waiting_context" : "retry",
-          reminder.attempts >= 4
-            ? "发送暂未成功，可先在微信发送一条消息以更新连接"
-            : "微信发送失败，稍后重试",
-          Math.min(60000, 5000 * 2 ** Math.min(4, reminder.attempts)),
+          failure.code === "wechat_expired" ? "paused" : "retry",
+          failure,
+          Math.min(60000, 5000 * 2 ** Math.min(4, Math.max(0, attempts - 1))),
         );
       }
     }
@@ -2306,7 +2367,7 @@ export class PersonalAccount extends DurableObject<Env> {
           }
           const draft = this.personalRecords.draft(
             plugin.id,
-            !!this.personalReminderTarget(plugin, recordConnectionId),
+            this.personalReminderTarget(plugin, recordConnectionId),
             plugin.currency,
             recordConnectionId,
           );
@@ -3095,7 +3156,7 @@ export class PersonalAccount extends DurableObject<Env> {
       plugin?.pluginId === "wechatai/personal-assistant"
         ? this.personalRecords.draft(
             plugin.id,
-            !!this.personalReminderTarget(plugin, personalConnectionId),
+            this.personalReminderTarget(plugin, personalConnectionId),
             plugin.currency,
             personalConnectionId,
           )

@@ -1,0 +1,1185 @@
+{
+  "base": "http://127.0.0.1:5322",
+  "apiProxy": "http://127.0.0.1:5173",
+  "generatedAt": "2026-10-27T02:50:22.193Z",
+  "results": [
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "1200",
+      "width": 1200,
+      "scrollWidth": 1200,
+      "clientWidth": 1200,
+      "innerWidth": 1200,
+      "bodyScrollWidth": 1200,
+      "scrollHeight": 6543,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 504,
+          "right": 1336,
+          "overflow": 136
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 557,
+          "right": 1282,
+          "overflow": 82
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 1142,
+          "rectH": 728.17,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 559,
+          "rectH": 560,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 559,
+          "rectH": 497.11,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 559,
+          "rectH": 305.16,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 559,
+          "rectH": 302.69,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 738,
+          "rectH": 461.25,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "561px 561px",
+        "columnCount": 2,
+        "width": 1144,
+        "cards": [
+          {
+            "wide": true,
+            "w": 1144,
+            "h": 859,
+            "imgW": 1142
+          },
+          {
+            "wide": false,
+            "w": 561,
+            "h": 714,
+            "imgW": 559
+          },
+          {
+            "wide": false,
+            "w": 561,
+            "h": 714,
+            "imgW": 559
+          },
+          {
+            "wide": false,
+            "w": 561,
+            "h": 459,
+            "imgW": 559
+          },
+          {
+            "wide": false,
+            "w": 561,
+            "h": 459,
+            "imgW": 559
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 373,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 373,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 373,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "1000",
+      "width": 1000,
+      "scrollWidth": 1000,
+      "clientWidth": 1000,
+      "innerWidth": 1000,
+      "bodyScrollWidth": 1000,
+      "scrollHeight": 6756,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 387,
+          "right": 1132,
+          "overflow": 132
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 435,
+          "right": 1084,
+          "overflow": 84
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 942,
+          "rectH": 600.81,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 459,
+          "rectH": 460,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 459,
+          "rectH": 408.36,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 459,
+          "rectH": 250.75,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 459,
+          "rectH": 248.72,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 538,
+          "rectH": 336.25,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "461px 461px",
+        "columnCount": 2,
+        "width": 944,
+        "cards": [
+          {
+            "wide": true,
+            "w": 944,
+            "h": 731,
+            "imgW": 942
+          },
+          {
+            "wide": false,
+            "w": 461,
+            "h": 614,
+            "imgW": 459
+          },
+          {
+            "wide": false,
+            "w": 461,
+            "h": 614,
+            "imgW": 459
+          },
+          {
+            "wide": false,
+            "w": 461,
+            "h": 405,
+            "imgW": 459
+          },
+          {
+            "wide": false,
+            "w": 461,
+            "h": 405,
+            "imgW": 459
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 307,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 307,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 307,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "981",
+      "width": 981,
+      "scrollWidth": 981,
+      "clientWidth": 981,
+      "innerWidth": 981,
+      "bodyScrollWidth": 981,
+      "scrollHeight": 6717,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 377,
+          "right": 1113,
+          "overflow": 132
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 424,
+          "right": 1066,
+          "overflow": 85
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 923,
+          "rectH": 588.72,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 449.5,
+          "rectH": 450.5,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 449.5,
+          "rectH": 399.92,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 449.5,
+          "rectH": 245.58,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 449.5,
+          "rectH": 243.59,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 519,
+          "rectH": 324.38,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "451.5px 451.5px",
+        "columnCount": 2,
+        "width": 925,
+        "cards": [
+          {
+            "wide": true,
+            "w": 925,
+            "h": 719,
+            "imgW": 923
+          },
+          {
+            "wide": false,
+            "w": 452,
+            "h": 604,
+            "imgW": 450
+          },
+          {
+            "wide": false,
+            "w": 452,
+            "h": 604,
+            "imgW": 450
+          },
+          {
+            "wide": false,
+            "w": 452,
+            "h": 399,
+            "imgW": 450
+          },
+          {
+            "wide": false,
+            "w": 452,
+            "h": 399,
+            "imgW": 450
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 300,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 300,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 300,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "980",
+      "width": 980,
+      "scrollWidth": 980,
+      "clientWidth": 980,
+      "innerWidth": 980,
+      "bodyScrollWidth": 980,
+      "scrollHeight": 9021,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 376,
+          "right": 1112,
+          "overflow": 132
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 424,
+          "right": 1065,
+          "overflow": 85
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 922,
+          "rectH": 588.08,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 922,
+          "rectH": 923,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 922,
+          "rectH": 819.27,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 922,
+          "rectH": 502.67,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 922,
+          "rectH": 498.59,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 518,
+          "rectH": 323.75,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "924px",
+        "columnCount": 1,
+        "width": 924,
+        "cards": [
+          {
+            "wide": true,
+            "w": 924,
+            "h": 718,
+            "imgW": 922
+          },
+          {
+            "wide": false,
+            "w": 924,
+            "h": 1053,
+            "imgW": 922
+          },
+          {
+            "wide": false,
+            "w": 924,
+            "h": 950,
+            "imgW": 922
+          },
+          {
+            "wide": false,
+            "w": 924,
+            "h": 633,
+            "imgW": 922
+          },
+          {
+            "wide": false,
+            "w": 924,
+            "h": 629,
+            "imgW": 922
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 300,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 300,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 300,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "900",
+      "width": 900,
+      "scrollWidth": 900,
+      "clientWidth": 900,
+      "innerWidth": 900,
+      "bodyScrollWidth": 900,
+      "scrollHeight": 9245,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 335,
+          "right": 1030,
+          "overflow": 130
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 380,
+          "right": 985,
+          "overflow": 85
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 842,
+          "rectH": 537.14,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 842,
+          "rectH": 843,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 842,
+          "rectH": 748.27,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 842,
+          "rectH": 459.16,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 842,
+          "rectH": 455.42,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 842,
+          "rectH": 526.25,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "844px",
+        "columnCount": 1,
+        "width": 844,
+        "cards": [
+          {
+            "wide": true,
+            "w": 844,
+            "h": 668,
+            "imgW": 842
+          },
+          {
+            "wide": false,
+            "w": 844,
+            "h": 973,
+            "imgW": 842
+          },
+          {
+            "wide": false,
+            "w": 844,
+            "h": 879,
+            "imgW": 842
+          },
+          {
+            "wide": false,
+            "w": 844,
+            "h": 590,
+            "imgW": 842
+          },
+          {
+            "wide": false,
+            "w": 844,
+            "h": 586,
+            "imgW": 842
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 273,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 273,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 273,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "860",
+      "width": 860,
+      "scrollWidth": 860,
+      "clientWidth": 860,
+      "innerWidth": 860,
+      "bodyScrollWidth": 860,
+      "scrollHeight": 9103,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 314,
+          "right": 990,
+          "overflow": 130
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 358,
+          "right": 946,
+          "overflow": 86
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 802,
+          "rectH": 511.67,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 802,
+          "rectH": 803,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 802,
+          "rectH": 712.77,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 802,
+          "rectH": 437.39,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 802,
+          "rectH": 433.84,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 802,
+          "rectH": 501.25,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "804px",
+        "columnCount": 1,
+        "width": 804,
+        "cards": [
+          {
+            "wide": true,
+            "w": 804,
+            "h": 642,
+            "imgW": 802
+          },
+          {
+            "wide": false,
+            "w": 804,
+            "h": 933,
+            "imgW": 802
+          },
+          {
+            "wide": false,
+            "w": 804,
+            "h": 843,
+            "imgW": 802
+          },
+          {
+            "wide": false,
+            "w": 804,
+            "h": 568,
+            "imgW": 802
+          },
+          {
+            "wide": false,
+            "w": 804,
+            "h": 564,
+            "imgW": 802
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 260,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 260,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 260,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    }
+  ],
+  "anchors": [
+    {
+      "viewport": "1200",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    },
+    {
+      "viewport": "1000",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    },
+    {
+      "viewport": "981",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    },
+    {
+      "viewport": "980",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    },
+    {
+      "viewport": "900",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    },
+    {
+      "viewport": "860",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    }
+  ],
+  "demoProbe": [
+    {
+      "route": "/demo",
+      "status": "loaded",
+      "title": "页面未找到 | 微伴 Wechatai",
+      "heading": "这个页面没有找到。",
+      "hasDemoWorkbench": false,
+      "bodyText": "微伴 WECHATAI 价格 文档 如何使用 登录 免费开始 404 · PAGE NOT FOUND 这个页面没有找到。 可以回到首页，或前往使用文档继续了解微信 AI。 回到首页 使用文档",
+      "location": "/demo"
+    },
+    {
+      "route": "/demo/app",
+      "status": "loaded",
+      "title": "页面未找到 | 微伴 Wechatai",
+      "heading": "这个页面没有找到。",
+      "hasDemoWorkbench": false,
+      "bodyText": "微伴 WECHATAI 价格 文档 如何使用 登录 免费开始 404 · PAGE NOT FOUND 这个页面没有找到。 可以回到首页，或前往使用文档继续了解微信 AI。 回到首页 使用文档",
+      "location": "/demo/app"
+    }
+  ],
+  "issues": [
+    {
+      "key": "demo-probe@1440",
+      "kind": "console",
+      "detail": "error: Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5322/demo"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "console",
+      "detail": "error: Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5322/demo/app"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "network",
+      "detail": "404 http://127.0.0.1:5322/demo"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "network",
+      "detail": "404 http://127.0.0.1:5322/demo/app"
+    }
+  ]
+}

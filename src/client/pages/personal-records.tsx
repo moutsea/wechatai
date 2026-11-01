@@ -16,6 +16,7 @@ import { Modal } from "../ui";
 import { json } from "../api";
 import { ChatMarkdown } from "../chat-markdown";
 import { DailyTasksReminder } from "./personal-daily-reminder";
+import { ReminderFailureNotice, reminderStatuses as statuses } from "./personal-reminder-status";
 import {
   beijingDate,
   beijingTime,
@@ -27,15 +28,6 @@ import {
 } from "../../shared/personal-assistant";
 import "./personal-assistant.css";
 const labels = { note: "普通笔记", entry: "账目", task: "待办", reminder: "提醒" };
-const statuses: Record<string, string> = {
-  scheduled: "等待提醒",
-  sent: "已提醒",
-  paused: "已暂停",
-  retry: "发送重试中",
-  waiting_context: "等待微信恢复",
-  blocked: "需重新设置",
-  expired: "提醒已过期",
-};
 const blank = (
   kind: PersonalRecordInput["kind"],
   currency: PersonalRecordInput["currency"],
@@ -642,6 +634,15 @@ function ScopedPersonalRecords({
                   搜索
                 </button>
               </form>
+              {kind === "reminder" && (
+                <button
+                  className="button secondary small"
+                  disabled={busy || loading}
+                  onClick={() => setRefresh((n) => n + 1)}
+                >
+                  刷新状态
+                </button>
+              )}
               <button
                 className="button secondary small"
                 onClick={() => void exportRecords()}
@@ -820,10 +821,10 @@ function ScopedPersonalRecords({
                           {!r.reminderEnabled
                             ? "已取消"
                             : (statuses[r.reminderState ?? ""] ?? "等待设置")}
-                          {r.reminderError ? ` · ${r.reminderError}` : ""}
                         </span>
                       </div>
                     )}
+                    {r.kind === "reminder" && <ReminderFailureNotice record={r} />}
                   </article>
                 ))}
               </div>

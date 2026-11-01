@@ -1,0 +1,69 @@
+Editor
+My Space
+Skills/Agent Hub
+Download
+Docs
+Upgrade
+Koinote
+More
+Koinote
+書
+Editor
+My Space
+Skills/Agent Hub
+Download
+Docs
+Upgrade
+English
+Log in
+如何在微信里使用 DeepSeek/Claude/GPT？
+Shared by Mout Liang
+·
+10/14/2026
+·
+1 reads
+
+国庆假期回老家发现了一个需求：把 DeepSeek 接入微信。
+
+需求背景
+
+先说下需求背景，主要是为了家里的长辈。在酒桌上聊了一圈，我发现在长辈圈子里知名度最高的人工智能产品还是豆包。
+
+老人们其实也是有高端模型的需求的，有的时候他们也会觉得豆包不够聪明，可是又没有渠道使用其他前沿模型。
+
+因为使用门槛太高了，哪怕是下载安装 DeepSeek，对大多数老人而言都是做不到的事情。
+
+于是就自然迸发出了一个需求点：能不能在微信里解决这个事情，让他们在微信里就能用上 DeepSeek，或者是其他的前沿模型呢？
+
+解决方案
+
+我花了两天开发验证了一下，确实可行。
+
+不仅可以接入 AI 生图，DeepSeek，openclaw，Hermes，还能接各种我们 diy 的插件。
+
+接着，我把这个服务打包成了 saas，GPT 帮它起了个名字叫——微伴。每个人都可以通过简单设置接入自己的 AI 模型。
+
+URL地址：wechatai.app
+
+使用教程
+
+微伴只是一个请求转发服务，它本身不提供 LLM token。
+
+因此注册登录之后，需要进入后台的「渠道与模型」，添加你自己的 AI 渠道。
+
+可以是 DeepSeek/Openai/Anthropic 官方，也可以是一些第三方渠道，也可以一键关联我的 kimiseek 国模站点。
+
+接着进入「微信连接」，创建连接。
+
+打开微信，依次进入「设置」-「功能」-「插件」-「微信 ClawBot」-「扫一扫」。
+
+连接上之后就可以直接开始使用了。
+
+Continue reading
+
+You've reached the end of the preview. Create an account or sign in to read the rest.
+
+Sign up to read more
+Sign in to read more
+書
+About Koinote

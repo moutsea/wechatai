@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Bell } from "lucide-react";
 import { useApp } from "../context";
 import { json } from "../api";
+import { ReminderFailureNotice } from "./personal-reminder-status";
 import {
   beijingDate,
   dailyTasksReminderSchema,
@@ -141,7 +142,7 @@ export function DailyTasksReminder({
           {loading ? "正在读取…" : "保存设置"}
         </button>
       </div>
-      {record?.reminderEnabled && record.reminderError && <p>发送状态：{record.reminderError}</p>}
+      {record && <ReminderFailureNotice record={record} />}
       {!connectionId && !plugin.reminderConnectionId && (
         <p>请先在助理配置中选择接收共享提醒的微信链接。</p>
       )}

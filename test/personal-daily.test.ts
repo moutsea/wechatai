@@ -124,7 +124,7 @@ describe("daily todo digests", () => {
     ).toBe(true);
     await runInDurableObject(stub, (_, state) => {
       const store = new PersonalRecordsStore(state.storage.sql);
-      const draft = store.draft("staged", true);
+      const draft = store.draft("staged", { connectionId: "default", generation: "g1" });
       draft.configureDailyTasks({ enabled: true, time: "09:00" });
       draft.configureDailyTasks({ enabled: true, time: "11:00" });
       expect(draft.query({ reminderType: "daily_tasks" }).total).toBe(1);
@@ -220,12 +220,15 @@ describe("daily todo digests", () => {
       for (let n = 0; n < 31; n++)
         draft.save({ ...note, kind: "task", title: `Task ${n} **特殊字符**`, date: beijingDate() });
       state.storage.transactionSync(() => store.commit("digest", draft.changes, null));
-      const text = dailyTasksMessage(store, "digest", Date.now())!;
+      const digest = dailyTasksMessage(store, "digest", Date.now());
+      expect(digest.status).toBe("message");
+      if (digest.status !== "message") throw new Error("Missing digest");
+      const text = digest.text;
       expect(text).toContain("还有 31 项");
       expect(text).toContain("另有 11 项");
       expect(text.split("\n").filter((line) => line.startsWith("- "))).toHaveLength(20);
       expect(text).toContain("\\*\\*特殊字符\\*\\*");
-      expect(dailyTasksMessage(store, "another", Date.now())).toBeNull();
+      expect(dailyTasksMessage(store, "another", Date.now())).toEqual({ status: "empty" });
     });
   });
   it("recovers a daily configuration without creating a second schedule", async () => {

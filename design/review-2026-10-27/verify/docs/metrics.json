@@ -1,0 +1,841 @@
+{
+  "base": "http://127.0.0.1:5323",
+  "apiProxy": "http://127.0.0.1:5173",
+  "generatedAt": "2026-10-27T02:52:45.841Z",
+  "results": [
+    {
+      "page": "docs-wechat-connection",
+      "path": "/docs/wechat-connection",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 6724,
+      "offenders": [
+        {
+          "el": "table",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "thead",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "th",
+          "left": 278,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tbody",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "td",
+          "left": 278,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/docs/wechat-settings-plugin.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 764,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 536.03,
+          "attrW": "496",
+          "attrH": "764",
+          "alt": "微信「设置」页面的「功能」分组，其中最后一项是「插件」"
+        },
+        {
+          "src": "/images/docs/wechat-plugin-list.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 569,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 399.2,
+          "attrW": "496",
+          "attrH": "569",
+          "alt": "微信「插件」页：「微信ClawBot」卡片副标题为「连接 OpenClaw 与微信」，右侧有「详情」按钮"
+        },
+        {
+          "src": "/images/docs/wechat-link-status.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 450,
+          "naturalHeight": 768,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 593.91,
+          "attrW": "450",
+          "attrH": "768",
+          "alt": "工作台「微信连接」页的「我的微信」卡片：已连接，显示当前渠道、当前模型、当前会话与最近消息，下方有「切换渠道与模型」和「"
+        },
+        {
+          "src": "/images/docs/clawbot-detail.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 615,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 431.48,
+          "attrW": "496",
+          "attrH": "615",
+          "alt": "微信 ClawBot 详情页说明：发消息后仅接收 OpenClaw 在 24 小时内的回复；下方有「我的 ClawBot"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-wechat-connection",
+      "path": "/docs/wechat-connection",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 7116,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/docs/wechat-settings-plugin.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 764,
+          "complete": true,
+          "rectW": 470,
+          "rectH": 723.94,
+          "attrW": "496",
+          "attrH": "764",
+          "alt": "微信「设置」页面的「功能」分组，其中最后一项是「插件」"
+        },
+        {
+          "src": "/images/docs/wechat-plugin-list.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 569,
+          "complete": true,
+          "rectW": 470,
+          "rectH": 539.17,
+          "attrW": "496",
+          "attrH": "569",
+          "alt": "微信「插件」页：「微信ClawBot」卡片副标题为「连接 OpenClaw 与微信」，右侧有「详情」按钮"
+        },
+        {
+          "src": "/images/docs/wechat-link-status.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 450,
+          "naturalHeight": 768,
+          "complete": true,
+          "rectW": 448,
+          "rectH": 764.58,
+          "attrW": "450",
+          "attrH": "768",
+          "alt": "工作台「微信连接」页的「我的微信」卡片：已连接，显示当前渠道、当前模型、当前会话与最近消息，下方有「切换渠道与模型」和「"
+        },
+        {
+          "src": "/images/docs/clawbot-detail.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 615,
+          "complete": true,
+          "rectW": 470,
+          "rectH": 582.75,
+          "attrW": "496",
+          "attrH": "615",
+          "alt": "微信 ClawBot 详情页说明：发消息后仅接收 OpenClaw 在 24 小时内的回复；下方有「我的 ClawBot"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-wechat-connection",
+      "path": "/docs/wechat-connection",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 6074,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/docs/wechat-settings-plugin.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 764,
+          "complete": true,
+          "rectW": 494,
+          "rectH": 760.91,
+          "attrW": "496",
+          "attrH": "764",
+          "alt": "微信「设置」页面的「功能」分组，其中最后一项是「插件」"
+        },
+        {
+          "src": "/images/docs/wechat-plugin-list.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 569,
+          "complete": true,
+          "rectW": 494,
+          "rectH": 566.7,
+          "attrW": "496",
+          "attrH": "569",
+          "alt": "微信「插件」页：「微信ClawBot」卡片副标题为「连接 OpenClaw 与微信」，右侧有「详情」按钮"
+        },
+        {
+          "src": "/images/docs/wechat-link-status.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 450,
+          "naturalHeight": 768,
+          "complete": true,
+          "rectW": 448,
+          "rectH": 764.58,
+          "attrW": "450",
+          "attrH": "768",
+          "alt": "工作台「微信连接」页的「我的微信」卡片：已连接，显示当前渠道、当前模型、当前会话与最近消息，下方有「切换渠道与模型」和「"
+        },
+        {
+          "src": "/images/docs/clawbot-detail.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 496,
+          "naturalHeight": 615,
+          "complete": true,
+          "rectW": 494,
+          "rectH": 612.52,
+          "attrW": "496",
+          "attrH": "615",
+          "alt": "微信 ClawBot 详情页说明：发消息后仅接收 OpenClaw 在 24 小时内的回复；下方有「我的 ClawBot"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-getting-started",
+      "path": "/docs/getting-started",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 3814,
+      "offenders": [
+        {
+          "el": "table",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "thead",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "th",
+          "left": 305,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tbody",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "td",
+          "left": 305,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/docs/deepseek-channel.png",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 195.86,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "添加渠道：选择 DeepSeek，填写 API Key，查看自动补全的协议与请求地址"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-getting-started",
+      "path": "/docs/getting-started",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 3591,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/docs/deepseek-channel.png",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 470,
+          "rectH": 264.53,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "添加渠道：选择 DeepSeek，填写 API Key，查看自动补全的协议与请求地址"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-getting-started",
+      "path": "/docs/getting-started",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 2922,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/docs/deepseek-channel.png",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 788,
+          "rectH": 443.52,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "添加渠道：选择 DeepSeek，填写 API Key，查看自动补全的协议与请求地址"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-commands",
+      "path": "/docs/commands",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 4572,
+      "offenders": [
+        {
+          "el": "table",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "thead",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "th",
+          "left": 130,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tbody",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "td",
+          "left": 130,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        }
+      ],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-commands",
+      "path": "/docs/commands",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 4251,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-commands",
+      "path": "/docs/commands",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 3098,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-channels-models",
+      "path": "/docs/channels-models",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 5613,
+      "offenders": [
+        {
+          "el": "table",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "thead",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "th",
+          "left": 97,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tbody",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "td",
+          "left": 97,
+          "right": 471,
+          "overflow": 81
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 471,
+          "overflow": 81
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/docs/deepseek-channel.png",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 195.86,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "添加渠道：选择 DeepSeek，填写 API Key，查看自动补全的协议与请求地址"
+        },
+        {
+          "src": "/images/docs/channels-overview.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 195.86,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "渠道卡片中的模型列表、测试连接闪电按钮，以及获取可用模型和添加模型入口"
+        },
+        {
+          "src": "/images/docs/model-limits.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 425,
+          "naturalHeight": 699,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 572.34,
+          "attrW": "425",
+          "attrH": "699",
+          "alt": "模型更多设置：输入 Token 上限、输出 Token 上限、上下文窗口、单轮 credits 上限与有效输入空间"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-channels-models",
+      "path": "/docs/channels-models",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 5657,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/docs/deepseek-channel.png",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 470,
+          "rectH": 264.53,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "添加渠道：选择 DeepSeek，填写 API Key，查看自动补全的协议与请求地址"
+        },
+        {
+          "src": "/images/docs/channels-overview.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 470,
+          "rectH": 264.53,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "渠道卡片中的模型列表、测试连接闪电按钮，以及获取可用模型和添加模型入口"
+        },
+        {
+          "src": "/images/docs/model-limits.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 425,
+          "naturalHeight": 699,
+          "complete": true,
+          "rectW": 423,
+          "rectH": 695.7,
+          "attrW": "425",
+          "attrH": "699",
+          "alt": "模型更多设置：输入 Token 上限、输出 Token 上限、上下文窗口、单轮 credits 上限与有效输入空间"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs-channels-models",
+      "path": "/docs/channels-models",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 4824,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/docs/deepseek-channel.png",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 788,
+          "rectH": 443.52,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "添加渠道：选择 DeepSeek，填写 API Key，查看自动补全的协议与请求地址"
+        },
+        {
+          "src": "/images/docs/channels-overview.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 1265,
+          "naturalHeight": 712,
+          "complete": true,
+          "rectW": 788,
+          "rectH": 443.52,
+          "attrW": "1265",
+          "attrH": "712",
+          "alt": "渠道卡片中的模型列表、测试连接闪电按钮，以及获取可用模型和添加模型入口"
+        },
+        {
+          "src": "/images/docs/model-limits.jpg",
+          "inSection": "other",
+          "loading": "lazy",
+          "naturalWidth": 425,
+          "naturalHeight": 699,
+          "complete": true,
+          "rectW": 423,
+          "rectH": 695.7,
+          "attrW": "425",
+          "attrH": "699",
+          "alt": "模型更多设置：输入 Token 上限、输出 Token 上限、上下文窗口、单轮 credits 上限与有效输入空间"
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    }
+  ],
+  "anchors": [
+    {
+      "viewport": "390",
+      "afterHash": {
+        "headerBottom": 1330,
+        "headerHeight": 61,
+        "headingTop": 1389,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 1357,
+        "scrollMarginTop": "88px",
+        "scrollY": 1269
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 1330,
+        "headerHeight": 61,
+        "headingTop": 1389,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 1357,
+        "scrollMarginTop": "88px",
+        "scrollY": 1269
+      }
+    },
+    {
+      "viewport": "768",
+      "afterHash": {
+        "headerBottom": 943,
+        "headerHeight": 61,
+        "headingTop": 1002,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 970,
+        "scrollMarginTop": "88px",
+        "scrollY": 882
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 943,
+        "headerHeight": 61,
+        "headingTop": 1002,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 970,
+        "scrollMarginTop": "88px",
+        "scrollY": 882
+      }
+    },
+    {
+      "viewport": "1440",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    }
+  ],
+  "demoProbe": [
+    {
+      "route": "/demo",
+      "status": "loaded",
+      "title": "页面未找到 | 微伴 Wechatai",
+      "heading": "这个页面没有找到。",
+      "hasDemoWorkbench": false,
+      "bodyText": "微伴 WECHATAI 价格 文档 如何使用 登录 免费开始 404 · PAGE NOT FOUND 这个页面没有找到。 可以回到首页，或前往使用文档继续了解微信 AI。 回到首页 使用文档",
+      "location": "/demo"
+    },
+    {
+      "route": "/demo/app",
+      "status": "loaded",
+      "title": "页面未找到 | 微伴 Wechatai",
+      "heading": "这个页面没有找到。",
+      "hasDemoWorkbench": false,
+      "bodyText": "微伴 WECHATAI 价格 文档 如何使用 登录 免费开始 404 · PAGE NOT FOUND 这个页面没有找到。 可以回到首页，或前往使用文档继续了解微信 AI。 回到首页 使用文档",
+      "location": "/demo/app"
+    }
+  ],
+  "issues": [
+    {
+      "key": "demo-probe@1440",
+      "kind": "console",
+      "detail": "error: Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5323/demo"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "console",
+      "detail": "error: Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5323/demo/app"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "network",
+      "detail": "404 http://127.0.0.1:5323/demo"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "network",
+      "detail": "404 http://127.0.0.1:5323/demo/app"
+    }
+  ]
+}

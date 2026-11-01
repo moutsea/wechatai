@@ -162,6 +162,37 @@
   flex-shrink: 0;
   margin-top: 2px;
 }
+.personal-reminder-failure {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.personal-reminder-warning {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #d9a848;
+  border-radius: 8px;
+  background: #fff8e8;
+  color: #754a0b;
+}
+.personal-reminder-warning > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.personal-reminder-failure p,
+.personal-daily-reminder .personal-reminder-failure p {
+  color: inherit;
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.personal-reminder-failure details {
+  margin-top: 8px;
+  color: var(--muted);
+}
+.personal-reminder-failure summary {
+  cursor: pointer;
+}
 .personal-check {
   width: 21px;
   height: 21px;

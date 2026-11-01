@@ -88,6 +88,19 @@ export const personalRecordInputSchema = personalRecordFields.superRefine((v, ct
     });
 });
 export type PersonalRecordInput = z.infer<typeof personalRecordInputSchema>;
+export type ReminderFailureReason = {
+  code: string;
+  message: string;
+  upstreamStatus?: number;
+  ret?: number;
+  errcode?: number;
+};
+export type ReminderFailure = ReminderFailureReason & {
+  // Legacy rows have a reason but no reliable failure timestamp.
+  at: number | null;
+  dueAt: number;
+};
+export type ReminderBlockReason = ReminderFailureReason & { dueAt: number };
 export type PersonalRecord = PersonalRecordInput & {
   id: string;
   revision: number;
@@ -95,6 +108,11 @@ export type PersonalRecord = PersonalRecordInput & {
   updatedAt: number;
   reminderState?: string;
   reminderError?: string;
+  // The occurrence described by reminderError, which may precede nextReminderAt.
+  reminderErrorDueAt?: number | null;
+  // Current delivery prerequisites, separate from the last failed send.
+  reminderBlockReason?: ReminderBlockReason;
+  reminderLastFailure?: ReminderFailure;
   nextReminderAt?: number | null;
 };
 export const personalQuerySchema = z

@@ -125,7 +125,7 @@ describe("explicit reminder saves after changing WeChat binding", () => {
     const { stub } = await setup();
     await runInDurableObject(stub, (_, state) => {
       const store = new PersonalRecordsStore(state.storage.sql);
-      const initial = store.draft("receiver-check", true);
+      const initial = store.draft("receiver-check", { connectionId: "default", generation: "g1" });
       const fields = { ...note, kind: "reminder", remindAt: future() };
       const record = initial.save(fields);
       state.storage.transactionSync(() =>
@@ -137,9 +137,9 @@ describe("explicit reminder saves after changing WeChat binding", () => {
       const schedule = store.schedule();
       const before = store.get("receiver-check", record.id);
       const beforeRevision = store.recordState("receiver-check");
-      const draft = store.draft("receiver-check", true);
+      const draft = store.draft("receiver-check", { connectionId: "default", generation: "g1" });
       draft.save(fields, record.id, record.revision);
-      const restored = store.draft("receiver-check", false);
+      const restored = store.draft("receiver-check", null);
       restored.restore(draft.snapshot());
       expect(() =>
         state.storage.transactionSync(() => store.commit("receiver-check", restored.changes, null)),

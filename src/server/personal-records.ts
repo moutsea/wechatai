@@ -9,7 +9,11 @@ import {
   personalRecordInputSchema,
   type PersonalQuery,
   type PersonalRecord,
+  type PersonalRecordInput,
   type PersonalRecords,
+  type ReminderFailure,
+  type ReminderFailureReason,
+  type ReminderBlockReason,
 } from "../shared/personal-assistant";
 import { AppError } from "./config";
 import type { ReminderSchedule } from "./reminder-scheduler";
@@ -23,6 +27,9 @@ type Row = {
   updatedAt: number;
   reminderState?: string;
   reminderError?: string;
+  reminderErrorDueAt?: number | null;
+  reminderBlockReason?: string | null;
+  reminderLastFailure?: string | null;
   nextReminderAt?: number | null;
 };
 export type Reminder = {
@@ -39,7 +46,11 @@ export type Reminder = {
   retryAt: number;
   attempts: number;
   error: string;
+  errorDueAt: number | null;
+  blockReason: string | null;
+  lastFailure: string | null;
 };
+type ReminderTarget = Pick<Reminder, "connectionId" | "generation">;
 type Change = { before: PersonalRecord | null; after: PersonalRecord | null };
 export type PersonalDraftState = {
   changes: [string, Change][];
@@ -68,8 +79,26 @@ const decode = (row: Row): PersonalRecord => ({
   updatedAt: row.updatedAt,
   reminderState: row.reminderState,
   reminderError: row.reminderError,
+  reminderErrorDueAt: row.reminderErrorDueAt,
+  reminderBlockReason: row.reminderBlockReason
+    ? (JSON.parse(row.reminderBlockReason) as ReminderBlockReason)
+    : undefined,
+  reminderLastFailure: row.reminderLastFailure
+    ? (JSON.parse(row.reminderLastFailure) as ReminderFailure)
+    : undefined,
   nextReminderAt: row.nextReminderAt,
 });
+function sameReminderTime(a: string | null, b: string | null) {
+  return a === b || (a !== null && b !== null && Date.parse(a) === Date.parse(b));
+}
+function reminderScheduleChanged(before: PersonalRecordInput | null, after: PersonalRecordInput) {
+  return (
+    !before ||
+    !sameReminderTime(before.remindAt, after.remindAt) ||
+    before.repeat !== after.repeat ||
+    before.reminderEnabled !== after.reminderEnabled
+  );
+}
 function matches(record: PersonalRecord, query: PersonalQuery) {
   return (
     (!query.kind || record.kind === query.kind) &&
@@ -137,6 +166,53 @@ export class PersonalRecordsStore {
         INSERT INTO personal_record_migrations VALUES (3);
       `);
     }
+    if (
+      !this.sql.exec("SELECT 1 FROM personal_record_migrations WHERE version=4").toArray().length
+    ) {
+      this.sql.exec(`
+        ALTER TABLE personal_reminders ADD COLUMN lastFailure TEXT;
+        UPDATE personal_reminders SET lastFailure=json_object(
+          'code','legacy','message',error,'at',NULL,'dueAt',dueAt
+        ) WHERE state IN ('retry','waiting_context','paused','blocked')
+          AND error NOT IN ('','正在发送提醒');
+        INSERT INTO personal_record_migrations VALUES (4);
+      `);
+    }
+    if (
+      !this.sql.exec("SELECT 1 FROM personal_record_migrations WHERE version=5").toArray().length
+    ) {
+      // A scheduled legacy row has already advanced its dueAt; its missed
+      // occurrence cannot be reconstructed reliably. Keep that association unknown.
+      this.sql.exec(`
+        ALTER TABLE personal_reminders ADD COLUMN errorDueAt INTEGER;
+        UPDATE personal_reminders SET errorDueAt=dueAt
+          WHERE state IN ('retry','waiting_context','paused','blocked','expired') AND error<>'';
+        INSERT INTO personal_record_migrations VALUES (5);
+      `);
+    }
+    if (
+      !this.sql.exec("SELECT 1 FROM personal_record_migrations WHERE version=6").toArray().length
+    ) {
+      this.sql.exec(`
+        ALTER TABLE personal_reminders ADD COLUMN blockReason TEXT;
+        INSERT INTO personal_record_migrations VALUES (6);
+      `);
+    }
+    if (
+      !this.sql.exec("SELECT 1 FROM personal_record_migrations WHERE version=7").toArray().length
+    ) {
+      // A skipped legacy recurrence may carry a much older block. Only active
+      // blocks and terminal one-off blocks have an unambiguous occurrence.
+      this.sql.exec(`
+        UPDATE personal_reminders SET blockReason=CASE
+          WHEN json_type(blockReason,'$.dueAt')='integer' THEN blockReason
+          WHEN state IN ('paused','waiting_context','blocked','expired') AND errorDueAt=dueAt
+            THEN json_set(blockReason,'$.dueAt',dueAt)
+          ELSE NULL END
+          WHERE blockReason IS NOT NULL;
+        INSERT INTO personal_record_migrations VALUES (7);
+      `);
+    }
   }
   private changedSchedule() {
     this.sql.exec("UPDATE personal_reminder_schedule SET revision=revision+1 WHERE id=1");
@@ -196,7 +272,7 @@ export class PersonalRecordsStore {
   get(pluginId: string, id: string, connectionId = "") {
     const row = this.sql
       .exec<Row>(
-        "SELECT r.*,m.state reminderState,m.error reminderError,m.dueAt nextReminderAt FROM personal_records r LEFT JOIN personal_reminders m ON m.recordId=r.id WHERE r.pluginId=? AND r.id=? AND r.connectionId=?",
+        "SELECT r.*,m.state reminderState,m.error reminderError,m.errorDueAt reminderErrorDueAt,m.blockReason reminderBlockReason,m.lastFailure reminderLastFailure,m.dueAt nextReminderAt FROM personal_records r LEFT JOIN personal_reminders m ON m.recordId=r.id WHERE r.pluginId=? AND r.id=? AND r.connectionId=?",
         pluginId,
         id,
         connectionId,
@@ -248,7 +324,7 @@ export class PersonalRecordsStore {
       .one().n;
     const base = this.sql
       .exec<Row>(
-        `SELECT r.*,m.state reminderState,m.error reminderError,m.dueAt nextReminderAt FROM personal_records r LEFT JOIN personal_reminders m ON m.recordId=r.id WHERE ${where} ORDER BY r.updatedAt DESC,r.id LIMIT ? OFFSET ?`,
+        `SELECT r.*,m.state reminderState,m.error reminderError,m.errorDueAt reminderErrorDueAt,m.blockReason reminderBlockReason,m.lastFailure reminderLastFailure,m.dueAt nextReminderAt FROM personal_records r LEFT JOIN personal_reminders m ON m.recordId=r.id WHERE ${where} ORDER BY r.updatedAt DESC,r.id LIMIT ? OFFSET ?`,
         ...values,
         q.limit + changes.size,
         changes.size ? 0 : q.offset,
@@ -296,16 +372,35 @@ export class PersonalRecordsStore {
   }
   draft(
     pluginId: string,
-    reminderAvailable = false,
+    reminderTarget: ReminderTarget | null = null,
     currency: PersonalRecord["currency"] = "CNY",
     connectionId = "",
   ) {
-    return new PersonalDraft(this, pluginId, reminderAvailable, currency, connectionId);
+    return new PersonalDraft(this, pluginId, reminderTarget, currency, connectionId);
+  }
+  reminderTargetChanged(
+    pluginId: string,
+    recordId: string,
+    connectionId: string,
+    target: ReminderTarget,
+  ) {
+    return (
+      this.sql
+        .exec(
+          "SELECT 1 FROM personal_reminders WHERE pluginId=? AND recordId=? AND recordConnectionId=? AND (connectionId<>? OR generation<>?)",
+          pluginId,
+          recordId,
+          connectionId,
+          target.connectionId,
+          target.generation,
+        )
+        .toArray().length > 0
+    );
   }
   commit(
     pluginId: string,
     changes: Map<string, Change>,
-    target: { connectionId: string; generation: string } | null,
+    target: ReminderTarget | null,
     source: RecordChange["source"] = "assistant",
     connectionId = "",
   ) {
@@ -355,11 +450,7 @@ export class PersonalRecordsStore {
         after.updatedAt,
         connectionId,
       );
-      const reminderChanged =
-        !before ||
-        before.remindAt !== after.remindAt ||
-        before.repeat !== after.repeat ||
-        before.reminderEnabled !== after.reminderEnabled;
+      const reminderChanged = reminderScheduleChanged(before, after);
       const previous = this.sql
         .exec<Reminder>("SELECT * FROM personal_reminders WHERE recordId=?", id)
         .toArray()[0];
@@ -379,7 +470,7 @@ export class PersonalRecordsStore {
             ? "这份记录所属的微信链接尚未连接，请连接后再设置提醒"
             : "请在个人助理配置中选择已连接的微信链接，再设置提醒",
         );
-      else if (reminderChanged || !previous || targetChanged) {
+      else if (reminderChanged || !previous || targetChanged || previous.state === "blocked") {
         const dueAt = Date.parse(data.remindAt);
         if (dueAt <= Date.now() || dueAt > Date.now() + 2 * 366 * 86400000)
           throw new AppError("reminder_time", "提醒时间需在未来两年内，请明确日期和时间");
@@ -461,34 +552,106 @@ export class PersonalRecordsStore {
       )
       .toArray();
   }
+  isCurrent(r: Reminder) {
+    return (
+      this.sql
+        .exec(
+          "SELECT 1 FROM personal_reminders WHERE id=? AND dueAt=? AND revision=? AND state IN ('scheduled','retry','waiting_context','paused') AND retryAt<=?",
+          r.id,
+          r.dueAt,
+          r.revision,
+          Date.now(),
+        )
+        .toArray().length > 0
+    );
+  }
   defer(r: Reminder, state: string, error: string, delay = 60000) {
+    this.updateDelivery(r, state, error, delay);
+  }
+  block(r: Reminder, state: string, reason: ReminderFailureReason) {
+    this.updateDelivery(r, state, reason.message, 60000, { blockReason: reason });
+  }
+  fail(r: Reminder, state: string, failure: ReminderFailureReason, delay = 60000) {
+    this.updateDelivery(r, state, failure.message, delay, { failure });
+  }
+  private updateDelivery(
+    r: Reminder,
+    state: string,
+    error: string,
+    delay: number,
+    {
+      failure,
+      blockReason,
+    }: { failure?: ReminderFailureReason; blockReason?: ReminderFailureReason } = {},
+  ) {
     this.changedSchedule();
     this.sql.exec(
-      "UPDATE personal_reminders SET state=?,error=?,retryAt=?,attempts=attempts+1 WHERE id=? AND dueAt=?",
+      "UPDATE personal_reminders SET state=?,error=?,errorDueAt=?,retryAt=?,lastFailure=COALESCE(?,lastFailure),blockReason=? WHERE id=? AND dueAt=?",
       state,
       error,
+      r.dueAt,
       Date.now() + delay,
+      failure
+        ? JSON.stringify({ ...failure, at: Date.now(), dueAt: r.dueAt } satisfies ReminderFailure)
+        : null,
+      blockReason
+        ? JSON.stringify({ ...blockReason, dueAt: r.dueAt } satisfies ReminderBlockReason)
+        : null,
       r.id,
       r.dueAt,
     );
   }
-  finish(r: Reminder, sent: boolean) {
+  startAttempt(r: Reminder) {
+    // Lease and counter are persisted together before the outbound request.
+    // Pauses, preparation failures and empty digests do not count as sends.
+    this.defer(r, "retry", "正在发送提醒", 30000);
+    return this.sql
+      .exec<{ attempts: number }>(
+        "UPDATE personal_reminders SET attempts=attempts+1 WHERE id=? AND dueAt=? RETURNING attempts",
+        r.id,
+        r.dueAt,
+      )
+      .one().attempts;
+  }
+  finish(r: Reminder) {
+    this.complete(r, "", null);
+  }
+  expire(
+    r: Reminder,
+    notBefore = Date.now() - 86400000,
+    error = r.repeatMs ? "已跳过过期提醒，保留下一次提醒" : "提醒已超过 24 小时，未再补发",
+  ) {
+    this.complete(r, error, notBefore);
+  }
+  private complete(r: Reminder, error: string, notBefore: number | null) {
     this.changedSchedule();
     if (!r.repeatMs)
       this.sql.exec(
-        "UPDATE personal_reminders SET state=?,error=? WHERE id=? AND dueAt=?",
-        sent ? "sent" : "expired",
-        sent ? "" : "提醒已超过 24 小时，未再补发",
+        "UPDATE personal_reminders SET state=?,error=?,errorDueAt=?,blockReason=CASE WHEN ?<>'' AND json_extract(blockReason,'$.dueAt')=? THEN blockReason ELSE NULL END WHERE id=? AND dueAt=?",
+        notBefore === null ? "sent" : "expired",
+        error,
+        error ? r.dueAt : null,
+        error,
+        r.dueAt,
         r.id,
         r.dueAt,
       );
     else {
-      const next = r.dueAt + (Math.floor((Date.now() - r.dueAt) / r.repeatMs) + 1) * r.repeatMs;
+      const elapsed = Math.floor((Date.now() - r.dueAt) / r.repeatMs);
+      let next = r.dueAt + Math.max(1, elapsed) * r.repeatMs;
+      // Retain the most recent occurrence if it is still deliverable. Do not
+      // replay a backlog, or discard today's reminder with yesterday's failure.
+      // A successful request can also cross the next occurrence's deadline.
+      // Keep that newly due occurrence instead of advancing past it.
+      if (next < (notBefore ?? Date.now() - 86400000)) next += r.repeatMs;
       this.sql.exec(
-        "UPDATE personal_reminders SET dueAt=?,retryAt=?,state='scheduled',attempts=0,error=? WHERE id=? AND dueAt=?",
+        "UPDATE personal_reminders SET dueAt=?,retryAt=?,state='scheduled',attempts=0,error=?,errorDueAt=?,blockReason=CASE WHEN ?<>'' AND json_extract(blockReason,'$.dueAt')=? THEN blockReason ELSE NULL END WHERE id=? AND dueAt=?",
         next,
         next,
-        sent ? "" : "已跳过过期提醒，保留下一次提醒",
+        error,
+        error ? r.dueAt : null,
+        error,
+        r.dueAt,
         r.id,
         r.dueAt,
       );
@@ -502,7 +665,7 @@ export class PersonalDraft {
   constructor(
     private store: PersonalRecordsStore,
     readonly pluginId: string,
-    private reminderAvailable: boolean,
+    private reminderTarget: ReminderTarget | null,
     private currency: PersonalRecord["currency"],
     readonly connectionId = "",
   ) {
@@ -522,6 +685,35 @@ export class PersonalDraft {
     this.assertCurrent();
     this.changes.clear();
     this.seen.clear();
+  }
+  reminderStatus(record: PersonalRecord) {
+    if (record.kind !== "reminder" || !record.reminderEnabled || !record.remindAt)
+      return { rescheduled: false, state: "none", nextAt: null };
+    const change = this.changes.get(record.id);
+    // Delivery progresses independently of record revisions and staged edits.
+    // Read it afresh, including when restoring a draft after a restart.
+    const latest = change?.before
+      ? this.store.get(this.pluginId, record.id, this.connectionId)
+      : record;
+    const rescheduled =
+      !!change &&
+      (reminderScheduleChanged(change.before, record) ||
+        !latest.reminderState ||
+        latest.reminderState === "blocked" ||
+        (!!this.reminderTarget &&
+          this.store.reminderTargetChanged(
+            this.pluginId,
+            record.id,
+            this.connectionId,
+            this.reminderTarget,
+          )));
+    return {
+      rescheduled,
+      state: rescheduled ? "staged" : (latest.reminderState ?? "none"),
+      nextAt: rescheduled
+        ? Date.parse(record.remindAt)
+        : (latest.nextReminderAt ?? Date.parse(record.remindAt)),
+    };
   }
   currentContext() {
     this.assertCurrent();
@@ -635,19 +827,38 @@ export class PersonalDraft {
         "已设置每日待办提醒，请查询原记录后修改时间或重新启用",
       );
     if (data.kind === "reminder" && data.remindAt && data.reminderEnabled) {
-      if (!this.reminderAvailable)
+      if (!this.reminderTarget)
         throw new AppError(
           "reminder_link",
           this.connectionId
             ? "当前微信链接尚未连接，请连接后再设置提醒"
             : "请在个人助理配置中选择已连接的微信链接，再设置提醒",
         );
+      const recovering =
+        current &&
+        (current.reminderState === "blocked" ||
+          this.store.reminderTargetChanged(
+            this.pluginId,
+            current.id,
+            this.connectionId,
+            this.reminderTarget,
+          ));
+      // Explicitly saving after a block or binding change confirms the receiver.
+      // Keep the original daily/weekly cadence, but never replay its backlog.
       if (
-        !current ||
-        current.remindAt !== data.remindAt ||
-        current.repeat !== data.repeat ||
-        !current.reminderEnabled
+        recovering &&
+        sameReminderTime(data.remindAt, current.remindAt) &&
+        data.repeat === current.repeat &&
+        data.repeat !== "none" &&
+        Date.parse(data.remindAt) <= Date.now()
       ) {
+        const interval = data.repeat === "daily" ? 86400000 : 7 * 86400000;
+        const anchor = current.nextReminderAt ?? Date.parse(data.remindAt);
+        const next =
+          anchor + Math.max(0, Math.floor((Date.now() - anchor) / interval) + 1) * interval;
+        data.remindAt = new Date(next).toISOString();
+      }
+      if (recovering || reminderScheduleChanged(current, data)) {
         const due = Date.parse(data.remindAt);
         if (due <= Date.now() || due > Date.now() + 2 * 366 * 86400000)
           throw new AppError("reminder_time", "提醒时间需在未来两年内，请明确日期和时间");

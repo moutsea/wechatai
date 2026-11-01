@@ -27,6 +27,18 @@ export type WxMessage = {
   create_time_ms?: number;
 };
 export type WxCredentials = { token: string; baseUrl: string; userId: string; botId: string };
+export class WechatRequestError extends AppError {
+  constructor(
+    code: string,
+    message: string,
+    status: number,
+    upstreamStatus: number,
+    public ret?: number,
+    public errcode?: number,
+  ) {
+    super(code, message, status, upstreamStatus);
+  }
+}
 export function validateWechatHost(value: string) {
   const u = new URL(value);
   if (
@@ -73,13 +85,35 @@ export async function wxRequest<T>(
   });
   if (!response.ok) {
     await response.body?.cancel();
-    throw new AppError("wechat_unavailable", `微信连接暂时不可用（${response.status}）`, 502);
+    throw new WechatRequestError(
+      "wechat_unavailable",
+      `微信连接暂时不可用（HTTP ${response.status}）`,
+      502,
+      response.status,
+    );
   }
   const data = (await readJson(response)) as { ret?: number; errcode?: number } & T;
-  if (data.ret === -14 || data.errcode === -14)
-    throw new AppError("wechat_expired", "微信连接已过期，请重新扫码", 409);
+  const ret = Number.isSafeInteger(data.ret) ? data.ret : undefined;
+  const errcode = Number.isSafeInteger(data.errcode) ? data.errcode : undefined;
+  if (ret === -14 || errcode === -14)
+    throw new WechatRequestError(
+      "wechat_expired",
+      "微信连接已过期，请重新扫码",
+      409,
+      response.status,
+      ret,
+      errcode,
+    );
   if ((data.ret ?? 0) !== 0 || (data.errcode ?? 0) !== 0)
-    throw new AppError("wechat_error", "微信暂时无法完成此操作", 502);
+    // Keep numeric diagnostics, never echo upstream errmsg (it may contain tokens or user data).
+    throw new WechatRequestError(
+      "wechat_error",
+      "微信暂时无法完成此操作",
+      502,
+      response.status,
+      ret,
+      errcode,
+    );
   return data;
 }
 export function extractText(message: WxMessage) {

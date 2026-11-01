@@ -6,7 +6,10 @@ import type { PersonalDraft } from "../personal-records";
 const plain = (text: string) =>
   text.replace(/[\r\n\t]+/g, " ").replace(/([\\`*_{}[\]<>])/g, "\\$1");
 const kindName = { note: "笔记", entry: "账目", task: "待办", reminder: "提醒" };
-function recordDetails(record: PersonalRecord, before: PersonalRecord | null) {
+function recordDetails(
+  record: PersonalRecord,
+  delivery: ReturnType<PersonalDraft["reminderStatus"]>,
+) {
   const lines = [`- ${kindName[record.kind]}：${plain(record.title)}`];
   if (record.kind === "entry") {
     lines.push(
@@ -21,18 +24,11 @@ function recordDetails(record: PersonalRecord, before: PersonalRecord | null) {
       lines.push("- 内容：当天最新的未完成待办；没有待办时不发送");
     if (!record.reminderEnabled) lines.push("- 提醒：已取消");
     else if (record.remindAt) {
-      const changed =
-        !before ||
-        !before.reminderEnabled ||
-        before.remindAt !== record.remindAt ||
-        before.repeat !== record.repeat;
-      const state = changed ? "scheduled" : before.reminderState;
+      const state = delivery.state;
       if (state === "sent") lines.push("- 提醒：已发送");
       else if (state === "expired") lines.push("- 提醒：已过期，未再补发");
       else {
-        const next = changed
-          ? Date.parse(record.remindAt)
-          : (before.nextReminderAt ?? Date.parse(record.remindAt));
+        const next = delivery.nextAt ?? Date.parse(record.remindAt);
         lines.push(`- 提醒时间：${beijingTime(next)}（北京时间）`);
         lines.push(
           `- ${record.repeat === "daily" ? "每天重复" : record.repeat === "weekly" ? "每周重复" : "一次性提醒"}`,
@@ -58,22 +54,18 @@ export function personalReceipt(draft: PersonalDraft, failures: string[] = []) {
       else cancelled++;
       continue;
     }
+    const delivery = draft.reminderStatus(after);
     const heading =
       after.kind === "task" && after.completed
         ? "待办已完成"
         : after.kind === "reminder" && !after.reminderEnabled
           ? "提醒已取消"
-          : after.kind === "reminder" &&
-              after.remindAt &&
-              (!before ||
-                !before.reminderEnabled ||
-                before.remindAt !== after.remindAt ||
-                before.repeat !== after.repeat)
+          : delivery.rescheduled
             ? before
               ? "提醒已更新"
               : "提醒已设置"
             : `${before ? "已更新" : "已保存"}${kindName[after.kind]}`;
-    sections.push(`${heading}\n\n${recordDetails(after, before).join("\n")}`);
+    sections.push(`${heading}\n\n${recordDetails(after, delivery).join("\n")}`);
   }
   if (cancelled) sections.push(`本轮有 ${cancelled} 条新建记录已取消，未保留。`);
   if (failures.length)

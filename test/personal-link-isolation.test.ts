@@ -177,8 +177,13 @@ describe("personal records across WeChat links", () => {
     const { stub, personal, linkB } = await isolated();
     await runInDurableObject(stub, (_, state) => {
       const store = new PersonalRecordsStore(state.storage.sql);
-      const a = store.draft(personal.id, true, "CNY", "default");
-      const b = store.draft(personal.id, true, "CNY", linkB);
+      const a = store.draft(
+        personal.id,
+        { connectionId: "default", generation: "g1" },
+        "CNY",
+        "default",
+      );
+      const b = store.draft(personal.id, { connectionId: linkB, generation: "g1" }, "CNY", linkB);
       a.save({ ...note, title: "staged-only-in-a" });
       expect(() => b.restore(a.snapshot())).toThrow("记录分类已更新");
       state.storage.transactionSync(() =>

@@ -297,7 +297,7 @@ describe("personal assistant records", () => {
     await runInDurableObject(stub, (_, state) => {
       const sql = state.storage.sql;
       const store = new PersonalRecordsStore(sql);
-      const initial = store.draft("legacy", true);
+      const initial = store.draft("legacy", { connectionId: "default", generation: "g1" });
       const ids = [
         "scheduled",
         "sent",
@@ -341,7 +341,7 @@ describe("personal assistant records", () => {
       sql.exec("DELETE FROM personal_record_migrations WHERE version=2");
       const before = sql.exec("SELECT * FROM personal_reminders ORDER BY id").toArray();
       const schedule = store.schedule();
-      const oldDraft = store.draft("legacy", true);
+      const oldDraft = store.draft("legacy", { connectionId: "default", generation: "g1" });
       state.storage.transactionSync(() => store.init());
       expect(() => oldDraft.assertCurrent()).toThrow("记录已修改或删除");
       expect(store.query("legacy", { kind: "reminder" }).total).toBe(8);
@@ -359,9 +359,11 @@ describe("personal assistant records", () => {
         before.map((r) => ({ ...r, revision: 2 })),
       );
       expect(store.schedule()).toEqual(schedule);
-      expect(() => store.draft("legacy", true).save({ title: "stale edit" }, ids[0].id, 1)).toThrow(
-        "记录已变更",
-      );
+      expect(() =>
+        store
+          .draft("legacy", { connectionId: "default", generation: "g1" })
+          .save({ title: "stale edit" }, ids[0].id, 1),
+      ).toThrow("记录已变更");
       const migrated = store.query("legacy", {});
       const revision = store.recordState("legacy").revision;
       state.storage.transactionSync(() => store.init());
@@ -373,7 +375,7 @@ describe("personal assistant records", () => {
     const { stub } = await setup();
     await runInDurableObject(stub, (_, state) => {
       const store = new PersonalRecordsStore(state.storage.sql);
-      const draft = store.draft("legacy-run", true);
+      const draft = store.draft("legacy-run", { connectionId: "default", generation: "g1" });
       const old = draft.snapshot();
       delete old.recordModelVersion;
       expect(() => draft.restore(old)).toThrow("记录分类已更新");
@@ -671,16 +673,13 @@ describe("personal assistant execution", () => {
     const { stub } = await setup();
     await runInDurableObject(stub, (_, state) => {
       const store = new PersonalRecordsStore(state.storage.sql);
-      const initial = store.draft("receipts", true);
+      const initial = store.draft("receipts", { connectionId: "default", generation: "g1" });
       const a = initial.save({ ...note, kind: "reminder", title: "完成的事", remindAt: future() });
       const b = initial.save({ ...note, kind: "reminder", title: "删除的事", remindAt: future() });
       const c = initial.save({ ...note, kind: "reminder", title: "已经提醒", remindAt: future() });
       store.commit("receipts", initial.changes, { connectionId: "default", generation: "g1" });
-      store.finish(
-        store.due(Date.now() + 7200000).find((r) => r.recordId === c.id)!,
-        true,
-      );
-      const draft = store.draft("receipts", true);
+      store.finish(store.due(Date.now() + 7200000).find((r) => r.recordId === c.id)!);
+      const draft = store.draft("receipts", { connectionId: "default", generation: "g1" });
       draft.save({ reminderEnabled: false }, a.id, 1);
       draft.remove(b.id, 1);
       draft.save({ title: "已发送过" }, c.id, 1);
@@ -829,14 +828,14 @@ describe("personal assistant execution", () => {
     const { stub } = await setup();
     await runInDurableObject(stub, (_, state) => {
       const store = new PersonalRecordsStore(state.storage.sql);
-      const initial = store.draft("states", true);
+      const initial = store.draft("states", { connectionId: "default", generation: "g1" });
       const sent = initial.save({ ...note, kind: "reminder", remindAt: future() });
       const done = initial.save({ ...note, kind: "task", completed: true });
       state.storage.transactionSync(() =>
         store.commit("states", initial.changes, { connectionId: "default", generation: "g1" }),
       );
-      store.finish(store.due(Date.now() + 7200000)[0], true);
-      const draft = store.draft("states", true);
+      store.finish(store.due(Date.now() + 7200000)[0]);
+      const draft = store.draft("states", { connectionId: "default", generation: "g1" });
       const added = draft.save({ ...note, kind: "reminder", remindAt: future() });
       const live = contextData(personalContext(draft));
       expect(live.tasks).toMatchObject({ total: 1, items: [{ id: done.id, completed: true }] });
@@ -1596,7 +1595,7 @@ describe("personal reminders", () => {
     expect(reminder.repeatMs).toBe(7 * 86400000);
     expect(reminder.dueAt).toBeGreaterThan(Date.now());
   });
-  it("advances daily/weekly reminders without replaying missed occurrences", async () => {
+  it("skips expired daily occurrences but retains the current occurrence for immediate delivery", async () => {
     const { stub, model } = await setup();
     await connect(stub);
     const p = await savePlugin(stub, model.id, { reminderConnectionId: "default" });
@@ -1605,9 +1604,13 @@ describe("personal reminders", () => {
     await deliver(stub);
     const r = (await reminders(stub))[0];
     expect(r.state).toBe("scheduled");
-    expect(r.dueAt).toBeGreaterThan(Date.now());
-    expect(r.dueAt).toBeLessThanOrEqual(Date.now() + 86400000);
+    expect(r.dueAt).toBeLessThanOrEqual(Date.now());
+    expect(r.dueAt).toBeGreaterThan(Date.now() - 86400000);
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    vi.mocked(fetch).mockImplementation(async () => Response.json({ ret: 0 }));
+    await deliver(stub);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect((await reminders(stub))[0].dueAt).toBeGreaterThan(Date.now());
   });
   it("dispatches through the scheduler while the chat alarm is still waiting", async () => {
     const { stub, model } = await setup();

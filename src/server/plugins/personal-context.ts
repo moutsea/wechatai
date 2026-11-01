@@ -13,12 +13,7 @@ export function personalContext(draft: PersonalDraft) {
   const current = draft.currentContext();
   const project = (record: PersonalRecord) => {
     const change = draft.changes.get(record.id);
-    const reminderChanged =
-      change &&
-      (!change.before ||
-        change.before.remindAt !== record.remindAt ||
-        change.before.repeat !== record.repeat ||
-        change.before.reminderEnabled !== record.reminderEnabled);
+    const delivery = draft.reminderStatus(record);
     return {
       id: record.id,
       kind: record.kind,
@@ -29,19 +24,9 @@ export function personalContext(draft: PersonalDraft) {
         ? {
             reminderEnabled: record.reminderEnabled,
             reminderType: record.reminderType,
-            reminderState:
-              !record.reminderEnabled || !record.remindAt
-                ? "none"
-                : reminderChanged
-                  ? "staged"
-                  : (record.reminderState ?? change?.before?.reminderState ?? "none"),
+            reminderState: delivery.state,
             remindAt: record.remindAt,
-            nextReminderAt:
-              !record.reminderEnabled || !record.remindAt
-                ? null
-                : reminderChanged
-                  ? record.remindAt
-                  : (record.nextReminderAt ?? change?.before?.nextReminderAt ?? null),
+            nextReminderAt: delivery.rescheduled ? record.remindAt : delivery.nextAt,
             repeat: record.repeat,
           }
         : {}),

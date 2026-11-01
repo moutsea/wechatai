@@ -1,0 +1,1214 @@
+{
+  "base": "http://127.0.0.1:5321",
+  "apiProxy": "http://127.0.0.1:5173",
+  "generatedAt": "2026-10-27T03:25:32.540Z",
+  "results": [
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 6553,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 624,
+          "right": 1464,
+          "overflow": 24
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 1158,
+          "rectH": 738.36,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 567,
+          "rectH": 568,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 567,
+          "rectH": 504.2,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 567,
+          "rectH": 309.52,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 567,
+          "rectH": 307,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 754,
+          "rectH": 471.25,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "569px 569px",
+        "columnCount": 2,
+        "width": 1160,
+        "cards": [
+          {
+            "wide": true,
+            "w": 1160,
+            "h": 869,
+            "imgW": 1158
+          },
+          {
+            "wide": false,
+            "w": 569,
+            "h": 722,
+            "imgW": 567
+          },
+          {
+            "wide": false,
+            "w": 569,
+            "h": 722,
+            "imgW": 567
+          },
+          {
+            "wide": false,
+            "w": 569,
+            "h": 440,
+            "imgW": 567
+          },
+          {
+            "wide": false,
+            "w": 569,
+            "h": 440,
+            "imgW": 567
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 379,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 379,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 379,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "1024",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "clientWidth": 1024,
+      "innerWidth": 1024,
+      "bodyScrollWidth": 1024,
+      "scrollHeight": 6221,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 404,
+          "right": 1157,
+          "overflow": 133
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 452,
+          "right": 1108,
+          "overflow": 84
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 966,
+          "rectH": 616.09,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 471,
+          "rectH": 472,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 471,
+          "rectH": 419,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 471,
+          "rectH": 257.28,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 471,
+          "rectH": 255.19,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 562,
+          "rectH": 351.25,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "473px 473px",
+        "columnCount": 2,
+        "width": 968,
+        "cards": [
+          {
+            "wide": true,
+            "w": 968,
+            "h": 746,
+            "imgW": 966
+          },
+          {
+            "wide": false,
+            "w": 473,
+            "h": 626,
+            "imgW": 471
+          },
+          {
+            "wide": false,
+            "w": 473,
+            "h": 626,
+            "imgW": 471
+          },
+          {
+            "wide": false,
+            "w": 473,
+            "h": 411,
+            "imgW": 471
+          },
+          {
+            "wide": false,
+            "w": 473,
+            "h": 411,
+            "imgW": 471
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 315,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 315,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 315,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 8806,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": 261,
+          "right": 910,
+          "overflow": 142
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": 303,
+          "right": 868,
+          "overflow": 100
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 726,
+          "rectH": 463.28,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 726,
+          "rectH": 727,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 726,
+          "rectH": 645.31,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 726,
+          "rectH": 396.03,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 726,
+          "rectH": 392.81,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 726,
+          "rectH": 453.75,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "728px",
+        "columnCount": 1,
+        "width": 728,
+        "cards": [
+          {
+            "wide": true,
+            "w": 728,
+            "h": 611,
+            "imgW": 726
+          },
+          {
+            "wide": false,
+            "w": 728,
+            "h": 851,
+            "imgW": 726
+          },
+          {
+            "wide": false,
+            "w": 728,
+            "h": 770,
+            "imgW": 726
+          },
+          {
+            "wide": false,
+            "w": 728,
+            "h": 520,
+            "imgW": 726
+          },
+          {
+            "wide": false,
+            "w": 728,
+            "h": 517,
+            "imgW": 726
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 235,
+          "h": 59
+        },
+        {
+          "label": "02连接微信",
+          "w": 235,
+          "h": 59
+        },
+        {
+          "label": "03开始聊天",
+          "w": 235,
+          "h": 59
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "home",
+      "path": "/",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 8839,
+      "offenders": [
+        {
+          "el": "div.orbit.orbit-two",
+          "left": -131,
+          "right": 521,
+          "overflow": 131
+        },
+        {
+          "el": "div.orbit.orbit-one",
+          "left": -89,
+          "right": 479,
+          "overflow": 89
+        }
+      ],
+      "images": [
+        {
+          "src": "/images/real/wechat-reminder.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1382,
+          "naturalHeight": 880,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 222.58,
+          "attrW": "1382",
+          "attrH": "880",
+          "alt": "微信对话：发送「@助手 10 分钟之后提醒我去看火」，助手回复提醒已设置；16:50 到点后，个人助理插件主动发来提醒消"
+        },
+        {
+          "src": "/images/real/channel-add.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1260,
+          "naturalHeight": 1260,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 349,
+          "attrW": "1260",
+          "attrH": "1260",
+          "alt": "工作台「添加渠道」弹窗：渠道名称填 DeepSeek，接口协议 OpenAI Chat Completions，Base"
+        },
+        {
+          "src": "/images/real/wechat-connect.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 1207,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 309.84,
+          "attrW": "1360",
+          "attrH": "1207",
+          "alt": "工作台「微信连接」页：一张待扫码的二维码卡片，右侧列出配置渠道、扫码确认、发送 /help 三步说明。"
+        },
+        {
+          "src": "/images/real/wechat-search.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1235,
+          "naturalHeight": 672,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 190.34,
+          "attrW": "1235",
+          "attrH": "672",
+          "alt": "微信对话：发送「@DS 今天上海天气如何」，回答给出气温与出行建议，并列出 1、4、5 三条来源引用。"
+        },
+        {
+          "src": "/images/real/wechat-notes.jpg",
+          "inSection": "landing-real",
+          "loading": "lazy",
+          "naturalWidth": 1360,
+          "naturalHeight": 734,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 188.81,
+          "attrW": "1360",
+          "attrH": "734",
+          "alt": "微信对话：发送「@助手 帮我记一下，寄件码是 3758」后回复已保存笔记；再说「帮我清理一下已经提醒完的项目」后回复已删"
+        },
+        {
+          "src": "/images/real/workspace-overview.jpg",
+          "inSection": "landing-preview",
+          "loading": "lazy",
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "complete": true,
+          "rectW": 348,
+          "rectH": 217.5,
+          "attrW": "1440",
+          "attrH": "900",
+          "alt": "微伴工作台概览页：左侧导航是渠道与模型、插件、微信连接、会话记录；右侧是会员、可用额度、渠道数与对话数四张统计卡，下方是"
+        }
+      ],
+      "heroSecondary": [
+        {
+          "text": "看看三步怎么配",
+          "href": "/#how"
+        }
+      ],
+      "gridInfo": {
+        "columns": "350px",
+        "columnCount": 1,
+        "width": 350,
+        "cards": [
+          {
+            "wide": true,
+            "w": 350,
+            "h": 394,
+            "imgW": 348
+          },
+          {
+            "wide": false,
+            "w": 350,
+            "h": 497,
+            "imgW": 348
+          },
+          {
+            "wide": false,
+            "w": 350,
+            "h": 458,
+            "imgW": 348
+          },
+          {
+            "wide": false,
+            "w": 350,
+            "h": 338,
+            "imgW": 348
+          },
+          {
+            "wide": false,
+            "w": 350,
+            "h": 337,
+            "imgW": 348
+          }
+        ]
+      },
+      "tabsInfo": [
+        {
+          "label": "01配置模型",
+          "w": 112,
+          "h": 81
+        },
+        {
+          "label": "02连接微信",
+          "w": 112,
+          "h": 81
+        },
+        {
+          "label": "03开始聊天",
+          "w": 112,
+          "h": 81
+        }
+      ],
+      "demoLinks": []
+    },
+    {
+      "page": "pricing",
+      "path": "/pricing",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 5329,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "pricing",
+      "path": "/pricing",
+      "viewport": "1024",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "clientWidth": 1024,
+      "innerWidth": 1024,
+      "bodyScrollWidth": 1024,
+      "scrollHeight": 5370,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "pricing",
+      "path": "/pricing",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 6063,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "pricing",
+      "path": "/pricing",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 7923,
+      "offenders": [
+        {
+          "el": "table",
+          "left": 21,
+          "right": 541,
+          "overflow": 151
+        },
+        {
+          "el": "thead",
+          "left": 21,
+          "right": 541,
+          "overflow": 151
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 541,
+          "overflow": 151
+        },
+        {
+          "el": "th",
+          "left": 259,
+          "right": 541,
+          "overflow": 151
+        },
+        {
+          "el": "tbody",
+          "left": 21,
+          "right": 541,
+          "overflow": 151
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 541,
+          "overflow": 151
+        },
+        {
+          "el": "td",
+          "left": 259,
+          "right": 541,
+          "overflow": 151
+        },
+        {
+          "el": "tr",
+          "left": 21,
+          "right": 541,
+          "overflow": 151
+        }
+      ],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs",
+      "path": "/docs",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 1712,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/channels/deepseek.png",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 460,
+          "naturalHeight": 460,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/openclaw-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/hermes-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs",
+      "path": "/docs",
+      "viewport": "1024",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "clientWidth": 1024,
+      "innerWidth": 1024,
+      "bodyScrollWidth": 1024,
+      "scrollHeight": 1745,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/channels/deepseek.png",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 460,
+          "naturalHeight": 460,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/openclaw-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/hermes-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs",
+      "path": "/docs",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 2349,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/channels/deepseek.png",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 460,
+          "naturalHeight": 460,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/openclaw-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/hermes-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "docs",
+      "path": "/docs",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 2617,
+      "offenders": [],
+      "images": [
+        {
+          "src": "/images/channels/deepseek.png",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 460,
+          "naturalHeight": 460,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/openclaw-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        },
+        {
+          "src": "/images/plugins/hermes-brand.webp",
+          "inSection": "other",
+          "loading": null,
+          "naturalWidth": 256,
+          "naturalHeight": 256,
+          "complete": true,
+          "rectW": 42,
+          "rectH": 42,
+          "attrW": "42",
+          "attrH": "42",
+          "alt": ""
+        }
+      ],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "register",
+      "path": "/register",
+      "viewport": "1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "clientWidth": 1440,
+      "innerWidth": 1440,
+      "bodyScrollWidth": 1440,
+      "scrollHeight": 1117,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "register",
+      "path": "/register",
+      "viewport": "1024",
+      "width": 1024,
+      "scrollWidth": 1024,
+      "clientWidth": 1024,
+      "innerWidth": 1024,
+      "bodyScrollWidth": 1024,
+      "scrollHeight": 1117,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "register",
+      "path": "/register",
+      "viewport": "768",
+      "width": 768,
+      "scrollWidth": 768,
+      "clientWidth": 768,
+      "innerWidth": 768,
+      "bodyScrollWidth": 768,
+      "scrollHeight": 1162,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    },
+    {
+      "page": "register",
+      "path": "/register",
+      "viewport": "390",
+      "width": 390,
+      "scrollWidth": 390,
+      "clientWidth": 390,
+      "innerWidth": 390,
+      "bodyScrollWidth": 390,
+      "scrollHeight": 1097,
+      "offenders": [],
+      "images": [],
+      "heroSecondary": [],
+      "gridInfo": null,
+      "tabsInfo": null,
+      "demoLinks": []
+    }
+  ],
+  "anchors": [
+    {
+      "viewport": "1440",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    },
+    {
+      "viewport": "1024",
+      "afterHash": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 888,
+        "headerHeight": 65,
+        "headingTop": 943,
+        "gap": 55,
+        "covered": false,
+        "sectionTop": 911,
+        "scrollMarginTop": "88px",
+        "scrollY": 823
+      }
+    },
+    {
+      "viewport": "768",
+      "afterHash": {
+        "headerBottom": 943,
+        "headerHeight": 61,
+        "headingTop": 1002,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 970,
+        "scrollMarginTop": "88px",
+        "scrollY": 882
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 943,
+        "headerHeight": 61,
+        "headingTop": 1002,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 970,
+        "scrollMarginTop": "88px",
+        "scrollY": 882
+      }
+    },
+    {
+      "viewport": "390",
+      "afterHash": {
+        "headerBottom": 1330,
+        "headerHeight": 61,
+        "headingTop": 1389,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 1357,
+        "scrollMarginTop": "88px",
+        "scrollY": 1269
+      },
+      "afterScrollIntoView": {
+        "headerBottom": 1330,
+        "headerHeight": 61,
+        "headingTop": 1389,
+        "gap": 59,
+        "covered": false,
+        "sectionTop": 1357,
+        "scrollMarginTop": "88px",
+        "scrollY": 1269
+      }
+    }
+  ],
+  "demoProbe": [
+    {
+      "route": "/demo",
+      "status": "loaded",
+      "title": "页面未找到 | 微伴 Wechatai",
+      "heading": "这个页面没有找到。",
+      "hasDemoWorkbench": false,
+      "bodyText": "微伴 WECHATAI 价格 文档 如何使用 登录 免费开始 404 · PAGE NOT FOUND 这个页面没有找到。 可以回到首页，或前往使用文档继续了解微信 AI。 回到首页 使用文档",
+      "location": "/demo"
+    },
+    {
+      "route": "/demo/app",
+      "status": "loaded",
+      "title": "页面未找到 | 微伴 Wechatai",
+      "heading": "这个页面没有找到。",
+      "hasDemoWorkbench": false,
+      "bodyText": "微伴 WECHATAI 价格 文档 如何使用 登录 免费开始 404 · PAGE NOT FOUND 这个页面没有找到。 可以回到首页，或前往使用文档继续了解微信 AI。 回到首页 使用文档",
+      "location": "/demo/app"
+    }
+  ],
+  "issues": [
+    {
+      "key": "demo-probe@1440",
+      "kind": "console",
+      "detail": "error: Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5321/demo"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "console",
+      "detail": "error: Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5321/demo/app"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "network",
+      "detail": "404 http://127.0.0.1:5321/demo"
+    },
+    {
+      "key": "demo-probe@1440",
+      "kind": "network",
+      "detail": "404 http://127.0.0.1:5321/demo/app"
+    }
+  ]
+}
