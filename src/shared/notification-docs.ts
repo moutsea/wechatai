@@ -35,6 +35,23 @@ title 为可选标题，最多 120 字；text 为必填正文，最多 4000 字�
 这是兼容文字消息格式，不能直接替换要求飞书签名校验的 SDK 地址。不要附带飞书的 timestamp 或 sign 字段。`,
   },
   {
+    id: "build-notification",
+    title: "任务示例：构建成功后通知自己",
+    body: `前提：先创建消息提醒插件并绑定微信，把专属 Token 保存为 CI 的私有 secret WECHATAI_NOTIFY_TOKEN。只在你主动配置的可信服务端使用，不放进代码仓库或构建日志。
+
+将下面一步放在构建成功之后（GitHub Actions 环境示例）：
+
+\`\`\`bash
+curl --fail-with-body 'https://wechatai.app/api/notify' \\
+  -H "Authorization: Bearer $WECHATAI_NOTIFY_TOKEN" \\
+  -H 'Content-Type: application/json' \\
+  -H "Idempotency-Key: build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \\
+  -d '{"title":"构建完成","text":"CI 构建已通过，请到代码仓库检查产物。"}'
+\`\`\`
+
+预期：HTTP 202 表示进入队列；按下面的投递查询确认 sent，不能把构建脚本退出成功当成微信已送达。受微信最近互动后的 24 小时回复窗口限制，请先在微信发一条消息。相同运行重试应使用相同幂等编号，不自动向其他微信发送。此通知不调用模型、不扣 credits。`,
+  },
+  {
     id: "receipt",
     title: "确认是否送达，以及请求重试",
     body: `首次接收成功返回 HTTP 202，例如：

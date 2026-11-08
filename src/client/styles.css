@@ -5542,3 +5542,7 @@ code {
   border-color: var(--green);
   color: var(--green);
 }
+
+.connection-privacy { line-height: 1.8; color: #486052; }
+.connection-privacy svg { vertical-align: middle; margin-right: 6px; }
+.connection-privacy a { margin-left: 6px; text-decoration: underline; }

@@ -18,7 +18,7 @@ import { WECHAT_LINK_LIMITS } from "./wechat-links";
 export const SITE_URL = "https://wechatai.app";
 export const SITE_NAME = "微伴 Wechatai";
 // Update only when the actual homepage content changes, never on every build.
-const HOME_UPDATED_AT = "2026-10-12";
+const HOME_UPDATED_AT = "2026-11-08";
 export const SOCIAL_IMAGE = `${SITE_URL}/og-image.png`;
 export const PUBLIC_PATHS = [
   "/",

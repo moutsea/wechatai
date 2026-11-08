@@ -27,6 +27,13 @@ export type AdminDay = AdminUsage & {
 };
 export type AdminPluginUsage = AdminUsage & { pluginId: string; users: number };
 export type AdminAccountStats = AdminUsage & {
+  activation?: {
+    firstModelTestAt: number | null;
+    firstWechatConnectedAt: number | null;
+    firstWechatReplyAt: number | null;
+    lastWechatReplyAt: number | null;
+    deliveredWechatReplies: number;
+  };
   sampledAt: number;
   planUntil: number;
   links: number;

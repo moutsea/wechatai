@@ -550,6 +550,11 @@ function ScopedPersonalRecords({
             )}
             {kind === "reminder" && (
               <>
+                <p className="form-note">
+                  提醒依赖有效微信连接及最近互动后的 24 小时回复窗口。请定期向 ClawBot
+                  发消息；单次提醒超过预定时间 24
+                  小时停止补发，每日待办跨天不补发，重复提醒跳过错过的时间。
+                </p>
                 <div className="form-grid">
                   <label>
                     提醒时间（北京时间）

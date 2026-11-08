@@ -320,8 +320,12 @@ describe("permanent bilateral invitation rewards", () => {
     expect((await stub.snapshot()).wallet.referral).toBe(0);
     await tick(stub);
     expect((await stub.snapshot()).wallet.referral).toBe(0);
+    expect((await stub.adminStats()).activation?.firstWechatReplyAt).toBeNull();
     net.control.sendFails = false;
     await tick(stub, 2);
+    const activation = (await stub.adminStats()).activation!;
+    expect(activation.firstWechatReplyAt).toBeGreaterThan(0);
+    expect(activation.deliveredWechatReplies).toBe(1);
     expect(await relationship(invitee)).toMatchObject({ status: "rewarded" });
     for (const id of [inviter, invitee]) {
       const snapshot = await env.ACCOUNTS.getByName(id).snapshot();
@@ -342,6 +346,10 @@ describe("permanent bilateral invitation rewards", () => {
     net.send("你好", 2);
     await tick(reopened, 4);
     expect((await reopened.snapshot()).wallet.referral).toBe(500);
+    expect((await reopened.adminStats()).activation?.firstWechatReplyAt).toBe(
+      activation.firstWechatReplyAt,
+    );
+    expect((await reopened.adminStats()).activation?.deliveredWechatReplies).toBe(2);
     expect((await env.ACCOUNTS.getByName(inviter).snapshot()).wallet.referral).toBe(500);
   });
   it("does not count commands, model tests or failed model requests", async () => {
@@ -356,6 +364,7 @@ describe("permanent bilateral invitation rewards", () => {
     net.send("你好", 2);
     await tick(stub, 4);
     expect(await relationship(invitee)).toMatchObject({ status: "pending" });
+    expect((await stub.adminStats()).activation?.firstWechatReplyAt).toBeNull();
     expect((await stub.snapshot()).wallet.referral).toBe(0);
     expect(JSON.parse(await stub.api("referral.grant", { units: 999999 }))).toMatchObject({
       ok: false,

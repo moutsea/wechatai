@@ -62,6 +62,8 @@ export function SiteFooter() {
           <Link to="/terms">服务协议</Link>
           <Link to="/privacy">隐私政策</Link>
           <Link to="/contact">联系我们</Link>
+          <a href="https://github.com/moutsea/wechatai">项目源码与维护者</a>
+          <a href="https://github.com/moutsea/wechatai/commits/main/">公开变更记录</a>
         </nav>
       </div>
       <div className="landing-footer-bottom">

@@ -10,7 +10,7 @@ export const wechatClawbotModelsPage: SeoPage = {
   h1: "微信 ClawBot 支持哪些模型？",
   lede: "搜这个问题的人通常在找一份模型清单。真实答案是：ClawBot 没有清单 —— 它是通道，模型在你绑定的那一端。",
   answer:
-    "ClawBot 不内置任何模型，也不提供 API Key。它能「支持」哪些模型，取决于你绑定的是什么服务：如果绑定的是自带 Key 的中转服务，则可以接所有兼容 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议的模型；如果绑定的是某个封装好的 Agent，则受该 Agent 自身支持范围的限制。",
+    "ClawBot 不内置任何模型，也不提供 API Key。它能「支持」哪些模型，取决于你绑定的是什么服务：如果绑定的是自带 Key 的中转服务，则可以配置采用 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议的模型；如果绑定的是某个封装好的 Agent，则受该 Agent 自身支持范围的限制。",
   primaryKeyword: "微信 ClawBot 支持哪些模型",
   secondaryKeywords: [
     "微信 ClawBot 模型",
@@ -18,7 +18,7 @@ export const wechatClawbotModelsPage: SeoPage = {
     "ClawBot 需要自己买 API 吗",
     "微信 ClawBot DeepSeek",
   ],
-  highlights: ["通道与模型是两层", "三种协议覆盖绝大多数模型", "换模型不用重新绑定"],
+  highlights: ["通道与模型是两层", "三种协议适配，功能逐项核对", "换模型不用重新绑定"],
   sections: [
     {
       id: "two-layers",
@@ -28,24 +28,43 @@ export const wechatClawbotModelsPage: SeoPage = {
 - **问通道**：ClawBot 这条链路本身对模型有没有限制？答案是几乎没有 —— 它传的是文本，不解析模型品牌。
 - **问你绑定的服务**：那个服务支持哪些模型？答案取决于它实现了什么协议、填得进谁的 Key。
 
-所以正确的问题是：**我要绑定的那一端，支持哪些模型？** 微伴这一端的答案是：只要服务商提供三种协议之一，就能接。
+所以正确的问题是：**我要绑定的那一端，支持哪些模型？** 微伴这一端的答案是：提供三种协议的适配；模型和功能仍需测试确认。
 
 这也解释了一个常见困惑：有人在教程里看到「ClawBot 支持 GPT-4o、Claude、DeepSeek」，有人看到「只支持某一家」。两种说法可能都对 —— 它们描述的是各自绑定的服务，不是 ClawBot 本体。`,
     },
     {
       id: "protocols",
-      title: "三种协议，覆盖绝大多数模型",
+      title: "三种协议，按服务商接口选择",
       body: `添加渠道时，选择服务商后会自动填好协议与地址。使用第三方地址或需要更换协议时，选择「自定义（第三方渠道 / 其他协议）」，按服务商文档填写：
 
 | 协议 | 常见适用对象 | 说明 |
 | --- | --- | --- |
 | OpenAI Chat Completions | DeepSeek、Moonshot、智谱、各类兼容服务 | 最通用的一种，多数国产服务都兼容 |
-| OpenAI Responses | OpenAI 新接口、部分代理服务 | 支持内置工具调用与会话状态 |
+| OpenAI Responses | OpenAI 新接口、部分代理服务 | 文字与工具调用需按具体模型验证，不自动启用所有内置工具 |
 | Anthropic Messages | Claude 系列、兼容实现 | 长文与代码场景常用 |
 
 判断方法很简单：打开你的 API 服务商文档，看它给的示例是 \`/v1/chat/completions\`、\`/v1/responses\` 还是 \`/v1/messages\`，三者分别对应上表。填错协议是最常见的「配置完不回复」原因。
 
 三种协议的字段差异、输入输出上限设置，[渠道与模型](/docs/channels-models) 里有逐项说明。`,
+    },
+    {
+      id: "compatibility",
+      title: "功能兼容矩阵：支持到哪一层",
+      body: `核对日期：2026-11-08。下表依据当前实现与仓库自动化测试，测试使用模拟接口；**不代表已经逐个调用真实供应商或验证你的账号**。
+
+| 能力 | Chat Completions | Responses | Anthropic Messages | 条件与失败处理 |
+| --- | --- | --- | --- | --- |
+| 普通文字聊天 | 有适配与测试覆盖 | 有适配与测试覆盖 | 有适配与测试覆盖 | 需有效 Key、正确模型 ID 与余额；先测试连接 |
+| 插件工具调用 | 有条件支持 | 有条件支持 | 有条件支持 | 上游必须支持工具字段与返回格式；失败按提示检查模型，不等于开启供应商全部内置工具 |
+| 图片 / 文件输入 | 有条件支持 | 有条件支持 | 有条件支持 | 需要 Plus；图片还需模型视觉能力，文件受格式和解析限制 |
+| 联网搜索 | 通过 DS Chat 配置 | 通过 DS Chat 配置 | 通过 DS Chat 配置 | 另配搜索服务；普通模型不会因协议兼容自动联网 |
+| AI 生图 | 独立插件 | 独立插件 | 独立插件 | 使用 images/generations 接口与支持的图像模型，不是聊天协议自动提供的能力 |
+| 微信语音 | 微信附带转写时按文字处理 | 同左 | 同左 | 无转写请改发文字；没有 AI 语音回复 |
+| 任意第三方 / 自建模型 | 未逐个实测 | 未逐个实测 | 未逐个实测 | 兼容声明不保证所有参数可用，先确认服务地址公网可达 |
+
+验证依据：[协议与模型约束测试](https://github.com/moutsea/wechatai/blob/main/test/model-compatibility.test.ts)、[工具调用测试](https://github.com/moutsea/wechatai/blob/main/test/llm-tools.test.ts)、[附件测试](https://github.com/moutsea/wechatai/blob/main/test/attachments.test.ts)。源码公开不等于独立安全审计。
+
+配置示例见 [渠道与模型](/docs/channels-models)，图片与文件限制见 [附件说明](/docs/attachments)。先看 [费用估算](/pricing#estimate)，再进行可能收费的模型连接测试。`,
     },
     {
       id: "combinations",
@@ -123,5 +142,5 @@ export const wechatClawbotModelsPage: SeoPage = {
     { label: "在微信里使用 Claude", href: "/wechat-claude" },
     { label: "价格与免费额度", href: "/pricing" },
   ],
-  updatedAt: "2026-10-24",
+  updatedAt: "2026-11-08",
 };

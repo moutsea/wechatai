@@ -29,6 +29,11 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
       "想在微信里直接问 DeepSeek、修改文案，或继续昨天没聊完的话题？微伴可以连接你自己的模型 API，把微信作为聊天入口。本篇从一个普通模型渠道开始，不需要安装本地 Agent。",
     sections: [
       {
+        id: "before-setup",
+        title: "开始前：确认路径与条件",
+        body: "本页负责逐步配置与验证。还没有决定托管聊天还是本机 Agent？先看[DeepSeek 选型对比](/wechat-deepseek)。请先确认手机微信的 ClawBot 入口可用，并准备服务商 Key 与余额；测试连接与正式聊天均可能产生费用。",
+      },
+      {
         id: "prepare",
         title: "开始前，准备好什么？",
         body: `你需要在微伴[注册账号](/register)并[登录](/login)，同时准备好 DeepSeek 模型官方或第三方 API 服务。
@@ -63,7 +68,7 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
       },
       {
         id: "search",
-        title: "配置 DS Chat 插件，获得逼近 DeepSeek 网页版体验",
+        title: "可选：为 DeepSeek 配置联网搜索",
         screenshots: [DOC_SCREENSHOTS.dsSearch],
         body: `普通 DeepSeek 模型聊天不会因为接入微信就自动获得搜索能力。如果希望它能处理最新信息，可以在[插件](/app/plugins)中配置 **DS Chat**：
 

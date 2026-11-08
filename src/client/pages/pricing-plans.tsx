@@ -29,7 +29,7 @@ const approx = approxYuan;
  */
 export function PricingPlans() {
   const { data: session, isPending } = useAuth();
-  const [interval, setInterval] = useState<"month" | "year">("year");
+  const [interval, setInterval] = useState<"month" | "year">("month");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -173,7 +173,7 @@ export function PricingPlans() {
         </article>
       </div>
       <p className="plans-fineprint">
-        支付由 Stripe 处理。credits 用完后可以单独购买加油包，价格见下方说明。
+        本次付款为所选周期的完整金额，单次购买、不自动续费。支付由 Stripe 处理。credits 用完后可以单独购买加油包，价格见下方说明。
       </p>
     </section>
   );

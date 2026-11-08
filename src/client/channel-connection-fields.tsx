@@ -1,3 +1,4 @@
+import { ConnectionPrivacy } from "./connection-privacy";
 import type { ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 import {
@@ -124,6 +125,7 @@ export function ChannelConnectionFields({
           </label>
         </>
       )}
+      <ConnectionPrivacy />
       <div className="channel-name-field">
         <div className="channel-name-label">
           <label htmlFor="channel-api-key">API Key</label>

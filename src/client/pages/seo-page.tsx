@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Check, ChevronDown, Sprout } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { SiteHeader } from "../site-header";
+import { CostEstimator } from "../getting-started-preview";
 import { PricingPlans } from "./pricing-plans";
 import { SiteFooter } from "../site-footer";
 
@@ -119,14 +120,21 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
           <h1>{page.h1}</h1>
           <p className="seopage-lede">{page.lede}</p>
           <div className="seopage-actions">
-            <Link className="button" to="/register">
+            <Link className="button" to={page.ctaHref ?? "/register"}>
               {page.ctaLabel ?? "免费开始"}
               <ArrowRight size={18} aria-hidden="true" />
             </Link>
-            <Link className="button secondary" to="/docs/getting-started">
-              查看使用指南
+            <Link
+              className="button secondary"
+              to={page.ctaHref ? "/pricing#estimate" : "/docs/getting-started"}
+            >
+              {page.ctaHref ? "先算使用费用" : "查看使用指南"}
             </Link>
           </div>
+          <p className="hero-prerequisite">
+            <Link to="/#start">注册前检查接入条件</Link> ·{" "}
+            <Link to="/pricing#estimate">估算平台与模型费用</Link>
+          </p>
           <ul className="seopage-highlights">
             {page.highlights.map((item) => (
               <li key={item}>
@@ -142,6 +150,7 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
         {page.path === "/pricing" && (
           <>
             <PricingPlans />
+            <CostEstimator />
             {/* 这段是给摘要/AEO 用的完整句子，排在卡后面，视觉上降级为注释，不再抢卡片。 */}
             <p className="seopage-answer seopage-answer-compact">{page.answer}</p>
           </>
@@ -174,8 +183,8 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
           <SeoRelated links={page.related} />
           <section className="seopage-cta" aria-labelledby="seopage-cta-title">
             <Sprout size={28} aria-hidden="true" />
-            <h2 id="seopage-cta-title">用自己的 API Key，今晚就能在微信里用上</h2>
-            <p>注册后添加模型渠道，扫码连接微信。模型调用费用由你的 API 服务商另行收取。</p>
+            <h2 id="seopage-cta-title">确认接入条件，开始配置你的微信 AI</h2>
+            <p>先检查微信 ClawBot 入口，再按模型、Agent 或通知的路径配置。模型调用费用另计。</p>
             <Link className="button" to="/register">
               免费开始
               <ArrowRight size={18} aria-hidden="true" />

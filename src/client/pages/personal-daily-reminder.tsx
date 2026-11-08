@@ -115,6 +115,10 @@ export function DailyTasksReminder({
         <strong>每日待办提醒</strong>
       </div>
       <p>每天汇总当天未完成的待办，通过微信发送；没有待办就不打扰，不消耗 credits。</p>
+      <p className="form-note">
+        受微信最近互动后的 24 小时回复窗口限制，请定期向 ClawBot
+        发消息。当天发送失败可重试，跨天不再补发；不保证必达。
+      </p>
       <div className="personal-daily-controls">
         <label className="personal-enabled">
           <input

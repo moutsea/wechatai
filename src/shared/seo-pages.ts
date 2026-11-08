@@ -60,6 +60,8 @@ export interface SeoPage {
   updatedAt: string;
   /** Optional label override for the primary call to action. */
   ctaLabel?: string;
+  /** Topic pages may lead to their specific tutorial before registration. */
+  ctaHref?: string;
 }
 
 export const SEO_PAGES: readonly SeoPage[] = SEO_CONTENT;

@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ChannelConnectionFields } from "../src/client/channel-connection-fields";
 import type { Channel, ChannelInput } from "../src/shared/types";
@@ -14,15 +15,17 @@ const form: ChannelInput = {
 const previous: Channel = { ...form, id: "existing", createdAt: 1, hasKey: true };
 const fields = (providerId: string, saved?: Channel) =>
   renderToStaticMarkup(
-    <ChannelConnectionFields
-      form={form}
-      providerId={providerId}
-      previous={saved}
-      disabled={false}
-      onChange={() => {}}
-      onProviderChange={() => {}}
-      importAction={<button>kimiseek 一键导入</button>}
-    />,
+    <MemoryRouter>
+      <ChannelConnectionFields
+        form={form}
+        providerId={providerId}
+        previous={saved}
+        disabled={false}
+        onChange={() => {}}
+        onProviderChange={() => {}}
+        importAction={<button>kimiseek 一键导入</button>}
+      />
+    </MemoryRouter>,
   );
 
 describe("channel provider fields", () => {
@@ -54,14 +57,16 @@ describe("channel provider fields", () => {
 
   it("leaves the key optional when editing only the protocol", () => {
     const html = renderToStaticMarkup(
-      <ChannelConnectionFields
-        form={{ ...form, protocol: "responses" }}
-        providerId="custom"
-        previous={previous}
-        disabled={false}
-        onChange={() => {}}
-        onProviderChange={() => {}}
-      />,
+      <MemoryRouter>
+        <ChannelConnectionFields
+          form={{ ...form, protocol: "responses" }}
+          providerId="custom"
+          previous={previous}
+          disabled={false}
+          onChange={() => {}}
+          onProviderChange={() => {}}
+        />
+      </MemoryRouter>,
     );
     expect(html).toContain("已加密保存，留空则不更改");
     expect(html).not.toContain("服务地址已更改");

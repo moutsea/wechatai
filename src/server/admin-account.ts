@@ -94,6 +94,13 @@ export function readAdminAccountStats(sql: SqlStorage, now = Date.now()): AdminA
     .toArray();
   return {
     ...totals,
+    activation: {
+      firstModelTestAt: setting<number | null>("firstModelTestAt", null),
+      firstWechatConnectedAt: setting<number | null>("firstWechatConnectedAt", null),
+      firstWechatReplyAt: setting<number | null>("firstWechatReplyAt", null),
+      lastWechatReplyAt: setting<number | null>("lastWechatReplyAt", null),
+      deliveredWechatReplies: setting("deliveredWechatReplies", 0),
+    },
     ...counts,
     failedRequests,
     lastFailureAt: lastFailure?.lastFailureAt ?? null,

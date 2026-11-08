@@ -2540,6 +2540,8 @@ export class PersonalAccount extends DurableObject<Env> {
           null,
           64,
         );
+        if (!this.getSetting("firstModelTestAt", 0))
+          this.setSetting("firstModelTestAt", Date.now());
       } else if (action === "assistant.activate") {
         this.busy();
         data = this.activateAssistant(
@@ -4636,6 +4638,8 @@ export class PersonalAccount extends DurableObject<Env> {
               cursor: "",
               lastSeen: Date.now(),
             });
+            if (!this.getSetting("firstWechatConnectedAt", 0))
+              this.setSetting("firstWechatConnectedAt", Date.now());
             const delivery = this.linkSetting<GuideDelivery | null>(
               connectionId,
               "guideDelivery",
@@ -4945,6 +4949,18 @@ export class PersonalAccount extends DurableObject<Env> {
                   "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id = ?",
                   pending.id,
                 );
+                // Persist only after all reply parts are acknowledged, in the same
+                // transaction as inbox completion so retries cannot count twice.
+                if (completed) {
+                  const now = Date.now();
+                  if (!this.getSetting("firstWechatReplyAt", 0))
+                    this.setSetting("firstWechatReplyAt", now);
+                  this.setSetting("lastWechatReplyAt", now);
+                  this.setSetting(
+                    "deliveredWechatReplies",
+                    this.getSetting("deliveredWechatReplies", 0) + 1,
+                  );
+                }
                 if (hash && !this.getSetting("referralUse", null))
                   this.setSetting("referralUse", {
                     hash,

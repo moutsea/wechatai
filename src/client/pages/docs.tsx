@@ -200,6 +200,10 @@ export function DocsIndex() {
       </section>
       <section className="docs-index-section" aria-labelledby="tutorials-title">
         <h2 id="tutorials-title">跟着教程配置</h2>
+        <p>
+          想在微信里用 DeepSeek？先看<Link to="/wechat-deepseek">接入条件与费用说明</Link>，准备好
+          Key 后跟着下方教程完成配置。
+        </p>
         <div className="docs-tutorial-list">
           {DOC_TUTORIALS.map((article) => (
             <Link to={docPath(article.slug)} key={article.slug}>

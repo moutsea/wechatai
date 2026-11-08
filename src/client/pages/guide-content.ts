@@ -1,3 +1,5 @@
+import { PLUGIN_LIMITS } from "../../shared/plugin-access";
+import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { wechatCommands } from "../../shared/guide";
 import { notificationSections } from "../../shared/notification-docs";
 import type { DOC_GUIDES } from "../../shared/docs";
@@ -330,10 +332,11 @@ Agent 的 \`/new\` 不会删除微伴聊天记录；\`/wx new\` 会在微伴新�
 | --- | --- | --- |
 | 自定义模型文字聊天、微信会话命令 | 支持 | 支持 |
 | 微信链接数量 | 1 个 | 最多 10 个 |
-| 每日赠送 credits | 以工作台显示为准 | 1,000 credits |
+| 每日赠送 credits | ${DAILY_CREDIT_DEFAULTS.free} credits | ${DAILY_CREDIT_DEFAULTS.plus} credits |
 | 网页会话记录 | 不支持 | 支持 |
 | 图片与文件输入、模型 @快捷调用 | 不支持 | 支持 |
-| DS Chat、Agent 等插件 | 不支持 | 支持 |
+| DS Chat、Agent、个人助理等插件配置 | ${PLUGIN_LIMITS.free} 个 | 不限 |
+| 消息提醒 Webhook | 支持，占用插件名额，不扣 credits | 支持，不扣 credits |
 
 每日赠送在北京时间零点刷新，当天未用完的赠送额度不累计。升级会按 Plus 会员的当日赠送上限补足，不会额外叠加一整份。
 
@@ -517,7 +520,7 @@ Plus 会员到期后，最早创建的 1 个插件仍可使用，其余配置保
         screenshots: [DOC_SCREENSHOTS.reminderClarify],
         body: `提醒使用北京时间，支持单次、每天和每周重复。后台会自动检查到期提醒，并通过你配置的微信链接发送；触发提醒本身不调用模型，也不扣 credits。
 
-微信链接离线或 Plus 会员到期时，提醒会暂停。单次提醒超过 24 小时不再补发；重复提醒跳过已错过的时间，保留下一次。
+微信链接离线、插件停用或配置超出当前套餐名额时，提醒会暂停。单次提醒超过 24 小时不再补发；重复提醒跳过已错过的时间，保留下一次。
 
 更换绑定的微信或提醒链接后，请重新设置相关提醒的时间。收到主动提醒时会标明消息来自个人助理，便于与当前对话区分。`,
       },

@@ -67,7 +67,7 @@ const landingPages = [
   ["wechat-ai-ban-risk.html", "https://wechatai.app/wechat-ai-ban-risk", "微信用 AI 会被封号吗：三类接法的风险差异"],
   ["wechat-clawbot-models.html", "https://wechatai.app/wechat-clawbot-models", "微信 ClawBot 支持哪些模型？"],
   ["bring-your-own-api-key.html", "https://wechatai.app/bring-your-own-api-key", "用自己的 API Key，把 AI 接进微信"],
-  ["wechat-deepseek.html", "https://wechatai.app/wechat-deepseek", "微信接入 DeepSeek：先选路，再配置"],
+  ["wechat-deepseek.html", "https://wechatai.app/wechat-deepseek", "想在微信里用 DeepSeek？从这里开始"],
   ["wechat-claude.html", "https://wechatai.app/wechat-claude", "微信接入 Claude：绕开桥接的那条路"],
   ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
   ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],

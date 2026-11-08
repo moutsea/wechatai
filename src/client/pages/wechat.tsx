@@ -1,3 +1,4 @@
+import { ConnectionPrivacy } from "../connection-privacy";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -34,7 +35,8 @@ export function Wechat() {
   const paused = selected?.paused ?? false;
   const atLimit = data.connections.length >= data.limits.connections;
   // 升级出口只在免费版有意义：撞限这件事成立时（atLimit）或刚被服务端拒过（limitCode）都该说一次。
-  const upgradeHint = data.plan === "free" ? (limitCode ?? (atLimit ? "connection_limit" : undefined)) : undefined;
+  const upgradeHint =
+    data.plan === "free" ? (limitCode ?? (atLimit ? "connection_limit" : undefined)) : undefined;
   const connected = connection.status === "connected" && !paused;
   const waiting = ["waiting", "scanned"].includes(connection.status) && !paused;
   const setupIssue = wechatSetupIssue(data);
@@ -200,6 +202,7 @@ export function Wechat() {
                 ? "现在就可以在微信里与你选择的模型对话。"
                 : "使用你自己的微信扫码，在手机上完成连接确认。"}
           </p>
+          <ConnectionPrivacy wechat />
           {!connected && !paused && (
             <div className="qr-area">
               {waiting && connection.qrUrl && !setupIssue ? (

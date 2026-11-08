@@ -49,7 +49,7 @@ export const wechatClawbotPage: SeoPage = {
     {
       id: "entry",
       title: "找不到 ClawBot 入口怎么办",
-      body: `这是搜索量最高的 ClawBot 问题，原因通常有三种，按可能性从高到低：
+      body: `找不到 ClawBot 入口时，可依次核对以下三项：
 
 1. **还在灰度**：ClawBot 采用分批开放，同一版本微信，有的人有入口，有的人没有。这与你手机型号、注册时间关系不大，属于账号级的灰度。
 2. **微信版本过旧**：先在「我 → 设置 → 关于微信」检查更新，更新后完全退出微信再重进。
@@ -135,5 +135,5 @@ export const wechatClawbotPage: SeoPage = {
     { label: "微信命令速查", href: "/docs/commands" },
     { label: "常见问题排查", href: "/docs/faq" },
   ],
-  updatedAt: "2026-10-24",
+  updatedAt: "2026-11-08",
 };

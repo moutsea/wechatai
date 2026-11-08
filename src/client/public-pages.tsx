@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "./site-header";
 import { LandingSteps } from "./landing-steps";
+import { GettingStartedPreview } from "./getting-started-preview";
 import { LandingReal } from "./landing-real";
 import { SiteFooter } from "./site-footer";
 import { LANDING_FAQ } from "../shared/landing-faq";
@@ -130,7 +131,7 @@ export function Landing() {
               在微信里，<span>用上你的大模型</span>
             </h1>
             <p>
-              选好服务商、粘贴你的 API Key，3 分钟配完。
+              把自选模型接入微信，让日常问答、写作和整理更顺手。
               <br />
               之后就在微信里说话，DeepSeek / Claude / GPT 随时切换。
             </p>
@@ -142,7 +143,7 @@ export function Landing() {
                   trackFunnel("hero_cta_click", { cta: "primary", auth: session ? "in" : "out" })
                 }
               >
-                {session ? "配置我的模型" : "免费开始，3 分钟上手"}
+                {session ? "配置我的模型" : "免费开始配置"}
                 <ArrowRight size={18} />
               </StartLink>
               {/* 次按钮不离开首页：直接滚到下面三步，用户看完就知道要做什么，
@@ -174,6 +175,10 @@ export function Landing() {
                 </span>
               ))}
             </p>
+            <p className="hero-prerequisite">
+              先<Link to="/#start">检查微信 ClawBot 入口</Link>。免费 credits
+              仅覆盖平台中转，模型费用另付；也可<Link to="/#try">免 Key 预览示例任务</Link>。
+            </p>
             <div className="hero-trust">
               <span>
                 <Check size={14} />
@@ -181,7 +186,7 @@ export function Landing() {
               </span>
               <span>
                 <Check size={14} />
-                三种协议一次配通
+                支持三种常见协议
               </span>
               <span>
                 <Check size={14} />
@@ -260,6 +265,24 @@ export function Landing() {
             <MessageSquareText size={20} aria-hidden="true" />
             Anthropic Messages
           </strong>
+        </section>
+        <GettingStartedPreview />
+        <section className="deepseek-entry" aria-labelledby="deepseek-entry-title">
+          <img src="/images/channels/deepseek.png" alt="" width={52} height={52} loading="lazy" />
+          <div>
+            <span className="eyebrow">模型使用专题</span>
+            <h2 id="deepseek-entry-title">想在微信里使用 DeepSeek？</h2>
+            <p>
+              从 API Key 到第一条微信回复，了解接入条件、费用和联网方式。微伴也支持 Claude、GPT
+              等模型。
+            </p>
+          </div>
+          <div className="deepseek-entry-links">
+            <Link to="/wechat-deepseek">
+              了解 DeepSeek 微信接入 <ArrowRight size={16} />
+            </Link>
+            <Link to="/docs/deepseek-in-wechat">已有 Key？直接看截图教程 →</Link>
+          </div>
         </section>
         <LandingSteps />
         <LandingReal />
@@ -591,9 +614,15 @@ function AuthForm({ register }: { register: boolean }) {
         <h1>{register ? "从这里，开启微伴。" : "欢迎回来。"}</h1>
         <p>
           {register
-            ? `创建账户，3 分钟连上微信。每天 ${DAILY_CREDIT_DEFAULTS.free} credits 免费，不绑卡。`
+            ? `创建账户后按指引配置。每天 ${DAILY_CREDIT_DEFAULTS.free} credits 免费，不绑卡。`
             : "你的模型和未完的对话，都在这里。"}
         </p>
+        {register && (
+          <p className="auth-policies">
+            注册前请先<Link to="/wechat-clawbot">检查手机微信 ClawBot 入口</Link>。聊模型需自备
+            Key，服务商费用另计；没有入口时可先<Link to="/#try">体验模拟预览</Link>。
+          </p>
+        )}
         <p className="auth-policies">
           注册或使用前，请阅读<Link to="/terms">服务协议</Link>和<Link to="/privacy">隐私政策</Link>
           。
