@@ -358,7 +358,7 @@ describe("external WeChat receiver", () => {
       });
       await instance.alarm();
       expect(network).toHaveBeenCalledOnce();
-      expect(sent[0]).toContain("Plus 会员已到期");
+      expect(sent[0]).toContain("你的 Plus 会员到期了");
       expect(sent[0]).toContain("/app/billing");
       expect(sent[0]).toContain("本次未扣除 credits");
       expect(state.storage.sql.exec("SELECT id FROM usage").toArray()).toEqual([]);

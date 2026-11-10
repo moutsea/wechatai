@@ -1619,8 +1619,8 @@ export class PersonalAccount extends DurableObject<Env> {
       const until = this.getSetting("planUntil", 0);
       throw new AppError(
         "connection_paused",
-        (until > 0 && until <= Date.now() ? "Plus 会员已到期，当前恢复为 Free。" : "") +
-          `此微信链接超出 Free 的 ${WECHAT_LINK_LIMITS.free} 条链接名额，暂不能处理消息。第一条链接仍可使用；续费 Plus，或删除不用的链接释放名额后，即可恢复。微信绑定与聊天记录仍保留。`,
+        (until > 0 && until <= Date.now() ? "你的 Plus 会员到期了，" : "") +
+          `这个微信连接暂时不能聊天。\n\n免费版只能用 ${WECHAT_LINK_LIMITS.free} 个微信连接，第一个连接还能正常聊天。想继续用这个，可以续费 Plus，或在网页删除其他连接，只保留这个。\n\n聊天记录和绑定都还在。`,
         403,
       );
     }

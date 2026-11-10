@@ -617,8 +617,8 @@ describe("personal WeChat link limits and isolation", () => {
     await cycles(stub, 1);
     expect(net.sends).toHaveLength(1);
     expect(net.sends[0]).toMatchObject({ token: "token-2", to: "owner-2", context: "context-2" });
-    expect(net.sends[0].text).toContain("Plus 会员已到期");
-    expect(net.sends[0].text).toContain("微信绑定与聊天记录仍保留");
+    expect(net.sends[0].text).toContain("你的 Plus 会员到期了");
+    expect(net.sends[0].text).toContain("聊天记录和绑定都还在");
     expect(net.sends[0].text).toContain("https://wechatai.app/app/billing");
     expect(net.sends[0].text).toContain("本次未扣除 credits");
     expect(net.sends[0].text).not.toContain("无法连接");
