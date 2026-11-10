@@ -559,7 +559,7 @@ describe("personal WeChat link limits and isolation", () => {
     expect(net.modelInputs.at(-1)).not.toContain("苹果问题");
   });
 
-  it("pauses excess links on expiry without losing data and wakes them on renewal", async () => {
+  it("keeps paused bindings receiving on expiry and resumes execution on renewal", async () => {
     const net = network();
     const stub = account();
     await plus(stub);
@@ -576,10 +576,10 @@ describe("personal WeChat link limits and isolation", () => {
     expect((await api(stub, "wechat.bind", { id: b })).error).toBe("connection_paused");
     net.polls.length = 0;
     await cycles(stub, 1);
-    expect(net.polls).toEqual(["token-1"]);
+    expect(net.polls).toEqual(["token-1", "token-2"]);
     await api(stub, "wechat.disconnect", { id: a });
     await runInDurableObject(stub, async (_, state) =>
-      expect(await state.storage.getAlarm()).toBeNull(),
+      expect(await state.storage.getAlarm()).not.toBeNull(),
     );
     await plus(stub);
     await runInDurableObject(stub, async (_, state) =>
@@ -592,6 +592,59 @@ describe("personal WeChat link limits and isolation", () => {
     net.polls.length = 0;
     await cycles(stub, 1);
     expect(net.polls).toEqual(["token-2"]);
+  });
+
+  it("replies to a paused link with an expiry notice, retries safely and restores chat after renewal", async () => {
+    const net = network();
+    const stub = account();
+    await plus(stub);
+    await model(stub);
+    const first = await create(stub, "保留链接");
+    const paused = await create(stub, "到期链接");
+    for (const id of [first, paused]) await api(stub, "wechat.bind", { id });
+    await cycles(stub, 1);
+    for (const id of [first, paused]) await skipWelcome(stub, id);
+    await runInDurableObject(stub, (_, state) =>
+      state.storage.sql.exec(
+        "UPDATE settings SET value=? WHERE key='planUntil'",
+        JSON.stringify(Date.now() - 1000),
+      ),
+    );
+    const balance = (await stub.snapshot()).wallet.balance;
+    net.control.failedSends = 1;
+    const message = msg(2, "你好，帮我整理今天的工作");
+    net.queues.set("token-2", [message, { ...message, from_user_id: "stranger", message_id: 2 }]);
+    await cycles(stub, 1);
+    expect(net.sends).toHaveLength(1);
+    expect(net.sends[0]).toMatchObject({ token: "token-2", to: "owner-2", context: "context-2" });
+    expect(net.sends[0].text).toContain("Plus 会员已到期");
+    expect(net.sends[0].text).toContain("微信绑定与聊天记录仍保留");
+    expect(net.sends[0].text).toContain("https://wechatai.app/app/billing");
+    expect(net.sends[0].text).toContain("本次未扣除 credits");
+    expect(net.sends[0].text).not.toContain("无法连接");
+    await cycles(stub, 1);
+    expect(net.sends[1]).toEqual(net.sends[0]);
+    net.queues.set("token-2", [message]);
+    await cycles(stub, 1);
+    expect(net.sends).toHaveLength(2);
+    expect(net.modelInputs).toHaveLength(0);
+    expect((await stub.snapshot()).wallet.balance).toBe(balance);
+    await runInDurableObject(stub, (_, state) => {
+      expect(state.storage.sql.exec("SELECT id FROM claw_jobs").toArray()).toHaveLength(0);
+      expect(state.storage.sql.exec("SELECT id FROM usage").toArray()).toHaveLength(0);
+      expect(state.storage.sql.exec("SELECT id FROM messages").toArray()).toHaveLength(0);
+      expect(
+        state.storage.sql.exec("SELECT id FROM inbox WHERE state='done'").toArray(),
+      ).toHaveLength(1);
+    });
+    net.queues.set("token-1", [msg(1, "Free 链接仍可聊天")]);
+    await cycles(stub, 1);
+    expect(net.sends.at(-1)?.text).toBe("回答：Free 链接仍可聊天");
+    await plus(stub);
+    net.queues.set("token-2", [msg(2, "续费后继续聊天", 3)]);
+    await cycles(stub, 1);
+    expect(net.sends.at(-1)?.text).toBe("回答：续费后继续聊天");
+    expect(net.modelInputs).toHaveLength(2);
   });
 
   it("rejects duplicate bot confirmations even if two scans complete concurrently", async () => {

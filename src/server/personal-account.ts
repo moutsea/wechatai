@@ -248,8 +248,7 @@ export class PersonalAccount extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(RECEIVER_PING, RECEIVER_PONG));
     this.receiver = new WechatReceiver(ctx, env, {
       links: () =>
-        this.links()
-          .slice(0, this.limits().connections)
+        this.receivingLinks()
           .map((l) => ({ ...this.connection(l.id), id: l.id }))
           .filter((l) => l.status === "connected" && !!l.encryptedCredentials)
           .map((l) => ({ ...l, ...this.wechatTyping(l.id, l.generation, l.contextToken) })),
@@ -259,7 +258,7 @@ export class PersonalAccount extends DurableObject<Env> {
         this.ingestWechat(id, generation, cursor, updates, credentials),
       expired: (id, generation) => {
         const link = this.connection(id);
-        if (link.generation === generation && this.linkEnabled(id))
+        if (link.generation === generation && this.linkReceivable(id))
           this.setLinkSetting(id, "connection", {
             ...link,
             status: "expired",
@@ -462,7 +461,7 @@ export class PersonalAccount extends DurableObject<Env> {
     return this.ctx.storage.sql;
   }
   private wechatTyping(connectionId: string, generation: string, contextToken?: string) {
-    if (!contextToken) return { typingUntil: 0 };
+    if (!contextToken || !this.linkEnabled(connectionId)) return { typingUntil: 0 };
     const pending =
       this.sql
         .exec<{ time: number | null }>(
@@ -541,8 +540,8 @@ export class PersonalAccount extends DurableObject<Env> {
       enabled: this.receiver.enabled(),
       registered: this.getSetting<boolean | null>("receiverRegistered", null),
       delegated: !!this.receiver.socket(),
-      connectedLinks: this.links().filter(
-        (l) => this.linkEnabled(l.id) && this.connection(l.id).status === "connected",
+      connectedLinks: this.receivingLinks().filter(
+        (l) => this.connection(l.id).status === "connected",
       ).length,
       nextAlarm: await this.ctx.storage.getAlarm(),
     };
@@ -598,7 +597,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (
         link.generation !== generation ||
         link.status !== "connected" ||
-        !this.linkEnabled(connectionId)
+        !this.linkReceivable(connectionId)
       )
         return null;
       let token = link.contextToken;
@@ -1616,13 +1615,33 @@ export class PersonalAccount extends DurableObject<Env> {
   private requireLink(id: string, usable = false) {
     const index = this.links().findIndex((l) => l.id === id);
     if (index < 0) throw new AppError("connection_missing", "找不到这个微信链接", 404);
-    if (usable && index >= this.limits().connections)
-      throw new AppError("connection_paused", "此链接因会员到期暂停，升级 Plus 后可继续使用", 403);
+    if (usable && index >= this.limits().connections) {
+      const until = this.getSetting("planUntil", 0);
+      throw new AppError(
+        "connection_paused",
+        (until > 0 && until <= Date.now() ? "Plus 会员已到期，当前恢复为 Free。" : "") +
+          `此微信链接超出 Free 的 ${WECHAT_LINK_LIMITS.free} 条链接名额，暂不能处理消息。第一条链接仍可使用；续费 Plus，或删除不用的链接释放名额后，即可恢复。微信绑定与聊天记录仍保留。`,
+        403,
+      );
+    }
   }
   private linkEnabled(id: string) {
     return this.links()
       .slice(0, this.limits().connections)
       .some((l) => l.id === id);
+  }
+  private receivingLinks() {
+    const limit = this.limits().connections;
+    // Keep existing bindings receiving so paused users get an explanation in
+    // WeChat. Model/Agent execution still requires linkEnabled()/requireLink().
+    return this.links().filter((record, index) => {
+      if (index < limit) return true;
+      const link = this.connection(record.id);
+      return link.status === "connected" && !!link.encryptedCredentials;
+    });
+  }
+  private linkReceivable(id: string) {
+    return this.receivingLinks().some((link) => link.id === id);
   }
   private connection(id = this.selectedLink()): Link {
     return this.linkSetting<Link>(id, "connection", {
@@ -2106,8 +2125,7 @@ export class PersonalAccount extends DurableObject<Env> {
       .sync()
       .catch(() => console.warn(JSON.stringify({ event: "wechat.receiver_sync_failed" })));
     const receivingExternally = !!this.receiver.socket();
-    const links = this.links()
-      .slice(0, this.limits().connections)
+    const links = this.receivingLinks()
       .map((l) => ({ ...this.connection(l.id), id: l.id }))
       .filter((l) => ["connected", "waiting", "scanned"].includes(l.status));
     const wakeups = [
@@ -4559,9 +4577,9 @@ export class PersonalAccount extends DurableObject<Env> {
           .toArray()
           .map((row) => [row.connectionId, row.priority]),
       );
-      const links = this.links()
-        .slice(0, this.limits().connections)
-        .sort((a, b) => (priority.get(b.id) ?? 0) - (priority.get(a.id) ?? 0));
+      const links = this.receivingLinks().sort(
+        (a, b) => (priority.get(b.id) ?? 0) - (priority.get(a.id) ?? 0),
+      );
       let next = 0;
       await Promise.all(
         Array.from({ length: Math.min(3, links.length) }, async () => {
@@ -4586,7 +4604,7 @@ export class PersonalAccount extends DurableObject<Env> {
   ): Promise<void> {
     const link = this.connection(connectionId);
     if (
-      !this.linkEnabled(connectionId) ||
+      !this.linkReceivable(connectionId) ||
       !["connected", "waiting", "scanned"].includes(link.status)
     )
       return;
@@ -4703,10 +4721,11 @@ export class PersonalAccount extends DurableObject<Env> {
         ) as WxCredentials;
         if (
           this.connection(connectionId).generation !== link.generation ||
-          !this.linkEnabled(connectionId)
+          !this.linkReceivable(connectionId)
         )
           return;
         if (
+          this.linkEnabled(connectionId) &&
           link.contextToken &&
           (await this.deliverGuide(credentials, link.contextToken, connectionId))
         )
@@ -4728,6 +4747,7 @@ export class PersonalAccount extends DurableObject<Env> {
         if (pending) {
           const external = this.execution.active();
           if (
+            this.linkEnabled(connectionId) &&
             pending.state === "pending" &&
             external &&
             (external.id !== pending.id || this.execution.waiting(pending.id))
@@ -4763,7 +4783,10 @@ export class PersonalAccount extends DurableObject<Env> {
                   )
                     throw new AppError("connection_changed", "链接已变更，请重新发送消息", 409);
                 });
-              if (this.execution.enabled() || this.execution.turn(pending.id)) {
+              if (
+                this.linkEnabled(connectionId) &&
+                (this.execution.enabled() || this.execution.turn(pending.id))
+              ) {
                 const scope = this.execution.scope(pending.id, connectionId, link.generation);
                 if (scope.generation !== link.generation || scope.deadline <= Date.now())
                   throw new AppError(
@@ -4806,6 +4829,11 @@ export class PersonalAccount extends DurableObject<Env> {
                 error instanceof AppError
                   ? error.message
                   : "处理失败，本次未扣除 credits。请稍后重新发送。";
+              if (
+                error instanceof AppError &&
+                ["connection_paused", "plugin_limit"].includes(error.code)
+              )
+                reply += `\n\n[查看会员 / 续费 Plus](${new URL("/app/billing", publicSiteUrl(this.env))})\n\n本次未扣除 credits。`;
             } finally {
               console.info(
                 JSON.stringify({
@@ -4818,7 +4846,7 @@ export class PersonalAccount extends DurableObject<Env> {
             }
             if (
               this.connection(connectionId).generation !== link.generation ||
-              !this.linkEnabled(connectionId)
+              !this.linkReceivable(connectionId)
             )
               return;
             if (reply.trim())
@@ -5027,7 +5055,7 @@ export class PersonalAccount extends DurableObject<Env> {
           }
           if (
             this.connection(connectionId).generation !== link.generation ||
-            !this.linkEnabled(connectionId)
+            !this.linkReceivable(connectionId)
           )
             return;
           this.ingestWechat(connectionId, link.generation, link.cursor || "", result, credentials);

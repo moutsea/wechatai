@@ -575,6 +575,50 @@ describe("OpenClaw native relay", () => {
     ).toBe(true);
     expect((await ctx.stub.snapshot()).plugins).toHaveLength(21);
   });
+  it.each(["你好", "@work 你好", "/use work"])(
+    "delivers a membership notice in WeChat instead of dispatching a paused plugin: %s",
+    async (text) => {
+      const ctx = await setup();
+      const second = (
+        await api(ctx.stub, "plugin.save", {
+          pluginId: "wechatai/openclaw",
+          name: "工作助手",
+          shortcut: "work",
+        })
+      ).data;
+      await api(ctx.stub, "plugin.clawToken", { id: second.id });
+      await send(ctx.stub, "/use work");
+      await runInDurableObject(ctx.stub, (_, state) =>
+        state.storage.sql.exec(
+          "UPDATE settings SET value=? WHERE key='planUntil'",
+          JSON.stringify(Date.now() - 1000),
+        ),
+      );
+      const before = (await ctx.stub.snapshot()).wallet.balance;
+      const delivered = await deliverQueuedReplies(ctx.stub, 1, false, {
+        viaAlarm: true,
+        incoming: [
+          {
+            message_type: 1,
+            message_id: 1,
+            from_user_id: "owner",
+            context_token: "fresh-context",
+            item_list: [{ type: 1, text_item: { text } }],
+          },
+        ],
+      });
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0].text).toContain("Plus 会员已到期");
+      expect(delivered[0].text).toContain("/app/billing");
+      expect(delivered[0].text).toContain("本次未扣除 credits");
+      expect(delivered[0].text).not.toContain("无法连接");
+      expect((await ctx.stub.snapshot()).wallet.balance).toBe(before);
+      await runInDurableObject(ctx.stub, (_, state) => {
+        expect(state.storage.sql.exec("SELECT id FROM claw_jobs").toArray()).toEqual([]);
+        expect(state.storage.sql.exec("SELECT id FROM usage").toArray()).toEqual([]);
+      });
+    },
+  );
   it.each([true, false])(
     "honors waiting notices, enabled=%s, while keeping final replies and dedupe intact",
     async (enabled) => {

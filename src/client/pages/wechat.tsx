@@ -155,7 +155,7 @@ export function Wechat() {
         <div className="gentle-tip wechat-link-note">
           <ShieldCheck size={20} />
           <div>
-            此链接因会员到期暂停。第一条链接仍可使用，聊天记录保留。{" "}
+            此链接的聊天功能因会员到期暂停。已绑定链接会保留收消息通道，回复到期原因与续费入口；第一条链接仍可正常使用，聊天记录保留。{" "}
             <Link className="text-link" to={`${base}/billing`}>
               续费 Plus，恢复链接
             </Link>

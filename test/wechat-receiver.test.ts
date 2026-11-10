@@ -4,6 +4,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import migration from "../migrations/0011_wechat_receivers.sql?raw";
 import { RECEIVER_PING, RECEIVER_PONG, receiverAuthorized } from "../src/server/wechat-receiver";
 import { connectForManualDelivery, useManualAlarms } from "./helpers/wechat-delivery";
+import { encrypt } from "../src/server/security";
+import { wechatLinkKey } from "../src/shared/wechat-links";
 
 const accounts: ReturnType<typeof env.ACCOUNTS.getByName>[] = [];
 const sockets: WebSocket[] = [];
@@ -297,6 +299,79 @@ describe("external WeChat receiver", () => {
     const state = await inspect(stub);
     expect(state.inbox).toHaveLength(2);
     expect(state.connection).toMatchObject({ cursor: "cursor-2", contextToken: "context-2" });
+  });
+  it("keeps paused bindings in receive configuration and sends only an expiry notice", async () => {
+    const stub = await setup();
+    await stub.applyPayment({
+      id: "membership",
+      kind: "subscription",
+      units: 0,
+      expires: Date.now() + 86400000,
+    });
+    const created = JSON.parse(await stub.api("wechat.create", { name: "暂停的微信" }));
+    expect(created.ok).toBe(true);
+    const id = created.data.selectedConnectionId as string;
+    await runInDurableObject(stub, async (_, state) => {
+      const encryptedCredentials = await encrypt(
+        env,
+        JSON.stringify({
+          token: "paused-token",
+          baseUrl: "https://ilinkai.weixin.qq.com",
+          userId: "owner",
+          botId: "paused-bot",
+        }),
+        `${state.id}:wechat`,
+      );
+      state.storage.sql.exec(
+        "INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        wechatLinkKey(id, "connection"),
+        JSON.stringify({ status: "connected", generation: "g2", encryptedCredentials }),
+      );
+      state.storage.sql.exec(
+        "UPDATE settings SET value=? WHERE key='planUntil'",
+        JSON.stringify(Date.now() - 1000),
+      );
+    });
+    const { socket, next, config } = await connect(stub);
+    expect(config.links).toMatchObject([
+      { id: "default" },
+      { id, generation: "g2", typingUntil: 0 },
+    ]);
+    expect((await stub.receiverStatus()).connectedLinks).toBe(2);
+    const request = batch({
+      connectionId: id,
+      generation: "g2",
+      msgs: [{ ...batch().msgs[0], item_list: [{ type: 1, text_item: { text: "你好" } }] }],
+    });
+    socket.send(JSON.stringify(request));
+    expect(await next("ack")).toMatchObject({ id: request.id, cursor: request.cursor });
+    const sent: string[] = [];
+    await runInDurableObject(stub, async (instance, state) => {
+      const network = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+        const request = new Request(url, init);
+        if (!request.url.endsWith("sendmessage")) throw new Error("unexpected_network_request");
+        const body = await request.json<{
+          msg: { item_list: { text_item: { text: string } }[] };
+        }>();
+        sent.push(body.msg.item_list[0].text_item.text);
+        return Response.json({ ret: 0 });
+      });
+      await instance.alarm();
+      expect(network).toHaveBeenCalledOnce();
+      expect(sent[0]).toContain("Plus 会员已到期");
+      expect(sent[0]).toContain("/app/billing");
+      expect(sent[0]).toContain("本次未扣除 credits");
+      expect(state.storage.sql.exec("SELECT id FROM usage").toArray()).toEqual([]);
+      expect(state.storage.sql.exec("SELECT id FROM claw_jobs").toArray()).toEqual([]);
+      expect(state.storage.sql.exec("SELECT id FROM messages").toArray()).toEqual([]);
+    });
+    socket.send(JSON.stringify(request));
+    await next("ack");
+    await runInDurableObject(stub, async (instance) => instance.alarm());
+    expect(sent).toHaveLength(1);
+    socket.send(JSON.stringify({ type: "expired", connectionId: id, generation: "g2" }));
+    expect((await next("config")).links).toMatchObject([{ id: "default" }]);
+    expect((await stub.snapshot()).connections.find((l) => l.id === id)?.status).toBe("expired");
   });
   it("rejects previous link generations and disconnects the receive configuration", async () => {
     const stub = await setup();
