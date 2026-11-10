@@ -270,6 +270,35 @@ describe.each<Protocol>(["chat-completions", "responses", "anthropic"])(
 );
 
 describe("pending attachment lifecycle", () => {
+  it.each(["自己的名称", "新的对话", ""])(
+    "preserves an explicit title or auto-names an untitled chat only once (%j)",
+    async (title) => {
+      const s = await setup();
+      network("chat-completions", []);
+      const model = (await s.snapshot()).currentSession!.assistantId;
+      const created = await api(s, "session.create", { assistantId: model, title });
+      expect(created.ok).toBe(true);
+      await send(s, "首条消息的标题");
+      expect((await s.snapshot()).currentSession?.title).toBe(title || "首条消息的标题");
+      await api(s, "session.action", { id: created.data.id, action: "clear" });
+      await send(s, "后续消息不再改名");
+      expect((await s.snapshot()).currentSession?.title).toBe(title || "首条消息的标题");
+    },
+  );
+
+  it("preserves user titles in ordinary chat even when renamed to the default title and messages are cleared", async () => {
+    const s = await setup();
+    network("chat-completions", []);
+    const session = (await s.snapshot()).currentSession!;
+    await api(s, "session.action", { id: session.id, action: "rename", title: "自己的名称" });
+    await send(s, "普通聊天的首条消息");
+    expect((await s.snapshot()).currentSession?.title).toBe("自己的名称");
+    await api(s, "session.action", { id: session.id, action: "clear" });
+    await api(s, "session.action", { id: session.id, action: "rename", title: "新的对话" });
+    await send(s, "清空后的消息不覆盖名称");
+    expect((await s.snapshot()).currentSession?.title).toBe("新的对话");
+  });
+
   it("keeps attachments after a model failure and uses them on the next instruction", async () => {
     const s = await setup();
     const f = fixture(png);

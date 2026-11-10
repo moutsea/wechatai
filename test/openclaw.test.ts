@@ -83,6 +83,25 @@ async function ready(plus = true) {
   return { ...ctx, call: ctx.call, id, text, job, event };
 }
 describe("OpenClaw native relay", () => {
+  it("preserves custom and explicitly renamed session titles after clearing messages", async () => {
+    const ctx = await setup();
+    const created = await api(ctx.stub, "session.create", {
+      pluginInstanceId: ctx.pluginId,
+      title: "工作计划",
+    });
+    expect(created.ok).toBe(true);
+    await send(ctx.stub, "整理这周的工作");
+    expect((await ctx.stub.snapshot()).currentSession?.title).toBe("工作计划");
+    await api(ctx.stub, "session.action", { id: created.data.id, action: "clear" });
+    await api(ctx.stub, "session.action", {
+      id: created.data.id,
+      action: "rename",
+      title: "新的对话",
+    });
+    await send(ctx.stub, "保留用户设置的名称");
+    expect((await ctx.stub.snapshot()).currentSession?.title).toBe("新的对话");
+  });
+
   it("targets legacy connectors, groups connections and keeps read state per account and release", async () => {
     const first = await setup();
     const second = await setup();

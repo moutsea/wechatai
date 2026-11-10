@@ -165,7 +165,7 @@ export function Sessions() {
           json({
             assistantId,
             ...(action === "new-story" ? { pluginInstanceId: role?.id } : {}),
-            title: action === "new-story" ? "新的对话" : title || "新的对话",
+            title: action === "new-story" ? "" : title,
             connectionId:
               action === "new-story"
                 ? (session?.connectionId ?? "default")

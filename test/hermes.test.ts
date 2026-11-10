@@ -96,6 +96,25 @@ async function ready() {
   return { ...ctx, call: ctx.call, text, job, event };
 }
 describe("Hermes native channel", () => {
+  it("preserves custom and explicitly renamed session titles after clearing messages", async () => {
+    const ctx = await setup();
+    const created = await api(ctx.stub, "session.create", {
+      pluginInstanceId: ctx.id,
+      title: "工作计划",
+    });
+    expect(created.ok).toBe(true);
+    await send(ctx.stub, "整理这周的工作");
+    expect((await ctx.stub.snapshot()).currentSession?.title).toBe("工作计划");
+    await api(ctx.stub, "session.action", { id: created.data.id, action: "clear" });
+    await api(ctx.stub, "session.action", {
+      id: created.data.id,
+      action: "rename",
+      title: "新的对话",
+    });
+    await send(ctx.stub, "保留用户设置的名称");
+    expect((await ctx.stub.snapshot()).currentSession?.title).toBe("新的对话");
+  });
+
   it("reports the current plugin without billing, including disabled plugins after Plus expires", async () => {
     const ctx = await setup();
     await send(ctx.stub, "/use hermes");

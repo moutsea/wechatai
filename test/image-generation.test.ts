@@ -234,6 +234,22 @@ function network() {
 }
 
 describe("AI image plugin", () => {
+  it("preserves custom and explicitly renamed titles through image generation and cleared history", async () => {
+    network();
+    const { s, p } = await setup();
+    const created = await api(s, "session.create", {
+      pluginInstanceId: p.data.id,
+      title: "绘画计划",
+    });
+    expect(created.ok).toBe(true);
+    await send(s, "画一只橘猫");
+    expect((await s.snapshot()).currentSession?.title).toBe("绘画计划");
+    await api(s, "session.action", { id: created.data.id, action: "clear" });
+    await api(s, "session.action", { id: created.data.id, action: "rename", title: "新的对话" });
+    await send(s, "画一座山");
+    expect((await s.snapshot()).currentSession?.title).toBe("新的对话");
+  });
+
   it("uses the image endpoint regardless of chat protocol and bills verified images once", async () => {
     const n = network(),
       { s, p } = await setup();

@@ -186,7 +186,7 @@ import {
 
 type LinkRecord = { id: string; name: string; createdAt: number };
 type StoredAssistant = ResolvedModel;
-type StoredSession = ChatSession & { contextStart: number };
+type StoredSession = ChatSession & { contextStart: number; autoTitle?: boolean };
 type StoredPlugin = (
   | Omit<NotificationPlugin, "hasKey">
   | Omit<RoleplayPlugin, "hasKey">
@@ -721,12 +721,13 @@ export class PersonalAccount extends DurableObject<Env> {
         agentName,
       );
       this.sql.exec("UPDATE inbox SET sessionId = ? WHERE id = ?", session.id, id);
-      this.saveSession({
+      const updatedSession = {
         ...session,
-        title: session.messageCount ? session.title : text.slice(0, 40),
         updatedAt: Date.now(),
         messageCount: session.messageCount + 1,
-      });
+      };
+      this.autoNameSession(updatedSession, text, 40);
+      this.saveSession(updatedSession);
       return reply;
     });
   }
@@ -1302,7 +1303,7 @@ export class PersonalAccount extends DurableObject<Env> {
     }
     return this.createSession(
       isRemoteAgent(p) ? null : p.modelId,
-      "新的对话",
+      "",
       false,
       connectionId,
       p.id,
@@ -1332,7 +1333,7 @@ export class PersonalAccount extends DurableObject<Env> {
       return null;
     }
     // If the return conversation was deleted, replacing it must remain possible after Plus expires.
-    return this.createSession(model.id, "新的对话", true, connectionId);
+    return this.createSession(model.id, "", true, connectionId);
   }
   private limits() {
     const plus = this.plan() === "plus";
@@ -1593,6 +1594,12 @@ export class PersonalAccount extends DurableObject<Env> {
       s.id,
       JSON.stringify(s),
     );
+  }
+  private autoNameSession(session: StoredSession, text: string, length: number) {
+    // Older rows have no flag: only the original default title is eligible.
+    if (!(session.autoTitle ?? session.title === "新的对话")) return;
+    session.title = text.slice(0, length);
+    session.autoTitle = false;
   }
   private linkSetting<T>(id: string, key: string, fallback: T): T {
     return this.getSetting(wechatLinkKey(id, key), fallback);
@@ -2802,7 +2809,7 @@ export class PersonalAccount extends DurableObject<Env> {
             : undefined;
         data = this.createSession(
           plugin ? ("modelId" in plugin ? plugin.modelId : null) : String(p.assistantId),
-          typeof p.title === "string" ? p.title : "新的对话",
+          typeof p.title === "string" ? p.title : "",
           false,
           typeof p.connectionId === "string" ? p.connectionId : this.selectedLink(),
           plugin?.id,
@@ -3091,7 +3098,7 @@ export class PersonalAccount extends DurableObject<Env> {
         (s) => !s.archived && (s.pluginInstanceId || models.some((a) => a.id === s.assistantId)),
       );
       if (next) this.selectSession(next);
-      else if (models[0]) this.createSession(models[0].id, "新的对话", true, connectionId);
+      else if (models[0]) this.createSession(models[0].id, "", true, connectionId);
     }
   }
   private selectSession(session: StoredSession) {
@@ -3126,7 +3133,7 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private createSession(
     assistantId: string | null,
-    title = "新的对话",
+    title = "",
     replacingDeleted = false,
     connectionId = this.selectedLink(),
     pluginInstanceId?: string,
@@ -3149,6 +3156,7 @@ export class PersonalAccount extends DurableObject<Env> {
       assistantId,
       ...(plugin ? { pluginInstanceId: plugin.id, pluginName: plugin.name } : {}),
       title: title.trim().slice(0, 80) || "新的对话",
+      autoTitle: !title.trim(),
       archived: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -3186,7 +3194,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.selectSession(s);
       return s;
     }
-    return this.createSession(id, "新的对话", false, connectionId);
+    return this.createSession(id, "", false, connectionId);
   }
   private changeSession(id: string, action: string, title = "") {
     this.busy();
@@ -3201,6 +3209,7 @@ export class PersonalAccount extends DurableObject<Env> {
     } else if (action === "rename") {
       if (!title.trim()) throw new AppError("title_required", "请输入会话名称");
       s.title = title.trim().slice(0, 80);
+      s.autoTitle = false;
     } else if (action === "restore") s.archived = false;
     else if (action === "reset") {
       const r = this.sql
@@ -3263,7 +3272,7 @@ export class PersonalAccount extends DurableObject<Env> {
       )
         this.createSession(
           replacementModel,
-          "新的对话",
+          "",
           action === "delete",
           connectionId,
           replacementPlugin?.id,
@@ -3767,7 +3776,7 @@ export class PersonalAccount extends DurableObject<Env> {
           );
           s.messageCount += 2;
           s.updatedAt = Date.now();
-          if (s.title === "新的对话") s.title = prompt.content.slice(0, 30);
+          this.autoNameSession(s, prompt.content, 30);
           this.saveSession(s);
         }
         this.sql.exec(
@@ -3958,7 +3967,7 @@ export class PersonalAccount extends DurableObject<Env> {
           );
           session.messageCount += 2;
           session.updatedAt = Date.now();
-          if (session.title === "新的对话") session.title = prompt.content.slice(0, 30);
+          this.autoNameSession(session, prompt.content, 30);
           this.saveSession(session);
         }
         this.sql.exec(
@@ -4202,7 +4211,7 @@ export class PersonalAccount extends DurableObject<Env> {
       return this.resumePersonalRun(id, connectionId, deadline);
     const defaultModel = this.assistants().find(isChatModel);
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
-      this.createSession(defaultModel.id, "新的对话", false, connectionId);
+      this.createSession(defaultModel.id, "", false, connectionId);
     const text = extractText(message);
     const assistants = this.assistants();
     const currentId = this.linkSetting(connectionId, "current", "");
@@ -4386,7 +4395,7 @@ export class PersonalAccount extends DurableObject<Env> {
           if (command[0] === "/new") {
             const story = this.createSession(
               s.assistantId,
-              "新的对话",
+              "",
               false,
               connectionId,
               s.pluginInstanceId,
