@@ -1,9 +1,11 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useId, useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowUpRight, Menu, X } from "lucide-react";
+import { ArrowUpRight, Menu, RefreshCw, X } from "lucide-react";
 import { Brand } from "./ui";
-import { UserMenu } from "./user-menu";
 import { useAuth } from "./auth";
+import { LoadErrorBoundary, reloadPage } from "./load-error-boundary";
+
+const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
 /**
  * 全站唯一页头。
@@ -30,7 +32,7 @@ type SiteHeaderProps = {
 };
 
 export function SiteHeader({ active, extra }: SiteHeaderProps) {
-  const { data: session, isPending } = useAuth();
+  const { data: session } = useAuth();
   const { pathname, hash } = useLocation();
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -58,8 +60,37 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     </>
   );
 
-  const account = isPending ? null : session ? (
-    <UserMenu key={session.user.id} user={session.user} />
+  const account = session ? (
+    <LoadErrorBoundary
+      key={session.user.id}
+      fallback={
+        <>
+          <span className="visually-hidden" role="alert">
+            账户菜单未能加载
+          </span>
+          <a href="/app">工作台</a>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="重新加载账户菜单"
+            title="重新加载账户菜单"
+            onClick={reloadPage}
+          >
+            <RefreshCw size={16} aria-hidden="true" />
+          </button>
+        </>
+      }
+    >
+      <Suspense
+        fallback={
+          <Link className="button small" to="/app">
+            进入工作台
+          </Link>
+        }
+      >
+        <UserMenu key={session.user.id} user={session.user} />
+      </Suspense>
+    </LoadErrorBoundary>
   ) : (
     <>
       <Link to="/login">登录</Link>
@@ -116,7 +147,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           </Link>
         ))}
         {extra}
-        {!isPending && !session && (
+        {!session && (
           <>
             <Link to="/login">登录</Link>
             <Link className="button site-mobile-cta" to="/register">

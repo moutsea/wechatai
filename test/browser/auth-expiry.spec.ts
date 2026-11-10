@@ -20,7 +20,7 @@ test.beforeAll(async () => {
         import { BrowserRouter, Route, Routes } from 'react-router-dom';
         import { AuthProvider, useAuth } from './src/client/auth';
         import { AppProvider, useApp } from './src/client/context';
-        import { AuthPage } from './src/client/public-pages';
+        import { AuthPage } from './src/client/pages/auth-page';
         import './src/client/styles.css';
         function Identity() {
           const {data} = useAuth();

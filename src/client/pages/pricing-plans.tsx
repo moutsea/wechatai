@@ -142,7 +142,7 @@ export function PricingPlans() {
             </li>
             <li>
               <Check size={15} aria-hidden="true" />
-              图片、文件与语音附件
+              图片与文件输入
             </li>
           </ul>
           {isPending ? null : session ? (

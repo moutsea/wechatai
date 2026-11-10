@@ -8,9 +8,9 @@ export const wechatClaudePage: SeoPage = {
     "把 Claude 接进微信，不需要装 Claude Code，也不需要搭桥接服务。用 Anthropic Messages 协议填一个 API Key，扫码就能在微信里对话。",
   eyebrow: "Claude × 微信",
   h1: "微信接入 Claude：绕开桥接的那条路",
-  lede: "搜「微信 接入 Claude」，出来的大多是给 Claude Code 做桥接的方案。如果你只是想在微信里和 Claude 说话，那是绕远了。",
+  lede: "在微信里用 Claude，常被理解成必须给 Claude Code 做桥接。如果你只需要在微信里对话，直连 API 是一条更短的路径。",
   answer:
-    "在微信里使用 Claude 有两种做法：一是给 Claude Code 做桥接，需要本机常开并维护；二是直接用 Claude 的 API Key 通过 Anthropic Messages 协议接入微信，扫码绑定即可，不需要电脑常开。后者更适合只想在微信里对话的人。",
+    "在微信里使用 Claude 有两种做法：一是给 Claude Code 做桥接，需要本机常开并维护；二是直接用 Claude 的 API Key 通过 Anthropic Messages 协议接入微信，扫码绑定即可，不需要电脑常开。后者只提供模型对话，不读取本机文件、不执行命令，也不使用 Claude 聊天订阅的额度。",
   primaryKeyword: "微信 接入 Claude",
   secondaryKeywords: [
     "微信 使用 claude",
@@ -18,14 +18,14 @@ export const wechatClaudePage: SeoPage = {
     "claude api 微信",
     "微信 claude 教程",
   ],
-  highlights: ["不需要 Claude Code", "Anthropic Messages 协议直连", "长文场景优势明显"],
+  highlights: ["不需要 Claude Code", "Anthropic Messages 协议直连", "工具与视觉按模型核对"],
   sections: [
     {
       id: "two-roads",
       title: "桥接 Claude Code，和直接接 API，是两件事",
       body: `桥接方案是在自己的设备上运行 Claude Code，再用桥接程序转发微信消息。这需要保持运行设备在线，并维护 Claude Code 和桥接程序；设备关机或休眠时无法处理新任务。
 
-第二种是很多人没想到的：Claude 本身提供 API，只要用 **Anthropic Messages 协议**填一个 Key，就能把模型接进微信。模型在服务端跑，与你的电脑是否在线无关。
+第二种做法常被忽略：Claude 本身提供 API，只要用 **Anthropic Messages 协议**填一个 Key，就能把模型接进微信。模型在服务端跑，与你的电脑是否在线无关。
 
 两者的区别可以用一句话概括：**桥接是把「工具」接进微信，直连是把「模型」接进微信**。如果你需要 Claude 读写本地文件、跑命令，前者才有意义；如果只是对话、总结、写代码片段，后者够用且省事。
 
@@ -33,17 +33,17 @@ export const wechatClaudePage: SeoPage = {
     },
     {
       id: "why-claude",
-      title: "什么场景下 Claude 比其他模型更值",
-      body: `Claude 的单价通常高于 DeepSeek 一类模型，把它当日常聊天主力并不经济。它更值得用的场景是：
+      title: "什么任务适合 Claude：先核对四类条件",
+      body: `Claude 是一组模型，不是一个固定能力。是否适合你的任务，取决于具体型号和账号权限；先核对下面四类条件，再决定要不要配置：
 
-- **长文档理解**：丢一整篇论文、合同、需求文档进去做结构化总结，不易漏细节。
-- **代码阅读与改造**：让它在上下文里读懂一段陌生代码，再提出改动方案。
-- **写作的语感**：长段落的行文连贯性较好，适合需要通篇一致的长文。
-- **不容易被带偏**：在需要严格按格式输出时更稳。
+- **上下文长度**：需要一次读完长文档时，先看该模型 ID 的上下文窗口与最大输出，并对照你设置的输入上限。输入仍受微伴配置与模型窗口限制，必要时按章节分段。
+- **本地文件与命令**：读写在你的本机文件、执行命令，需要有相应权限且在线的 Agent 或工具环境（例如桥接 Claude Code）；普通 API 对话不具备本机文件权限，只发送你在微信里输入的文字和附件。
+- **图片与文件输入**：附件需要 Plus；只有图片输入要求所选模型支持视觉。TXT、DOCX 和可提取文字的 PDF 会先解析为文字，不要求视觉模型；扫描版 PDF 需要先做文字识别。可发送的文件类型与大小限制见 [图片、文件与语音](/docs/attachments)。
+- **费用与账号权限**：按服务商对该模型 ID 的公开单价和你的 token 用量结算，微伴 credits 另计；账号是否可用该模型，以控制台为准。没有你自己的用量与报价，无法判断 Claude 是否比别的模型更贵或更省。
 
-对应的做法是「按需切换」：默认用便宜的模型，遇到长文或复杂推理时，用 \`/wx models\` 查看编号，再用 \`/wx model 编号\` 切到 Claude。若 Claude 在另一渠道，先发 \`/wx channels\`，再用 \`/wx channel 编号\` 切换渠道。
+确认这些之后，如果任务确实需要长上下文或代码阅读，可以把 Claude 配成按需切换的模型；日常问答用哪个模型，取决于你核对过的单价与实测效果，不存在对所有账号都成立的默认选择。
 
-各模型会继续自己最近的活动会话，没有则新建。旧聊天记录保留，但上下文不会自动转给 Claude；请在切换后发送需要处理的材料。`,
+切换方式：先用 \`/wx models\` 查看编号，再用 \`/wx model 编号\` 切到 Claude；若 Claude 在另一渠道，先发 \`/wx channels\`，再用 \`/wx channel 编号\` 切换渠道。各模型会继续自己最近的活动会话，没有则新建。旧聊天记录保留，但上下文不会自动转给 Claude；请在切换后发送需要处理的材料。`,
     },
     {
       id: "config",
@@ -62,7 +62,7 @@ export const wechatClaudePage: SeoPage = {
       title: "长文场景的实操建议",
       body: `微信里处理长文档，瓶颈往往不是模型，而是输入方式：
 
-- **先把文档变成文字**：截图里的文字模型读不了，需要先转成文本（或让模型读图片，附件功能需要 Plus）。
+- **先把材料变成可用输入**：文档可先发文件（格式与大小限制见 [图片、文件与语音](/docs/attachments)，需 Plus）；截图需要所选模型支持图片输入才能读，纯文本模型读不了，应先转成文字。
 - **分段喂**：一次贴太长会触及输入上限，按章节分几次发，让它在同一会话里累积上下文。
 - **明确输出格式**：例如「用三级标题 + 要点列表，不超过 500 字」，比「总结一下」有用得多。
 - **善用会话**：用 \`/wx new\` 为每份文档开独立会话，避免和别的任务串味。
@@ -71,21 +71,22 @@ export const wechatClaudePage: SeoPage = {
     },
     {
       id: "cost",
-      title: "成本：Claude 会比 DeepSeek 贵多少",
-      body: `具体倍数取决于你选的型号与输入输出比例，不同时期价格也会调整，所以这里不给绝对值，只给结构：
+      title: "成本怎么算：两笔账分开核对",
+      body: `具体金额取决于你选的模型 ID、服务商当前价目表、输入输出比例，所以这里不给倍数，只给可核对的结构：
 
-- **模型费用**：由 Anthropic（或其授权渠道）按 token 计费，中文长文通常输入远大于输出。
-- **中转费用**：微伴按消息文字量计 credits，与模型品牌无关 —— 也就是说，用 Claude 时微伴这一侧的成本和用 DeepSeek 时一样。
+- **模型费用**：由 Anthropic（或其授权渠道）按该模型的 token 单价计费，以服务商账单为准；中文长文通常输入远大于输出。
+- **中转费用**：微伴按实际计量的输入、输出 tokens 收取 credits，相同输入输出量适用相同费率，不随模型品牌变化。换模型后，回复长度和历史上下文可能改变，实际消耗也会变化。
 - **输出更贵**：无论哪个模型，输出都按 8 倍权重计入 credits，长回答比长问题消耗更快。
+- **核对方法**：在服务商后台导出该 Key 的用量与账单，与微信里的消息记录对照，两笔费用分开加总。
 
-结论是：**用 Claude 的主要成本在模型侧，不在中转侧**。想让成本可控，最好的办法是把 Claude 放在「需要时才用」的位置，而不是设为默认。`,
+比较成本时，要同时核对服务商单价和实际输入输出量。先看 [费用估算](/pricing#estimate)，填入查到的单价和预计用量，再结合实际消耗决定是否设为常用模型；没有你自己的用量与报价时，本站不宣称 Claude 比其它模型更贵或更便宜。`,
     },
   ],
   faq: [
     {
       question: "在微信里用 Claude 需要装 Claude Code 吗？",
       answer:
-        "不需要。直接使用 Claude 的 API Key，通过 Anthropic Messages 协议接入即可。Claude Code 是编程工具，只有当你要它读写本地文件、执行命令时，才需要走桥接方案。",
+        "不需要。直接使用 Claude 的 API Key，通过 Anthropic Messages 协议接入即可。本页比较的两种路径里，只有桥接具备本机文件与命令权限；这类操作还需要在线的 Agent 或工具环境，普通 API 对话只处理你发送的文字与附件。",
     },
     {
       question: "Claude 的订阅能直接当 API 用吗？",
@@ -95,7 +96,7 @@ export const wechatClaudePage: SeoPage = {
     {
       question: "微信里能发图片给 Claude 看吗？",
       answer:
-        "可以，图片与文件属于附件功能，需要 Plus。语音需要微信转写为文字后才能处理；没有附带转写时请改发文字。",
+        "要看具体模型是否支持图片输入：附件功能需要 Plus，且所选模型 ID 必须支持视觉，否则会报错或忽略图片。语音需要微信转写为文字后才能处理；没有附带转写时请改发文字。先用一张图测试，不要按品牌推断。",
     },
     {
       question: "Claude 和 DeepSeek 能同时配置吗？",
@@ -105,7 +106,7 @@ export const wechatClaudePage: SeoPage = {
     {
       question: "通过第三方中转访问 Claude 安全吗？",
       answer:
-        "取决于该中转是否可信：你的消息与 Key 都会经过它。选择时看它是否加密存储 Key、是否公开说明转发路径。若在意，请使用 Anthropic 官方地址。",
+        "取决于该中转是否可信，以及它是否被服务商条款和你所在地区规则允许：你的消息与 Key 都会经过它。选择时看它是否加密存储 Key、是否公开说明转发路径与运营主体。若在意，请使用 Anthropic 官方地址；本站不建议用任何中转规避地区限制或服务商规则。",
     },
   ],
   related: [
@@ -116,5 +117,5 @@ export const wechatClaudePage: SeoPage = {
     { label: "渠道与模型配置", href: "/docs/channels-models" },
     { label: "价格与免费额度", href: "/pricing" },
   ],
-  updatedAt: "2026-10-24",
+  updatedAt: "2026-11-10",
 };

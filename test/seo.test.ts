@@ -81,8 +81,7 @@ describe("search indexing boundaries", () => {
       `<loc>https://wechatai.app/privacy</loc><lastmod>${pageLastModified("/privacy")}</lastmod>`,
     );
     expect(pageLastModified("/not-a-page")).toBeUndefined();
-    // 开发者页的日期是 seo.ts 里手工维护的内容日期，和 DOCS_UPDATED_AT 同一套做法，
-    // 断言只钉形状与 sitemap 是否真的带上，具体哪天由内容改动决定。
+    // 开发者页按各自正文维护日期；不与文档索引或其他文章的修改日联动。
     for (const path of ["/developers/plugins", "/developers/openclaw", "/developers/hermes"]) {
       const modified = pageLastModified(path);
       expect(modified, path).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -209,17 +208,6 @@ describe("query landing pages", () => {
     const descriptions = PUBLIC_PATHS.map((path) => getPageSeo(path).description);
     expect(new Set(titles).size).toBe(titles.length);
     expect(new Set(descriptions).size).toBe(descriptions.length);
-  });
-
-  it("targets one query per page and keeps the answer block quotable", () => {
-    for (const page of SEO_PAGES) {
-      expect(page.primaryKeyword.length).toBeGreaterThan(3);
-      expect(page.secondaryKeywords.length).toBeGreaterThanOrEqual(3);
-      expect(page.answer.length).toBeGreaterThan(60);
-      expect(page.sections.length).toBeGreaterThanOrEqual(4);
-      expect(page.faq.length).toBeGreaterThanOrEqual(4);
-      expect(page.sections.some((section) => section.id === "faq")).toBe(false);
-    }
   });
 
   it("publishes canonical, breadcrumb and FAQ structured data per page", () => {

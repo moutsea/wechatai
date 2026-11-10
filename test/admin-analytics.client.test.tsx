@@ -28,7 +28,7 @@ const report = (days = 7, pv = 123): AdminAnalytics => ({
     countries: [],
     devices: [],
   },
-  conversions: { total: 0, unattributed: 0, sessions: pv ? 1 : 0, rate: 0, rows: [] },
+  conversions: { total: 0, unattributed: 0, sessions: pv ? 1 : 0, rate: 0, rows: [], sourceRows: [] },
   funnel: emptyFunnelSummary({ from: "2026-10-25", to: "2026-10-25", days }),
 });
 

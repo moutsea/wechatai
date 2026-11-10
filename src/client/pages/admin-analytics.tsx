@@ -249,7 +249,9 @@ export function AnalyticsReport({ data }: { data: AnalyticsData }) {
           <p className="analytics-empty">暂无来源记录</p>
         )}
         <p className="admin-footnote">
-          直接访问表示未获得外部来源，也可能来自未传递来源的应用。各来源的访客数分别去重，同一访客可出现在多个来源中。
+          直接访问表示未获得外部来源，也可能来自未传递来源的应用。ChatGPT、Perplexity
+          等引荐只代表可识别的点击，不等于 AI
+          提及或引用总量。各来源的访客数分别去重，同一访客可出现在多个来源中。
         </p>
       </section>
       <section className="admin-panel">
@@ -287,6 +289,49 @@ export function AnalyticsReport({ data }: { data: AnalyticsData }) {
         )}
         <p className="admin-footnote">
           未归因注册会话：{number(conversions.unattributed)}。汇总包含全部记录，不受前 15 项限制。
+        </p>
+      </section>
+      <section className="admin-panel">
+        <div className="admin-panel-heading">
+          <div>
+            <h2>来源 × 落地页</h2>
+            <p>按注册会话数显示前 15 项 · 来源与落地页都取该会话首次访问的归因</p>
+          </div>
+        </div>
+        {conversions.sourceRows.length ? (
+          <div className="admin-table-scroll">
+            <table className="analytics-combo" aria-label="来源与落地页注册转化">
+              <thead>
+                <tr>
+                  <th>来源</th>
+                  <th>落地页</th>
+                  <th>活跃会话</th>
+                  <th>注册会话</th>
+                  <th>转化率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conversions.sourceRows.map((row) => (
+                  <tr key={`${row.source}\u0000${row.landingPath}`}>
+                    <td className="analytics-label">
+                      {row.source ? sourceName(row.source) : "未识别来源"}
+                    </td>
+                    <td className="analytics-label">{row.landingPath}</td>
+                    <td>{number(row.sessions)}</td>
+                    <td>{number(row.signups)}</td>
+                    <td>{percent(row.rate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="analytics-empty">暂无可归因的来源与落地页组合</p>
+        )}
+        <p className="admin-footnote">
+          「未识别来源」表示该会话没有拿到外部 UTM 或
+          referrer：可能是真正的直接访问，也可能是来源被应用剥掉，不能当作已确认的直接访问。同一会话只计一次，明细截断不影响上方汇总；来源与注册数不代表
+          AI 引用或付费 ROI。
         </p>
       </section>
       <section className="admin-panel">

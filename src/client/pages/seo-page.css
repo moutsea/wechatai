@@ -160,7 +160,8 @@
   margin-top: 48px;
 }
 
-.seopage-toc {
+.seopage-toc,
+.seopage-details {
   margin-bottom: 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -168,7 +169,8 @@
   padding: 12px 16px;
 }
 
-.seopage-toc summary {
+.seopage-toc summary,
+.seopage-details summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -184,6 +186,16 @@
   gap: 7px;
   margin-top: 12px;
   font-size: 13.5px;
+}
+.seopage-details[open] summary {
+  margin-bottom: 16px;
+}
+.seopage-details summary svg {
+  flex: none;
+  transition: transform 0.18s;
+}
+.seopage-details[open] summary svg {
+  transform: rotate(180deg);
 }
 
 .seopage-toc nav a {

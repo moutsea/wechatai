@@ -167,3 +167,13 @@ node scripts/verify-https.mjs
 D1、Durable Object 数据、R2 文件和加密密钥需要分别规划备份。D1 导出不包含账户对象里的聊天或钱包。生产密钥丢失后，单独恢复数据库不能恢复加密凭据。
 
 参考：[Wrangler 配置](https://developers.cloudflare.com/workers/wrangler/configuration/)、[Durable Object 迁移](https://developers.cloudflare.com/durable-objects/reference/durable-objects-migrations/)。
+
+## 7. 搜索内容更新与重新抓取
+
+修改插件权益或接入条件后，先发布网站，再按以下顺序检查。代码更新和 sitemap 更新不等于搜索引擎已经更新摘要。
+
+1. 直接打开受影响的公开 URL，核对正文、description、自引用 canonical 和 sitemap 的 `lastmod`；`lastmod` 只记录该页实际内容变化，不能为了催抓取批量改成今天。
+2. 本次权益更正重点核对 `https://wechatai.app/docs/ds-chat`、`https://wechatai.app/docs/notifications` 和 `https://wechatai.app/docs/getting-started`。Free 最多配置 1 个插件；模型与搜索服务商费用另计，消息提醒 Webhook 不扣平台 credits。
+3. 在已验证的 Google Search Console 中对这几个 URL 使用「网址检查 → 测试实际网址」，确认已发布新内容后请求编入索引；核对已提交的 `https://wechatai.app/sitemap.xml`。如已开通 Bing Webmaster Tools，再提交相同的更新 URL。需要站长平台账号权限，仓库内的验证 meta 不代表当前操作者有权限，也不保证重新抓取或收录。
+4. 更新自己控制的仓库说明、产品介绍和社区帖子中的旧权益描述。外部转载无法由本站改写，应记录 URL 并联系发布者；不要用 `noindex` 或更换 canonical 隐藏仍然有效的教程。
+5. 分别记录「发布已验证」「请求已提交」「索引版本已更新」；只有在站长平台或实际搜索结果中观察到相应结果才标记完成。搜索缓存、摘要和 AI 引用可能独立滞后，不能把一次搜索抽样当成全站收录数量或排名结论。

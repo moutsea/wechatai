@@ -221,7 +221,14 @@ describe("admin analytics", () => {
     const data = await response.json<AdminAnalytics>();
     expect(data.traffic.range.days).toBe(7);
     expect(data.traffic.totals).toEqual({ pv: 0, visitorDays: 0, sessions: 0, pagesPerSession: 0 });
-    expect(data.conversions).toEqual({ total: 0, unattributed: 0, sessions: 0, rate: 0, rows: [] });
+    expect(data.conversions).toEqual({
+      total: 0,
+      unattributed: 0,
+      sessions: 0,
+      rate: 0,
+      rows: [],
+      sourceRows: [],
+    });
   });
 
   it("validates the range instead of silently accepting invalid or unbounded queries", async () => {
@@ -316,6 +323,13 @@ describe("admin analytics", () => {
       signups: 1,
       rate: 1,
     });
+    // 同一份归因驱动来源×落地页：UTM 会话不会同时算到 google.com 名下，
+    // 未识别来源保持空串而不是被写成「直接访问」。
+    expect(today.conversions.sourceRows).toEqual([
+      { source: "google.com", landingPath: "/pricing", sessions: 1, signups: 1, rate: 1 },
+      { source: "", landingPath: "/", sessions: 1, signups: 0, rate: 0 },
+      { source: "utm:newsletter", landingPath: "/docs", sessions: 1, signups: 0, rate: 0 },
+    ]);
     const week = await (
       await request("/api/admin/analytics?days=7", { headers: auth })
     ).json<AdminAnalytics>();

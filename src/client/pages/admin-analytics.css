@@ -52,6 +52,11 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+/* 来源×落地页两列都是长文本，收窄一点让五列在窄屏也能读完。 */
+.admin-page table.analytics-combo td.analytics-label {
+  min-width: 120px;
+  max-width: 260px;
+}
 .analytics-empty {
   padding: 20px 0;
   text-align: center;

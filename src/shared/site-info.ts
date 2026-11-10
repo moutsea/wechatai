@@ -1,4 +1,10 @@
 export const SUPPORT_EMAIL = "cfjwlchangji@gmail.com";
+/** Public GitHub profile links this product and the same support email. */
+export const SITE_MAINTAINER = {
+  name: "Coder Liang",
+  profile: "https://github.com/moutsea",
+  website: "https://coderliang.com",
+} as const;
 /** 隐私政策最近一次实质修改的日期。 */
 export const POLICY_UPDATED_AT = "2026-11-08";
 /** 服务协议最近一次实质修改的日期（改访问统计没有动条款正文）。 */
@@ -22,7 +28,7 @@ export const INFO_PAGES = {
     title: "联系我们",
     eyebrow: "HERE TO HELP",
     description:
-      "使用中遇到问题，或有想分享的建议？写邮件给微伴，说明发生了什么、操作步骤和大致时间，能让我们更快定位问题。",
+      "微伴 Wechatai 由 Coder Liang（GitHub：moutsea）独立维护。查看项目来源、公开变更记录和配置、连接、账单支持方式；本站与腾讯微信无官方关联。",
   },
 } as const;
 export type InfoPageKind = keyof typeof INFO_PAGES;
@@ -31,6 +37,5 @@ export type InfoPageKind = keyof typeof INFO_PAGES;
 export const INFO_PAGE_UPDATED_AT: Record<InfoPageKind, string> = {
   terms: TERMS_UPDATED_AT,
   privacy: POLICY_UPDATED_AT,
-  // 联系页正文在这次改访问统计时没有改动，沿用上一次的日期，不假报更新。
-  contact: TERMS_UPDATED_AT,
+  contact: "2026-11-09",
 };

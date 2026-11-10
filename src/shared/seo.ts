@@ -1,9 +1,9 @@
-import { INFO_PAGES, INFO_PAGE_UPDATED_AT, type InfoPageKind } from "./site-info";
+import { INFO_PAGES, INFO_PAGE_UPDATED_AT, SITE_MAINTAINER, type InfoPageKind } from "./site-info";
 import {
   DOC_ARTICLES,
   DOCS_TITLE,
   DOCS_DESCRIPTION,
-  DOCS_UPDATED_AT,
+  DOCS_INDEX_UPDATED_AT,
   docPath,
   findDocArticle,
 } from "./docs";
@@ -18,7 +18,7 @@ import { WECHAT_LINK_LIMITS } from "./wechat-links";
 export const SITE_URL = "https://wechatai.app";
 export const SITE_NAME = "微伴 Wechatai";
 // Update only when the actual homepage content changes, never on every build.
-const HOME_UPDATED_AT = "2026-11-08";
+const HOME_UPDATED_AT = "2026-11-10";
 export const SOCIAL_IMAGE = `${SITE_URL}/og-image.png`;
 export const PUBLIC_PATHS = [
   "/",
@@ -65,7 +65,7 @@ const OFFICIAL_PROFILES = ["https://github.com/moutsea/wechatai"];
 /**
  * `/developers/*` 三页不走 `SEO_PAGES` 的内容表：正文分别来自 `openclaw-docs.ts`、
  * `hermes-docs.ts` 与 `plugin-docs.ts`，这几个模块没有导出更新日期。这里的 `updatedAt`
- * 和 `HOME_UPDATED_AT` / `DOCS_UPDATED_AT` / `INFO_PAGE_UPDATED_AT` 是同一套做法：
+ * 和 `HOME_UPDATED_AT` / `DOCS_INDEX_UPDATED_AT` / `INFO_PAGE_UPDATED_AT` 一样手动维护：
  * 取该页正文模块与其渲染组件最近一次改动的日期，手动维护，绝不用构建时间冒充内容更新。
  * 三个页面都是 2026-10-24：plugin-docs.ts 与 openclaw-guide.tsx（同时渲染 OpenClaw 与
  * Hermes 两页）在这一天改动。
@@ -109,6 +109,7 @@ function organizationNode() {
     name: SITE_NAME,
     alternateName: ["Wechatai", "微伴"],
     url: `${SITE_URL}/`,
+    description: "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
     // 站内唯一的方形品牌资源是 favicon.svg（64×64 矢量）；og-image.png 是 1200×630 横幅，不能当 logo。
     logo: {
       "@type": "ImageObject",
@@ -119,6 +120,16 @@ function organizationNode() {
       caption: SITE_NAME,
     },
     sameAs: [...OFFICIAL_PROFILES],
+  };
+}
+
+function maintainerNode() {
+  return {
+    "@type": "Person",
+    "@id": `${SITE_URL}/contact#maintainer`,
+    name: SITE_MAINTAINER.name,
+    url: SITE_MAINTAINER.profile,
+    sameAs: [SITE_MAINTAINER.website],
   };
 }
 
@@ -213,9 +224,13 @@ function seoLandingPage(page: SeoPage): PageSeo {
         description: page.description,
         inLanguage: "zh-CN",
         image: SOCIAL_IMAGE,
-        datePublished: page.updatedAt,
         dateModified: page.updatedAt,
-        author: { "@type": "Organization", name: "微伴团队", url: `${SITE_URL}/` },
+        author: {
+          "@id": ORGANIZATION_ID,
+          "@type": "Organization",
+          name: SITE_NAME,
+          url: `${SITE_URL}/`,
+        },
         publisher,
       }
     : {
@@ -315,9 +330,13 @@ export function getPageSeo(pathname: string): PageSeo {
                 description,
                 inLanguage: "zh-CN",
                 image: SOCIAL_IMAGE,
-                datePublished: DOCS_UPDATED_AT,
-                dateModified: DOCS_UPDATED_AT,
-                author: { "@type": "Organization", name: "微伴团队", url: `${SITE_URL}/` },
+                dateModified: article.updatedAt,
+                author: {
+                  "@id": ORGANIZATION_ID,
+                  "@type": "Organization",
+                  name: SITE_NAME,
+                  url: `${SITE_URL}/`,
+                },
                 publisher: organizationNode(),
                 articleSection: article.category,
                 isPartOf: { "@id": `${SITE_URL}/docs` },
@@ -360,6 +379,9 @@ export function getPageSeo(pathname: string): PageSeo {
         description: info.description,
         url: canonical,
         inLanguage: "zh-CN",
+        ...(path === "/contact"
+          ? { about: softwareApplicationRef(), mainEntity: maintainerNode() }
+          : {}),
       },
     };
   }
@@ -432,6 +454,7 @@ export function getPageSeo(pathname: string): PageSeo {
             description,
             operatingSystem: "Web",
             image: SOCIAL_IMAGE,
+            maintainer: maintainerNode(),
             featureList: [
               "使用自己的 API Key 与模型服务地址",
               "在微信中切换大模型并管理聊天会话",
@@ -535,8 +558,9 @@ export function replaceSeoHead(html: string, seo: PageSeo) {
 
 export function pageLastModified(path: string): string | undefined {
   if (path === "/") return HOME_UPDATED_AT;
-  if (path === "/docs" || DOC_ARTICLES.some((article) => docPath(article.slug) === path))
-    return DOCS_UPDATED_AT;
+  if (path === "/docs") return DOCS_INDEX_UPDATED_AT;
+  const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
+  if (article) return article.updatedAt;
   const landing = findSeoPage(path);
   if (landing) return landing.updatedAt;
   const developer = findDeveloperPage(path);

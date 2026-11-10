@@ -60,8 +60,11 @@ const mount = async () =>
     ),
   );
 async function click(selector: string) {
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(container.querySelector(selector)).not.toBeNull();
+  });
   const target = container.querySelector<HTMLButtonElement>(selector);
-  expect(target).not.toBeNull();
   await act(async () => target!.click());
 }
 

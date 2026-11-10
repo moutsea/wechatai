@@ -108,6 +108,9 @@
   color: var(--green);
   margin-bottom: 24px;
 }
+.contact-content section[id] {
+  scroll-margin-top: 84px;
+}
 .contact-content h2 {
   margin-bottom: 12px;
   font-size: 22px;

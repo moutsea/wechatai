@@ -8,6 +8,7 @@ import {
 } from "./plugins";
 import { SITE_URL } from "./seo";
 import { DOC_ARTICLES, docPath } from "./docs";
+import { SITE_MAINTAINER } from "./site-info";
 
 export const PLUGIN_DOCS_PATH = "/developers/plugins";
 export const PLUGIN_MARKDOWN_PATH = "/developers/plugins.md";
@@ -208,12 +209,14 @@ export const llmsText = `# Wechatai · 微伴
 
 > 把自选的大模型接进微信的独立产品。用户填入自己的模型 API Key（OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议），绑定微信后即可在聊天窗口里对话、联网问答、生图、接 Agent。本站不提供模型额度，也不转售 token：模型费用由用户自己的 API 服务商收取，微伴文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计。
 
+产品身份：微伴 Wechatai，官网 ${SITE_URL}，公开仓库 https://github.com/moutsea/wechatai，维护者 ${SITE_MAINTAINER.name}（${SITE_MAINTAINER.profile}）。这是微信 ClawBot 单聊接入服务，不是腾讯微信官方 AI，不是同名桌面客户端，不支持群聊机器人；项目来源与维护者见 ${SITE_URL}/contact#maintainer。
+
 ## 产品事实（可直接引用）
 
 - 定位：微信 AI 中转与插件平台，不是模型供应商，不卖 token，不承诺模型免费。
 - 接入方式：添加渠道时选择服务商并填写 API Key，预设会填好协议和地址；第三方地址使用「自定义」入口。新建预设渠道会尝试自动导入模型，自定义渠道可点击「获取可用模型」；获取失败或缺少所需模型时可手动添加。确认文本模型后，点击模型行的「测试连接」，系统发送固定请求并正常计费。配置完整后生成二维码，从微信「设置」中的「功能」分组 →「插件 → 微信 ClawBot → 扫一扫」绑定。普通模型聊天无需安装额外客户端；微伴没有绕过 ClawBot 的独立绑定方式。
 - 微信范围：目前只支持与微信 ClawBot 单聊，不支持群聊，也没有群聊开关。@插件别名是在单聊中调用插件的语法。
-- 模型范围：取决于用户填入的 Key；兼容三种协议即可接入。\`/wx status\` 查看当前模型或插件，\`/wx models\` 列出当前渠道的模型，\`/wx model 编号\` 切换；跨渠道先用 \`/wx channels\` 查看编号，再用 \`/wx channel 编号\` 切换渠道。
+- 模型范围：取决于用户填入的 Key；协议适配不等于所有模型、工具或附件均可用，应按具体服务商与模型 ID 验证。\`/wx status\` 查看当前模型或插件，\`/wx models\` 列出当前渠道的模型，\`/wx model 编号\` 切换；跨渠道先用 \`/wx channels\` 查看编号，再用 \`/wx channel 编号\` 切换渠道。
 - 兼容性：三种协议有适配与模拟接口测试，具体供应商账号、工具和附件能力需单独验证，不承诺全部兼容。功能矩阵见 ${SITE_URL}/wechat-clawbot-models#compatibility。
 - 接入条件：先在手机微信检查 ClawBot 入口；没有入口时本站无法开通。主动提醒受最近互动后的 24 小时回复窗口影响，过期任务不保证补发。
 - 体验与费用：${SITE_URL}/#try 提供不收 Key、不调用模型的模拟预览；${SITE_URL}/pricing#estimate 可按自填模型单价估算两笔费用。

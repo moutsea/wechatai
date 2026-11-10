@@ -1,5 +1,5 @@
-import { useEffect, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowRight, Check, ChevronDown, Sprout } from "lucide-react";
@@ -86,20 +86,6 @@ function SeoRelated({ links }: { links: SeoPage["related"] }) {
 }
 
 export function SeoPageView({ page, children }: { page: SeoPage; children?: ReactNode }) {
-  const { hash } = useLocation();
-  useEffect(() => {
-    if (!hash) return;
-    let id: string;
-    try {
-      id = decodeURIComponent(hash.slice(1));
-    } catch {
-      return;
-    }
-    // Wait for the shared route scroll reset before positioning this section.
-    const frame = requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView());
-    return () => cancelAnimationFrame(frame);
-  }, [page.path, hash]);
-
   return (
     <div className="seopage">
       <a className="seopage-skip" href="#seopage-content">
@@ -177,6 +163,15 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
             <section key={section.id} id={section.id}>
               <h2>{section.title}</h2>
               <SeoMarkdown>{section.body}</SeoMarkdown>
+              {section.details && (
+                <details className="seopage-details">
+                  <summary>
+                    {section.details.summary}
+                    <ChevronDown size={16} aria-hidden="true" />
+                  </summary>
+                  <SeoMarkdown>{section.details.body}</SeoMarkdown>
+                </details>
+              )}
             </section>
           ))}
           <SeoFaq items={page.faq} />

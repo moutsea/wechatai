@@ -129,6 +129,18 @@ export type LandingConversion = {
   rate: number;
 };
 
+/**
+ * 来源 × 落地页的联合维度。`source` 沿用流量汇总的编码：`utm:<值>`、referrer 主机名，
+ * 或空串。空串表示「未识别来源」，不等同于确认的直接访问。
+ */
+export type SourceLandingConversion = {
+  source: string;
+  landingPath: string;
+  sessions: number;
+  signups: number;
+  rate: number;
+};
+
 export type SignupConversions = {
   /** 区间内注册的去重会话数，并非全部新用户数。 */
   total: number;
@@ -137,6 +149,8 @@ export type SignupConversions = {
   sessions: number;
   rate: number;
   rows: LandingConversion[];
+  /** 来源 × 落地页前 15 项；汇总口径与 `rows` 相同，不因截断而改变。 */
+  sourceRows: SourceLandingConversion[];
 };
 
 export type AdminAnalytics = {

@@ -2,7 +2,7 @@ import { act, StrictMode, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { AuthPage } from "../src/client/public-pages";
+import { AuthPage } from "../src/client/pages/auth-page";
 import { VerifyEmailPage, ResetPasswordPage } from "../src/client/pages/auth-recovery";
 import { Billing } from "../src/client/pages/billing";
 import { browserPageViewReporter, trackFunnel } from "../src/client/analytics-client";

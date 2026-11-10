@@ -4,6 +4,7 @@ import {
   INFO_PAGES,
   INFO_PAGE_UPDATED_AT,
   SUPPORT_EMAIL,
+  SITE_MAINTAINER,
   type InfoPageKind,
 } from "../../shared/site-info";
 import { SiteFooter } from "../site-footer";
@@ -312,13 +313,24 @@ function Contact() {
         </a>
         <span>点击邮箱，使用你的邮件应用发送。</span>
       </section>
-      <section>
-        <h2>微伴 Wechatai · 项目与支持</h2>
+      <section id="maintainer">
+        <h2>微伴 Wechatai · 项目与维护者</h2>
         <p>
-          独立开发的微信 AI 接入服务，与微信、腾讯及模型供应商无官方关联。
-          <a href="https://github.com/moutsea/wechatai">公开仓库与维护者信息</a>、
-          <a href="https://github.com/moutsea/wechatai/commits/main/">代码变更记录</a>
-          可供核对；开源不等于经过独立安全审计。本站支持配置、连接及账单问题，不能代为开放微信入口或管理服务商账户。
+          微伴 Wechatai（wechatai.app）由独立开发者{" "}
+          <a href={SITE_MAINTAINER.profile}>{SITE_MAINTAINER.name}（moutsea）</a>
+          维护。可从其 <a href={SITE_MAINTAINER.website}>个人网站</a> 和公开 GitHub
+          资料核对项目链接。 本站通过微信 ClawBot 单聊接入用户自己的模型与 Agent，不是微信官方
+          AI，也不提供群聊机器人。
+        </p>
+        <p>
+          本站与同名桌面客户端或其他 WeChatAI 项目无关，产品身份以本域名和{" "}
+          <a href="https://github.com/moutsea/wechatai">moutsea/wechatai 仓库</a>为准。
+          <a href="https://github.com/moutsea/wechatai/commits/main/">公开变更记录</a>
+          可核对维护情况；开源不等于经过独立安全审计，与微信、腾讯及模型供应商无官方关联。
+        </p>
+        <p>
+          本站支持配置、连接及账单问题，不能代为开放微信入口或管理服务商账户。
+          联系邮箱见上方；请勿在公开 issue 中提交密钥或个人聊天内容。
         </p>
       </section>
       <div className="contact-grid">

@@ -4,7 +4,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "../src/client/auth";
 import { AppProvider, useApp } from "../src/client/context";
-import { AuthPage } from "../src/client/public-pages";
+import { AuthPage } from "../src/client/pages/auth-page";
 import { ForgotPasswordPage } from "../src/client/pages/auth-recovery";
 import { ApiError, type api } from "../src/client/api";
 import type { Snapshot } from "../src/shared/types";
@@ -82,12 +82,10 @@ beforeEach(async () => {
   auth.session.isRefetching = false;
   auth.session.error = null;
   auth.session.refetch.mockReset().mockResolvedValue(undefined);
-  auth.signIn
-    .mockReset()
-    .mockResolvedValue({
-      error: null,
-      data: { user: auth.signedIn.user, token: auth.signedIn.session.token },
-    });
+  auth.signIn.mockReset().mockResolvedValue({
+    error: null,
+    data: { user: auth.signedIn.user, token: auth.signedIn.session.token },
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (path: string) => {

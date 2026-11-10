@@ -25,7 +25,7 @@ GSC / Bing WMT 只回答「搜索引擎里的词带来了多少点击」，回�
   → Better Auth databaseHooks.user.create.after（仅真实创建新账户）
   → recordSignupConversion()        （服务端生成 eventId，按 session_id 反查落地页）
   → D1 signup_attributions          （ON CONFLICT(event_id) DO NOTHING）
-  → getSignupConversions() / pnpm analytics 的「落地页转化」
+  → getSignupConversions() / pnpm analytics 的「落地页转化」与「来源 × 落地页」
 ```
 
 | 环节 | 文件 | 关键行为 |
@@ -69,6 +69,20 @@ PV 高不等于有用。要回答「写哪个页面值得」，需要把注册�
 
 报表里的「总注册数」和「已归因」是**同一条汇总查询分别按会话去重**算出来的，不是对展示用的明细行求和 —— 明细有 `LIMIT 15`，拿它求和会把排在第 16 位之后的落地页带来的注册误算成未归因，报表上就会凭空出现一个缺口。
 
+### 来源 × 落地页：同一个页面在不同来源下的表现
+
+`conversions.rows` 只回答「哪个页面带来了注册」，无法回答「从搜索来的 `/pricing` 和从公众号来的 `/pricing` 效果是否一样」。`conversions.sourceRows` 在同一份归因上加一维：
+
+- 维度是 `(source, landingPath)`，两者都取该会话**同一次**首访归因：注册会话用 `signup_attributions` 里保存的 `landing_path` / `referrer_host` / `utm_source` 快照，未注册会话用保留期内最早的一条 `page_views`；
+- 未注册会话的首访通过 `(session_id, created_at)` 索引按 `created_at, id LIMIT 1` 取得记录 ID，再连接该行读取页面和来源；不要对这些会话的全部历史浏览做窗口排序，也不要分别取多个字段导致首访不一致。注册快照仍优先，空快照不回填。
+- `source` 沿用流量汇总的编码（`SOURCE_EXPR`）：非空 UTM → `utm:<值>`，其次 referrer 主机名，都没有是空串。UTM 与 referrer 同时存在时只算 UTM，不会把一次访问同时记到两个来源；
+- 展示层把空串写成「未识别来源」，**不等于**确认的直接访问：可能是真正的直接访问，也可能是微信等应用剥掉了 referrer，或用户点了「复制链接」。流量汇总的 `sources` 仍按原口径把空标签写成「直接访问」，两种展示刻意不复用同一句文案；
+- 前 15 项按「注册会话数 → 会话数 → 来源 → 落地页」稳定排序，和 `rows` 一样**不影响** `total` / `unattributed` / `sessions` / `rate`：汇总来自独立的去重查询，不是对截断后的明细求和；
+- 同一会话只出现在一个 `(source, landingPath)` 里，因此来源行之和不会超过 `rows` 的总会话数；
+- 幂等与去重规则与 `rows` 完全一致：注册按会话去重，未归因注册不会因为事后的一次浏览被补上来源或落地页。
+
+这条维度足以回答「来自 `chatgpt.com` 的落地页有没有带来注册」，但**不能**据此推断 AI 引用量或付费 ROI：referrer 缺失、跳转链路被应用截断、以及付费回调里没有会话号这三点都仍在，报表文案里也明确写出了这一点。
+
 这也是为什么表里存的是 `landing_path` 快照而不是外键：`page_views` 180 天后会清理，归因记录要能独立存活。清理同样覆盖两张表（cron 里的 `pruneExpiredPageViews` 做 `batch` 双删），否则隐私政策承诺的 180 天只对一半数据成立。
 
 ## 来源归因：按会话首次归因，不是逐页
@@ -77,7 +91,7 @@ PV 高不等于有用。要回答「写哪个页面值得」，需要把注册�
 
 所以 `page-view-tracker.tsx` 在会话第一次上报时把 `{referrer, utm_source, utm_medium, utm_campaign}` 存进 `sessionStorage`（`wechatai:attribution`），整个会话后续的浏览都复用这份归因。这样 `referrer_host` 与 `utm_*` 的含义是「**这次会话从哪来**」，而不是「这一页是从哪跳来的」。
 
-来源的归类顺序（`SOURCE_EXPR`）：有 `utm_source` 用 `utm:<值>`，否则用 referrer 主机名，都没有算直接访问。本站自己的主机名会被剥掉（`siteHost` 由路由按请求 Host 传入），所以站内跳转不会被误记成来源。
+来源的归类顺序（`src/shared/analytics-queries.ts` 的 `SOURCE_EXPR`，Worker 与 CLI 共用一份）：有 `utm_source` 用 `utm:<值>`，否则用 referrer 主机名，都没有算直接访问。本站自己的主机名会被剥掉（`siteHost` 由路由按请求 Host 传入），所以站内跳转不会被误记成来源。
 
 ## 隐私边界
 
@@ -102,7 +116,7 @@ pnpm analytics --local         # 本地开发库
 
 线上查询走 `wrangler.production.local.jsonc`（不存在时脚本会提示，避免把线上库地址写进仓库）。缺表时错误信息会直接提示先跑 `pnpm db:migrate:remote`。
 
-输出包含：总览（PV / 去重访客 / 会话 / 人均页数）、按天趋势、热门页面 Top 20、来源 Top 15（含人均页数）、**落地页转化**（会话 / 注册 / 转化率，附未归因条数）、国家地区、设备。`signup_attributions` 表还没建时只有这一段会显示一行提示，其余照常输出。
+输出包含：总览（PV / 去重访客 / 会话 / 人均页数）、按天趋势、热门页面 Top 20、来源 Top 15（含人均页数）、**落地页转化**（会话 / 注册 / 转化率，附未归因条数）、**来源 × 落地页**（前 15 项，空来源显示为「未识别来源」）、国家地区、设备。`signup_attributions` 表还没建时只有这两段注册相关输出会显示一行提示，其余照常输出。来源×落地页的脚注明确说明同一会话只算一次、未识别来源不等于确认的直接访问，也不代表 AI 引用或付费 ROI。
 
 ## 上线步骤
 
@@ -123,7 +137,8 @@ pnpm analytics --local         # 本地开发库
 - **重复注册提交**（连点、重试）：`signup_attributions` 按 `eventId` 幂等写入，报表按会话去重，同一会话最多算 1 次注册，汇总和明细一致。
 - **空路径 / 带查询串 / 带扩展名 / 一次性令牌页**：一律不接收，避免把垃圾请求记成首页浏览。
 - **iPad 的 UA**：iPadOS 13 起 Safari 上报的 UA 与 macOS 完全一致，只看 UA 会把 iPad 记成桌面。浏览器上报 `touch`（`navigator.maxTouchPoints > 0`），服务端据此把「Macintosh UA + 有触摸」认回平板。踩过的坑：第一版判定写成「有触摸 + `mac os x`」，而 iPhone 的 UA 里也带 `like Mac OS X`，结果所有 iPhone 都被记成平板 —— 现在只认 `macintosh` 并排除 `iphone|ipod|mobile`。
-- **空标签的含义**：来源为空才是「直接访问」，国家/设备为空只是没取到值，标成「（未知）」。两者曾统一标成直接访问，会让报表看着像所有未知地区的访问都来自直接访问。
+- **空标签的含义**：来源为空才是「直接访问」，国家/设备为空只是没取到值，标成「（未知）」。两者曾统一标成直接访问，会让报表看着像所有未知地区的访问都来自直接访问。来源×落地页里同一个空串标成「未识别来源」而不是「直接访问」：那一格只说明没拿到外部来源，不能确认是用户直接输入地址。
+- **来源×落地页的分母与截断**：明细只显示前 15 个 `(source, landingPath)` 组合，但 `total` / `unattributed` / `sessions` / `rate` 来自独立的去重汇总查询，不随截断变化。同一会话只落在一个组合里，因此可见行求和不会超过汇总。
 - **保留期怎么真的被执行**：交给 Worker 已有的每分钟 cron（`src/server/index.ts` 的 `scheduled`，同一处还在清 `auth_email_limit`）跑 `pruneExpiredPageViews()`，两张表一起删。
   这里换过一次方案：一开始是「写入时按 1% 概率顺带清理」，省掉定时任务，但那样只能保证「有访问就会清」——站点一旦安静下来，旧数据就永远留着，与隐私政策承诺的 180 天不符。既然本来就有 cron，交给它更实在：到期即删，与流量无关。更早的一版概率写成万分之一，日访问 20 次时平均 250 天才清一次，同样对不上承诺。
 - **同页内的锚点跳转不算浏览**：文档页和落地页都有目录（`<a href="#faq">`）。点锚点、或从锚点按后退回到同一页时，`pathname` 与 `search` 都没变、只有 `hash` 变了，这是同一次浏览里的定位移动。上报时带着 `search` 与 `hash`，这种情况直接跳过 —— 否则每个点目录的读者都会给自己的页面多加一次 PV，热门页排名被「目录好不好点」污染。
@@ -136,15 +151,15 @@ pnpm analytics --local         # 本地开发库
 
 - **客户端与服务端的字段契约**（`test/analytics-client.test.ts`）：客户端上报的请求体会被喂进服务端的 `pageViewPayloadSchema` 做校验。这条测试抓到了一个真实事故 —— 浏览器原先直接把内部归因对象的键（`utm_source`）展开进请求体，而服务端 schema 是 `.strict()` + camelCase（`utmSource`），于是**线上每一条浏览都会被判成非法字段、静默丢弃**，整套统计一条数据也收不到。字段名现在逐项写出，并且两侧对 UTM 做同一套归一化（trim → 小写 → 截断 60）。测试还直接使用真实 ID 生成器，以及 `randomUUID` 不可用时的 `getRandomValues` UUID v4 分支，防止测试替身掩盖格式错误。
 - **浏览器端的隐私判断**（同一文件）：DNT / GPC、一次性令牌页不上报、后台标签页延迟上报、同一 `location.key` 只记一次、往返缓存恢复算新浏览、会话号复用、首次归因 —— 核心逻辑被抽成 `src/client/analytics-client.ts` 的依赖注入工厂，测试里用假存储、假 navigator、假 fetch 跑，不需要 jsdom。
-- **注册查询共用实现**：Worker 和 CLI 使用同一个 `signupConversionQueries`。`test/analytics.test.ts` 用真实 D1 验证跨日窗口、历史首访、快照保留、重复归因总数、未归因和超过 15 个落地页的汇总。
+- **注册查询共用实现**：Worker 和 CLI 使用同一个 `signupConversionQueries`（含 `sourceFunnel`）。`test/analytics.test.ts` 用真实 D1 验证跨日窗口、历史首访、快照保留、重复归因总数、未归因和超过 15 个落地页的汇总，以及来源×落地页的 UTM 优先级、同页不同来源、跨窗口首访、快照保留、未归因不回填和 top15 不影响总计。
 - **真实注册链路**（`test/analytics-auth.test.ts`）：从真实客户端 UUID 到 PV 接口、邮箱注册与重复注册、Google/GitHub 首次注册和回访、已有账户关联、DNT/GPC、统计表缺失不影响注册。
-- **保留期真的会执行**：`pruneExpiredPageViews(env, now)` 独立成函数，`test/analytics.test.ts` 直接断言 200 天前的记录（两张表）被删、10 天前的还在；`test/analytics-sql-drift.test.ts` 再盯住 cron 里那一行调用 —— 有人把它删掉时线上没有任何症状，只有这条断言会红。
+- **保留期行为**：`pruneExpiredPageViews(env, now)` 独立成函数，`test/analytics.test.ts` 用真实数据库验证两张表删除过期记录、保留近期记录；不以源码字符串匹配代替行为验证。
 
 ## 管理后台
 
 `/app/admin?tab=analytics` 提供流量统计，支持今天、近 7 / 30 / 90 天和手动刷新。`GET /api/admin/analytics?days=7` 复用服务端汇总，仅管理员可读，禁止缓存；天数必须为 1–90 的整数。
 
-页面展示 PV、每日去重访客加总、每日趋势、来源和浏览深度、热门页面、落地页注册转化。注册汇总按会话去重，分母是区间内有浏览或注册的全部会话（含未归因），不会用截断后的前 15 个落地页计算总转化率。访客数不代表跨天独立人数，注册会话也不等于全部新增用户。
+页面展示 PV、每日去重访客加总、每日趋势、来源和浏览深度、热门页面、落地页注册转化，以及来源 × 落地页（前 15 项，空来源显示为「未识别来源」）。注册汇总按会话去重，分母是区间内有浏览或注册的全部会话（含未归因），不会用截断后的前 15 个落地页或来源组合计算总转化率。访客数不代表跨天独立人数，注册会话也不等于全部新增用户；来源×落地页同样不能读成 AI 引用或付费 ROI。
 
 切换区间会取消旧请求并清空旧结果；请求（含响应体读取）超过 15 秒会取消并显示可重试的超时提示。加载失败不展示为零或“暂无数据”，迟到响应不能覆盖当前结果。进入流量页不触发账户统计同步。
 

@@ -5,7 +5,7 @@ export const pricingPage: SeoPage = {
   kind: "pricing",
   title: "价格：免费版每天 100 credits，Plus ¥9.9/月",
   description:
-    "微伴不卖 token。模型费用由你自己的 API 服务商收取，本站只按消息中转量计 credits。免费版每天 100 credits，Plus ¥9.9/月或 ¥88/年。",
+    "模型费用另付给 API 服务商。微伴文字按加权 token 计 credits，AI 生图每张 5 credits、描述文字另计。免费版每天 100 credits，Plus ¥9.9/月或 ¥88/年。",
   eyebrow: "价格",
   h1: "价格：我们不卖 token",
   lede: "你的模型费用付给模型服务商，本站只收消息中转的费用。两笔账分开，各自可核 —— 这是本站定价的全部逻辑。",
@@ -133,5 +133,5 @@ export const pricingPage: SeoPage = {
     { label: "微信 AI", href: "/wechat-ai" },
     { label: "注册并免费试用", href: "/register" },
   ],
-  updatedAt: "2026-11-08",
+  updatedAt: "2026-11-10",
 };

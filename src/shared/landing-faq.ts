@@ -25,7 +25,7 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   },
   {
     question: "Plus 多少钱？比免费版多什么？",
-    answer: `Plus ${yuan(PLUS_MONTHLY_YUAN)}/月或 ${yuan(PLUS_YEARLY_YUAN)}/年，每天 ${DAILY_CREDIT_DEFAULTS.plus} credits、${WECHAT_LINK_LIMITS.plus} 个微信链接、插件数量不限，并解锁图片、文件与语音附件。`,
+    answer: `Plus ${yuan(PLUS_MONTHLY_YUAN)}/月或 ${yuan(PLUS_YEARLY_YUAN)}/年，每天 ${DAILY_CREDIT_DEFAULTS.plus} credits、${WECHAT_LINK_LIMITS.plus} 个微信链接、插件数量不限，并解锁图片与文件输入。带微信转写文字的语音，Free 也能使用；没有转写时，任何套餐都无法读取原始语音。`,
   },
   {
     question: "支持哪些模型？",

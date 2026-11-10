@@ -62,12 +62,13 @@ export function SiteFooter() {
           <Link to="/terms">服务协议</Link>
           <Link to="/privacy">隐私政策</Link>
           <Link to="/contact">联系我们</Link>
+          <Link to="/contact#maintainer">维护者与项目来源</Link>
           <a href="https://github.com/moutsea/wechatai">项目源码与维护者</a>
           <a href="https://github.com/moutsea/wechatai/commits/main/">公开变更记录</a>
         </nav>
       </div>
       <div className="landing-footer-bottom">
-        <span>© {new Date().getFullYear()} Wechatai · 微伴</span>
+        <span>© {new Date().getFullYear()} 微伴 Wechatai</span>
         <p>独立开发产品，与微信、腾讯及模型供应商无官方关联。</p>
       </div>
     </footer>

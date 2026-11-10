@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, Copy, Bell, Bot, MessageSquare } from "lucide-react";
 import { estimateTextCost } from "../shared/cost-estimate";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
+import { useDocumentInputs } from "./document-handoff";
 import "./getting-started-preview.css";
 
 export function WechatPrerequisite() {
@@ -187,8 +188,21 @@ export function GettingStartedPreview() {
   );
 }
 
+const estimateInputIds = [
+  "estimate-input-tokens",
+  "estimate-output-tokens",
+  "estimate-rounds",
+  "estimate-input-price",
+  "estimate-output-price",
+];
+
 export function CostEstimator() {
-  const [values, setValues] = useState(["1000", "1000", "10", "", ""]);
+  const inputs = useDocumentInputs();
+  const [values, setValues] = useState(() =>
+    ["1000", "1000", "10", "", ""].map(
+      (value, index) => inputs?.get(estimateInputIds[index]) ?? value,
+    ),
+  );
   const fields = [
     "每轮输入 tokens（含历史上下文）",
     "每轮输出 tokens",
@@ -212,6 +226,7 @@ export function CostEstimator() {
           <label key={label}>
             {label}
             <input
+              id={estimateInputIds[index]}
               type="number"
               min="0"
               step={index < 3 ? "1" : "any"}

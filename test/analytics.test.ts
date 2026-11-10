@@ -610,6 +610,11 @@ describe("getSignupConversions", () => {
       { label: "/wechat-deepseek", sessions: 2, signups: 1, rate: 0.5 },
       { label: "/pricing", sessions: 1, signups: 1, rate: 1 },
     ]);
+    // 没有外部来源时 source 留空，由展示层标成「未识别来源」；不在数据层冒充直接访问。
+    expect(summary.sourceRows).toEqual([
+      { source: "", landingPath: "/wechat-deepseek", sessions: 2, signups: 1, rate: 0.5 },
+      { source: "", landingPath: "/pricing", sessions: 1, signups: 1, rate: 1 },
+    ]);
   });
 
   it("reports signups it could not attribute instead of dropping them", async () => {
@@ -620,6 +625,9 @@ describe("getSignupConversions", () => {
     expect(summary.total).toBe(1);
     expect(summary.unattributed).toBe(1);
     expect(summary.rows).toEqual([{ label: "/wechat-ai", sessions: 1, signups: 0, rate: 0 }]);
+    expect(summary.sourceRows).toEqual([
+      { source: "", landingPath: "/wechat-ai", sessions: 1, signups: 0, rate: 0 },
+    ]);
   });
 
   it("does not let one session count as two signups", async () => {
@@ -632,6 +640,9 @@ describe("getSignupConversions", () => {
     const summary = await getSignupConversions(env, 7);
     expect(summary.total).toBe(1);
     expect(summary.rows).toEqual([{ label: "/pricing", sessions: 1, signups: 1, rate: 1 }]);
+    expect(summary.sourceRows).toEqual([
+      { source: "", landingPath: "/pricing", sessions: 1, signups: 1, rate: 1 },
+    ]);
     expect(summary.unattributed).toBe(0);
   });
 
@@ -644,6 +655,7 @@ describe("getSignupConversions", () => {
       sessions: 1,
       rate: 1,
       rows: [],
+      sourceRows: [],
     });
   });
 
@@ -686,6 +698,7 @@ describe("getSignupConversions", () => {
         sessions: 2,
         rate: 0.5,
         rows: [{ label: "/wechat-ai", sessions: 2, signups: 1, rate: 0.5 }],
+        sourceRows: [{ source: "", landingPath: "/wechat-ai", sessions: 2, signups: 1, rate: 0.5 }],
       });
     }
   });
@@ -702,6 +715,7 @@ describe("getSignupConversions", () => {
       sessions: 1,
       rate: 1,
       rows: [{ label: "/pricing", sessions: 1, signups: 1, rate: 1 }],
+      sourceRows: [{ source: "", landingPath: "/pricing", sessions: 1, signups: 1, rate: 1 }],
     };
     expect(await getSignupConversions(env, 1)).toEqual(expected);
     await env.DB.prepare("DELETE FROM page_views").run();
@@ -717,6 +731,7 @@ describe("getSignupConversions", () => {
       sessions: 1,
       rate: 1,
       rows: [],
+      sourceRows: [],
     });
   });
 
@@ -741,6 +756,159 @@ describe("getSignupConversions", () => {
     expect(summary.rows).toHaveLength(15);
     expect(summary.rows.reduce((sum, row) => sum + row.signups, 0)).toBe(15);
     expect(summary.rows.every((row) => row.rate === 1)).toBe(true);
+  });
+});
+
+describe("source × landing conversion", () => {
+  const agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)";
+  const base = Date.now() - 2 * 86_400_000;
+  const visit = async (
+    sessionId: string,
+    pathname: string,
+    minute: number,
+    { referrer = "", utmSource = "", now = base + minute * 60_000 } = {},
+  ) =>
+    recordPageView(env, {
+      payload: event({ sessionId, pathname, referrer, utmSource }),
+      ip: "203.0.113.7",
+      userAgent: agent,
+      country: "CN",
+      siteHost: "wechatai.app",
+      now,
+    });
+  const register = async (sessionId: string, minute = 10) =>
+    recordSignupConversion(env, {
+      payload: { eventId: crypto.randomUUID(), sessionId },
+      userAgent: agent,
+      now: base + minute * 60_000 + 30_000,
+    });
+
+  it("splits the same landing page by source and lets UTM win over the referrer", async () => {
+    // 三个会话都落在 /pricing，但来源不同：UTM 与 referrer 同时存在时必须用 UTM，
+    // 不能同时计入两个来源；空来源单独成为「未识别来源」。
+    await visit("session-utm", "/pricing", 1, {
+      referrer: "https://www.google.com/",
+      utmSource: "Newsletter",
+    });
+    await register("session-utm", 2);
+    await visit("session-google", "/pricing", 3, { referrer: "https://www.google.com/" });
+    await register("session-google", 4);
+    await visit("session-direct", "/pricing", 5);
+    await visit("session-ai", "/wechat-ai", 6, {
+      referrer: "https://chatgpt.com/c/abc",
+    });
+    await register("session-ai", 7);
+
+    const summary = await getSignupConversions(env, 7);
+    expect(summary.total).toBe(3);
+    expect(summary.sessions).toBe(4);
+    // 同一落地页按来源拆成三行，而不是把来源混在一起。
+    expect(summary.rows).toEqual([
+      { label: "/pricing", sessions: 3, signups: 2, rate: 2 / 3 },
+      { label: "/wechat-ai", sessions: 1, signups: 1, rate: 1 },
+    ]);
+    expect(summary.sourceRows).toEqual([
+      { source: "chatgpt.com", landingPath: "/wechat-ai", sessions: 1, signups: 1, rate: 1 },
+      { source: "google.com", landingPath: "/pricing", sessions: 1, signups: 1, rate: 1 },
+      { source: "utm:newsletter", landingPath: "/pricing", sessions: 1, signups: 1, rate: 1 },
+      { source: "", landingPath: "/pricing", sessions: 1, signups: 0, rate: 0 },
+    ]);
+  });
+
+  it("takes the source and landing page from the first visit, even outside the window", async () => {
+    // 会话的首次浏览早于查询窗口：来源与落地页都必须沿用首次浏览，
+    // 不能被窗口内更晚的一次浏览改写（那会把 Google 流量记到别的页面/来源上）。
+    const oldVisit = base - 40 * 86_400_000;
+    await visit("session-old", "/wechat-clawbot", 0, {
+      referrer: "https://www.google.com/",
+      now: oldVisit,
+    });
+    await visit("session-old", "/pricing", 0, { now: base + 60_000 });
+
+    const summary = await getSignupConversions(env, 7);
+    expect(summary.rows).toEqual([{ label: "/wechat-clawbot", sessions: 1, signups: 0, rate: 0 }]);
+    expect(summary.sourceRows).toEqual([
+      { source: "google.com", landingPath: "/wechat-clawbot", sessions: 1, signups: 0, rate: 0 },
+    ]);
+  });
+
+  it("keeps all first-visit fields from the earliest inserted row when timestamps tie", async () => {
+    const now = base + 60_000;
+    await visit("session-tied-source", "/wechat-deepseek", 0, {
+      referrer: "https://www.google.com/",
+      now,
+    });
+    await visit("session-tied-source", "/pricing", 0, {
+      utmSource: "later-campaign",
+      now,
+    });
+
+    const summary = await getSignupConversions(env, 7);
+    expect(summary.sourceRows).toEqual([
+      { source: "google.com", landingPath: "/wechat-deepseek", sessions: 1, signups: 0, rate: 0 },
+    ]);
+    expect(summary.rows).toEqual([{ label: "/wechat-deepseek", sessions: 1, signups: 0, rate: 0 }]);
+  });
+
+  it("keeps the source snapshot when its page views are gone", async () => {
+    // 归因快照保存了首访的来源；page_views 过期被清理后，来源×落地页仍然可读，
+    // 且不能因为浏览明细没了就变成「未识别来源」。
+    await visit("session-snapshot-source", "/wechat-deepseek", 1, {
+      referrer: "https://www.bing.com/search",
+      utmSource: "newsletter",
+    });
+    await register("session-snapshot-source", 2);
+    const expected = [
+      {
+        source: "utm:newsletter",
+        landingPath: "/wechat-deepseek",
+        sessions: 1,
+        signups: 1,
+        rate: 1,
+      },
+    ];
+    expect((await getSignupConversions(env, 7)).sourceRows).toEqual(expected);
+    await env.DB.prepare("DELETE FROM page_views").run();
+    expect((await getSignupConversions(env, 7)).sourceRows).toEqual(expected);
+  });
+
+  it("does not credit a late visit to an unattributed registration", async () => {
+    // 注册时没有快照就保持未归因；事后的一次浏览不能补出一条来源×落地页。
+    await register("session-orphan", 1);
+    await visit("session-orphan", "/pricing", 2, { referrer: "https://www.google.com/" });
+
+    const summary = await getSignupConversions(env, 7);
+    expect(summary).toMatchObject({ total: 1, unattributed: 1, sessions: 1 });
+    expect(summary.rows).toEqual([]);
+    expect(summary.sourceRows).toEqual([]);
+  });
+
+  it("caps the source × landing detail at 15 without changing any total", async () => {
+    // 明细截断不能反过来影响汇总：曾把明细行求和当总数，第 16 项之后的注册
+    // 就被算成未归因，报表上凭空出现缺口。
+    for (let index = 0; index < 18; index += 1) {
+      const suffix = String(index).padStart(2, "0");
+      await visit(`session-combo-${suffix}`, `/wechat-page-${suffix}`, index, {
+        utmSource: `campaign-${suffix}`,
+      });
+      await register(`session-combo-${suffix}`, index);
+    }
+
+    const summary = await getSignupConversions(env, 7);
+    expect(summary.total).toBe(18);
+    expect(summary.unattributed).toBe(0);
+    expect(summary.sessions).toBe(18);
+    expect(summary.rate).toBe(1);
+    expect(summary.rows).toHaveLength(15);
+    expect(summary.sourceRows).toHaveLength(15);
+    expect(summary.sourceRows[0]).toEqual({
+      source: "utm:campaign-00",
+      landingPath: "/wechat-page-00",
+      sessions: 1,
+      signups: 1,
+      rate: 1,
+    });
+    expect(summary.sourceRows.reduce((sum, row) => sum + row.signups, 0)).toBe(15);
   });
 });
 

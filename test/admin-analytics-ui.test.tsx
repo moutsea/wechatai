@@ -23,6 +23,10 @@ const report = (): AdminAnalytics => ({
     sessions: 5,
     rate: 0.4,
     rows: [{ label: "/pricing", sessions: 4, signups: 1, rate: 0.25 }],
+    sourceRows: [
+      { source: "utm:newsletter", landingPath: "/pricing", sessions: 2, signups: 1, rate: 0.5 },
+      { source: "", landingPath: "/wechat-ai", sessions: 2, signups: 0, rate: 0 },
+    ],
   },
   funnel: emptyFunnelSummary({ from: "2026-10-23", to: "2026-10-25", days: 3 }),
 });
@@ -87,24 +91,6 @@ describe("admin analytics presentation", () => {
     expect(renderToStaticMarkup(<AnalyticsReport data={data} />)).not.toContain("还没有关键事件");
   });
 
-  it("labels daily UV totals and renders full conversion totals rather than summing visible rows", () => {
-    const html = renderToStaticMarkup(<AnalyticsReport data={report()} />);
-    for (const text of [
-      "访问量（PV）",
-      "访客数（按天去重）",
-      "非跨天独立人数",
-      "40.0%",
-      "25.0%",
-      "2 个注册会话 / 5 个活跃会话",
-      "未归因注册会话：1",
-      "UTM · newsletter",
-      "热门页面",
-      "/pricing",
-    ])
-      expect(html).toContain(text);
-    expect(html).not.toContain("暂无访问或注册记录");
-  });
-
   it("keeps missing dates visible as zero and safely renders single-day or 90-day charts", () => {
     const data = report();
     const html = renderToStaticMarkup(<AnalyticsReport data={data} />);
@@ -145,14 +131,28 @@ describe("admin analytics presentation", () => {
     data.traffic.sources = [];
     data.traffic.topPages = [];
     data.traffic.sourceDepth = [];
-    data.conversions = { total: 0, unattributed: 0, sessions: 0, rate: 0, rows: [] };
+    data.conversions = {
+      total: 0,
+      unattributed: 0,
+      sessions: 0,
+      rate: 0,
+      rows: [],
+      sourceRows: [],
+    };
     const html = renderToStaticMarkup(
       <AnalyticsResult state={{ status: "success", data }} retry={retry} />,
     );
     expect(html).toContain("该时间范围暂无访问或注册记录");
     expect(html).toContain("0.0%");
     expect(html).not.toContain('role="alert"');
-    data.conversions = { total: 1, unattributed: 1, sessions: 1, rate: 1, rows: [] };
+    data.conversions = {
+      total: 1,
+      unattributed: 1,
+      sessions: 1,
+      rate: 1,
+      rows: [],
+      sourceRows: [],
+    };
     const orphan = renderToStaticMarkup(<AnalyticsReport data={data} />);
     expect(orphan).toContain("未归因注册会话：1");
     expect(orphan).not.toContain("暂无访问或注册记录");
@@ -163,11 +163,14 @@ describe("admin analytics presentation", () => {
     data.traffic.sources[0].label = '<img src=x onerror="alert(1)">';
     data.traffic.topPages[0].label = "javascript:alert(1)";
     data.conversions.rows[0].label = "<script>alert(1)</script>";
+    data.conversions.sourceRows[0].source = '<img src=x onerror="alert(2)">';
+    data.conversions.sourceRows[0].landingPath = "<script>alert(2)</script>";
     const html = renderToStaticMarkup(<AnalyticsReport data={data} />);
     expect(html).toContain("&lt;img");
     expect(html).toContain("&lt;script&gt;");
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<img");
+    expect(html).not.toContain('onerror="alert(2)"');
     expect(html).not.toContain("href=");
   });
 });

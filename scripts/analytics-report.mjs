@@ -2,7 +2,7 @@
 // 用法：pnpm analytics [--days 7] [--local]
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { signupConversionQueries } from "../src/shared/analytics-queries.ts";
+import { SOURCE_EXPR, signupConversionQueries } from "../src/shared/analytics-queries.ts";
 
 const DAY_OFFSET_SECONDS = 8 * 60 * 60;
 
@@ -26,11 +26,6 @@ function shanghaiDay(at = new Date()) {
 function daysAgo(days) {
   return shanghaiDay(new Date(Date.now() - days * 86_400_000));
 }
-
-const SOURCE_EXPR = `CASE
-  WHEN utm_source <> '' THEN 'utm:' || utm_source
-  WHEN referrer_host <> '' THEN referrer_host
-  ELSE '' END`;
 
 function query(label, sql, { days, local }) {
   const args = ["exec", "wrangler", "d1", "execute", "wechatai-db", "--json", "--command", sql];
@@ -156,16 +151,18 @@ function main() {
      GROUP BY label ORDER BY pv DESC, label LIMIT 5`,
     scope,
   );
-  // 注册归因：落地页按会话的第一次浏览算，注册数按同一会话的去重计数。
+  // 注册归因：落地页与来源都按会话的第一次浏览算，注册数按同一会话的去重计数。
+  // 来源×落地页与落地页汇总共用同一份 CTE 和去重集合，三个数字对得上。
   // 这块依赖 0015 的迁移；没应用时只提示一句，不让整张报表失败。
   let signups = { total: 0 };
   let funnel = [];
+  let sourceFunnel = [];
   let funnelNote = "";
   try {
     const queries = signupConversionQueries(from, to);
     signups = query("注册汇总", queries.totals, scope)[0] ?? {};
-    const funnelRows = query("落地页转化", queries.funnel, scope);
-    funnel = funnelRows;
+    funnel = query("落地页转化", queries.funnel, scope);
+    sourceFunnel = query("来源×落地页", queries.sourceFunnel, scope);
   } catch (error) {
     funnelNote = `注册归因暂时不可用：${String(error instanceof Error ? error.message : error).split("\n")[0]}`;
   }
@@ -244,6 +241,27 @@ function main() {
           const missing = Math.max(total - attributed, 0);
           return `\n注册 ${total} 次，其中 ${attributed} 次能归到落地页${missing > 0 ? `，${missing} 次未归因（注册时没有可用的落地页浏览记录）` : ""}。`;
         })()}`
+      : "",
+    sourceFunnel.length
+      ? `\n来源 × 落地页（会话注册 / 会话，前 15 项；同一会话只算一次）\n${table(
+          ["来源", "落地页", "会话", "注册", "转化率"],
+          sourceFunnel.map((row) => {
+            const rowSessions = num(row.sessions);
+            const rowSignups = num(row.signups);
+            const source = String(row.source ?? "");
+            return [
+              source
+                ? source.startsWith("utm:")
+                  ? `UTM · ${source.slice(4)}`
+                  : source
+                : "未识别来源",
+              String(row.path ?? "") || "（未知）",
+              String(rowSessions),
+              String(rowSignups),
+              percent(rowSignups, rowSessions),
+            ];
+          }),
+        )}\n未识别来源表示这次会话没有拿到外部 UTM 或 referrer，可能是真正的直接访问，也可能是来源被应用剥掉；AI 引荐只代表可识别点击，不代表提及或引用总量，也不能推断付费 ROI。`
       : "",
     countries.length
       ? `\n国家地区\n${table(

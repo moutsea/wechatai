@@ -23,6 +23,8 @@
 
 模型、搜索、生图接口由用户自行配置。微伴不附送上游 API，也不托管 OpenClaw / Hermes 的运行环境。项目独立开发，与腾讯、微信和模型供应商没有官方关联。
 
+维护者：[Coder Liang（moutsea）](https://github.com/moutsea) · [个人网站](https://coderliang.com) · [项目来源与支持](https://wechatai.app/contact#maintainer)。微伴 Wechatai（wechatai.app）通过微信 ClawBot 单聊接入，不提供群聊机器人，与同名桌面客户端或其他 WeChatAI 项目无关。
+
 站内通知支持管理员保存草稿、发布普通或重要通知、Markdown 预览、编辑、下架和删除。用户从工作台右上角小铃铛或「通知」页面查看；重要通知在工作台顶部展示，已读和关闭状态按用户保存。后台入口为「管理后台 → 通知管理」，Free 和 Plus 用户均可接收。
 
 ## 内置插件
@@ -61,6 +63,8 @@ pnpm dev
 ```
 
 打开 [localhost:5173](http://localhost:5173)：
+
+先在手机微信「我 → 设置 → 功能 → 插件」确认有「微信 ClawBot」入口。没有入口时，本项目不能代开或绕过；无需先付费或提交模型 Key，可先看[首页模拟预览](https://wechatai.app/#try)。
 
 1. 注册账号，在「渠道与模型」中填写协议、Base URL、API Key 并添加模型。
 2. 在「微信连接」创建链接，使用手机微信 **设置 → 插件（部分版本位于“功能”）→ 微信 ClawBot → 扫一扫** 完成绑定。

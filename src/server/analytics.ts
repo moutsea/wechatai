@@ -25,7 +25,7 @@ import { funnelEventPayloadSchema, type FunnelEventPayload } from "../shared/fun
 import { isServerFunnelEvent } from "../shared/funnel-policy";
 import { summarizeFunnel, type FunnelCount, type FunnelSummary } from "../shared/funnel-report";
 import { AppError, secret } from "./config";
-import { signupConversionQueries } from "../shared/analytics-queries";
+import { SOURCE_EXPR, signupConversionQueries } from "../shared/analytics-queries";
 
 /**
  * 第一方访问统计的写入与汇总。
@@ -231,12 +231,7 @@ export async function pruneExpiredPageViews(env: Env, now: number = Date.now()) 
   ]);
 }
 
-/** 来源归类：有 UTM 用 UTM，其次 referrer 主机名，都没有算直接访问。 */
-const SOURCE_EXPR = `CASE
-  WHEN utm_source <> '' THEN 'utm:' || utm_source
-  WHEN referrer_host <> '' THEN referrer_host
-  ELSE '' END`;
-
+/** 来源归类与报表脚本共用 `SOURCE_EXPR`：有 UTM 用 UTM，其次 referrer 主机名。 */
 type Row = Record<string, unknown>;
 const num = (value: unknown) => (typeof value === "number" ? value : Number(value ?? 0));
 
@@ -385,9 +380,12 @@ export async function getSignupConversions(
   const to = shanghaiDay(at);
   const from = shanghaiDaysAgo(window - 1, at);
   const queries = signupConversionQueries(from, to);
-  const [totals, rows] = await env.DB.batch<Row>([
+  // 汇总、落地页、来源×落地页一次发出；三者共用同一份 signups/active_sessions，
+  // 不会因为某张表缺行而让三个数字对不上，也不做逐会话回查。
+  const [totals, rows, sourceRows] = await env.DB.batch<Row>([
     env.DB.prepare(queries.totals),
     env.DB.prepare(queries.funnel),
+    env.DB.prepare(queries.sourceFunnel),
   ]);
   const total = num(totals?.results?.[0]?.total);
   const attributed = num(totals?.results?.[0]?.attributed);
@@ -402,12 +400,25 @@ export async function getSignupConversions(
       rate: sessions > 0 ? signups / sessions : 0,
     };
   });
+  const combined = (sourceRows?.results ?? []).map((row) => {
+    const sessions = num(row.sessions);
+    const signups = num(row.signups);
+    return {
+      // 空来源保留空串；展示层标成「未识别来源」，不伪造成已确认的直接访问。
+      source: String(row.source ?? ""),
+      landingPath: String(row.path ?? "") || "（未知）",
+      sessions,
+      signups,
+      rate: sessions > 0 ? signups / sessions : 0,
+    };
+  });
   return {
     total,
     unattributed: Math.max(total - attributed, 0),
     sessions,
     rate: sessions > 0 ? total / sessions : 0,
     rows: list,
+    sourceRows: combined,
   };
 }
 

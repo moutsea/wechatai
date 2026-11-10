@@ -20,7 +20,6 @@ import {
   DOC_ARTICLES,
   DOC_GROUPS,
   DOC_TUTORIALS,
-  DOCS_UPDATED_AT,
   docPath,
   findDocArticle,
   guideSectionRedirect,
@@ -30,11 +29,13 @@ import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import { NotFound } from "../not-found";
 import { DOC_CONTENT } from "./docs-content";
+import { useDocumentInputs } from "../document-handoff";
 
-function DocsNavigation({ activePath }: { activePath: string }) {
+function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: string }) {
   // 文档一共二十来篇，本地过滤就够；不做全文检索，只匹配标题、分类和摘要，
   // 免得给出一个「搜得到但答不上」的结果。
-  const [query, setQuery] = useState("");
+  const inputs = useDocumentInputs();
+  const [query, setQuery] = useState(() => inputs?.get(inputId) ?? "");
   const keyword = query.trim().toLowerCase();
   const matches = (article: DocArticle) =>
     !keyword ||
@@ -49,10 +50,11 @@ function DocsNavigation({ activePath }: { activePath: string }) {
   }));
   const hits = groups.reduce((total, item) => total + item.articles.length, 0);
   return (
-    <nav aria-label="文档导航">
+    <nav aria-label="文档导航" data-handoff-focus-fallback={inputId}>
       <label className="docs-search">
         <Search size={15} aria-hidden="true" />
         <input
+          id={inputId}
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -61,6 +63,7 @@ function DocsNavigation({ activePath }: { activePath: string }) {
         />
       </label>
       <Link
+        id={`${inputId}-overview`}
         className="docs-nav-overview"
         to="/docs"
         aria-current={activePath === "/docs" ? "page" : undefined}
@@ -76,6 +79,7 @@ function DocsNavigation({ activePath }: { activePath: string }) {
               {articles.map((article) => (
                 <li key={article.slug}>
                   <Link
+                    id={`${inputId}-${article.slug}`}
                     to={docPath(article.slug)}
                     aria-current={activePath === docPath(article.slug) ? "page" : undefined}
                     onClick={() => setQuery("")}
@@ -94,7 +98,7 @@ function DocsNavigation({ activePath }: { activePath: string }) {
         </p>
       )}
       <div className="docs-nav-developer">
-        <Link to="/developers/plugins">
+        <Link id={`${inputId}-developer`} to="/developers/plugins">
           <Terminal size={15} />
           插件开发文档
           <ArrowUpRight size={13} />
@@ -114,8 +118,8 @@ function DocsLayout({ article, children }: { article?: DocArticle; children: Rea
       </a>
       <SiteHeader active="/docs" />
       <div className="docs-layout">
-        <aside className="docs-sidebar">
-          <DocsNavigation activePath={activePath} />
+        <aside id="docs-sidebar" className="docs-sidebar">
+          <DocsNavigation activePath={activePath} inputId="docs-search-desktop" />
         </aside>
         <details className="docs-mobile-navigation" key={pathname}>
           <summary>
@@ -126,7 +130,7 @@ function DocsLayout({ article, children }: { article?: DocArticle; children: Rea
             </span>
             <ChevronDown size={15} />
           </summary>
-          <DocsNavigation activePath={activePath} />
+          <DocsNavigation activePath={activePath} inputId="docs-search-mobile" />
         </details>
         <main id="doc-content" className="docs-main" tabIndex={-1}>
           <nav className="docs-breadcrumb" aria-label="面包屑导航">
@@ -238,14 +242,7 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
       navigate(legacyTarget, { replace: true });
       return;
     }
-    if (hash) {
-      // Run after the shared route scroll reset, including direct section links.
-      const frame = requestAnimationFrame(() =>
-        document.getElementById(hash.slice(1))?.scrollIntoView(),
-      );
-      return () => cancelAnimationFrame(frame);
-    }
-  }, [article?.slug, hash, legacyTarget, navigate]);
+  }, [legacyTarget, navigate]);
   if (!article) return <NotFound />;
   const content = DOC_CONTENT[article.slug];
   const currentIndex = DOC_ARTICLES.findIndex((item) => item.slug === article.slug);
@@ -268,7 +265,8 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
             <Clock3 size={13} />约 {article.minutes} 分钟
           </span>
           <span>
-            更新于 <time dateTime={DOCS_UPDATED_AT}>{DOCS_UPDATED_AT.replaceAll("-", ".")}</time>
+            更新于{" "}
+            <time dateTime={article.updatedAt}>{article.updatedAt.replaceAll("-", ".")}</time>
           </span>
         </div>
       </header>

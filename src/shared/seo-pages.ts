@@ -13,6 +13,8 @@ export interface SeoSection {
   title: string;
   /** Markdown body. Rendered server-side so crawlers see it without JavaScript. */
   body: string;
+  /** Optional advanced guidance, readable without JavaScript but collapsed by default. */
+  details?: { summary: string; body: string };
 }
 
 export interface SeoFaq {

@@ -10,7 +10,8 @@ import { DOC_SCREENSHOTS } from "./doc-screenshots";
 // The long-form guide now lives in small, independently linkable pages.
 export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocContent> = {
   notifications: {
-    intro: "把订单状态、监控告警、脚本结果发到自己的微信。只需发送 HTTP 请求，无需模型 API。",
+    intro:
+      "把订单状态、监控告警、脚本结果发到自己的微信。只需一条 HTTP 请求，无需模型 API；Free 用户也能用，推送不扣 credits。",
     sections: notificationSections.map((section) =>
       section.id === "setup"
         ? { ...section, screenshots: [DOC_SCREENSHOTS.notificationToken] }
@@ -19,8 +20,21 @@ export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocConte
   },
   "getting-started": {
     intro:
-      "微伴把你自己的模型和 Agent 接到微信里。第一次使用，按下面三步连接一个模型即可；其他功能可以等用到时再配置。",
+      "微伴通过微信自带的 ClawBot 插件通道收发消息，所以先确认手机微信有这个入口，再准备模型。第一次使用，按下面的步骤连接一个模型即可；其他功能可以等用到时再配置。",
     sections: [
+      {
+        id: "clawbot-entry",
+        title: "先确认微信 ClawBot 入口",
+        body: `微伴通过微信「插件 → 微信 ClawBot」这个通道收发消息。入口由微信按账号开放，不在微伴这边，所以第一步不是注册或准备 API Key，而是先确认自己的微信里有它。
+
+1. 打开手机微信，点右下角「我」→「设置」。
+2. 在「设置」里向下找到「功能」分组，点「插件」。
+3. 在插件列表里找到「微信 ClawBot」卡片。
+
+**如果找不到入口：** 微伴无法替你的账号开通，也没有绕过这个入口的绑定方式。先在「设置 → 关于微信」检查版本并更新，完全退出微信后重进再看一次；入口按账号逐步开放，未开放的账号暂时无法强制开启。**在确认入口可用之前，无需付款或提交 API Key。** 可以先去[首页模拟预览](/#try)看看聊天和插件使用示例（不收 Key、不调用模型），入口说明见[微信 ClawBot 排查](/wechat-clawbot)。
+
+确认有入口后，再继续下面的准备和连接步骤；完整扫码路径见[连接微信](/docs/wechat-connection#connect)。`,
+      },
       {
         id: "prepare",
         title: "准备账号和模型服务",
@@ -35,7 +49,7 @@ Free 用户可使用基础文字聊天，并配置 1 个插件；Plus 会员插�
         title: "三步开始聊天",
         screenshots: [DOC_SCREENSHOTS.channelConfig],
         body: `1. 打开[渠道与模型](/app/channels)，点击「添加渠道」，选择服务商并填写 API Key。第三方地址选择「自定义（第三方渠道 / 其他协议）」后填写协议和 Base URL。保存后确认已有文本模型：预设渠道会尝试自动导入，自定义渠道可点击「获取可用模型」；获取失败或缺少所需模型时，点击「添加模型」。然后点击文本模型行的闪电图标「测试连接」，系统会发送固定测试请求并正常计费。
-2. 打开[微信连接](/app/wechat)，创建链接，获取连接二维码。在微信打开「设置」，找到「功能」分组中的「插件」，进入「微信 ClawBot → 扫一扫」，扫描二维码并确认连接。
+2. 打开[微信连接](/app/wechat)，创建链接，获取连接二维码。在微信按上面的入口路径进入「微信 ClawBot → 扫一扫」，扫描二维码并确认连接。
 3. 在对应的微信对话中发一句话，收到回答后就可以继续聊了。
 
 添加渠道时拿不准怎么填，可以跟着[在微信里使用 DeepSeek](/docs/deepseek-in-wechat)操作。每个字段的说明见[渠道与模型](/docs/channels-models)。
@@ -378,7 +392,7 @@ Agent 的 \`/new\` 不会删除微伴聊天记录；\`/wx new\` 会在微伴新�
   },
   "ds-chat": {
     intro:
-      "DS Chat 基于 DeepSeek Harness 开源项目开发。你提供回答模型和搜索 API，微伴负责把它们接到微信。Free 用户最多配置 1 个插件，Plus 会员插件配置数量不限。",
+      "DS Chat 基于 DeepSeek-Harness 开源项目开发。你提供回答模型和搜索 API，微伴负责把它们接到微信，模型与搜索费用由对应服务商另计。Free 用户最多配置 1 个插件，Plus 会员插件配置数量不限。",
     sections: [
       {
         id: "configure",
