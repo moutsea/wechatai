@@ -5,6 +5,7 @@ import billing from "../migrations/0002_billing.sql?raw";
 import referrals from "../migrations/0003_referrals.sql?raw";
 import prepaid from "../migrations/0004_prepaid_membership.sql?raw";
 import admin from "../migrations/0005_admin.sql?raw";
+import adminExpiry from "../migrations/0017_admin_expiry.sql?raw";
 import notices from "../migrations/0008_site_notices.sql?raw";
 import noticeVersions from "../migrations/0009_notice_publication_versions.sql?raw";
 import noticeReadState from "../migrations/0010_notice_read_state.sql?raw";
@@ -81,6 +82,7 @@ beforeAll(async () => {
     notices,
     noticeVersions,
     noticeReadState,
+    adminExpiry,
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   owner = await login();

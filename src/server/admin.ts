@@ -14,7 +14,11 @@ import type {
 
 export async function isAdmin(env: Env, userId: string): Promise<boolean> {
   return Boolean(
-    await env.DB.prepare("SELECT 1 FROM admin_user WHERE user_id=?").bind(userId).first(),
+    await env.DB.prepare(
+      "SELECT 1 FROM admin_user WHERE user_id=? AND (expires_at IS NULL OR expires_at>?)",
+    )
+      .bind(userId, Date.now())
+      .first(),
   );
 }
 
@@ -218,12 +222,12 @@ export async function adminUsers(
   const items = (
     await db
       .prepare(`SELECT u.id,u.name,u.email,(${createdMillis}) createdAt,
-      EXISTS(SELECT 1 FROM admin_user a WHERE a.user_id=u.id) isAdmin, s.synced_at syncedAt,
+      EXISTS(SELECT 1 FROM admin_user a WHERE a.user_id=u.id AND (a.expires_at IS NULL OR a.expires_at>?)) isAdmin, s.synced_at syncedAt,
       ${["planUntil", "links", "connected", "requests", "failedRequests", "lastFailureAt", "lastFailureCode", "lastFailureStatus", "credits", "lastActiveAt"].map((k) => `${value(k)} ${k}`).join(",")},
       (SELECT COALESCE(SUM(amount),0)/100.0 FROM billing_order o WHERE o.user_id=u.id AND o.mode=? AND o.status='paid' AND o.currency='cny') paidAmount
       FROM user u LEFT JOIN admin_account_stats s ON s.user_id=u.id WHERE ${where}
       ORDER BY (${createdMillis}) DESC,u.id DESC LIMIT 20 OFFSET ?`)
-      .bind(billingMode(env), ...args, (page - 1) * 20)
+      .bind(Date.now(), billingMode(env), ...args, (page - 1) * 20)
       .all<AdminUser>()
   ).results;
   return { items, total, page, totalPages };

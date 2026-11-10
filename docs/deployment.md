@@ -150,6 +150,16 @@ INSERT OR IGNORE INTO admin_user(user_id,created_at)
 SELECT id,unixepoch()*1000 FROM user WHERE id='VERIFIED_USER_ID';
 ```
 
+需要一年期限时，在应用 `0017_admin_expiry.sql` 并发布支持到期校验的 Worker 后，使用以下授权语句：
+
+```sql
+INSERT INTO admin_user(user_id,created_at,expires_at)
+SELECT id,unixepoch()*1000,unixepoch('now','+1 year')*1000 FROM user WHERE id='VERIFIED_USER_ID'
+ON CONFLICT(user_id) DO UPDATE SET expires_at=excluded.expires_at;
+```
+
+`expires_at` 使用毫秒时间戳，`NULL` 表示长期授权，已有管理员不受迁移影响。迁移只增加可空字段，应先应用迁移，再发布 Worker，确认新版接管后再设置有限期授权。每次管理请求都会校验到期时间，已登录的会话也会在到期后失去管理权限。
+
 可通过 `pnpm cf:production d1 execute wechatai-db --remote --file path/to/private.sql` 执行，临时 SQL 不要提交。管理员入口为 `/app/admin`。撤销对应 `admin_user` 行会立即阻止后续管理请求，Plus 会员不自动拥有管理员权限。
 
 ## 6. 验证与备份

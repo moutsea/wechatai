@@ -6,6 +6,7 @@ import billingMigration from "../migrations/0002_billing.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
 import prepaidMigration from "../migrations/0004_prepaid_membership.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
+import adminExpiryMigration from "../migrations/0017_admin_expiry.sql?raw";
 import serverStatusMigration from "../migrations/0013_server_status.sql?raw";
 import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
 import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
@@ -13,7 +14,13 @@ import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
 import { recordPageView, recordSignupConversion } from "../src/server/analytics";
 import type { AdminAnalytics } from "../src/shared/analytics";
 import worker from "../src/server/index";
-import { adminOverview, adminUsers, saveAdminStats, syncAdminStats } from "../src/server/admin";
+import {
+  adminOverview,
+  adminUsers,
+  isAdmin,
+  saveAdminStats,
+  syncAdminStats,
+} from "../src/server/admin";
 import { readAdminAccountStats } from "../src/server/admin-account";
 import { dayWindow } from "../src/server/wallet";
 import { extendMembership } from "../src/shared/billing";
@@ -31,6 +38,7 @@ beforeAll(async () => {
     pageViewsMigration,
     signupMigration,
     funnelMigration,
+    adminExpiryMigration,
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
@@ -163,7 +171,9 @@ describe("admin authorization", () => {
     expect((await request("/api/admin/sync", { method: "POST", headers, body: "{}" })).status).toBe(
       403,
     );
-    await env.DB.prepare("INSERT INTO admin_user VALUES (?,?)").bind(account.id, Date.now()).run();
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at) VALUES (?,?)")
+      .bind(account.id, Date.now())
+      .run();
     const allowed = await request("/api/admin/overview", { headers });
     expect(allowed.status).toBe(200);
     expect(allowed.headers.get("cache-control")).toBe("no-store");
@@ -204,12 +214,73 @@ describe("admin authorization", () => {
     expect((await request("/api/admin/analytics", { headers })).status).toBe(403);
     expect(fetch).not.toHaveBeenCalled();
   });
+  it("expires a timed grant for existing sessions and removes the administrator badge", async () => {
+    const account = await login();
+    const headers = {
+      cookie: account.cookie,
+      origin: env.APP_URL,
+      "content-type": "application/json",
+    };
+    const expires = Date.now() + 60000;
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at,expires_at) VALUES (?,?,?)")
+      .bind(account.id, Date.now(), expires)
+      .run();
+    expect(await (await request("/api/admin/access", { headers })).json()).toEqual({
+      isAdmin: true,
+    });
+    expect((await request("/api/admin/overview", { headers })).status).toBe(200);
+    expect((await adminUsers(env, {})).items.find((item) => item.id === account.id)?.isAdmin).toBe(
+      1,
+    );
+    const clock = vi.spyOn(Date, "now").mockReturnValue(expires - 1);
+    try {
+      expect(await isAdmin(env, account.id)).toBe(true);
+      clock.mockReturnValue(expires);
+      expect(await isAdmin(env, account.id)).toBe(false);
+      expect(await (await request("/api/admin/access", { headers })).json()).toEqual({
+        isAdmin: false,
+      });
+      for (const path of [
+        "/api/admin/overview",
+        "/api/admin/users",
+        "/api/admin/server-status",
+        "/api/admin/analytics",
+      ])
+        expect((await request(path, { headers })).status).toBe(403);
+      expect(
+        (await request("/api/admin/sync", { method: "POST", headers, body: "{}" })).status,
+      ).toBe(403);
+      expect(
+        (await adminUsers(env, {})).items.find((item) => item.id === account.id)?.isAdmin,
+      ).toBe(0);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+  it("preserves permanent grants and accepts a renewed expiry", async () => {
+    const permanent = await user();
+    const timed = await user();
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at) VALUES (?,?)")
+      .bind(permanent, 1)
+      .run();
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at,expires_at) VALUES (?,?,?)")
+      .bind(timed, 1, Date.now() - 1)
+      .run();
+    expect(await isAdmin(env, permanent)).toBe(true);
+    expect(await isAdmin(env, timed)).toBe(false);
+    await env.DB.prepare("UPDATE admin_user SET expires_at=? WHERE user_id=?")
+      .bind(Date.now() + 60000, timed)
+      .run();
+    expect(await isAdmin(env, timed)).toBe(true);
+  });
 });
 
 describe("admin analytics", () => {
   async function headers() {
     const account = await login();
-    await env.DB.prepare("INSERT INTO admin_user VALUES (?,?)").bind(account.id, Date.now()).run();
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at) VALUES (?,?)")
+      .bind(account.id, Date.now())
+      .run();
     return { cookie: account.cookie };
   }
 
@@ -366,7 +437,9 @@ describe("admin analytics", () => {
 describe("admin membership gifts", () => {
   async function setup() {
     const admin = await login();
-    await env.DB.prepare("INSERT INTO admin_user VALUES (?,?)").bind(admin.id, Date.now()).run();
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at) VALUES (?,?)")
+      .bind(admin.id, Date.now())
+      .run();
     const target = await user();
     const headers = {
       cookie: admin.cookie,
