@@ -11,6 +11,7 @@ import {
   PLUGIN_SHORTCUT_HINT,
 } from "../shared/plugin-shortcut";
 import { extendMembership } from "../shared/billing";
+import { MembershipReminders, type MembershipReminder } from "./membership-reminders";
 import {
   notificationInputSchema,
   notificationMessageSchema,
@@ -238,6 +239,8 @@ export class PersonalAccount extends DurableObject<Env> {
   private reminderDelivery: Promise<void> | null = null;
   private notifications: NotificationStore;
   private notificationDelivery: Promise<void> | null = null;
+  private membershipReminders: MembershipReminders;
+  private membershipDelivery: Promise<void> | null = null;
   private wechatPolls = new Set<AbortController>();
   private wechatWakeVersion = 0;
   private receiver: WechatReceiver;
@@ -273,6 +276,7 @@ export class PersonalAccount extends DurableObject<Env> {
     });
     this.wallet = new Wallet(ctx.storage);
     this.notifications = new NotificationStore(ctx.storage);
+    this.membershipReminders = new MembershipReminders(ctx.storage.sql);
     this.personalRecords = new PersonalRecordsStore(ctx.storage.sql);
     this.personalRuns = new PersonalRunStore(ctx.storage);
     this.attachments = new AttachmentQueue(ctx.storage.sql);
@@ -414,6 +418,7 @@ export class PersonalAccount extends DurableObject<Env> {
           );
       }
       this.wallet.init();
+      this.membershipReminders.init();
       this.claw.init();
       ctx.storage.transactionSync(() => initCallFailures(this.sql));
       if (
@@ -628,6 +633,7 @@ export class PersonalAccount extends DurableObject<Env> {
             connectionId,
           );
       }
+      if (received) this.membershipReminders.wake();
       // A fallback poll or a lost acknowledgement may race this batch. Merge
       // messages, but never overwrite a cursor advanced by another receiver.
       const cursor =
@@ -1701,6 +1707,129 @@ export class PersonalAccount extends DurableObject<Env> {
       console.warn(JSON.stringify({ event: "notification.schedule_pending" }));
     }
   }
+  private async flushMembershipSchedule(force = false) {
+    if (!force && !this.membershipReminders.pendingSync()) return;
+    const schedule = this.membershipReminders.schedule();
+    try {
+      const schedulers = this.env.REMINDERS as DurableObjectNamespace<ReminderScheduler>;
+      await schedulers
+        .getByName(`${this.ctx.id}:membership`)
+        .synchronizeMembership(this.ctx.id.toString(), schedule);
+      this.membershipReminders.acknowledge(schedule.revision);
+    } catch {
+      await this.scheduleRecovery();
+      console.warn(JSON.stringify({ event: "membership.schedule_pending" }));
+    }
+  }
+  // Operator-only backfill through the internal scheduler service binding.
+  async registerMembershipReminders(): Promise<ReminderSchedule> {
+    this.membershipReminders.sync(this.getSetting("planUntil", 0), Date.now(), true);
+    await this.flushMembershipSchedule(true);
+    if (this.membershipReminders.pendingSync()) {
+      await this.scheduleRecovery();
+      throw new Error("Membership reminder schedule pending");
+    }
+    return this.membershipReminders.schedule();
+  }
+  membershipReminderStatus() {
+    return { ...this.membershipReminders.status(), ...this.membershipReminders.schedule() };
+  }
+  async dispatchMembershipReminders(): Promise<ReminderSchedule> {
+    const delivery = (this.membershipDelivery ??= this.deliverMembershipReminders());
+    try {
+      await delivery;
+      return this.membershipReminders.schedule();
+    } finally {
+      if (this.membershipDelivery === delivery) this.membershipDelivery = null;
+    }
+  }
+  private membershipReminderTarget(job: MembershipReminder) {
+    const records = job.target
+      ? this.links().filter((record) => record.id === job.target!.connectionId)
+      : this.links();
+    return records
+      .map((record) => ({ connectionId: record.id, ...this.connection(record.id) }))
+      .find(
+        (link) =>
+          this.linkEnabled(link.connectionId) &&
+          link.status === "connected" &&
+          link.encryptedCredentials &&
+          link.contextToken &&
+          (!job.target || link.generation === job.target.generation),
+      );
+  }
+  private async deliverMembershipReminders() {
+    this.membershipReminders.sync(this.getSetting("planUntil", 0));
+    for (const reminder of this.membershipReminders.due()) {
+      let job = reminder;
+      const target = this.membershipReminderTarget(job);
+      if (!target) {
+        const changed =
+          job.target &&
+          (!this.links().some((link) => link.id === job.target!.connectionId) ||
+            this.connection(job.target.connectionId).generation !== job.target.generation);
+        this.membershipReminders.settle(job, changed ? "cancelled" : "waiting");
+        continue;
+      }
+      const expires = `${beijingTime(job.planUntil)}（北京时间）`;
+      const intro =
+        job.days === 7
+          ? `提前提醒一下，你的 Plus 会员将于 ${expires}到期。`
+          : `你的 Plus 会员就快到期了，到期时间是 ${expires}。`;
+      const detail =
+        job.days === 7
+          ? "如果想继续用所有微信连接和插件，可以提前续费，剩余时间会一起顺延。"
+          : "到期后，免费版可以用 1 个微信连接和 1 个插件，其余会暂停。聊天记录和绑定都还在。\n\n想继续用的话，可以提前续费，剩余时间会一起顺延。";
+      const text = `${intro}\n\n${detail}\n\n[续费 Plus](${new URL("/app/billing", publicSiteUrl(this.env))})`;
+      const claimed = this.membershipReminders.claim(
+        job,
+        {
+          connectionId: target.connectionId,
+          generation: target.generation,
+        },
+        text,
+      );
+      if (!claimed) continue;
+      job = claimed;
+      try {
+        const credentials = JSON.parse(
+          await decrypt(this.env, target.encryptedCredentials!, `${this.ctx.id}:wechat`),
+        ) as WxCredentials;
+        if (
+          this.getSetting("planUntil", 0) !== job.planUntil ||
+          !this.membershipReminders.isCurrent(job)
+        )
+          continue;
+        const latest = this.membershipReminderTarget(job);
+        if (!latest || latest.encryptedCredentials !== target.encryptedCredentials) {
+          this.membershipReminders.settle(job, "waiting");
+          continue;
+        }
+        await sendText(
+          credentials,
+          latest.contextToken!,
+          `membership:${this.ctx.id}:${job.planUntil}:${job.days}`,
+          job.text!,
+          5000,
+        );
+        this.membershipReminders.settle(job, "sent");
+        console.info(JSON.stringify({ event: "membership.reminder_delivered", days: job.days }));
+      } catch (error) {
+        this.membershipReminders.settle(
+          job,
+          error instanceof AppError && error.code === "wechat_expired" ? "waiting" : "retry",
+        );
+        console.warn(
+          JSON.stringify({
+            event: "membership.reminder_retry",
+            days: job.days,
+            code: error instanceof AppError ? error.code : "delivery_failed",
+          }),
+        );
+      }
+    }
+    this.membershipReminders.sync(this.getSetting("planUntil", 0));
+  }
   // Internal preflight for the HTTP account quota. HMAC validity alone does not
   // prove that a credential is still active after rotation or revocation.
   notificationCredentialValid(pluginId: string, credential: string): boolean {
@@ -2115,6 +2244,8 @@ export class PersonalAccount extends DurableObject<Env> {
     );
   }
   private async scheduleWechat() {
+    this.membershipReminders.sync(this.getSetting("planUntil", 0));
+    await this.flushMembershipSchedule();
     this.attachments.expire();
     this.pruneExecution();
     await this.execution
@@ -2129,6 +2260,7 @@ export class PersonalAccount extends DurableObject<Env> {
       .map((l) => ({ ...this.connection(l.id), id: l.id }))
       .filter((l) => ["connected", "waiting", "scanned"].includes(l.status));
     const wakeups = [
+      this.membershipReminders.pendingSync() ? Date.now() + 1000 : null,
       this.attachments.nextExpiry(),
       this.media.nextExpiry(),
       this.personalRecords.schedulePending() ? Date.now() + 1000 : null,

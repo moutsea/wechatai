@@ -225,6 +225,8 @@ describe("plugin entitlement controls", () => {
     data.planUntil = Date.now() + 86400000;
     expect(notice()).toContain("会员即将到期");
     data.planUntil = Date.now() + 5 * 86400000;
+    expect(notice()).toContain("会员即将到期");
+    data.planUntil = Date.now() + 8 * 86400000;
     expect(notice()).toBe("");
     data.plan = "free";
     data.planUntil = 0;

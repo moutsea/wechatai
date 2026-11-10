@@ -127,6 +127,14 @@ pnpm reminders:reconcile
 
 该工具需要 Cloudflare 操作权限，通过内部 service binding 逐批修复调度，不提供公开管理接口。
 
+会员到期提醒新增独立的会员调度 RPC，应先运行 `pnpm deploy:reminders`，再构建并发布主 Worker。发布完成后运行：
+
+```sh
+pnpm memberships:reconcile
+```
+
+该命令为已有账户登记到期前 7 天、前 3 天的提醒，并核对独立调度器的闹钟；可重复执行，不会重复发送。会员提醒记录在账户 Durable Object 内自动建表，无新增 D1 迁移。登记时已进入提醒窗口的会员只补当前阶段，已到期会员不补发。后续购买、续费和管理员赠送自动更新排期。
+
 ## 5. 管理员
 
 新安装不自动授予任何邮箱管理权限。先正常注册并核实账户身份，查询用户 ID：

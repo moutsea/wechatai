@@ -7,6 +7,10 @@ import { getPlatformProxy, unstable_readConfig } from "wrangler";
 // Only Cloudflare account operators can invoke this internal service binding.
 // No public administrative endpoint or extra application secret is created.
 const config = unstable_readConfig({ config: productionConfigPath(), env: "production" });
+const membership = process.argv.includes("--membership");
+if (process.argv.slice(2).some((arg) => arg !== "--membership"))
+  throw new Error("Unknown reconciliation option");
+const eventPrefix = membership ? "memberships" : "reminders";
 const directory = await mkdtemp(join(tmpdir(), "wechatai-reminders-"));
 let platform;
 try {
@@ -40,11 +44,14 @@ try {
       .bind(cursor)
       .all();
     if (!results.length) break;
-    const response = await platform.env.REMINDER_OPS.fetch("https://reminders.internal/reconcile", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(results.map((row) => row.id)),
-    });
+    const response = await platform.env.REMINDER_OPS.fetch(
+      `https://reminders.internal/${membership ? "reconcile-memberships" : "reconcile"}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(results.map((row) => row.id)),
+      },
+    );
     if (!response.ok) throw new Error(`Reminder reconciliation HTTP ${response.status}`);
     const schedules = await response.json();
     const failed = schedules.filter((result) => !result.ok);
@@ -60,12 +67,16 @@ try {
     count += results.length;
     cursor = results.at(-1).id;
     console.log(
-      JSON.stringify({ event: "reminders.reconciled", accounts: count, activeSchedules: active }),
+      JSON.stringify({
+        event: `${eventPrefix}.reconciled`,
+        accounts: count,
+        activeSchedules: active,
+      }),
     );
   }
   console.log(
     JSON.stringify({
-      event: "reminders.reconciliation_complete",
+      event: `${eventPrefix}.reconciliation_complete`,
       accounts: count,
       activeSchedules: active,
     }),

@@ -10,7 +10,7 @@ export function MembershipNotice() {
   if (!data?.planUntil) return null;
   const remaining = data.planUntil - Date.now();
   const expired = data.plan === "free" && remaining <= 0;
-  if (!expired && (data.plan !== "plus" || remaining > 3 * 86400000 || remaining <= 0)) return null;
+  if (!expired && (data.plan !== "plus" || remaining > 7 * 86400000 || remaining <= 0)) return null;
   const pausedPlugins = Math.max(0, (data.plugins?.length ?? 0) - PLUGIN_LIMITS.free);
   const pausedLinks = Math.max(0, data.connections.length - WECHAT_LINK_LIMITS.free);
   return (

@@ -1,7 +1,8 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 
 export type ReminderSchedule = { revision: number; nextAt: number | null };
-type Schedule = ReminderSchedule & { accountId: string; failures: number; kind?: "notification" };
+type ScheduleKind = "notification" | "membership";
+type Schedule = ReminderSchedule & { accountId: string; failures: number; kind?: ScheduleKind };
 
 // Production runs this class in a separate Worker. Only internal DO bindings can
 // register schedules; this service has no public routes or user credentials.
@@ -20,8 +21,14 @@ export class ReminderScheduler extends DurableObject<Pick<Env, "ACCOUNTS" | "REM
       throw new Error("Notification scheduler scope mismatch");
     await this.saveSchedule(accountId, schedule, false, "notification");
   }
-  private async dispatch(accountId: string, kind?: "notification"): Promise<ReminderSchedule> {
+  async synchronizeMembership(accountId: string, schedule: ReminderSchedule): Promise<void> {
+    if (!this.ctx.id.equals(this.env.REMINDERS!.idFromName(`${accountId}:membership`)))
+      throw new Error("Membership scheduler scope mismatch");
+    await this.saveSchedule(accountId, schedule, false, "membership");
+  }
+  private async dispatch(accountId: string, kind?: ScheduleKind): Promise<ReminderSchedule> {
     const account = this.env.ACCOUNTS.get(this.env.ACCOUNTS.idFromString(accountId));
+    if (kind === "membership") return account.dispatchMembershipReminders();
     return kind === "notification"
       ? account.dispatchNotifications()
       : account.dispatchPersonalReminders();
@@ -30,7 +37,7 @@ export class ReminderScheduler extends DurableObject<Pick<Env, "ACCOUNTS" | "REM
     accountId: string,
     schedule: ReminderSchedule,
     fromAlarm: boolean,
-    kind?: "notification",
+    kind?: ScheduleKind,
   ) {
     if (
       !/^[0-9a-f]{64}$/.test(accountId) ||
@@ -91,6 +98,12 @@ export class ReminderScheduler extends DurableObject<Pick<Env, "ACCOUNTS" | "REM
 // lets deployments reconcile pre-existing reminders without accessing secrets.
 export default class ReminderService extends WorkerEntrypoint<Pick<Env, "ACCOUNTS" | "REMINDERS">> {
   async reconcileUsers(userIds: string[]) {
+    return this.reconcile(userIds, false);
+  }
+  async reconcileMemberships(userIds: string[]) {
+    return this.reconcile(userIds, true);
+  }
+  private async reconcile(userIds: string[], membership: boolean) {
     if (
       !Array.isArray(userIds) ||
       userIds.length > 100 ||
@@ -101,10 +114,12 @@ export default class ReminderService extends WorkerEntrypoint<Pick<Env, "ACCOUNT
     for (const id of userIds) {
       try {
         const account = this.env.ACCOUNTS.getByName(id);
-        const schedule = await account.registerPersonalReminders();
+        const schedule = membership
+          ? await account.registerMembershipReminders()
+          : await account.registerPersonalReminders();
         const scheduler = (
           this.env.REMINDERS as DurableObjectNamespace<ReminderScheduler>
-        ).getByName(account.id.toString());
+        ).getByName(`${account.id}${membership ? ":membership" : ""}`);
         results.push({ ok: true, ...schedule, ...(await scheduler.status()) });
       } catch (error) {
         results.push({
@@ -120,6 +135,8 @@ export default class ReminderService extends WorkerEntrypoint<Pick<Env, "ACCOUNT
     // reconciliation call alive across the local operations proxy's RPC hops.
     if (request.method === "POST" && new URL(request.url).pathname === "/reconcile")
       return Response.json(await this.reconcileUsers(await request.json()));
+    if (request.method === "POST" && new URL(request.url).pathname === "/reconcile-memberships")
+      return Response.json(await this.reconcileMemberships(await request.json()));
     return new Response("Not found", { status: 404 });
   }
 }

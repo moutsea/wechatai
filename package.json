@@ -31,6 +31,7 @@
     "deploy": "pnpm build:production && wrangler deploy --config dist/wechatai/wrangler.json",
     "deploy:reminders": "node scripts/production.mjs reminders",
     "reminders:reconcile": "node scripts/reconcile-reminders.mjs",
+    "memberships:reconcile": "node scripts/reconcile-reminders.mjs --membership",
     "stripe:setup": "node scripts/setup-stripe.mjs",
     "stripe:listen": "node scripts/stripe-listen.mjs",
     "setup:local": "node scripts/setup-local.mjs && pnpm cf-typegen && pnpm db:migrate:local",
