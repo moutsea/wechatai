@@ -163,7 +163,7 @@ export function Plugins() {
         operation === "delete"
           ? "插件配置已删除，会话记录仍然保留"
           : operation === "exit"
-            ? "已退出插件，返回普通模型会话"
+            ? "已退出插件"
             : "已进入默认插件模式，直接发送问题即可；/exit 退出",
       );
     } catch (e) {

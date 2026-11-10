@@ -39,6 +39,7 @@ function network() {
   const sends: { token: string; to: string; text: string; context: string; clientId: string }[] =
     [];
   const modelInputs: string[] = [];
+  const modelIds: string[] = [];
   const control = { duplicateBot: false, failedSends: 0 };
   vi.stubGlobal(
     "fetch",
@@ -93,8 +94,9 @@ function network() {
       if (target.hostname === "cloudflare-dns.com")
         return Response.json({ Answer: [{ type: 1, data: "1.1.1.1" }] });
       if (target.hostname === "llm.example.com") {
-        const body = (await request.json()) as { messages: { content: string }[] };
+        const body = (await request.json()) as { model: string; messages: { content: string }[] };
         modelInputs.push(JSON.stringify(body.messages));
+        modelIds.push(body.model);
         return Response.json({
           choices: [{ message: { content: `回答：${body.messages.at(-1)?.content}` } }],
           usage: { prompt_tokens: 100, completion_tokens: 10 },
@@ -103,7 +105,7 @@ function network() {
       throw new Error("Unexpected test endpoint");
     }),
   );
-  return { queues, polls, sends, modelInputs, control };
+  return { queues, polls, sends, modelInputs, modelIds, control };
 }
 function msg(owner: number, text: string, id = 1): WxMessage {
   return {
@@ -114,6 +116,14 @@ function msg(owner: number, text: string, id = 1): WxMessage {
     item_list: [{ type: 1, text_item: { text } }],
   };
 }
+const send = (stub: Account, link: string, text: string, id = crypto.randomUUID()) =>
+  runInDurableObject(stub, (instance) =>
+    (
+      instance as unknown as {
+        processWechat(id: string, message: WxMessage, connectionId: string): Promise<string>;
+      }
+    ).processWechat(id, msg(1, text), link),
+  );
 async function model(stub: Account) {
   const result = await api(stub, "assistant.save", {
     name: "测试模型",
@@ -146,6 +156,403 @@ afterEach(async () => {
       await state.storage.deleteAlarm();
     });
   vi.unstubAllGlobals();
+});
+
+describe("WeChat sessions on demand", () => {
+  const confirmCommand = (reply: string) => /60 秒内发送 (\/wx [^\n]+) 确认/.exec(reply)![1];
+
+  async function emptyLink() {
+    const stub = account();
+    await plus(stub);
+    const modelId = await model(stub);
+    await create(stub, "已有会话的微信");
+    const link = await create(stub, "新的微信");
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    return { stub, link, modelId };
+  }
+
+  it("answers platform commands and invalid shortcuts without creating a default session", async () => {
+    const { stub, link } = await emptyLink();
+    for (const text of [
+      "/wx help",
+      "/wx status",
+      "/wx balance",
+      "/wx plugins",
+      "/wx channels",
+      "/wx models",
+      "/wx sessions",
+      "/wx cancel",
+      "/wx reset",
+      "/wx clear",
+      "/wx delete",
+      "/wx archive",
+      "@不存在 你好",
+    ]) {
+      expect(await send(stub, link, text)).toBeTruthy();
+      const snapshot = await stub.snapshot();
+      expect(snapshot.currentSession, text).toBeNull();
+      expect(snapshot.stats.sessions, text).toBe(1);
+    }
+    expect(await send(stub, link, "/wx status")).toContain("当前还没有会话");
+    expect(await send(stub, link, "/wx sessions")).toContain("/wx new");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("creates one session for the first new command and replays it without creating another", async () => {
+    const { stub, link } = await emptyLink();
+    const id = crypto.randomUUID();
+    const reply = await send(stub, link, "/wx new", id);
+    expect(reply).toBe("已开始新的会话。");
+    const first = await stub.snapshot();
+    expect(first.stats.sessions).toBe(2);
+    expect(first.currentSession).not.toBeNull();
+    expect(await send(stub, link, "/wx new", id)).toBe(reply);
+    expect((await stub.snapshot()).stats.sessions).toBe(2);
+    expect(await send(stub, link, "/wx new")).toBe("已开始新的会话，原会话已保留。");
+    const next = await stub.snapshot();
+    expect(next.stats.sessions).toBe(3);
+    expect(next.currentSession?.id).not.toBe(first.currentSession?.id);
+  });
+
+  it("enters the requested plugin without first creating an ordinary model session", async () => {
+    const { stub, link, modelId } = await emptyLink();
+    const plugin = await api(stub, "plugin.save", {
+      pluginId: "wechatai/roleplay",
+      name: "旅人",
+      shortcut: "旅人",
+      modelId,
+      description: "森林中的旅人",
+      firstMessage: "一起出发吧。",
+    });
+    expect(plugin.ok).toBe(true);
+    expect(await send(stub, link, "@旅人")).toContain("请在后面加上问题");
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    expect(await send(stub, link, "/use 旅人")).toContain("一起出发吧。");
+    const snapshot = await stub.snapshot();
+    expect(snapshot.stats.sessions).toBe(2);
+    expect(snapshot.currentSession?.pluginInstanceId).toBe(plugin.data.id);
+  });
+
+  it("still starts ordinary chat after looking up platform commands", async () => {
+    const net = network();
+    const { stub, link, modelId } = await emptyLink();
+    await send(stub, link, "/wx models");
+    expect(await send(stub, link, "你好")).toBe("回答：你好");
+    expect(net.modelInputs).toHaveLength(1);
+    const snapshot = await stub.snapshot();
+    expect(snapshot.stats.sessions).toBe(2);
+    expect(snapshot.currentSession?.assistantId).toBe(modelId);
+    expect(snapshot.connections[0].currentSessionId).not.toBe(snapshot.currentSession?.id);
+  });
+
+  it("uses the ordinary default model after first entering a plugin with a different model", async () => {
+    const { stub, link, modelId } = await emptyLink();
+    const original = (await stub.snapshot()).assistants.find((a) => a.id === modelId)!;
+    await api(stub, "wechat.select", { id: "default" });
+    const second = await api(stub, "model.save", {
+      channelId: original.channelId,
+      name: "插件模型",
+      model: "plugin-model",
+    });
+    expect(second.ok).toBe(true);
+    await api(stub, "wechat.select", { id: link });
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    const plugin = await api(stub, "plugin.save", {
+      pluginId: "wechatai/roleplay",
+      name: "旅人",
+      shortcut: "旅人",
+      modelId: second.data.id,
+      description: "森林中的旅人",
+    });
+    expect(plugin.ok).toBe(true);
+    const entered = await send(stub, link, "/use 旅人");
+    expect(entered).not.toContain("返回进入插件前");
+    expect((await stub.snapshot()).currentSession?.assistantId).toBe(second.data.id);
+    expect(await send(stub, link, "/exit")).toContain("新建普通模型会话");
+    const snapshot = await stub.snapshot();
+    expect(snapshot.currentSession?.assistantId).toBe(modelId);
+    expect(snapshot.currentSession?.pluginInstanceId).toBeUndefined();
+    const net = network();
+    await send(stub, link, "你好");
+    expect(net.modelIds).toEqual([original.model]);
+  });
+
+  it("checks the session limit for both WeChat and web exits and preserves the current mode on failure", async () => {
+    const { stub, link, modelId } = await emptyLink();
+    const plugin = await api(stub, "plugin.save", {
+      pluginId: "wechatai/roleplay",
+      name: "旅人",
+      shortcut: "旅人",
+      modelId,
+      description: "森林中的旅人",
+    });
+    expect(plugin.ok).toBe(true);
+    await send(stub, link, "/use 旅人");
+    const before = await stub.snapshot();
+    const disposable = await runInDurableObject(stub, (_, state) => {
+      const source = JSON.parse(
+        state.storage.sql
+          .exec<{ data: string }>(
+            "SELECT data FROM sessions WHERE id = ?",
+            before.currentSession!.id,
+          )
+          .one().data,
+      );
+      let lastId = "";
+      for (let n = before.stats.sessions; n < before.limits.sessions; n++) {
+        const id = crypto.randomUUID();
+        state.storage.sql.exec(
+          "INSERT INTO sessions VALUES (?, ?)",
+          id,
+          JSON.stringify({ ...source, id }),
+        );
+        lastId = id;
+      }
+      return lastId;
+    });
+    await expect(send(stub, link, "/exit")).rejects.toMatchObject({ code: "session_limit" });
+    expect(await api(stub, "plugin.exit", { connectionId: link })).toMatchObject({
+      ok: false,
+      error: "session_limit",
+    });
+    const full = await stub.snapshot();
+    expect(full.stats.sessions).toBe(before.limits.sessions);
+    expect(full.currentSession?.id).toBe(before.currentSession?.id);
+    const otherLink = await create(stub, "空微信");
+    await expect(send(stub, otherLink, "/exit")).rejects.toMatchObject({ code: "session_limit" });
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    expect((await stub.snapshot()).stats.sessions).toBe(before.limits.sessions);
+    expect((await api(stub, "session.action", { id: disposable, action: "delete" })).ok).toBe(true);
+    await send(stub, link, "/exit");
+    const plain = (await api(stub, "session.list")).data.find(
+      (s: { connectionId: string; pluginInstanceId?: string }) =>
+        s.connectionId === link && !s.pluginInstanceId,
+    );
+    expect(plain).toBeTruthy();
+    await send(stub, link, "/use 旅人");
+    expect(await send(stub, link, "/exit")).toContain("已退出插件，返回");
+    const snapshot = await stub.snapshot();
+    expect(snapshot.connections.find((c) => c.id === link)?.currentSessionId).toBe(plain.id);
+    expect(snapshot.stats.sessions).toBe(before.limits.sessions);
+  });
+
+  it("lists and selects the default text model when the first channel only has images", async () => {
+    const stub = account();
+    await plus(stub);
+    const image = await api(stub, "assistant.save", {
+      name: "生图渠道",
+      protocol: "chat-completions",
+      baseUrl: "https://image.example.com",
+      apiKey: "test",
+      model: "qwen-image-3.0",
+      kind: "image",
+    });
+    expect(image.ok).toBe(true);
+    const modelId = await model(stub);
+    await create(stub, "已有微信");
+    const link = await create(stub, "新微信");
+    expect(await send(stub, link, "/wx models")).toContain("测试模型");
+    expect((await stub.snapshot()).currentSession).toBeNull();
+    const selected = await send(stub, link, "/wx model 1");
+    expect(selected).toContain("已切换到");
+    const first = await stub.snapshot();
+    expect(first.currentSession?.assistantId).toBe(modelId);
+    expect(first.stats.sessions).toBe(2);
+    await send(stub, link, "/wx new");
+    expect((await stub.snapshot()).currentSession?.assistantId).toBe(modelId);
+  });
+
+  it("lets Free users delete an Agent session to free a slot and return to ordinary chat", async () => {
+    const stub = account();
+    const link = await create(stub, "微信");
+    expect(
+      (
+        await api(stub, "plugin.save", {
+          pluginId: "wechatai/openclaw",
+          name: "我的 Agent",
+          shortcut: "claw",
+          agentId: "main",
+        })
+      ).ok,
+    ).toBe(true);
+    await send(stub, link, "/use claw");
+    const first = await stub.snapshot();
+    for (let count = 1; count < first.limits.sessions; count++) await send(stub, link, "/wx new");
+    const modelId = await model(stub);
+    await expect(send(stub, link, "/exit")).rejects.toMatchObject({ code: "session_limit" });
+    const before = await stub.snapshot();
+    expect(before.plan).toBe("free");
+    expect(before.stats.sessions).toBe(before.limits.sessions);
+    const warning = await send(stub, link, "/wx delete");
+    expect(warning).toContain("释放一个会话名额");
+    expect((await stub.snapshot()).stats.sessions).toBe(before.limits.sessions);
+    const token = /\/wx delete ([a-f0-9]{6})/.exec(warning)![1];
+    const id = crypto.randomUUID();
+    const deleted = await send(stub, link, `/wx delete ${token}`, id);
+    expect(deleted).toContain("已释放一个会话名额");
+    const after = await stub.snapshot();
+    expect(after.stats.sessions).toBe(before.limits.sessions - 1);
+    expect(after.currentSession).toBeNull();
+    expect(await send(stub, link, `/wx delete ${token}`, id)).toBe(deleted);
+    expect((await stub.snapshot()).stats.sessions).toBe(before.limits.sessions - 1);
+    await send(stub, link, "/exit");
+    const returned = await stub.snapshot();
+    expect(returned.stats.sessions).toBe(before.limits.sessions);
+    expect(returned.currentSession?.assistantId).toBe(modelId);
+    const net = network();
+    expect(await send(stub, link, "你好")).toBe("回答：你好");
+    expect(net.modelIds).toEqual(["test-model"]);
+  });
+
+  it("frees the current web session without creating a replacement and starts chat on demand", async () => {
+    const { stub, link, modelId } = await emptyLink();
+    await send(stub, link, "/wx new");
+    const before = await stub.snapshot();
+    const originalId = before.currentSession!.id;
+    expect((await api(stub, "session.action", { id: originalId, action: "delete" })).ok).toBe(true);
+    const deleted = await stub.snapshot();
+    expect(deleted.stats.sessions).toBe(before.stats.sessions - 1);
+    expect(deleted.currentSession).toBeNull();
+    expect(deleted.connections[0].currentSessionId).toBe(before.connections[0].currentSessionId);
+    expect(
+      (await api(stub, "session.list")).data.some((s: { id: string }) => s.id === originalId),
+    ).toBe(false);
+    const net = network();
+    await send(stub, link, "删除后继续聊天");
+    const fresh = await stub.snapshot();
+    expect(fresh.stats.sessions).toBe(before.stats.sessions);
+    expect(fresh.currentSession?.id).not.toBe(originalId);
+    expect(fresh.currentSession?.assistantId).toBe(modelId);
+    expect(net.modelInputs).toHaveLength(1);
+  });
+
+  it.each(["deleted", "disabled"])(
+    "lets Free users release all quota from a %s plugin, including archived sessions",
+    async (availability) => {
+      const stub = account();
+      const link = await create(stub, "微信");
+      const saved = await api(stub, "plugin.save", {
+        pluginId: "wechatai/openclaw",
+        name: "旧 Agent",
+        shortcut: "old",
+        agentId: "main",
+      });
+      expect(saved.ok).toBe(true);
+      await send(stub, link, "/use old");
+      await send(stub, link, "/wx archive");
+      const initial = await stub.snapshot();
+      for (let n = initial.stats.sessions; n < initial.limits.sessions; n++)
+        await send(stub, link, "/wx new");
+      expect(
+        (
+          await api(stub, availability === "deleted" ? "plugin.delete" : "plugin.save", {
+            id: saved.data.id,
+            enabled: false,
+          })
+        ).ok,
+      ).toBe(true);
+      expect((await stub.snapshot()).plan).toBe("free");
+      expect((await api(stub, "session.list")).ok).toBe(false);
+      await send(stub, link, confirmCommand(await send(stub, link, "/wx delete")));
+      expect((await stub.snapshot()).currentSession).toBeNull();
+      expect(await send(stub, link, "/wx delete")).toContain("/wx delete 编号");
+      const net = network();
+      let sawArchived = false;
+      for (let remaining = initial.limits.sessions - 1; remaining > 0; remaining--) {
+        const listing = await send(stub, link, "/wx sessions");
+        sawArchived ||= listing.includes("[归档]");
+        const warning = await send(stub, link, "/wx delete 1");
+        expect(warning).toContain("会话「");
+        expect((await stub.snapshot()).stats.sessions).toBe(remaining);
+        const id = crypto.randomUUID();
+        const command = confirmCommand(warning);
+        const reply = await send(stub, link, command, id);
+        expect(reply).toContain("已释放一个会话名额");
+        expect(await send(stub, link, command, id)).toBe(reply);
+        expect((await stub.snapshot()).stats.sessions).toBe(remaining - 1);
+        expect((await stub.snapshot()).currentSession).toBeNull();
+      }
+      expect(sawArchived).toBe(true);
+      expect(net.modelInputs).toHaveLength(0);
+      const modelId = await model(stub);
+      expect(await send(stub, link, "重新开始聊天")).toBe("回答：重新开始聊天");
+      expect((await stub.snapshot()).currentSession?.assistantId).toBe(modelId);
+      expect(net.modelInputs).toHaveLength(1);
+    },
+  );
+
+  it("binds numbered deletion to the chosen session across switches and list changes", async () => {
+    const { stub, link } = await emptyLink();
+    await send(stub, link, "/wx new");
+    const target = (await stub.snapshot()).currentSession!;
+    await send(stub, link, "/wx new");
+    await send(stub, link, "/wx sessions");
+    const rows = (await api(stub, "session.list")).data as { id: string; connectionId: string }[];
+    const number =
+      rows.filter((s) => s.connectionId === link).findIndex((s) => s.id === target.id) + 1;
+    const warning = await send(stub, link, `/wx delete ${number}`);
+    expect(warning).toContain(`「${target.title}」`);
+    const command = confirmCommand(warning);
+    expect(await send(stub, link, `/wx delete ${number} invalid`)).toContain("确认码无效");
+    await runInDurableObject(stub, (_, state) => {
+      const key = wechatLinkKey(link, "clearConfirmation");
+      const row = state.storage.sql
+        .exec<{ value: string }>("SELECT value FROM settings WHERE key = ?", key)
+        .one();
+      const confirmation = JSON.parse(row.value);
+      confirmation.expires = Date.now() - 1;
+      state.storage.sql.exec(
+        "UPDATE settings SET value = ? WHERE key = ?",
+        JSON.stringify(confirmation),
+        key,
+      );
+    });
+    expect(await send(stub, link, command)).toContain("确认码无效或已过期");
+    const freshCommand = confirmCommand(await send(stub, link, `/wx delete ${number}`));
+    await send(stub, link, "/wx new");
+    await send(stub, link, "/wx sessions");
+    const before = await stub.snapshot();
+    expect(await send(stub, link, freshCommand)).toContain("已释放一个会话名额");
+    const after = await stub.snapshot();
+    expect(after.currentSession?.id).toBe(before.currentSession?.id);
+    expect(after.stats.sessions).toBe(before.stats.sessions - 1);
+    const remaining = (await api(stub, "session.list")).data as { id: string }[];
+    expect(remaining.some((s) => s.id === target.id)).toBe(false);
+    expect(await send(stub, link, freshCommand)).toContain("确认码无效");
+    expect((await stub.snapshot()).stats.sessions).toBe(after.stats.sessions);
+  });
+
+  it.each(["clear", "delete"])(
+    "does not apply a current-session %s confirmation after switching sessions",
+    async (operation) => {
+      const { stub, link } = await emptyLink();
+      await send(stub, link, "/wx new");
+      const target = (await stub.snapshot()).currentSession!;
+      const original = (await api(stub, "session.list")).data.find(
+        (s: { id: string }) => s.id === target.id,
+      );
+      await send(stub, link, `/wx ${operation}`);
+      await runInDurableObject(stub, (_, state) => {
+        const key = wechatLinkKey(link, "clearConfirmation");
+        const row = state.storage.sql
+          .exec<{ value: string }>("SELECT value FROM settings WHERE key = ?", key)
+          .one();
+        state.storage.sql.exec(
+          "UPDATE settings SET value = ? WHERE key = ?",
+          JSON.stringify({ ...JSON.parse(row.value), token: "123456" }),
+          key,
+        );
+      });
+      const command = `/wx ${operation} 123456`;
+      await send(stub, link, "/wx new");
+      const before = await stub.snapshot();
+      expect(await send(stub, link, command)).toContain("确认码无效");
+      expect((await stub.snapshot()).currentSession?.id).toBe(before.currentSession?.id);
+      const rows = (await api(stub, "session.list")).data as { id: string; resetAt: number }[];
+      expect(rows.find((s) => s.id === target.id)?.resetAt).toBe(original.resetAt);
+      expect(rows).toHaveLength(before.stats.sessions);
+    },
+  );
 });
 
 describe("WeChat QR configuration preflight", () => {
@@ -698,6 +1105,17 @@ describe("personal WeChat link limits and isolation", () => {
       await call(a, "/delete");
       const token = value(a, "clearConfirmation").token;
       await call(b, `/delete ${token}`);
+      expect(JSON.parse(await instance.api("session.list")).data).toHaveLength(2);
+      await call(a, "/delete 1");
+      const numbered = value(a, "clearConfirmation");
+      await call(b, `/delete 1 ${numbered.token}`);
+      expect(JSON.parse(await instance.api("session.list")).data).toHaveLength(2);
+      state.storage.sql.exec(
+        "UPDATE settings SET value = ? WHERE key = ?",
+        JSON.stringify([numbered.id]),
+        wechatLinkKey(b, "sessionList"),
+      );
+      expect(await call(b, "/delete 1")).toContain("会话编号无效");
       expect(JSON.parse(await instance.api("session.list")).data).toHaveLength(2);
     });
   });

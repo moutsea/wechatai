@@ -1301,13 +1301,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.selectSession(s);
       return s;
     }
-    return this.createSession(
-      isRemoteAgent(p) ? null : p.modelId,
-      "",
-      false,
-      connectionId,
-      p.id,
-    );
+    return this.createSession(isRemoteAgent(p) ? null : p.modelId, "", false, connectionId, p.id);
   }
   private exitPlugin(connectionId = this.selectedLink()) {
     this.busy();
@@ -1327,13 +1321,12 @@ export class PersonalAccount extends DurableObject<Env> {
       this.selectSession(target);
       return target;
     }
-    const model = models.find((a) => a.id === current?.assistantId) ?? models[0];
+    const model = this.defaultChatModel(models);
     if (!model) {
       this.setLinkSetting(connectionId, "current", "");
       return null;
     }
-    // If the return conversation was deleted, replacing it must remain possible after Plus expires.
-    return this.createSession(model.id, "", true, connectionId);
+    return this.createSession(model.id, "", false, connectionId);
   }
   private limits() {
     const plus = this.plan() === "plus";
@@ -1554,6 +1547,9 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!channel) throw new AppError("channel_missing", "模型所属渠道不存在", 404);
         return resolveModel(model, channel);
       });
+  }
+  private defaultChatModel(models = this.assistants()) {
+    return models.find(isChatModel);
   }
   private publicAssistant(a: StoredAssistant): Assistant {
     const { encryptedKey: _secret, keyContext: _binding, ...visible } = a;
@@ -3149,7 +3145,13 @@ export class PersonalAccount extends DurableObject<Env> {
       throw new AppError("assistant_missing", "请先选择模型或远程 Agent 插件");
     if (!replacingDeleted && this.links().length) this.requireLink(connectionId, true);
     if (!replacingDeleted && this.sessions().length >= this.limits().sessions)
-      throw new AppError("session_limit", "已达到会话上限，请删除不再需要的会话或升级会员", 403);
+      throw new AppError(
+        "session_limit",
+        this.plan() === "plus"
+          ? "已达到会话上限。请在网页「会话记录」删除不需要的会话后重试；归档和清空不会释放会话名额。"
+          : "已达到会话上限。请用 /wx sessions 查看会话，再用 /wx delete 编号 选择不需要的会话并确认删除，无需先切换；也可升级 Plus。",
+        403,
+      );
     const s: StoredSession = {
       id: crypto.randomUUID(),
       connectionId,
@@ -3257,7 +3259,8 @@ export class PersonalAccount extends DurableObject<Env> {
     s.updatedAt = Date.now();
     if (action === "delete") this.sql.exec("DELETE FROM sessions WHERE id = ?", id);
     else this.saveSession(s);
-    if (current && (action === "archive" || action === "delete")) {
+    if (current && action === "delete") this.setLinkSetting(connectionId, "current", "");
+    if (current && action === "archive") {
       const candidate = this.findPlugin(s.pluginInstanceId ?? "");
       const replacementPlugin =
         candidate?.enabled && this.pluginAvailable(candidate.id) ? candidate : undefined;
@@ -3270,13 +3273,7 @@ export class PersonalAccount extends DurableObject<Env> {
           (!this.links().length && !this.getSetting("legacyLinkDeleted", false))) &&
         (replacementModel || isRemoteAgent(replacementPlugin))
       )
-        this.createSession(
-          replacementModel,
-          "",
-          action === "delete",
-          connectionId,
-          replacementPlugin?.id,
-        );
+        this.createSession(replacementModel, "", false, connectionId, replacementPlugin?.id);
       else this.setLinkSetting(connectionId, "current", "");
     }
     this.personalRuns.prune();
@@ -4209,11 +4206,9 @@ export class PersonalAccount extends DurableObject<Env> {
       .toArray()[0];
     if (interrupted?.status === "interrupted")
       return this.resumePersonalRun(id, connectionId, deadline);
-    const defaultModel = this.assistants().find(isChatModel);
-    if (!this.linkSetting(connectionId, "current", "") && defaultModel)
-      this.createSession(defaultModel.id, "", false, connectionId);
     const text = extractText(message);
     const assistants = this.assistants();
+    const defaultModel = this.defaultChatModel(assistants);
     const currentId = this.linkSetting(connectionId, "current", "");
     const currentSession = this.sessions(connectionId).find((s) => s.id === currentId);
     const currentPlugin = currentSession?.pluginInstanceId
@@ -4237,9 +4232,13 @@ export class PersonalAccount extends DurableObject<Env> {
         if (previous) return (JSON.parse(previous.response) as { text: string }).text;
         const reply = (() => {
           this.busy();
+          const noSession = defaultModel
+            ? "当前还没有会话。发送 /wx new 新建普通模型会话，或发送 /use 快捷名 进入插件。"
+            : "当前未使用插件或模型。请先在网页添加文本模型，或发送 /use 快捷名 进入已配置的插件。";
           if (command[0] === "/help") return wechatHelp(publicSiteUrl(this.env));
           if (command[0] === "/status") {
             const session = this.sessions(connectionId).find((s) => s.id === currentId);
+            if (!session) return noSession;
             if (session?.pluginInstanceId) {
               const plugin = this.plugins().find((p) => p.id === session.pluginInstanceId);
               return plugin
@@ -4256,13 +4255,17 @@ export class PersonalAccount extends DurableObject<Env> {
             return "已清空待处理附件。你可以重新发送图片或文件，再补充处理要求。";
           }
           if (command[0] === "/exit") {
-            const wasPlugin = this.sessions(connectionId).find(
-              (s) => s.id === currentId,
-            )?.pluginInstanceId;
+            const wasPlugin = currentSession?.pluginInstanceId;
+            const previousSessions = this.sessions(connectionId);
             const s = this.exitPlugin(connectionId);
-            return s
-              ? `${wasPlugin ? "已退出插件，返回" : "当前已是普通模型模式："}「${s.title}」｜${this.assistant(s.assistantId).name}。`
-              : "已退出插件，请先在网页添加模型。";
+            if (!s)
+              return wasPlugin ? "已退出插件。请先在网页添加文本模型，再开始普通聊天。" : noSession;
+            const action = previousSessions.some((previous) => previous.id === s.id)
+              ? wasPlugin
+                ? "已退出插件，返回"
+                : "当前已是普通模型模式："
+              : `${wasPlugin ? "已退出插件，" : ""}已新建普通模型会话：`;
+            return `${action}「${s.title}」｜${this.assistant(s.assistantId).name}。`;
           }
           if (command[0] === "/plugins" || (command[0] === "/use" && !command[1])) {
             const plugins = this.plugins();
@@ -4306,7 +4309,7 @@ export class PersonalAccount extends DurableObject<Env> {
                     : p.pluginId === "wechatai/personal-assistant"
                       ? "之后直接告诉我想记下的事情、收支或待办，也可以单独设置提醒。提醒按北京时间设置；/wx new 新建聊天，已保存的记录会保留。"
                       : "之后直接发送问题即可，模型会按需联网。";
-            return `${action}「${p.name}」。${usage}\n\n- @其他快捷名 内容：仅本次调用，不改变当前默认插件\n- /use 其他别名：直接切换，无需先退出\n- /exit：返回进入插件前的普通模型会话${hadStory ? "" : this.roleGreeting(story)}`;
+            return `${action}「${p.name}」。${usage}\n\n- @其他快捷名 内容：仅本次调用，不改变当前默认插件\n- /use 其他别名：直接切换，无需先退出\n- /exit：退出插件，优先恢复之前的普通模型会话；没有可用会话时新建${hadStory ? "" : this.roleGreeting(story)}`;
           }
           if (command[0] === "/balance") {
             const balance = this.wallet.balance() / 1000;
@@ -4341,7 +4344,8 @@ export class PersonalAccount extends DurableObject<Env> {
             const a = this.assistant(s.assistantId);
             return `已切换到渠道「${channel.name}」｜${a.name}（${a.model}）\n发送 /wx models 查看该渠道下的模型。`;
           }
-          const channelId = currentModel?.channelId ?? this.channels()[0]?.id;
+          const channelId =
+            currentModel?.channelId ?? defaultModel?.channelId ?? this.channels()[0]?.id;
           const available = assistants.filter((a) => a.channelId === channelId && isChatModel(a));
           if (command[0] === "/models") {
             this.setLinkSetting(connectionId, "modelList", {
@@ -4350,7 +4354,7 @@ export class PersonalAccount extends DurableObject<Env> {
             });
             return available.length
               ? `**${available[0].channelName} · 模型**\n\n${available.map((a, i) => `${i + 1}. ${a.name} · ${a.model}${a.id === currentModel?.id ? " [当前]" : ""}`).join("\n")}\n\n发送 /wx model 编号 切换普通模型；/wx channels 查看其他渠道。/use 用于进入插件。`
-              : "当前渠道还没有文本模型，请在网页添加；生图模型请在 AI 生图插件中使用。";
+              : "当前渠道还没有文本模型。发送 /wx channels 查看其他渠道，或在网页添加文本模型；生图模型请在 AI 生图插件中使用。";
           }
           if (command[0] === "/model") {
             const list = this.linkSetting<{ channelId: string; ids: string[] } | null>(
@@ -4371,14 +4375,15 @@ export class PersonalAccount extends DurableObject<Env> {
               "sessionList",
               items.map((s) => s.id),
             );
-            return (
-              items
-                .map(
-                  (s, i) =>
-                    `${i + 1}. ${s.title}${s.archived ? " [归档]" : ""}${s.id === currentId ? " [当前]" : ""}`,
-                )
-                .join("\n") || "还没有会话，请先添加模型。"
-            );
+            return items.length
+              ? items
+                  .map(
+                    (s, i) =>
+                      `${i + 1}. ${s.title}${s.archived ? " [归档]" : ""}${s.id === currentId ? " [当前]" : ""}`,
+                  )
+                  .join("\n") +
+                  "\n\n发送 /wx switch 编号 继续聊天，或 /wx delete 编号 删除指定会话（需确认）。"
+              : noSession;
           }
           if (command[0] === "/switch") {
             const ids = this.linkSetting<string[]>(connectionId, "sessionList", []);
@@ -4390,7 +4395,83 @@ export class PersonalAccount extends DurableObject<Env> {
             this.changeSession(id, "switch");
             return `已切换到「${s.title}」｜${s.assistantId ? this.assistant(s.assistantId).channelName + " / " + this.assistant(s.assistantId).name : (s.pluginName ?? "OpenClaw")}`;
           }
-          if (!currentId) return "请先在网页添加模型。";
+          if (command[0] === "/clear" || command[0] === "/delete") {
+            const operation = command[0] === "/delete" ? "delete" : "clear";
+            const confirmation = this.linkSetting<{
+              id: string;
+              token: string;
+              expires: number;
+              operation: string;
+              number?: string;
+            } | null>(connectionId, "clearConfirmation", null);
+            if (
+              confirmation &&
+              confirmation.operation === operation &&
+              confirmation.expires > Date.now() &&
+              (confirmation.number
+                ? command.length === 3 &&
+                  command[1] === confirmation.number &&
+                  command[2] === confirmation.token
+                : command.length === 2 &&
+                  confirmation.id === currentId &&
+                  command[1] === confirmation.token)
+            ) {
+              const target = this.sessions(connectionId).find((s) => s.id === confirmation.id);
+              this.setLinkSetting(connectionId, "clearConfirmation", null);
+              if (!target) return "该会话已删除，请发送 /wx sessions 查看最新会话。";
+              this.changeSession(target.id, operation);
+              return operation === "delete"
+                ? `${target.id === currentId ? "当前会话" : `会话「${target.title}」`}已删除，已释放一个会话名额。` +
+                    (this.linkSetting(connectionId, "current", "")
+                      ? ""
+                      : defaultModel
+                        ? "发送 /wx new 开始普通聊天，或发送 /use 快捷名 进入插件。"
+                        : "发送 /use 快捷名 进入插件继续聊天。")
+                : "当前会话记录已清空。";
+            }
+            const number =
+              operation === "delete" &&
+              command.length === 2 &&
+              command[1] !== confirmation?.token &&
+              /^[1-9]\d*$/.test(command[1])
+                ? command[1]
+                : undefined;
+            if (command.length > 1 && !number)
+              return operation === "delete"
+                ? "确认码无效或已过期。请重新发送 /wx delete 删除当前会话，或先用 /wx sessions 查看编号，再用 /wx delete 编号 选择会话。"
+                : "确认码无效或已过期，请重新发送 /wx clear 获取确认码。";
+            const targetId = number
+              ? this.linkSetting<string[]>(connectionId, "sessionList", [])[Number(number) - 1]
+              : currentId;
+            const target = this.sessions(connectionId).find((s) => s.id === targetId);
+            if (!target) {
+              if (number)
+                return "会话编号无效或会话已删除，请先发送 /wx sessions，再使用 /wx delete 编号。";
+              return operation === "delete" && this.sessions(connectionId).length
+                ? "当前没有正在使用的会话。发送 /wx sessions 查看编号，再用 /wx delete 编号 删除指定会话。"
+                : noSession;
+            }
+            const token = crypto.randomUUID().slice(0, 6);
+            this.setLinkSetting(connectionId, "clearConfirmation", {
+              id: target.id,
+              token,
+              operation,
+              expires: Date.now() + 60000,
+              number,
+            });
+            const effect =
+              operation === "delete"
+                ? `这会永久删除会话「${target.title}」及其平台记录，并释放一个会话名额；删除后不会自动新建会话。`
+                : `这会永久删除当前会话「${target.title}」的平台记录，会话本身仍保留。`;
+            return `${effect}\n\n60 秒内发送 /wx ${operation}${number ? ` ${number}` : ""} ${token} 确认。`;
+          }
+          if (!currentId) {
+            if (command[0] === "/new" && defaultModel) {
+              this.createSession(defaultModel.id, "", false, connectionId);
+              return "已开始新的会话。";
+            }
+            return noSession;
+          }
           const s = this.session(currentId);
           if (command[0] === "/new") {
             const story = this.createSession(
@@ -4413,36 +4494,6 @@ export class PersonalAccount extends DurableObject<Env> {
               "会话已归档，并开始新的会话。" +
               (next && next !== s.id ? this.roleGreeting(this.session(next)) : "")
             );
-          }
-          if (command[0] === "/clear" || command[0] === "/delete") {
-            const operation = command[0] === "/delete" ? "delete" : "clear";
-            const confirmation = this.linkSetting<{
-              id: string;
-              token: string;
-              expires: number;
-              operation: string;
-            } | null>(connectionId, "clearConfirmation", null);
-            if (
-              confirmation &&
-              confirmation.id === s.id &&
-              confirmation.operation === operation &&
-              confirmation.expires > Date.now() &&
-              command[1] === confirmation.token
-            ) {
-              this.changeSession(s.id, operation);
-              this.setLinkSetting(connectionId, "clearConfirmation", null);
-              return operation === "delete"
-                ? "当前会话已删除，并开始新的空会话。"
-                : "当前会话记录已清空。";
-            }
-            const token = crypto.randomUUID().slice(0, 6);
-            this.setLinkSetting(connectionId, "clearConfirmation", {
-              id: s.id,
-              token,
-              operation,
-              expires: Date.now() + 60000,
-            });
-            return `这会永久删除当前会话的平台记录。60 秒内发送 /wx ${command[0].slice(1)} ${token} 确认。`;
           }
           return "微伴暂不支持这条指令。发送 /wx help 查看平台命令。";
         })();
@@ -4513,6 +4564,8 @@ export class PersonalAccount extends DurableObject<Env> {
           ? `@${handle} 只用于单次调用，请在后面加上问题。\n\n如需默认使用此插件，发送 /use ${plugin.shortcut}；发送 /exit 退出。`
           : `请发送 @${handle} 问题 进行单次对话。切换默认模型请用 /wx models 和 /wx model 编号。`;
     }
+    if (!this.linkSetting(connectionId, "current", "") && defaultModel)
+      this.createSession(defaultModel.id, "", false, connectionId);
     const active = this.linkSetting(connectionId, "current", "");
     if (!active && once?.pluginId && isRemoteAgent(this.plugin(once.pluginId))) {
       // First use without any LLM model. Establish an isolated OpenClaw conversation.

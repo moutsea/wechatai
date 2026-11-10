@@ -192,7 +192,7 @@ export function Sessions() {
             archive: "会话已归档",
             restore: "会话已恢复",
             clear: "当前会话记录已清空",
-            delete: "会话已删除",
+            delete: "会话已删除，已释放一个会话名额",
             new: "新会话已创建，并设为微信当前会话",
             "new-story": "新故事已创建，原会话已保留",
           } as Record<string, string>
@@ -592,7 +592,8 @@ export function Sessions() {
                 archive: "记录会移入归档。如这是当前会话，将自动开启新会话。",
                 restore: "会话将回到常用列表，恢复后可以手动切换继续聊。",
                 clear: "平台上的消息记录和模型上下文都会删除，无法恢复。",
-                delete: "会话及其消息会从平台删除，无法恢复。微信里的消息不受影响。",
+                delete:
+                  "会话及其消息会从平台删除，无法恢复，并释放一个会话名额。删除当前会话后不会自动新建，微信里的消息不受影响。",
               } as Record<string, string>
             )[operation]
           }
