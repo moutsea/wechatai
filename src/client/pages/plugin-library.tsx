@@ -1,4 +1,9 @@
-import { availablePluginIds, canAddPlugin, pluginAvailable } from "../../shared/plugin-access";
+import {
+  availablePluginIds,
+  canAddPlugin,
+  pluginAvailable,
+  pluginLimitIssue,
+} from "../../shared/plugin-access";
 import { PLUGIN_SHORTCUT_PATTERN, PLUGIN_SHORTCUT_HINT } from "../../shared/plugin-shortcut";
 import { useState } from "react";
 import type { PersonalAssistantPlugin } from "../../shared/personal-assistant";
@@ -328,7 +333,12 @@ export function PluginConfiguration({
     (a) => a.id === (selected && "modelId" in selected ? selected.modelId : null),
   );
   const active = selected && data.currentSession?.pluginInstanceId === selected.id;
-  const connection = isRemoteAgent(selected) ? remoteAgentConnection(selected) : null;
+  const connection = isRemoteAgent(selected)
+    ? remoteAgentConnection({
+        ...selected,
+        access: allowed ? selected.access : pluginLimitIssue(data.planUntil),
+      })
+    : null;
   const incomplete = connection && !connection.connectedBefore;
   return (
     <Modal
@@ -570,9 +580,8 @@ export function PluginConfiguration({
             )}
             {!allowed && (
               <p className="plugin-config-renew">
-                Free 用户可使用最早创建的 1 个插件配置，其余配置保留但暂停使用。删除较早的配置，或
-                <Link to={`${base}/billing`}>升级 Plus</Link>
-                ，即可继续使用。暂停期间仍可停用或修改别名。
+                {pluginLimitIssue(data.planUntil).message}{" "}
+                <Link to={`${base}/billing`}>查看会员 / 续费 Plus</Link>
               </p>
             )}
             {aliasConflict && (

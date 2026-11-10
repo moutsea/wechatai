@@ -1,34 +1,39 @@
 import { compareConnectorVersions } from "../shared/openclaw-release";
 import type { OpenClawStatus } from "../shared/openclaw";
+import type { PluginAccessIssue } from "../shared/plugin-access";
 
-type Connection = { hasKey: boolean; lastSeen?: number };
+type Connection = { hasKey: boolean; lastSeen?: number; access?: PluginAccessIssue | null };
 
 const labels = {
   pending: "待连接",
   waiting: "等待上线",
   online: "已连接",
   offline: "已离线",
+  paused: "已暂停",
 } as const;
 const descriptions = {
   pending: "配置已保存，请执行连接命令完成连接",
   waiting: "配对已完成，等待本机渠道上线",
   online: "本机渠道在线，可以在微信中使用",
   offline: "本机渠道离线，请检查 Gateway 是否运行",
+  paused: "此配置已暂停，请查看会员与插件设置",
 } as const;
 
 export function remoteAgentConnection(connection: Connection, now = Date.now()) {
   const lastSeen = connection.lastSeen ?? 0;
-  const state = !connection.hasKey
-    ? "pending"
-    : !lastSeen
-      ? "waiting"
-      : lastSeen > now - 60000
-        ? "online"
-        : "offline";
+  const state = connection.access
+    ? "paused"
+    : !connection.hasKey
+      ? "pending"
+      : !lastSeen
+        ? "waiting"
+        : lastSeen > now - 60000
+          ? "online"
+          : "offline";
   return {
     state,
-    label: labels[state],
-    description: descriptions[state],
+    label: connection.access?.code === "membership_expired" ? "会员到期已暂停" : labels[state],
+    description: connection.access?.message ?? descriptions[state],
     connectedBefore: connection.hasKey && lastSeen > 0,
   };
 }

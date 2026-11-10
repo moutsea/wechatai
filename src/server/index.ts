@@ -410,7 +410,11 @@ for (const kind of ["openclaw", "hermes"] as const)
     return result.ok
       ? c.json(result.data)
       : c.json(
-          { error: result.error, message: result.message },
+          {
+            error: result.error,
+            message: result.message,
+            ...(result.reason ? { reason: result.reason } : {}),
+          },
           result.status as ContentfulStatusCode,
         );
   });

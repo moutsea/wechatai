@@ -4,7 +4,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { Journal, executeJob, flush, relay, type Account, type Job } from "./transport.ts";
+import {
+  Journal,
+  executeJob,
+  flush,
+  relay,
+  RelayError,
+  type Account,
+  type Job,
+} from "./transport.ts";
 import { AgentReply, PARTIAL_FAILURE_NOTICE } from "./reply.ts";
 
 const account: Account = {
@@ -27,6 +35,36 @@ function fixture() {
   };
   return { dir, path, journal, job };
 }
+
+test("reports membership and plugin restrictions without exposing raw relay errors", async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const [code, reason, expected] of [
+      ["plugin_limit", "membership_expired", "Plus 会员已到期"],
+      ["plugin_limit", undefined, "超出 Free 插件名额"],
+      ["plugin_disabled", undefined, "插件已停用"],
+      ["unauthorized", undefined, "连接凭证无效或已撤销"],
+    ]) {
+      globalThis.fetch = async () =>
+        Response.json(
+          { error: code, reason, message: "sensitive-token-from-raw-error" },
+          { status: 403 },
+        );
+      await assert.rejects(relay(account, "heartbeat", {}), (error: unknown) => {
+        assert(error instanceof RelayError);
+        assert.equal(error.status, 403);
+        assert.equal(error.code, code);
+        assert(error.message.includes(expected!));
+        assert(!error.message.includes("sensitive-token"));
+        return true;
+      });
+    }
+    globalThis.fetch = async () => new Response("<html>sensitive-token</html>", { status: 502 });
+    await assert.rejects(relay(account, "heartbeat", {}), /Wechatai relay returned HTTP 502/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
 
 for (const text of [
   "⚙️ Compacted (10k → 2k) • Context 2k/128k",

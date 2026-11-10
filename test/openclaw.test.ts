@@ -494,6 +494,63 @@ describe("OpenClaw native relay", () => {
     expect((await api(ctx.stub, "plugin.save", { ...second, name: "可编辑" })).ok).toBe(true);
     expect(await send(ctx.stub, "/use second")).toContain("已进入");
   });
+  it("explains expired membership without losing pairing and recovers with the same credentials", async () => {
+    const ctx = await setup();
+    const second = (
+      await api(ctx.stub, "plugin.save", {
+        pluginId: "wechatai/openclaw",
+        name: "第二个助手",
+        shortcut: "work",
+      })
+    ).data;
+    const token = (await api(ctx.stub, "plugin.clawToken", { id: second.id })).data.token as string;
+    const secret = token.split(".")[2];
+    const heartbeat = async () =>
+      JSON.parse(await ctx.stub.openClawRequest(second.id, secret, "heartbeat", {}));
+    expect((await heartbeat()).ok).toBe(true);
+    await runInDurableObject(ctx.stub, (_, state) =>
+      state.storage.sql.exec(
+        "UPDATE settings SET value=? WHERE key='planUntil'",
+        JSON.stringify(Date.now() - 1000),
+      ),
+    );
+    const paused = (await api(ctx.stub, "plugin.clawStatus", { id: second.id })).data;
+    expect(paused).toMatchObject({ hasKey: true, access: { code: "membership_expired" } });
+    expect(paused.access.message).toContain("Plus 会员已到期");
+    expect(paused.access.message).toContain("仅停用不会释放名额");
+    const snapshotPlugin = (await ctx.stub.snapshot()).plugins?.find((p) => p.id === second.id);
+    expect(
+      snapshotPlugin && "access" in snapshotPlugin ? snapshotPlugin.access : undefined,
+    ).toEqual(paused.access);
+    expect((await api(ctx.stub, "plugin.clawStatus", { id: ctx.pluginId })).data.access).toBeNull();
+    expect(await heartbeat()).toMatchObject({
+      ok: false,
+      error: "plugin_limit",
+      status: 403,
+      reason: "membership_expired",
+    });
+    const response = await SELF.fetch("https://example.com/api/openclaw/heartbeat", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({
+      error: "plugin_limit",
+      reason: "membership_expired",
+      message: paused.access.message,
+    });
+    await expect(send(ctx.stub, "/use work")).rejects.toThrow("Plus 会员已到期");
+    await ctx.stub.applyPayment({
+      id: "renew",
+      kind: "subscription",
+      units: 0,
+      expires: Date.now() + 86400000,
+    });
+    expect((await api(ctx.stub, "plugin.clawStatus", { id: second.id })).data.access).toBeNull();
+    expect((await heartbeat()).ok).toBe(true);
+  });
   it("allows Plus to add another agent after twenty configs, including disabled ones", async () => {
     const ctx = await setup();
     for (let i = 1; i < 20; i++)

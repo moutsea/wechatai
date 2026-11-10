@@ -1,0 +1,33 @@
+.membership-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  padding: 18px 22px;
+  margin-bottom: 24px;
+  border: 1px solid #e9d3a2;
+  border-radius: var(--radius);
+  background: #fff9ec;
+  color: #6a481b;
+}
+.membership-notice > div:first-child {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+.membership-notice p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.membership-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.membership-notice-actions a:not(.button) {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

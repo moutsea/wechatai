@@ -1,5 +1,10 @@
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
-import { PLUGIN_LIMITS, availablePluginIds } from "../shared/plugin-access";
+import {
+  PLUGIN_LIMITS,
+  availablePluginIds,
+  pluginLimitIssue,
+  type PluginAccessIssue,
+} from "../shared/plugin-access";
 import {
   pluginShortcutSchema,
   pluginShortcutForEdit,
@@ -760,6 +765,9 @@ export class PersonalAccount extends DurableObject<Env> {
         error: error instanceof AppError ? error.code : "invalid_request",
         message: error instanceof AppError ? error.message : "请求格式无效",
         status: error instanceof AppError ? error.status : 400,
+        ...(error instanceof AppError && error.code === "plugin_limit"
+          ? { reason: pluginLimitIssue(this.getSetting("planUntil", 0)).code }
+          : {}),
       });
     }
   }
@@ -931,7 +939,9 @@ export class PersonalAccount extends DurableObject<Env> {
     if (id ? !this.pluginAvailable(id) : this.plugins().length >= limit)
       throw new AppError(
         "plugin_limit",
-        `Free 用户最多配置 ${limit} 个插件。${id ? "此配置已暂停，记录仍保留。" : ""}请删除不用的配置后重试，或升级会员。`,
+        id
+          ? pluginLimitIssue(this.getSetting("planUntil", 0)).message
+          : `Free 用户最多配置 ${limit} 个插件。请删除不用的配置后重试，或升级会员。`,
         403,
       );
   }
@@ -980,7 +990,12 @@ export class PersonalAccount extends DurableObject<Env> {
       const { encryptedKey: _key, ...safe } = p;
       return { ...safe, hasKey: this.notifications.hasToken(p.id) };
     }
-    if (isRemoteAgent(p)) return { ...rest, ...this.claw.status(p.id) } as RemoteAgentPlugin;
+    if (isRemoteAgent(p))
+      return {
+        ...rest,
+        ...this.claw.status(p.id),
+        access: this.remoteAgentAccess(p),
+      } as RemoteAgentPlugin;
     return {
       ...rest,
       hasKey:
@@ -990,6 +1005,15 @@ export class PersonalAccount extends DurableObject<Env> {
           ? (this.assistants().find((a) => a.id === p.modelId)?.hasKey ?? false)
           : Boolean(encryptedKey),
     };
+  }
+  private remoteAgentAccess(p: StoredPlugin): PluginAccessIssue | null {
+    if (!this.pluginAvailable(p.id)) return pluginLimitIssue(this.getSetting("planUntil", 0));
+    return p.enabled
+      ? null
+      : {
+          code: "plugin_disabled",
+          message: "此插件已停用，请在插件配置中重新启用。配置与绑定仍保留。",
+        };
   }
   private async savePlugin(id: string | undefined, raw: unknown) {
     this.busy();
@@ -2436,6 +2460,7 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!isRemoteAgent(plugin)) throw new AppError("plugin_type", "不是远程 Agent 配置");
         data = {
           ...this.claw.status(plugin.id),
+          access: this.remoteAgentAccess(plugin),
           ...(plugin.pluginId === "wechatai/openclaw"
             ? {
                 connectorUpdate: {

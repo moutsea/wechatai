@@ -28,8 +28,21 @@ export type Event = {
   status: "completed" | "failed";
 };
 export class RelayError extends Error {
-  constructor(public status: number) {
-    super(`Wechatai relay returned HTTP ${status}`);
+  constructor(
+    public status: number,
+    public code?: string,
+    public reason?: string,
+  ) {
+    const messages: Record<string, string> = {
+      plugin_limit:
+        reason === "membership_expired"
+          ? "Plus 会员已到期，此 OpenClaw 配置因 Free 插件名额限制暂停。请到微伴「会员与 credits」续费，或删除不用的插件配置释放名额；配置与绑定仍保留。"
+          : "此 OpenClaw 配置超出 Free 插件名额，已暂停。请到微伴「会员与 credits」查看会员，或删除不用的插件配置释放名额；仅停用不会释放名额。",
+      plugin_disabled: "微伴中的 OpenClaw 插件已停用，请在网页插件配置中重新启用。",
+      plugin_missing: "微伴中的 OpenClaw 配置已删除，请在网页重新配置。",
+      unauthorized: "微伴连接凭证无效或已撤销，请在网页 OpenClaw 配置中重新连接。",
+    };
+    super(messages[code ?? ""] ?? `Wechatai relay returned HTTP ${status}`);
   }
 }
 export async function relay<T>(
@@ -56,8 +69,22 @@ export async function relay<T>(
       : AbortSignal.timeout(20000),
   });
   if (!response.ok) {
-    await response.body?.cancel();
-    throw new RelayError(response.status);
+    // Only interpret known business codes. Never expose a raw response message,
+    // which can contain credentials, request bodies or a reverse-proxy error page.
+    const detail = (await response.json().catch(() => null)) as {
+      error?: unknown;
+      reason?: unknown;
+    } | null;
+    const code =
+      typeof detail?.error === "string" &&
+      ["plugin_limit", "plugin_disabled", "plugin_missing", "unauthorized"].includes(detail.error)
+        ? detail.error
+        : undefined;
+    throw new RelayError(
+      response.status,
+      code,
+      detail?.reason === "membership_expired" ? "membership_expired" : undefined,
+    );
   }
   return (await response.json()) as T;
 }

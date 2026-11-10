@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PluginAccessIssue } from "./plugin-access";
 import { openClawInputSchema, openClawManifest, type OpenClawInput } from "./openclaw";
 import { pluginManifestSchema } from "./plugins";
 
@@ -6,6 +7,7 @@ export const hermesInputSchema = openClawInputSchema.safeExtend({
   agentId: z.literal("main").default("main"),
 });
 export type HermesPlugin = OpenClawInput & {
+  access?: PluginAccessIssue | null;
   id: string;
   pluginId: "wechatai/hermes";
   version: "1.0.0";

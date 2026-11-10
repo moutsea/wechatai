@@ -15,6 +15,7 @@ import {
   flush,
   Journal,
   relay,
+  RelayError,
   type Account,
   type Job,
 } from "./transport.js";
@@ -125,6 +126,21 @@ export function createWechataiChannel(
       uiHints: { "accounts.*.token": { sensitive: true } },
     },
     reload: { configPrefixes: ["channels.wechatai"] },
+    status: {
+      buildAccountSnapshot: ({ account, runtime }) => ({
+        accountId: account.accountId,
+        enabled: account.enabled,
+        configured: Boolean(account.token),
+        running: runtime?.running ?? false,
+        connected: runtime?.connected ?? false,
+        lastError: runtime?.lastError ?? null,
+        lastStartAt: runtime?.lastStartAt ?? null,
+        lastStopAt: runtime?.lastStopAt ?? null,
+        lastEventAt: runtime?.lastEventAt ?? null,
+        lastInboundAt: runtime?.lastInboundAt ?? null,
+        lastOutboundAt: runtime?.lastOutboundAt ?? null,
+      }),
+    },
     messaging: {
       normalizeTarget: (target) => target.replace(/^wechatai:/, ""),
       targetResolver: {
@@ -174,6 +190,21 @@ export function createWechataiChannel(
           nativeCommands: true,
           connectorVersion: OPENCLAW_CONNECTOR_VERSION,
         };
+        let reportedError: string | null = null;
+        const reportError = (error: unknown) => {
+          const message =
+            error instanceof RelayError
+              ? error.message
+              : "Wechatai connection or Agent dispatch unavailable; retrying";
+          if (message !== reportedError) ctx.log?.warn(`[${a.accountId}] ${message}`);
+          reportedError = message;
+          ctx.setStatus({
+            accountId: a.accountId,
+            running: true,
+            connected: false,
+            lastError: message,
+          });
+        };
         let outboxBusy = false;
         let outboxRetryAt = 0;
         const drainOutbox = () => {
@@ -191,8 +222,9 @@ export function createWechataiChannel(
             .then(() => {
               outboxRetryAt = 0;
             })
-            .catch(() => {
+            .catch((error) => {
               outboxRetryAt = Date.now() + 5000;
+              if (!ctx.abortSignal.aborted && error instanceof RelayError) reportError(error);
             })
             .finally(() => {
               outboxBusy = false;
@@ -208,7 +240,14 @@ export function createWechataiChannel(
           if (heartbeatBusy || ctx.abortSignal.aborted) return;
           heartbeatBusy = true;
           void relay(a, "heartbeat", heartbeat, ctx.abortSignal)
-            .catch(() => {})
+            .catch((error) => {
+              if (
+                !ctx.abortSignal.aborted &&
+                error instanceof RelayError &&
+                [401, 403, 404].includes(error.status)
+              )
+                reportError(error);
+            })
             .finally(() => {
               heartbeatBusy = false;
             });
@@ -315,15 +354,11 @@ export function createWechataiChannel(
                 lastEventAt: Date.now(),
                 lastError: null,
               });
-            } catch {
-              retryAfterMs = 5000;
-              if (!ctx.abortSignal.aborted)
-                ctx.setStatus({
-                  accountId: a.accountId,
-                  running: true,
-                  connected: false,
-                  lastError: "Wechatai connection or Agent dispatch unavailable; retrying",
-                });
+              reportedError = null;
+            } catch (error) {
+              retryAfterMs =
+                error instanceof RelayError && error.code === "plugin_limit" ? 60000 : 5000;
+              if (!ctx.abortSignal.aborted) reportError(error);
             }
             if (retryAfterMs)
               await delay(retryAfterMs, undefined, { signal: ctx.abortSignal }).catch(() => {});

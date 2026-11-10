@@ -36,7 +36,9 @@ Heartbeat, poll and claim advertise `nativeCommands: true`. Two poll lanes (`mes
 
 ## License
 
-MIT; see [LICENSE](LICENSE). Connector 1.1.4 adds runtime version reporting and an independent upgrade path; the wire protocol remains compatible with 1.1.x.
+Membership expiry or a plugin quota restriction pauses only the affected configuration. The website shows the reason and a membership link; connector 1.1.5 also reports it in channel status and logs. Renewing membership restores access with the existing credentials. Disabling other configurations does not release a Free plugin slot; deleting unused configurations does. No re-pairing is needed for a quota restriction.
+
+MIT; see [LICENSE](LICENSE). Connector 1.1.5 adds readable membership/quota errors to channel status and logs; the wire protocol remains compatible with 1.1.x.
 
 ## Upgrade without pairing
 

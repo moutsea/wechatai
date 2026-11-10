@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 
 // Filled by the release packager. The installer and archive come from the same site.
-const ARCHIVE_SHA256 = "bcce08e8337fb2026e28f5a8b3cf6a34482b577adfc23b16dbb45d6fbdad392f";
-const CONNECTOR_VERSION = "1.1.4";
+const ARCHIVE_SHA256 = "604c7e77e9675e8010bc6aaf9d6acd0246af8cfdfe329d9de07b36f9d16d4b78";
+const CONNECTOR_VERSION = "1.1.5";
 export function normalizeAgents(value) {
   if (!Array.isArray(value) || !value.length || value.length > 100)
     throw new Error("没有找到可用助手，请先完成 OpenClaw 初始化。");

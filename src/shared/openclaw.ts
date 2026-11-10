@@ -1,5 +1,6 @@
 import { pluginShortcutSchema, pluginShortcutJsonSchema } from "./plugin-shortcut";
 import { z } from "zod";
+import type { PluginAccessIssue } from "./plugin-access";
 import { pluginManifestSchema } from "./plugins";
 import { DEFAULT_INPUT_TOKENS, MAX_CONTEXT_TOKENS } from "./context";
 import {
@@ -28,6 +29,7 @@ export const openClawAgentsSchema = z
 export type OpenClawAgent = z.infer<typeof openClawAgentsSchema>[number];
 export type OpenClawPairing = { command: string; expiresAt: number };
 export type OpenClawStatus = {
+  access?: PluginAccessIssue | null;
   pairingClaimed?: boolean;
   nativeCommands?: boolean;
   hasKey: boolean;
@@ -60,6 +62,7 @@ export const openClawInputSchema = z
   .refine(validWaitingMessage, waitingMessageValidation);
 export type OpenClawInput = z.infer<typeof openClawInputSchema>;
 export type OpenClawPlugin = OpenClawInput & {
+  access?: PluginAccessIssue | null;
   id: string;
   pluginId: "wechatai/openclaw";
   version: "1.0.0";

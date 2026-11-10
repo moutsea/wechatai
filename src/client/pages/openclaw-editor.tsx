@@ -26,6 +26,8 @@ import { OPENCLAW_WAITING_MESSAGE } from "../../shared/waiting-message";
 import { WaitingMessageField } from "./waiting-message-field";
 import { remoteAgentConnection } from "../remote-agent-status";
 import { OpenClawUpgrade } from "./openclaw-upgrade";
+import { Link } from "react-router-dom";
+import { pluginAvailable, pluginLimitIssue } from "../../shared/plugin-access";
 
 export function OpenClawEditor({
   plugin,
@@ -42,7 +44,7 @@ export function OpenClawEditor({
   onSaved: (id: string) => void;
   onComplete: (id: string) => void;
 }) {
-  const { request, refresh, notify } = useApp();
+  const { data, base, request, refresh, notify } = useApp();
   const agentName = remoteAgentName(`wechatai/${kind}`);
   const [saved, setSaved] = useState(plugin === "new" ? null : plugin);
   const editSchema = openClawInputSchema.safeExtend({
@@ -114,7 +116,18 @@ export function OpenClawEditor({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [pairing]);
-  const connection = remoteAgentConnection(status ?? saved ?? { hasKey: false }, now);
+  const access =
+    status?.access !== undefined
+      ? status.access
+      : (saved?.access ??
+        (saved && data && !pluginAvailable(data.plan, data.plugins ?? [], saved.id)
+          ? pluginLimitIssue(data.planUntil)
+          : null));
+  const connection = remoteAgentConnection(
+    { ...(status ?? saved ?? { hasKey: false }), access },
+    now,
+  );
+  const limited = access?.code === "membership_expired" || access?.code === "plugin_limit";
   const connected = connection.state === "online";
   const agents = status?.agents ?? saved?.agents ?? [];
   const secondsLeft = Math.max(0, Math.ceil(((pairing?.expiresAt ?? 0) - now) / 1000));
@@ -198,7 +211,13 @@ export function OpenClawEditor({
             </p>
           </div>
         </div>
-        {!connected && !pairing && (
+        {limited && (
+          <p className="plugin-config-renew" role="status">
+            <Link to={`${base}/billing`}>查看会员 / 续费 Plus</Link> ·{" "}
+            <Link to={`${base}/plugins`}>管理插件名额</Link>
+          </p>
+        )}
+        {!connected && !pairing && !limited && (
           <ol className="claw-steps">
             <li>
               <span>1</span>
@@ -260,7 +279,7 @@ export function OpenClawEditor({
             </div>
           </div>
         )}
-        {kind === "openclaw" && status?.hasKey && !pairing && (
+        {kind === "openclaw" && status?.hasKey && !pairing && !limited && (
           <OpenClawUpgrade status={status} initiallyExpanded={showUpgrade} />
         )}
         {kind === "hermes" && status?.hasKey && !status.nativeCommands && !pairing && (
@@ -299,7 +318,7 @@ export function OpenClawEditor({
           <button
             type="button"
             className={`button ${pairing || connected ? "secondary small" : ""}`}
-            disabled={busy}
+            disabled={busy || limited}
             onClick={() => void connect()}
           >
             {busy
@@ -314,7 +333,7 @@ export function OpenClawEditor({
             查看教程 <ExternalLink size={13} />
           </a>
         </div>
-        {!connected && (
+        {!connected && !limited && (
           <p className="claw-install-note">
             需要已安装 {kind === "hermes" ? "Hermes Agent（当前稳定版）" : "OpenClaw 2026.6.10+"}
             。执行后会安装微伴渠道并重启 Gateway，请等待当前任务完成后再连接。
@@ -469,7 +488,7 @@ export function OpenClawEditor({
                 断开连接
               </button>
             )}
-            <button type="submit" className="button" disabled={busy}>
+            <button type="submit" className="button" disabled={busy || limited}>
               保存配置
             </button>
           </div>

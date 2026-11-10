@@ -3,8 +3,8 @@ import { OPENCLAW_CONNECTOR_VERSION } from "../../integrations/openclaw/version"
 export const openClawRelease = {
   version: OPENCLAW_CONNECTOR_VERSION,
   notes: [
-    "支持保留原有绑定的独立升级，并在网页显示实际运行版本。",
-    "保留工具报错后的有效回答，正确返回 /compact 等原生命令的结果。",
+    "会员到期或插件超出名额时，连接状态和日志明确说明暂停原因及恢复方式。",
+    "保留原有绑定，权益恢复后自动重试连接。",
   ],
 };
 

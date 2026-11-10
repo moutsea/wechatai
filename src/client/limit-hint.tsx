@@ -31,8 +31,8 @@ export function LimitHint({ code }: { code?: string }) {
     <div className="limit-hint">
       <p>
         <strong>{label}已达当前方案上限。</strong>Plus ¥{plusYuan} / 月起：每天{" "}
-        {DAILY_CREDIT_DEFAULTS.plus} credits、{pluginText}、可绑定{" "}
-        {WECHAT_LINK_LIMITS.plus} 个微信链接。
+        {DAILY_CREDIT_DEFAULTS.plus} credits、{pluginText}、可绑定 {WECHAT_LINK_LIMITS.plus}{" "}
+        个微信链接。
       </p>
       <div className="limit-hint-actions">
         <Link className="button small" to="/pricing">
@@ -40,7 +40,7 @@ export function LimitHint({ code }: { code?: string }) {
           <ArrowRight size={14} aria-hidden="true" />
         </Link>
         <Link className="text-link" to="/app/billing">
-          先单独买 credits
+          管理会员与配置
         </Link>
       </div>
     </div>

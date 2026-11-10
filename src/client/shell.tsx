@@ -24,6 +24,7 @@ import { authClient } from "./auth";
 import { useApp } from "./context";
 import { Brand, Modal } from "./ui";
 import { formatCredits } from "../shared/types";
+import { MembershipNotice } from "./membership-notice";
 const items = [
   { path: "", label: "概览", en: "Overview", icon: LayoutDashboard },
   { path: "/channels", label: "渠道与模型", en: "Channels", icon: Cpu },
@@ -151,6 +152,7 @@ export function Shell({ children }: { children: ReactNode }) {
           {data ? (
             <>
               <ImportantNotice />
+              <MembershipNotice />
               {children}
             </>
           ) : (

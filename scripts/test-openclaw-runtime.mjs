@@ -169,6 +169,55 @@ try {
   console.log(
     "OpenClaw runtime: native help/compact, authorization, concurrent stop and final answer with tool warning passed.",
   );
+  const restrictionController = new AbortController();
+  const restrictedAccount = {
+    accountId: randomUUID(),
+    endpoint: "https://relay.example.com",
+    token: "sensitive-connector-token",
+    agentId: "main",
+    enabled: true,
+  };
+  let restrictedStatus = {};
+  const warnings = [];
+  globalThis.fetch = async () =>
+    Response.json(
+      {
+        error: "plugin_limit",
+        reason: "membership_expired",
+        message: "sensitive raw response",
+      },
+      { status: 403 },
+    );
+  const restrictionTimeout = setTimeout(() => restrictionController.abort(), 5000);
+  try {
+    await channel.gateway.startAccount({
+      account: restrictedAccount,
+      cfg: {},
+      channelRuntime: runtime,
+      abortSignal: restrictionController.signal,
+      log: { warn: (message) => warnings.push(message) },
+      setStatus: (value) => {
+        restrictedStatus = { ...restrictedStatus, ...value };
+        if (value.lastError) restrictionController.abort();
+      },
+      getStatus: () => restrictedStatus,
+    });
+  } finally {
+    clearTimeout(restrictionTimeout);
+  }
+  assert.match(restrictedStatus.lastError, /Plus 会员已到期/);
+  assert.equal(warnings.length, 1);
+  const snapshot = await channel.status.buildAccountSnapshot({
+    account: restrictedAccount,
+    cfg: {},
+    runtime: restrictedStatus,
+  });
+  assert.equal(snapshot.lastError, restrictedStatus.lastError);
+  assert.equal(snapshot.connected, false);
+  assert(!JSON.stringify({ snapshot, warnings }).includes("sensitive"));
+  console.log(
+    "OpenClaw runtime: membership restriction is visible in channel status and logged once without credentials.",
+  );
 } finally {
   controller.abort();
   globalThis.fetch = originalFetch;

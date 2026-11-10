@@ -17,6 +17,9 @@ import { ConnectorUpdateCard } from "../src/client/connector-update-notice";
 import { connectorUpgradePath } from "../src/shared/connector-update";
 import { authReturnPath } from "../src/shared/auth";
 import { unreadNoticeCount, type UserNotices } from "../src/shared/site-notices";
+import { MembershipNotice } from "../src/client/membership-notice";
+import { remoteAgentConnection } from "../src/client/remote-agent-status";
+import { pluginLimitIssue } from "../src/shared/plugin-access";
 import { openClawInputSchema, type OpenClawPlugin } from "../src/shared/openclaw";
 import type { Snapshot } from "../src/shared/types";
 
@@ -184,6 +187,48 @@ describe("plugin entitlement controls", () => {
     data.plan = "plus";
     expect(editButton(configuration("second"))).not.toContain("disabled");
     expect(configuration("second")).toContain("添加另一组配置");
+  });
+  it("shows expiry and paused configuration reasons instead of suggesting a broken Gateway", () => {
+    data.planUntil = Date.now() - 1000;
+    data.plugins = [plugin("first"), { ...plugin("second"), lastSeen: 1 }];
+    const notice = () =>
+      renderToStaticMarkup(
+        <MemoryRouter>
+          <MembershipNotice />
+        </MemoryRouter>,
+      );
+    expect(notice()).toContain("Plus 会员已到期");
+    expect(notice()).toContain("1 个插件");
+    expect(notice()).toContain('href="/app/billing"');
+    const editor = renderToStaticMarkup(
+      <MemoryRouter>
+        <OpenClawEditor
+          plugin={data.plugins[1] as OpenClawPlugin}
+          onClose={noop}
+          onSaved={noop}
+          onComplete={noop}
+        />
+      </MemoryRouter>,
+    );
+    expect(editor).toContain("会员到期已暂停");
+    expect(editor).not.toContain("请检查 Gateway");
+    expect(editor).not.toContain("生成连接命令</strong>");
+    expect(configuration("second")).toContain("Plus 会员已到期");
+    expect(
+      remoteAgentConnection({
+        hasKey: true,
+        lastSeen: Date.now(),
+        access: pluginLimitIssue(data.planUntil),
+      }).state,
+    ).toBe("paused");
+    data.plan = "plus";
+    data.planUntil = Date.now() + 86400000;
+    expect(notice()).toContain("会员即将到期");
+    data.planUntil = Date.now() + 5 * 86400000;
+    expect(notice()).toBe("");
+    data.plan = "free";
+    data.planUntil = 0;
+    expect(notice()).toBe("");
   });
   it("keeps configuration and editing available for Plus beyond twenty plugins", () => {
     data.plan = "plus";
