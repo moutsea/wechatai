@@ -114,6 +114,56 @@ for (const width of [390, 1280]) {
     await expect(page.locator("#how")).toBeInViewport();
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   });
+
+  test(`preserves homepage reading state when DOMContentLoaded follows React at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const views: unknown[] = [];
+    page.on("request", (request) => {
+      if (request.url().endsWith("/api/analytics/page-view")) views.push(request.postDataJSON());
+    });
+    let entry: Route | undefined;
+    let deferred: Route | undefined;
+    await page.route(`${origin}/`, async (route) => {
+      const html = await readFile(new URL("index.html", assets), "utf8");
+      await route.fulfill({
+        contentType: "text/html",
+        body: html.replace("</head>", '<script defer src="/deferred.js"></script></head>'),
+      });
+    });
+    await page.route(`${origin}/deferred.js`, (route) => {
+      deferred = route;
+    });
+    await page.route("**/assets/index-*.js", (route) => {
+      entry = route;
+    });
+    await page.goto(`${origin}/#how`, { waitUntil: "commit" });
+    await expect.poll(() => Boolean(entry && deferred)).toBe(true);
+    const question = page.locator(".landing-faq details").first();
+    await question.locator("summary").click();
+    const position = await page.evaluate(() => window.scrollY);
+    const script = await readFile(
+      new URL(new URL(entry!.request().url()).pathname.slice(1), assets),
+      "utf8",
+    );
+    await entry!.fulfill({
+      contentType: "text/javascript",
+      body: `${script}\ndocument.body.dataset.entryEvaluated = "true";`,
+    });
+    // Hold DOMContentLoaded past the entry's initial React commit opportunity.
+    // The marker is appended to the built entry without changing its application code.
+    await expect(page.locator("body")).toHaveAttribute("data-entry-evaluated", "true");
+    await expect.poll(() => views.length).toBe(1);
+    await page.waitForTimeout(300);
+    await deferred!.fulfill({ contentType: "text/javascript", body: "" });
+    await page.waitForLoadState("load");
+    await page.waitForTimeout(1000);
+    await expect(question).toHaveAttribute("open", "");
+    await expect(question.locator("summary")).toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBe(position);
+    expect(views).toHaveLength(1);
+  });
 }
 
 test("keeps the prerendered article visible while its chunk loads and React mounts", async ({

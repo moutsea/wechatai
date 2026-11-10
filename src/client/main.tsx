@@ -196,20 +196,26 @@ if (
   const hasStaticHomepage =
     !import.meta.hot?.data.root && window.location.pathname === "/" && container.hasChildNodes();
   if (hasStaticHomepage) {
-    const initialDocument = captureDocumentState(container);
-    if (
-      window.location.hash &&
-      initialDocument.x === 0 &&
-      initialDocument.y === 0 &&
-      !initialDocument.focus &&
-      !initialDocument.details.some(({ open }) => open)
-    ) {
-      // An untouched page may not have reached its native initial fragment yet.
-      requestAnimationFrame(() => mountApp(captureDocumentState(container)));
-    } else {
-      // Capture user interactions before the pending native fragment can overwrite them.
-      mountApp(initialDocument);
-    }
+    const stopInitialTracking = startInitialPageViewTracking();
+    const mountHomepage = () => {
+      // DOMContentLoaded precedes the browser's final initial-fragment positioning.
+      // Capture interactions first, then restore after that positioning has finished.
+      const initialDocument = captureDocumentState(container);
+      const untouched =
+        initialDocument.x === 0 &&
+        initialDocument.y === 0 &&
+        !initialDocument.focus &&
+        !initialDocument.details.some(({ open }) => open);
+      requestAnimationFrame(() =>
+        mountApp(
+          untouched ? captureDocumentState(container) : initialDocument,
+          stopInitialTracking,
+        ),
+      );
+    };
+    // The module can execute before other deferred scripts finish loading.
+    if (document.readyState === "complete") mountHomepage();
+    else document.addEventListener("DOMContentLoaded", mountHomepage, { once: true });
   } else {
     mountApp();
   }
