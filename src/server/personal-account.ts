@@ -131,7 +131,7 @@ import {
 } from "./kimiseek";
 import { dayWindow, Wallet } from "./wallet";
 import { CloudAgentDelivery } from "./cloud-agent-delivery";
-import type { CloudTask } from "./cloud-agent-store";
+import { CloudAgentStore, type CloudTask } from "./cloud-agent-store";
 import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
 import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
@@ -238,6 +238,7 @@ export class PersonalAccount extends DurableObject<Env> {
   private attachments: AttachmentQueue;
   private media: MediaStore;
   private claw: OpenClawRelay;
+  private cloud: CloudAgentStore;
   private cloudDelivery: CloudAgentDelivery;
   private personalRecords: PersonalRecordsStore;
   private personalRuns: PersonalRunStore;
@@ -280,6 +281,7 @@ export class PersonalAccount extends DurableObject<Env> {
       schedule: () => this.scheduleWechat(),
     });
     this.wallet = new Wallet(ctx.storage);
+    this.cloud = new CloudAgentStore(ctx.storage);
     this.cloudDelivery = new CloudAgentDelivery(ctx.storage, (task) =>
       this.cloudDeliveryStale(task),
     );
@@ -426,7 +428,7 @@ export class PersonalAccount extends DurableObject<Env> {
           );
       }
       this.wallet.init();
-      this.cloudDelivery.init();
+      this.cloud.init();
       this.membershipReminders.init();
       this.claw.init();
       ctx.storage.transactionSync(() => initCallFailures(this.sql));
@@ -2853,6 +2855,7 @@ export class PersonalAccount extends DurableObject<Env> {
           this.sql.exec("DELETE FROM context_summaries");
           this.personalRecords.forgetContextChanges();
           this.sql.exec("DELETE FROM runs");
+          this.cloud.hideSession();
           this.sql.exec("DELETE FROM pending_attachments");
           this.revokeMedia();
           this.sql.exec("UPDATE inbox SET state = 'done', payload = '{}', reply = ''");
@@ -3100,6 +3103,7 @@ export class PersonalAccount extends DurableObject<Env> {
       (s) => s.assistantId !== null && ids.includes(s.assistantId),
     );
     for (const session of related) {
+      this.cloud.hideSession(session.id);
       this.sql.exec("DELETE FROM messages WHERE sessionId = ?", session.id);
       this.sql.exec("DELETE FROM runs WHERE sessionId = ?", session.id);
       this.sql.exec(
@@ -3254,6 +3258,7 @@ export class PersonalAccount extends DurableObject<Env> {
     } else if (action === "clear" || action === "delete") {
       this.revokeMedia(s.id);
       this.ctx.storage.transactionSync(() => {
+        this.cloud.hideSession(id);
         this.sql.exec("DELETE FROM messages WHERE sessionId = ?", id);
         this.sql.exec("DELETE FROM context_summaries WHERE sessionId = ?", id);
         this.sql.exec("DELETE FROM runs WHERE sessionId = ?", id);

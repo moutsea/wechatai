@@ -43,6 +43,7 @@ function inAccount<T>(
 async function setup(
   text = "任务已完成🌱",
   status: "completed" | "failed" | "cancelled" = "completed",
+  plainSession = false,
 ) {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(stub);
@@ -61,6 +62,16 @@ async function setup(
     shortcut: "work",
   });
   await api(stub, "plugin.activate", { id: plugin.id });
+  const model = plainSession
+    ? await api(stub, "assistant.save", {
+        name: "测试模型",
+        model: "test-model",
+        protocol: "chat-completions",
+        baseUrl: "https://llm.example.com",
+        apiKey: "test-key",
+      })
+    : null;
+  if (model) await api(stub, "assistant.activate", { id: model.id });
   const session = (await stub.snapshot()).currentSession!;
   const task = await inAccount(stub, async (storage, store) => {
     const saved = JSON.parse(
@@ -130,7 +141,7 @@ async function setup(
     store.save(task);
     return (await settleCloudAgentTask(storage, id, () => false))!;
   });
-  return { stub, task, plugin, inboxId: `cloud:${task.id}` };
+  return { stub, task, plugin, model, inboxId: `cloud:${task.id}` };
 }
 afterEach(async () => {
   for (const stub of accounts.splice(0))
@@ -139,6 +150,120 @@ afterEach(async () => {
 });
 
 describe("durable AGT reply delivery", () => {
+  it.each(["clear", "delete", "privacy.clear", "assistant.delete", "channel.delete"])(
+    "erases cloud content through %s without changing bills or restoring late results",
+    async (action) => {
+      const deletingModel = action === "assistant.delete" || action === "channel.delete";
+      const { stub, task, inboxId, model } = await setup(
+        "private-cloud-answer",
+        "completed",
+        deletingModel,
+      );
+      const before = await inAccount(stub, async (storage, store, delivery) => {
+        delivery.sync(task.id);
+        storage.sql.exec("UPDATE inbox SET state='waiting_context' WHERE id=?", inboxId);
+        const pending = (sessionId = task.sessionId): CloudTask => {
+          const id = crypto.randomUUID();
+          return {
+            ...task,
+            id,
+            sourceId: crypto.randomUUID(),
+            idempotencyKey: crypto.randomUUID(),
+            jobId: `job-${id}`,
+            sessionId,
+            state: "accepted",
+            delivered: 0,
+            settled: 0,
+            units: 0,
+            result: "",
+            frozen: "",
+            prompt: "private-cloud-prompt",
+            request: "private-encrypted-request",
+            invocation: { ...task.invocation!, runId: id, sessionId },
+            outcome: { ...task.outcome!, id: `job-${id}` },
+          };
+        };
+        const stale = pending();
+        store.save(stale);
+        await settleCloudAgentTask(storage, stale.id, () => true);
+        expect(storage.sql.exec("SELECT sessionId FROM runs WHERE id=?", stale.id).one()).toEqual({
+          sessionId: null,
+        });
+        const active = { ...pending(), outcome: null };
+        const unrelated = { ...pending(crypto.randomUUID()), outcome: null };
+        store.save(active);
+        store.save(unrelated);
+        return {
+          active,
+          unrelated,
+          ids: [task.id, stale.id, active.id],
+          balance: new Wallet(storage).balance(),
+          ledger: storage.sql.exec("SELECT * FROM credit_ledger").toArray(),
+          usage: storage.sql.exec("SELECT * FROM usage").toArray(),
+          metering: storage.sql.exec("SELECT * FROM platform_metering").toArray(),
+        };
+      });
+      if (action === "privacy.clear") await api(stub, action);
+      else if (deletingModel)
+        await api(stub, action, { id: action === "assistant.delete" ? model.id : model.channelId });
+      else await api(stub, "session.action", { id: task.sessionId, action });
+      expect(await deliverQueuedReplies(stub)).toEqual([]);
+      await inAccount(stub, async (storage, store, delivery) => {
+        const ids = action === "privacy.clear" ? [...before.ids, before.unrelated.id] : before.ids;
+        for (const id of ids) {
+          expect(store.get(id)).toMatchObject({
+            hidden: 1,
+            stale: 1,
+            delivered: 1,
+            deliveryStatus: "stale",
+            prompt: "",
+            result: "",
+            error: "",
+            stopReason: "",
+            frozen: "",
+            request: "",
+            invocation: null,
+            outcome: null,
+          });
+          expect(storage.sql.exec("SELECT id FROM runs WHERE id=?", id).toArray()).toEqual([]);
+          expect(delivery.pending(id, 0)).toBe(false);
+        }
+        if (action !== "privacy.clear")
+          expect(store.get(before.unrelated.id)).toEqual(before.unrelated);
+        expect(store.get(before.active.id)).toMatchObject({
+          stopRequested: 1,
+          settled: 0,
+          units: 0,
+        });
+        expect(store.get(task.id)).toMatchObject({ settled: 1, units: task.units });
+        expect(
+          storage.sql.exec("SELECT state,reply,payload FROM inbox WHERE id=?", inboxId).one(),
+        ).toEqual({
+          state: "done",
+          reply: "",
+          payload: "{}",
+        });
+        // An in-flight poll/preparation may still hold a snapshot from before erasure.
+        store.patch(before.active, {
+          outcome: { ...task.outcome!, id: before.active.jobId, text: "private-late-answer" },
+          prompt: "private-late-prompt",
+          result: "private-late-answer",
+          frozen: task.frozen,
+        });
+        await settleCloudAgentTask(storage, before.active.id, () => false);
+        expect(JSON.stringify(store.get(before.active.id))).not.toContain("private");
+        expect(delivery.sync(before.active.id)!.deliveryStatus).toBe("stale");
+        expect(new Wallet(storage).balance()).toBe(before.balance);
+        expect(storage.sql.exec("SELECT * FROM credit_ledger").toArray()).toEqual(before.ledger);
+        expect(storage.sql.exec("SELECT * FROM usage").toArray()).toEqual(before.usage);
+        expect(storage.sql.exec("SELECT * FROM platform_metering").toArray()).toEqual(
+          before.metering,
+        );
+      });
+      expect(await deliverQueuedReplies(stub)).toEqual([]);
+    },
+  );
+
   it("ignores active tasks and cancels an orphan reply without sending fallback text", async () => {
     const { stub, task, inboxId } = await setup();
     await inAccount(stub, (storage, store, delivery) => {
