@@ -1,9 +1,18 @@
 import { isChatModel } from "./model-compatibility";
 import type { Assistant, Channel } from "./types";
+import {
+  CLOUD_AGENT_PLUGIN_ID,
+  cloudAgentAvailabilityIssue,
+  type CloudAgentStatus,
+} from "./cloud-agent";
+import type { UserPlugin } from "./image-generation";
 
 type Setup = {
   channels: Pick<Channel, "id" | "hasKey" | "baseUrl" | "protocol">[];
   assistants: Pick<Assistant, "channelId" | "model" | "kind">[];
+  plan?: "free" | "plus";
+  cloudAgent?: Pick<CloudAgentStatus, "ready" | "reason">;
+  plugins?: Pick<UserPlugin, "pluginId" | "enabled">[];
 };
 type SetupIssue = { code: string; message: string };
 
@@ -20,6 +29,17 @@ export function wechatSetupIssue(setup: Setup): SetupIssue | null {
     );
   });
   if (configured) return null;
+
+  const cloud = setup.plugins?.filter((p) => p.pluginId === CLOUD_AGENT_PLUGIN_ID);
+  if (cloud?.length && setup.cloudAgent && setup.plan) {
+    const issue = cloudAgentAvailabilityIssue(setup.plan, setup.cloudAgent);
+    if (issue) return issue;
+    if (cloud.some((p) => p.enabled)) return null;
+    return {
+      code: "plugin_disabled",
+      message: "请在「插件」中启用云端 Agent，或在「渠道与模型」中配置文本模型后连接微信。",
+    };
+  }
 
   if (!setup.channels.length)
     return {

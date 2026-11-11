@@ -238,6 +238,14 @@ export function createFakeApi({
   const snapshot = (): Snapshot => ({
     plan: "plus",
     plugins,
+    cloudAgent: {
+      ready: true,
+      maxActive: 1,
+      dailyLimit: 30,
+      usedToday: 0,
+      active: 0,
+      deadlineMinutes: 10,
+    },
     planUntil: now + 20 * 86400000,
     channels,
     assistants: assistants.map((a) => ({

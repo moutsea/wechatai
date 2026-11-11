@@ -1,6 +1,7 @@
 import type { PlatformMeter } from "./plugins";
 import type { UserPlugin } from "./image-generation";
 import type { ModelKind } from "./model-kind";
+import type { CloudAgentStatus } from "./cloud-agent";
 export type Protocol = "chat-completions" | "responses" | "anthropic";
 export type Channel = {
   integration?: "kimiseek";
@@ -103,6 +104,7 @@ export type WechatLink = Connection & {
 export type Snapshot = {
   onboardingDismissedAt?: number;
   plugins?: UserPlugin[];
+  cloudAgent: CloudAgentStatus;
   plan: "free" | "plus";
   planUntil: number;
   assistants: Assistant[];

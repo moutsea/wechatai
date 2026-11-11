@@ -344,7 +344,7 @@ export function CloudTasks() {
         <Empty
           icon={<Cloud size={22} />}
           title={plugin ? "该插件暂无云端任务" : cursor ? "没有更早的云端任务" : "还没有云端任务"}
-          description="已接收的云端任务会显示在这里。云端 Agent 仍在接入中，暂未开放任务创建。"
+          description="已接收的云端任务会显示在这里。服务开放后，Plus 会员可在插件页配置云端 Agent，再从微信提交文字任务。"
         />
       )}
       {!id && currentPage?.nextCursor && (

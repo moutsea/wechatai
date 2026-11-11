@@ -1,5 +1,6 @@
 import { pluginShortcutSchema, pluginShortcutJsonSchema } from "./plugin-shortcut";
 import { z } from "zod";
+import type { CloudAgentPlugin } from "./cloud-agent";
 import type { NotificationPlugin } from "./notification";
 import { pluginManifestSchema } from "./plugins";
 import type { OpenClawPlugin } from "./openclaw";
@@ -33,6 +34,7 @@ export type ImageGenerationPlugin = ImageGenerationInput & {
   hasKey: boolean;
 };
 export type UserPlugin =
+  | CloudAgentPlugin
   | NotificationPlugin
   | WebResearchPlugin
   | ImageGenerationPlugin

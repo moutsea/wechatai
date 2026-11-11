@@ -1,3 +1,5 @@
+import { cloudAgentInputSchema, type CloudAgentPlugin } from "../src/shared/cloud-agent";
+import { CloudAgentEditor } from "../src/client/pages/cloud-agent-editor";
 import { OpenClawEditor } from "../src/client/pages/openclaw-editor";
 import { RoleplayEditor } from "../src/client/pages/roleplay-editor";
 import { PersonalAssistantEditor } from "../src/client/pages/personal-assistant-editor";
@@ -21,6 +23,7 @@ import { MembershipNotice } from "../src/client/membership-notice";
 import { remoteAgentConnection } from "../src/client/remote-agent-status";
 import { pluginLimitIssue } from "../src/shared/plugin-access";
 import { openClawInputSchema, type OpenClawPlugin } from "../src/shared/openclaw";
+import type { UserPlugin } from "../src/shared/image-generation";
 import type { Snapshot } from "../src/shared/types";
 
 vi.mock("../src/client/context", () => ({ useApp: vi.fn() }));
@@ -41,11 +44,11 @@ const library = () =>
       <PluginLibrary onConfigure={noop} onView={noop} onResume={noop} />
     </MemoryRouter>,
   );
-const configuration = (id: string) =>
+const configuration = (id: string, kind: UserPlugin["pluginId"] = "wechatai/openclaw") =>
   renderToStaticMarkup(
     <MemoryRouter>
       <PluginConfiguration
-        kind="wechatai/openclaw"
+        kind={kind}
         selectedId={id}
         onSelect={noop}
         busy={false}
@@ -165,10 +168,11 @@ describe("plugin entitlement controls", () => {
     expect(unreadNoticeCount(null)).toBe(0);
   });
 
-  it("offers all seven plugins before the Free slot is used", () => {
+  it("offers seven general plugins and a Plus upgrade for cloud Agent", () => {
     const html = library();
     expect(html.match(/aria-label="配置 /g)).toHaveLength(7);
     expect(html).not.toContain("升级以添加更多");
+    expect(html).toContain("开通 Plus");
   });
   it("lets Free users edit their first plugin and offers an upgrade for more", () => {
     data.plugins = [plugin("first")];
@@ -348,4 +352,68 @@ describe("legacy numeric plugin editors", () => {
       expect(validity.test("助理2")).toBe(true);
     },
   );
+});
+
+const cloudPlugin = (): CloudAgentPlugin => ({
+  ...cloudAgentInputSchema.parse({}),
+  id: "cloud",
+  pluginId: "wechatai/cloud-agent",
+  version: "1.0.0",
+  createdAt: 1,
+  hasKey: true,
+  status: {
+    ready: true,
+    maxActive: 1,
+    dailyLimit: 30,
+    usedToday: 3,
+    active: 1,
+    deadlineMinutes: 10,
+  },
+});
+describe("managed cloud Agent configuration", () => {
+  it("offers Plus configuration without requiring any local models", () => {
+    data.plan = "plus";
+    data.assistants = [];
+    expect(library()).toContain('aria-label="配置 云端 Agent"');
+    expect(library().match(/<article/g)).toHaveLength(8);
+    const editor = renderToStaticMarkup(<CloudAgentEditor plugin="new" onClose={noop} />);
+    expect(editor).toContain("无需自备模型渠道");
+    expect(editor).toContain('value="disabled"');
+    expect(editor).toContain("失败或取消不扣费");
+    expect(editor).not.toContain('type="password"');
+  });
+  it("shows quotas and managed model correctly and uses a state check instead of a paid test", () => {
+    data.plan = "plus";
+    data.plugins = [cloudPlugin()];
+    data.cloudAgent = cloudPlugin().status!;
+    const html = configuration("cloud", "wechatai/cloud-agent");
+    expect(html).toContain("微伴托管，无需填写 API Key");
+    expect(html).not.toContain("模型已删除");
+    expect(html).toContain("今日 3 / 30 次");
+    expect(html).toContain('href="/app/tasks?plugin=cloud"');
+    expect(html).toContain("检查服务状态");
+    expect(html).not.toContain("测试配置");
+    expect(html).toContain("/wx stop");
+  });
+  it("blocks activation for expired membership or unavailable service while retaining maintenance", () => {
+    data.plugins = [cloudPlugin()];
+    let html = configuration("cloud", "wechatai/cloud-agent");
+    expect(html).toContain("云端 Agent 是 Plus 会员功能");
+    expect(html).toMatch(/disabled=""[^>]*>设为默认插件/);
+    expect(html).toContain("删除配置");
+    data.plan = "plus";
+    data.plugins[0] = {
+      ...cloudPlugin(),
+      status: {
+        ...cloudPlugin().status!,
+        ready: false,
+        reason: "运营方尚未开启云端服务，请稍后再试。",
+      },
+    };
+    data.cloudAgent = data.plugins[0].status!;
+    html = configuration("cloud", "wechatai/cloud-agent");
+    expect(html).toContain("运营方尚未开启云端服务");
+    expect(html).toMatch(/disabled=""[^>]*>设为默认插件/);
+    expect(library()).toContain("服务未就绪");
+  });
 });

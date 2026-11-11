@@ -1,3 +1,16 @@
+import {
+  CLOUD_AGENT_PLUGIN_ID,
+  CLOUD_AGENT_VERSION,
+  CLOUD_AGENT_WAITING_MESSAGE,
+  CLOUD_AGENT_PLUS_MESSAGE,
+  CLOUD_AGENT_UNAVAILABLE_MESSAGE,
+  cloudAgentAvailabilityIssue,
+  cloudAgentInputSchema,
+  isCloudAgent,
+  type CloudAgentPlugin,
+  type CloudAgentStatus,
+} from "../shared/cloud-agent";
+import { admitCloudAgentTask } from "./cloud-agent-admission";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import {
   PLUGIN_LIMITS,
@@ -83,6 +96,7 @@ import type {
 } from "../shared/types";
 import {
   AppError,
+  cloudAgentConfig,
   MODEL_RUN_LOCK_MS,
   MODEL_TURN_TIMEOUT_MS,
   numberSetting,
@@ -199,6 +213,7 @@ type LinkRecord = { id: string; name: string; createdAt: number };
 type StoredAssistant = ResolvedModel;
 type StoredSession = ChatSession & { contextStart: number; autoTitle?: boolean };
 type StoredPlugin = (
+  | Omit<CloudAgentPlugin, "hasKey" | "access" | "status">
   | Omit<NotificationPlugin, "hasKey">
   | Omit<RoleplayPlugin, "hasKey">
   | Omit<PersonalAssistantPlugin, "hasKey">
@@ -986,6 +1001,28 @@ export class PersonalAccount extends DurableObject<Env> {
         403,
       );
   }
+  private pluginModelId(plugin: StoredPlugin): string | null {
+    return "modelId" in plugin ? plugin.modelId : null;
+  }
+  private cloudAccess(plugin: StoredPlugin): PluginAccessIssue | null {
+    if (this.plan() !== "plus")
+      return { code: "cloud_plus_required", message: CLOUD_AGENT_PLUS_MESSAGE };
+    if (!plugin.enabled)
+      return { code: "plugin_disabled", message: "云端 Agent 已停用，请在插件页重新启用。" };
+    return null;
+  }
+  private cloudStatus(): CloudAgentStatus {
+    const config = cloudAgentConfig(this.env);
+    return {
+      ready: !!config,
+      ...(!config ? { reason: CLOUD_AGENT_UNAVAILABLE_MESSAGE } : {}),
+      maxActive: config?.maxActive ?? 1,
+      dailyLimit: config?.dailyLimit ?? 0,
+      usedToday: this.cloud.countSince(dayWindow().start),
+      active: this.cloud.active().length,
+      deadlineMinutes: (config?.deadlineMs ?? 0) / 60_000,
+    };
+  }
   private plugins() {
     return this.sql
       .exec<{ data: string }>("SELECT data FROM plugins ORDER BY rowid")
@@ -995,6 +1032,7 @@ export class PersonalAccount extends DurableObject<Env> {
   private decodePlugin(data: string): StoredPlugin {
     const p = JSON.parse(data) as StoredPlugin;
     if (isRemoteAgent(p)) return { ...waitingMessageDefaults(OPENCLAW_WAITING_MESSAGE), ...p };
+    if (isCloudAgent(p)) return { ...waitingMessageDefaults(CLOUD_AGENT_WAITING_MESSAGE), ...p };
     if (p.pluginId === "wechatai/image-generation")
       return { ...waitingMessageDefaults(IMAGE_WAITING_MESSAGE), ...p };
     if (p.pluginId === "wechatai/personal-assistant")
@@ -1018,7 +1056,18 @@ export class PersonalAccount extends DurableObject<Env> {
           "插件已停用，请在网页启用，或用 /exit 返回普通模型",
           403,
         );
-      if (!isRemoteAgent(p) && p.pluginId !== "wechatai/notification") {
+      if (isCloudAgent(p)) {
+        const availability = cloudAgentAvailabilityIssue(this.plan(), this.cloudStatus());
+        if (availability)
+          throw new AppError(
+            availability.code,
+            availability.message,
+            availability.code === "cloud_agent_unavailable" ? 503 : 403,
+          );
+        const issue = this.cloudAccess(p);
+        if (issue) throw new AppError(issue.code, issue.message, 403);
+      }
+      if (!isRemoteAgent(p) && !isCloudAgent(p) && p.pluginId !== "wechatai/notification") {
         if (p.pluginId === "wechatai/image-generation") this.assistant(p.modelId);
         else this.textAssistant(p.modelId);
       }
@@ -1030,6 +1079,10 @@ export class PersonalAccount extends DurableObject<Env> {
     if (p.pluginId === "wechatai/notification") {
       const { encryptedKey: _key, ...safe } = p;
       return { ...safe, hasKey: this.notifications.hasToken(p.id) };
+    }
+    if (isCloudAgent(p)) {
+      const { encryptedKey: _key, ...safe } = p;
+      return { ...safe, hasKey: true, access: this.cloudAccess(p), status: this.cloudStatus() };
     }
     if (isRemoteAgent(p))
       return {
@@ -1150,6 +1203,33 @@ export class PersonalAccount extends DurableObject<Env> {
     )
       throw new AppError("invalid_plugin_shortcut", PLUGIN_SHORTCUT_HINT);
     const editableShortcut = pluginShortcutForEdit(previous?.shortcut);
+    if ((kind ?? previous?.pluginId) === CLOUD_AGENT_PLUGIN_ID) {
+      const input = cloudAgentInputSchema
+        .safeExtend({ shortcut: editableShortcut.default("云") })
+        .parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
+      if (!previous || input.enabled) {
+        const issue = cloudAgentAvailabilityIssue(this.plan(), this.cloudStatus());
+        if (issue)
+          throw new AppError(
+            issue.code,
+            issue.message,
+            issue.code === "cloud_agent_unavailable" ? 503 : 403,
+          );
+      }
+      if (!previous || input.shortcut !== previous.shortcut)
+        this.requireUniqueShortcut(input.shortcut, { pluginId: id });
+      const plugin: StoredPlugin = {
+        ...input,
+        id: id ?? crypto.randomUUID(),
+        pluginId: CLOUD_AGENT_PLUGIN_ID,
+        version: CLOUD_AGENT_VERSION,
+        createdAt: previous?.createdAt ?? Date.now(),
+        encryptedKey: "",
+      };
+      this.persistPlugin(plugin);
+      await this.scheduleWechat();
+      return this.publicPlugin(plugin);
+    }
     if (["wechatai/openclaw", "wechatai/hermes"].includes(kind ?? previous?.pluginId)) {
       const input = (
         (kind ?? previous?.pluginId) === "wechatai/hermes" ? hermesInputSchema : openClawInputSchema
@@ -1330,7 +1410,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.selectSession(s);
       return s;
     }
-    return this.createSession(isRemoteAgent(p) ? null : p.modelId, "", false, connectionId, p.id);
+    return this.createSession(this.pluginModelId(p), "", false, connectionId, p.id);
   }
   private exitPlugin(connectionId = this.selectedLink()) {
     this.busy();
@@ -1625,6 +1705,86 @@ export class PersonalAccount extends DurableObject<Env> {
     if (!(session.autoTitle ?? session.title === "新的对话")) return;
     session.title = text.slice(0, length);
     session.autoTitle = false;
+  }
+  private enqueueCloud(
+    id: string,
+    pluginId: string,
+    session: StoredSession,
+    text: string,
+    message: WxMessage,
+  ) {
+    const plugin = this.plugin(pluginId);
+    if (!isCloudAgent(plugin)) throw new AppError("plugin_type", "不是云端 Agent 配置", 422);
+    const connectionId = session.connectionId ?? DEFAULT_WECHAT_LINK;
+    const pending = this.attachments.get({
+      connectionId,
+      sessionId: session.id,
+      generation: this.connection(connectionId).generation,
+      contextStart: session.contextStart,
+    });
+    if (
+      message.item_list?.some(
+        (item) =>
+          item.type === 2 || item.type === 4 || (item.type === 3 && !item.voice_item?.text?.trim()),
+      ) ||
+      pending?.items.length
+    )
+      throw new AppError(
+        "cloud_text_only",
+        "云端 Agent 支持文字和带微信转写文本的语音，暂不支持图片、文件或未转写语音。请切换到聊天模型处理附件，或用 /cancel 清空暂存附件后再提交文字任务。本次未创建任务。",
+        422,
+      );
+    if (pending && !pending.items.length) {
+      this.attachments.clear(connectionId, pending.token);
+      throw new AppError(
+        "attachment_expired",
+        "之前暂存的附件已过期。如需处理附件，请重新发送给聊天模型；如只需执行文字任务，请重新发送要求。本次未创建任务。",
+        422,
+      );
+    }
+    const reply = plugin.waitingMessageEnabled ? plugin.waitingMessage : "";
+    admitCloudAgentTask(
+      this.env,
+      this.ctx.storage,
+      this.ctx.id.toString(),
+      { sourceId: id, prompt: text },
+      () => {
+        this.refreshWallet();
+        return {
+          planUntil: this.getSetting("planUntil", 0),
+          plugin: this.findPlugin(pluginId) ?? null,
+          session: this.sessions().find((current) => current.id === session.id) ?? null,
+          connection: {
+            id: connectionId,
+            generation: this.connection(connectionId).generation,
+            currentSessionId: this.linkSetting(connectionId, "current", ""),
+            enabled: this.linkEnabled(connectionId),
+          },
+        };
+      },
+      (task) => {
+        this.sql.exec(
+          "INSERT INTO runs VALUES (?,NULL,'complete',?,?)",
+          id,
+          JSON.stringify({ text: reply, cost: 0 }),
+          task.createdAt,
+        );
+        this.sql.exec(
+          "INSERT INTO messages (sessionId,role,content,createdAt,model) VALUES (?,'user',?,?,?)",
+          task.sessionId,
+          task.prompt,
+          task.createdAt,
+          task.pluginName,
+        );
+        this.sql.exec("UPDATE inbox SET sessionId=? WHERE id=?", task.sessionId, id);
+        const updated = { ...this.session(task.sessionId), updatedAt: task.createdAt };
+        updated.messageCount++;
+        this.autoNameSession(updated, text, 40);
+        this.saveSession(updated);
+      },
+    );
+    this.ctx.waitUntil(this.scheduleCloudRecovery());
+    return reply;
   }
   private cloudDeliveryStale(task: CloudTask) {
     const plugin = this.findPlugin(task.pluginId);
@@ -2559,6 +2719,9 @@ export class PersonalAccount extends DurableObject<Env> {
       (s) => s.id === this.linkSetting(selectedConnectionId, "current", ""),
     );
     const active = assistants.find((a) => a.id === current?.assistantId);
+    const currentPlugin = current?.pluginInstanceId
+      ? this.findPlugin(current.pluginInstanceId)
+      : undefined;
     const buckets = this.wallet.buckets();
     const window = dayWindow();
     const totals = this.sql
@@ -2578,6 +2741,7 @@ export class PersonalAccount extends DurableObject<Env> {
       plan: this.plan(),
       onboardingDismissedAt: this.getSetting("dashboardOnboardingDismissedAt", 0),
       plugins: this.plugins().map((p) => this.publicPlugin(p)),
+      cloudAgent: this.cloudStatus(),
       planUntil: this.getSetting("planUntil", 0),
       channels: this.channels().map((c) => this.publicChannel(c)),
       assistants: assistants.map((a) => this.publicAssistant(a)),
@@ -2586,19 +2750,21 @@ export class PersonalAccount extends DurableObject<Env> {
             id: current.id,
             pluginInstanceId: current.pluginInstanceId,
             pluginName: current.pluginInstanceId
-              ? (this.plugins().find((p) => p.id === current.pluginInstanceId)?.name ??
-                current.pluginName)
+              ? (currentPlugin?.name ?? current.pluginName)
               : undefined,
             title: current.title,
             assistantId: current.assistantId,
             assistantName:
               active?.name ??
-              (current.pluginInstanceId
-                ? (this.plugins().find((p) => p.id === current.pluginInstanceId)?.name ??
-                  "已删除插件")
-                : "模型"),
+              (current.pluginInstanceId ? (currentPlugin?.name ?? "已删除插件") : "模型"),
             channelId: active?.channelId ?? "",
-            channelName: active?.channelName ?? (current.pluginInstanceId ? "远程 Agent" : ""),
+            channelName:
+              active?.channelName ??
+              (isCloudAgent(currentPlugin)
+                ? "微伴托管"
+                : current.pluginInstanceId
+                  ? "远程 Agent"
+                  : ""),
             model: active?.model ?? "",
           }
         : null,
@@ -2845,6 +3011,19 @@ export class PersonalAccount extends DurableObject<Env> {
               cost: 0,
             },
           });
+        if (isCloudAgent(plugin)) {
+          const status = this.cloudStatus();
+          return JSON.stringify({
+            ok: true,
+            data: {
+              text:
+                cloudAgentAvailabilityIssue(this.plan(), status)?.message ??
+                this.cloudAccess(plugin)?.message ??
+                `云端服务已配置，首次提交时会自动开通。今日已用 ${status.usedToday} / ${status.dailyLimit} 次，执行中 ${status.active} / ${status.maxActive} 个。请在微信发送任务验证实际运行。`,
+              cost: 0,
+            },
+          });
+        }
         const a = this.assistant(plugin.modelId);
         const query = typeof p.query === "string" ? p.query.trim() : "";
         if (!query || query.length > 2000)
@@ -3346,7 +3525,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (plugin?.pluginId === "wechatai/image-generation") this.assistant(assistantId);
       else this.textAssistant(assistantId);
     }
-    if (!assistantId && !isRemoteAgent(plugin))
+    if (!assistantId && !isRemoteAgent(plugin) && !isCloudAgent(plugin))
       throw new AppError("assistant_missing", "请先选择模型或远程 Agent 插件");
     if (!replacingDeleted && this.links().length) this.requireLink(connectionId, true);
     if (!replacingDeleted && this.sessions().length >= this.limits().sessions)
@@ -3478,7 +3657,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (
         (this.linkEnabled(connectionId) ||
           (!this.links().length && !this.getSetting("legacyLinkDeleted", false))) &&
-        (replacementModel || isRemoteAgent(replacementPlugin))
+        (replacementModel || isRemoteAgent(replacementPlugin) || isCloudAgent(replacementPlugin))
       )
         this.createSession(replacementModel, "", false, connectionId, replacementPlugin?.id);
       else this.setLinkSetting(connectionId, "current", "");
@@ -4261,6 +4440,9 @@ export class PersonalAccount extends DurableObject<Env> {
     const issue = wechatSetupIssue({
       channels: this.channels().map((c) => ({ ...c, hasKey: Boolean(c.encryptedKey) })),
       assistants: this.assistants(),
+      plan: this.plan(),
+      plugins: this.plugins(),
+      cloudAgent: this.cloudStatus(),
     });
     if (issue) throw new AppError(issue.code, issue.message, 422);
     if (needsLink) connectionId = this.createLink("我的微信");
@@ -4411,6 +4593,7 @@ export class PersonalAccount extends DurableObject<Env> {
       // A restart can happen after the commit but before scheduler registration.
       // Never send a saved success until its reminder outbox is acknowledged.
       await this.requireReminderSchedule();
+      if (this.cloud.source(id)) await this.scheduleCloudRecovery();
       return (JSON.parse(completed.response) as { text: string }).text;
     }
     const interrupted = this.sql
@@ -4466,6 +4649,26 @@ export class PersonalAccount extends DurableObject<Env> {
             this.attachments.clear(connectionId);
             return "已清空待处理附件。你可以重新发送图片或文件，再补充处理要求。";
           }
+          if (command[0] === "/stop") {
+            const task = this.cloud
+              .active()
+              .find(
+                (task) =>
+                  !task.outcome &&
+                  (currentId ? task.sessionId === currentId : task.connectionId === connectionId),
+              );
+            if (!task) return "当前会话没有可停止的云端任务，可在网页云端任务页查看其他任务。";
+            if (!task.stopRequested)
+              this.cloud.patch(task, {
+                stopRequested: 1,
+                stopReason: "用户请求停止云端任务。",
+                error: "已请求停止云端任务，等待确认。已发生的外部操作无法撤销。",
+                nextAt: Date.now(),
+              });
+            // Arm recovery after the synchronous command transaction commits.
+            this.ctx.waitUntil(Promise.resolve().then(() => this.scheduleCloudRecovery()));
+            return "已请求停止云端任务，等待云端确认。已发生的外部操作无法撤销，费用以最终结算为准。";
+          }
           if (command[0] === "/exit") {
             const wasPlugin = currentSession?.pluginInstanceId;
             const previousSessions = this.sessions(connectionId);
@@ -4516,11 +4719,13 @@ export class PersonalAccount extends DurableObject<Env> {
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
                   ? `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
-                  : p.pluginId === "wechatai/roleplay"
-                    ? "直接聊天即可继续剧情，/new 开始新的故事。"
-                    : p.pluginId === "wechatai/personal-assistant"
-                      ? "之后直接告诉我想记下的事情、收支或待办，也可以单独设置提醒。提醒按北京时间设置；/wx new 新建聊天，已保存的记录会保留。"
-                      : "之后直接发送问题即可，模型会按需联网。";
+                  : isCloudAgent(p)
+                    ? "之后直接发送文字即可提交云端任务；结果会回复微信，也可在云端任务页查看。/wx stop 请求停止，/wx new 开始新对话。"
+                    : p.pluginId === "wechatai/roleplay"
+                      ? "直接聊天即可继续剧情，/new 开始新的故事。"
+                      : p.pluginId === "wechatai/personal-assistant"
+                        ? "之后直接告诉我想记下的事情、收支或待办，也可以单独设置提醒。提醒按北京时间设置；/wx new 新建聊天，已保存的记录会保留。"
+                        : "之后直接发送问题即可，模型会按需联网。";
             return `${action}「${p.name}」。${usage}\n\n- @其他快捷名 内容：仅本次调用，不改变当前默认插件\n- /use 其他别名：直接切换，无需先退出\n- /exit：退出插件，优先恢复之前的普通模型会话；没有可用会话时新建${hadStory ? "" : this.roleGreeting(story)}`;
           }
           if (command[0] === "/balance") {
@@ -4738,7 +4943,7 @@ export class PersonalAccount extends DurableObject<Env> {
         if (plugin.pluginId === "wechatai/notification")
           return "消息提醒只接收 HTTP 推送，不支持对话，也不会改变当前聊天模式。请在网页插件页面查看调用示例。";
         once = {
-          modelId: isRemoteAgent(plugin) ? null : plugin.modelId,
+          modelId: this.pluginModelId(plugin),
           pluginId: plugin.id,
         };
       } else if (a) {
@@ -4785,6 +4990,11 @@ export class PersonalAccount extends DurableObject<Env> {
       this.setLinkSetting(connectionId, "current", "");
       return this.enqueueClaw(id, once.pluginId, session, content, message);
     }
+    if (!active && once?.pluginId && isCloudAgent(this.plugin(once.pluginId))) {
+      const session = this.activatePlugin(once.pluginId, connectionId);
+      this.setLinkSetting(connectionId, "current", "");
+      return this.enqueueCloud(id, once.pluginId, session, content, message);
+    }
     if (
       !active &&
       once?.pluginId &&
@@ -4818,6 +5028,8 @@ export class PersonalAccount extends DurableObject<Env> {
       const plugin = this.plugin(invocationPlugin, true);
       if (isRemoteAgent(plugin))
         return this.enqueueClaw(id, plugin.id, activeSession, content, message);
+      if (isCloudAgent(plugin))
+        return this.enqueueCloud(id, plugin.id, activeSession, content, message);
     }
     const scope = {
       connectionId,

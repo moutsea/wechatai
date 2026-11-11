@@ -457,7 +457,8 @@ export function Billing() {
         </article>
       </div>
       <p className="billing-footnote">
-        Credits 是平台服务额度，自备 API Key 的模型费用由供应商另行收取。
+        Credits 是平台服务额度，自备 API Key 的模型费用由供应商另行收取；云端 Agent
+        的托管模型无需另付供应商，仍按平台规则扣 credits。
         <Link to={`${base}/credits`}>
           查看计费规则与额度明细
           <ArrowUpRight size={14} />

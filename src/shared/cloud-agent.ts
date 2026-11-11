@@ -1,5 +1,65 @@
+import { z } from "zod";
+import type { PluginAccessIssue } from "./plugin-access";
+import { pluginShortcutSchema } from "./plugin-shortcut";
+import {
+  waitingMessageFields,
+  validWaitingMessage,
+  waitingMessageValidation,
+} from "./waiting-message";
+
 export const CLOUD_AGENT_PLUGIN_ID = "wechatai/cloud-agent";
 export const CLOUD_AGENT_VERSION = "1.0.0";
+
+export const CLOUD_AGENT_WAITING_MESSAGE =
+  "任务已接收，正在提交云端 Agent；结果会在微信回复，也可在云端任务页查看。";
+export const CLOUD_AGENT_PLUS_MESSAGE =
+  "云端 Agent 是 Plus 会员功能，开通或续费后可提交新任务，已有任务记录仍可查看。";
+export const CLOUD_AGENT_UNAVAILABLE_MESSAGE = "运营方尚未开启云端服务，请稍后再试。";
+export const cloudAgentInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(40).default("云端 Agent"),
+    shortcut: pluginShortcutSchema.default("云"),
+    enabled: z.boolean().default(true),
+    ...waitingMessageFields(CLOUD_AGENT_WAITING_MESSAGE),
+  })
+  .refine(validWaitingMessage, waitingMessageValidation);
+export type CloudAgentInput = z.infer<typeof cloudAgentInputSchema>;
+export type CloudAgentStatus = {
+  ready: boolean;
+  reason?: string;
+  maxActive: number;
+  dailyLimit: number;
+  usedToday: number;
+  active: number;
+  deadlineMinutes: number;
+};
+export function cloudAgentAvailabilityIssue(
+  plan: "free" | "plus",
+  status: Pick<CloudAgentStatus, "ready" | "reason">,
+) {
+  if (!status.ready)
+    return {
+      code: "cloud_agent_unavailable" as const,
+      message: status.reason ?? CLOUD_AGENT_UNAVAILABLE_MESSAGE,
+    };
+  if (plan !== "plus")
+    return { code: "cloud_plus_required" as const, message: CLOUD_AGENT_PLUS_MESSAGE };
+  return null;
+}
+export type CloudAgentPlugin = CloudAgentInput & {
+  id: string;
+  pluginId: typeof CLOUD_AGENT_PLUGIN_ID;
+  version: typeof CLOUD_AGENT_VERSION;
+  createdAt: number;
+  hasKey: boolean;
+  access?: PluginAccessIssue | null;
+  status?: CloudAgentStatus;
+};
+export function isCloudAgent<T extends { pluginId: string }>(
+  plugin: T | null | undefined,
+): plugin is Extract<T, { pluginId: typeof CLOUD_AGENT_PLUGIN_ID }> {
+  return plugin?.pluginId === CLOUD_AGENT_PLUGIN_ID;
+}
 
 /** Public task history. Never include upstream identities, credentials or raw requests. */
 export type CloudAgentTaskStatus =

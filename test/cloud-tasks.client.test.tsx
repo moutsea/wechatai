@@ -561,11 +561,11 @@ describe("cloud task status, cost and delivery", () => {
     expect(rows[2]).toContain("正在确认云端是否已接收任务");
   });
 
-  it("explains the unavailable creation entry without directing users to a nonexistent flow", async () => {
+  it("explains configuration and WeChat entry with the service availability condition", async () => {
     handle = () => page([]);
     await mount();
     expect(container.textContent).toContain("还没有云端任务");
-    expect(container.textContent).toContain("暂未开放任务创建");
+    expect(container.textContent).toContain("服务开放后，Plus 会员可在插件页配置云端 Agent");
     expect(container.textContent).not.toContain("在微信里向云端 Agent 发送");
   });
 

@@ -1,3 +1,5 @@
+import { isCloudAgent, type CloudAgentPlugin } from "../../shared/cloud-agent";
+import { CloudAgentEditor } from "./cloud-agent-editor";
 import {
   pluginShortcutPatternForEdit,
   isLegacyNumericShortcut,
@@ -67,6 +69,7 @@ export function Plugins() {
   );
   const [personalRecords, setPersonalRecords] = useState<PersonalAssistantPlugin | null>(null);
   const [roleEditor, setRoleEditor] = useState<RoleplayPlugin | "new" | null>(null);
+  const [cloudEditor, setCloudEditor] = useState<CloudAgentPlugin | "new" | null>(null);
   const [imageEditor, setImageEditor] = useState<ImageGenerationPlugin | "new" | null>(null);
   const [viewing, setViewing] = useState<PluginKind | null>(null);
   const [viewedId, setViewedId] = useState("");
@@ -102,6 +105,10 @@ export function Plugins() {
   const update = <K extends keyof WebResearchInput>(key: K, value: WebResearchInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const open = (p: UserPlugin | "new") => {
+    if (p !== "new" && isCloudAgent(p)) {
+      setCloudEditor(p);
+      return;
+    }
     if (p !== "new" && p.pluginId === "wechatai/notification") {
       setNotificationEditor(p);
       return;
@@ -137,6 +144,7 @@ export function Plugins() {
       setClawEditor("new");
     } else if (kind === "wechatai/personal-assistant") setPersonalEditor("new");
     else if (kind === "wechatai/roleplay") setRoleEditor("new");
+    else if (kind === "wechatai/cloud-agent") setCloudEditor("new");
     else if (kind === "wechatai/image-generation") setImageEditor("new");
     else open("new");
   };
@@ -274,7 +282,8 @@ export function Plugins() {
         )}
       <p className="research-billing">
         消息提醒不扣 credits。其他插件输入与最终回复按 token 计费，生成图片另计 5 credits /
-        张；插件内部调用不重复计收。上游 API 费用由你的服务商另行收取。
+        张；插件内部调用不重复计收。自备 API 的费用由服务商另行收取；云端 Agent
+        使用微伴托管模型，无需另付供应商，失败或取消不扣 credits。
       </p>
       {viewing &&
         !notificationEditor &&
@@ -283,6 +292,7 @@ export function Plugins() {
         !roleEditor &&
         !editor &&
         !imageEditor &&
+        !cloudEditor &&
         !activeClawEditor &&
         !testing &&
         !deleting && (
@@ -300,6 +310,14 @@ export function Plugins() {
               if (isRemoteAgent(p)) {
                 setAgentKind(p.pluginId === "wechatai/hermes" ? "hermes" : "openclaw");
                 setClawEditor(p);
+                return;
+              }
+              if (isCloudAgent(p)) {
+                setBusy(p.id);
+                void request<{ text: string; cost: number }>(`/plugins/${p.id}/test`, json({}))
+                  .then((result) => notify(result.text))
+                  .catch((e: Error) => notify(e.message, true))
+                  .finally(() => setBusy(""));
                 return;
               }
               setTesting(p);
@@ -364,6 +382,16 @@ export function Plugins() {
             setViewing("wechatai/roleplay");
           }}
           onClose={() => setRoleEditor(null)}
+        />
+      )}
+      {cloudEditor && (
+        <CloudAgentEditor
+          plugin={cloudEditor}
+          onClose={() => setCloudEditor(null)}
+          onSaved={(id) => {
+            setViewedId(id);
+            setViewing("wechatai/cloud-agent");
+          }}
         />
       )}
       {imageEditor && (

@@ -1,3 +1,4 @@
+import { cloudAgentAvailabilityIssue, isCloudAgent } from "../../shared/cloud-agent";
 import {
   availablePluginIds,
   canAddPlugin,
@@ -66,6 +67,12 @@ function PluginAlias({
 
 const library = [
   {
+    id: "wechatai/cloud-agent",
+    name: "云端 Agent",
+    description: "由微伴托管模型与工具，在微信提交文字任务，后台执行后回复结果，也可在任务页查看。",
+    tags: ["Plus 专属", "无需 API Key", "后台执行"],
+  },
+  {
     id: "wechatai/notification",
     name: "消息提醒",
     description:
@@ -125,6 +132,7 @@ export function PluginLibrary({
   const canAdd = canAddPlugin(data.plan, data.plugins?.length ?? 0);
   const availableIds = availablePluginIds(data.plan, data.plugins ?? []);
   const shortcutConflicts = conflictingShortcuts([...data.assistants, ...(data.plugins ?? [])]);
+  const cloudAvailability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
   return (
     <div className="plugin-library">
       {library.map(({ id, name, description, tags }) => {
@@ -143,7 +151,19 @@ export function PluginLibrary({
         const connectedBefore = available.some((p) => remoteAgentConnection(p).connectedBefore);
         const resume = configs.length === 1 && connection && !connection.connectedBefore;
         const notificationReady = usable.some((p) => p.enabled && p.hasKey);
-        const statusLabel = !configs.length
+        const cloudUnavailable = id === "wechatai/cloud-agent" && !data.cloudAgent.ready;
+        const cloudLabel = cloudUnavailable
+          ? configs.length
+            ? "服务未就绪"
+            : "暂未开放"
+          : id === "wechatai/cloud-agent" && configs.length
+            ? data.plan !== "plus"
+              ? "需开通或续费 Plus"
+              : !enabled
+                ? "已停用"
+                : "已配置"
+            : null;
+        const defaultStatusLabel = !configs.length
           ? "未配置"
           : !allowed
             ? "已暂停"
@@ -164,13 +184,16 @@ export function PluginLibrary({
                       : available.some((p) => p.hasKey)
                         ? "等待上线"
                         : "待连接";
+        const statusLabel = cloudLabel ?? defaultStatusLabel;
         const positiveStatus =
           allowed &&
-          (id === "wechatai/notification"
-            ? notificationReady
-            : remote.length
-              ? online.length > 0
-              : configs.length > 0);
+          (id === "wechatai/cloud-agent"
+            ? cloudLabel === "已配置"
+            : id === "wechatai/notification"
+              ? notificationReady
+              : remote.length
+                ? online.length > 0
+                : configs.length > 0);
         const actionLabel =
           id === "wechatai/notification"
             ? configs.some((p) => p.hasKey)
@@ -213,25 +236,28 @@ export function PluginLibrary({
                   开源项目开发
                 </small>
               )}
-              {configs.length > 0 && (
+              {(configs.length > 0 || cloudUnavailable) && (
                 <div className="plugin-entry-summary">
-                  <code>
-                    {id === "wechatai/notification" ? "HTTP 推送" : `@${representative.shortcut}`}
-                  </code>
+                  {representative && (
+                    <code>
+                      {id === "wechatai/notification" ? "HTTP 推送" : `@${representative.shortcut}`}
+                    </code>
+                  )}
                   <span>
-                    {!allowed
-                      ? "超出当前套餐的插件上限"
-                      : !enabled
-                        ? "配置已停用"
-                        : connection && connection.state !== "online"
-                          ? connection.description
-                          : id === "wechatai/notification"
-                            ? representative.hasKey
-                              ? "Token 已配置"
-                              : "待生成专属 Token"
-                            : active
-                              ? "微信默认使用中"
-                              : "在任意对话中单次调用"}
+                    {(id === "wechatai/cloud-agent" && cloudAvailability?.message) ||
+                      (!allowed
+                        ? "超出当前套餐的插件上限"
+                        : !enabled
+                          ? "配置已停用"
+                          : connection && connection.state !== "online"
+                            ? connection.description
+                            : id === "wechatai/notification"
+                              ? representative.hasKey
+                                ? "Token 已配置"
+                                : "待生成专属 Token"
+                              : active
+                                ? "微信默认使用中"
+                                : "在任意对话中单次调用")}
                   </span>
                 </div>
               )}
@@ -256,6 +282,14 @@ export function PluginLibrary({
                 >
                   {actionLabel} <ArrowRight size={15} />
                 </button>
+              ) : cloudUnavailable ? (
+                <button className="button secondary small" disabled>
+                  暂未开放
+                </button>
+              ) : id === "wechatai/cloud-agent" && data.plan !== "plus" ? (
+                <Link className="button secondary small" to={`${base}/billing`}>
+                  开通 Plus <ArrowRight size={15} />
+                </Link>
               ) : !canAdd ? (
                 data.plan === "free" ? (
                   <Link className="button secondary small" to={`${base}/billing`}>
@@ -269,7 +303,8 @@ export function PluginLibrary({
               ) : !data.assistants.length &&
                 id !== "wechatai/openclaw" &&
                 id !== "wechatai/notification" &&
-                id !== "wechatai/hermes" ? (
+                id !== "wechatai/hermes" &&
+                id !== "wechatai/cloud-agent" ? (
                 <Link className="button secondary small" to={`${base}/channels`}>
                   先添加模型 <ArrowRight size={15} />
                 </Link>
@@ -339,6 +374,17 @@ export function PluginConfiguration({
         access: allowed ? selected.access : pluginLimitIssue(data.planUntil),
       })
     : null;
+  const cloud = isCloudAgent(selected) ? selected : null;
+  const cloudAvailability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
+  const cloudIssue = cloud ? cloudAvailability?.message : null;
+  const canConfigure =
+    canAdd &&
+    (kind === "wechatai/cloud-agent"
+      ? !cloudAvailability
+      : kind === "wechatai/openclaw" ||
+        kind === "wechatai/notification" ||
+        kind === "wechatai/hermes" ||
+        data.assistants.length > 0);
   const incomplete = connection && !connection.connectedBefore;
   return (
     <Modal
@@ -388,13 +434,15 @@ export function PluginConfiguration({
                 <h3>{selected.name}</h3>
               )}
               <span
-                className={`plugin-status ${allowed && selected.enabled && (!connection || connection.state === "online") ? "configured" : ""}`}
+                className={`plugin-status ${allowed && !cloudIssue && selected.enabled && (!connection || connection.state === "online") ? "configured" : ""}`}
               >
                 {!allowed
                   ? "已暂停"
                   : !selected.enabled
                     ? "已停用"
-                    : (connection?.label ?? "已启用")}
+                    : cloudIssue
+                      ? "服务不可用"
+                      : (connection?.label ?? "已启用")}
               </span>
             </div>
             {selected.pluginId === "wechatai/personal-assistant" && (
@@ -440,6 +488,8 @@ export function PluginConfiguration({
                       {isRemoteAgent(selected) ? (
                         (selected.agents?.find((a) => a.id === selected.agentId)?.name ??
                         (selected.hasKey ? selected.agentId : "连接后自动识别"))
+                      ) : isCloudAgent(selected) ? (
+                        "微伴托管，无需填写 API Key"
                       ) : model ? (
                         <>
                           {model.channelName} / {model.name}
@@ -487,6 +537,48 @@ export function PluginConfiguration({
                       <div>
                         <dt>模型与工具</dt>
                         <dd>在 {remoteAgentName(selected.pluginId)} 中管理，无需本站模型渠道</dd>
+                      </div>
+                    </>
+                  ) : isCloudAgent(selected) ? (
+                    <>
+                      <div>
+                        <dt>服务状态</dt>
+                        <dd>{cloudIssue ?? "已配置；在微信提交任务验证实际运行"}</dd>
+                      </div>
+                      {data.cloudAgent.ready && (
+                        <>
+                          <div>
+                            <dt>账号任务额度</dt>
+                            <dd>
+                              今日 {data.cloudAgent.usedToday} / {data.cloudAgent.dailyLimit} 次 ·
+                              执行中 {data.cloudAgent.active} / {data.cloudAgent.maxActive} 个
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>执行时限</dt>
+                            <dd>{data.cloudAgent.deadlineMinutes} 分钟后请求停止，等待云端确认</dd>
+                          </div>
+                        </>
+                      )}
+                      <div>
+                        <dt>任务记录</dt>
+                        <dd>
+                          <Link to={`${base}/tasks?plugin=${selected.id}`}>查看云端任务</Link>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>使用费用</dt>
+                        <dd>
+                          输入和最终输出按 token 扣
+                          credits，托管模型无需另付供应商；失败或取消不扣费。
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>支持范围</dt>
+                        <dd>
+                          文字和带微信转写文本的语音；暂不支持图片和文件。/wx stop
+                          请求停止当前会话任务。
+                        </dd>
                       </div>
                     </>
                   ) : selected.pluginId === "wechatai/web-research" ? (
@@ -578,10 +670,18 @@ export function PluginConfiguration({
                 </div>
               </>
             )}
-            {!allowed && (
+            {!allowed && !cloud && (
               <p className="plugin-config-renew">
                 {pluginLimitIssue(data.planUntil).message}{" "}
                 <Link to={`${base}/billing`}>查看会员 / 续费 Plus</Link>
+              </p>
+            )}
+            {cloudIssue && (
+              <p className="plugin-config-renew">
+                {cloudIssue}
+                {cloudAvailability?.code === "cloud_plus_required" && (
+                  <Link to={`${base}/billing`}>查看会员 / 续费 Plus</Link>
+                )}
               </p>
             )}
             {aliasConflict && (
@@ -617,7 +717,7 @@ export function PluginConfiguration({
                   onClick={() => onTest(selected)}
                 >
                   <FlaskConical size={15} />
-                  {connection ? "连接设置" : "测试配置"}
+                  {cloud ? "检查服务状态" : connection ? "连接设置" : "测试配置"}
                 </button>
               )}
               <button
@@ -628,31 +728,26 @@ export function PluginConfiguration({
                 <Trash2 size={15} />
                 删除配置
               </button>
-              {canAdd &&
-                (kind === "wechatai/openclaw" ||
-                  kind === "wechatai/notification" ||
-                  kind === "wechatai/hermes" ||
-                  data.assistants.length > 0) && (
-                  <button className="text-link" disabled={busy} onClick={() => onAdd(kind)}>
-                    <Plus size={15} />
-                    添加另一组配置
-                  </button>
-                )}
+              {canConfigure && (
+                <button className="text-link" disabled={busy} onClick={() => onAdd(kind)}>
+                  <Plus size={15} />
+                  添加另一组配置
+                </button>
+              )}
             </div>
           </>
         ) : (
           <div className="plugin-config-empty">
             <p>还没有配置此插件。</p>
-            {canAdd &&
-              (kind === "wechatai/openclaw" ||
-                kind === "wechatai/notification" ||
-                kind === "wechatai/hermes" ||
-                data.assistants.length > 0) && (
-                <button className="button" onClick={() => onAdd(kind)}>
-                  <Plus size={16} />
-                  添加配置
-                </button>
-              )}
+            {kind === "wechatai/cloud-agent" && cloudAvailability && (
+              <p>{cloudAvailability.message}</p>
+            )}
+            {canConfigure && (
+              <button className="button" onClick={() => onAdd(kind)}>
+                <Plus size={16} />
+                添加配置
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -661,7 +756,11 @@ export function PluginConfiguration({
           {kind !== "wechatai/notification" && (
             <button
               className="button secondary"
-              disabled={busy || (!active && (!allowed || !selected.enabled || Boolean(incomplete)))}
+              disabled={
+                busy ||
+                (!active &&
+                  (!allowed || !selected.enabled || Boolean(incomplete) || Boolean(cloudIssue)))
+              }
               onClick={() => onAction(selected.id, active ? "exit" : "activate")}
             >
               {active ? "退出默认插件" : "设为默认插件"}

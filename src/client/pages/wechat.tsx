@@ -21,6 +21,8 @@ import { json, limitErrorCode } from "../api";
 import { LimitHint } from "../limit-hint";
 import { COMMANDS_GUIDE_PATH } from "../../shared/guide";
 import { wechatSetupIssue } from "../../shared/wechat-readiness";
+import { isCloudAgent } from "../../shared/cloud-agent";
+import { isChatModel } from "../../shared/model-compatibility";
 export function Wechat() {
   const { data, base, request, refresh, notify } = useApp();
   const [busy, setBusy] = useState(false);
@@ -40,6 +42,14 @@ export function Wechat() {
   const connected = connection.status === "connected" && !paused;
   const waiting = ["waiting", "scanned"].includes(connection.status) && !paused;
   const setupIssue = wechatSetupIssue(data);
+  const cloud =
+    data.plugins?.find((p) => isCloudAgent(p) && p.enabled) ?? data.plugins?.find(isCloudAgent);
+  const cloudMode =
+    !!cloud &&
+    (!data.assistants.some(isChatModel) || data.currentSession?.pluginInstanceId === cloud.id);
+  const cloudSetupIssue =
+    setupIssue &&
+    ["cloud_plus_required", "cloud_agent_unavailable", "plugin_disabled"].includes(setupIssue.code);
   const action = async (
     type: "bind" | "disconnect" | "select" | "create" | "rename" | "delete",
     id = data.selectedConnectionId,
@@ -166,10 +176,10 @@ export function Wechat() {
         <div className="gentle-tip wechat-link-note" role="status">
           <ShieldCheck size={20} />
           <div>
-            <h3>{connected ? "请补全渠道配置" : "连接微信前，先完成配置"}</h3>
+            <h3>{connected ? "请检查聊天配置" : "连接微信前，先完成配置"}</h3>
             <p>{setupIssue.message}</p>
-            <Link className="text-link" to={`${base}/channels`}>
-              配置渠道与模型
+            <Link className="text-link" to={`${base}${cloudSetupIssue ? "/plugins" : "/channels"}`}>
+              {cloudSetupIssue ? "管理云端 Agent" : "配置渠道与模型"}
               <ArrowUpRight size={14} />
             </Link>
           </div>
@@ -252,7 +262,7 @@ export function Wechat() {
           {connected && (
             <div className="simple-note">
               每次扫码连接后，在微信发送任意一条消息，就会收到一次微伴的招呼和命令速查链接。 发送{" "}
-              <code>/help</code> 不消耗 credits。
+              <code>/wx help</code> 不消耗 credits。
               <Link className="text-link" to={COMMANDS_GUIDE_PATH}>
                 查看微信命令速查 <ArrowUpRight size={14} />
               </Link>
@@ -261,17 +271,23 @@ export function Wechat() {
           <div className="binding-details">
             <div>
               <span>
-                {data.currentSession && !data.currentSession.assistantId ? "当前入口" : "当前渠道"}
+                {cloudMode || (data.currentSession && !data.currentSession.assistantId)
+                  ? "当前入口"
+                  : "当前渠道"}
               </span>
-              <strong>{data.currentSession?.channelName || "请先添加渠道"}</strong>
+              <strong>
+                {data.currentSession?.channelName || (cloudMode ? "微伴托管" : "请先添加渠道")}
+              </strong>
             </div>
             <div>
               <span>
-                {data.currentSession && !data.currentSession.assistantId
+                {cloudMode || (data.currentSession && !data.currentSession.assistantId)
                   ? "当前 Agent"
                   : "当前模型"}
               </span>
-              <strong>{data.currentSession?.assistantName || "请先添加模型"}</strong>
+              <strong>
+                {data.currentSession?.assistantName || (cloudMode ? cloud?.name : "请先添加模型")}
+              </strong>
             </div>
             <div>
               <span>当前会话</span>
@@ -291,8 +307,11 @@ export function Wechat() {
               </Link>
             ) : connected ? (
               <>
-                <Link className="button secondary" to={`${base}/channels`}>
-                  切换渠道与模型
+                <Link
+                  className="button secondary"
+                  to={`${base}${cloudMode ? "/plugins" : "/channels"}`}
+                >
+                  {cloudMode ? "管理云端 Agent" : "切换渠道与模型"}
                   <ArrowUpRight size={15} />
                 </Link>
                 <button className="text-button muted" onClick={() => setDisconnect(true)}>
@@ -310,8 +329,8 @@ export function Wechat() {
                 重新生成二维码
               </button>
             ) : (
-              <Link className="text-link" to={`${base}/channels`}>
-                先配置渠道与模型
+              <Link className="text-link" to={`${base}${cloudMode ? "/plugins" : "/channels"}`}>
+                {cloudMode ? "查看云端 Agent 配置" : "先配置渠道与模型"}
                 <ArrowUpRight size={15} />
               </Link>
             )}
@@ -322,13 +341,25 @@ export function Wechat() {
             <span className="eyebrow">READY IN A MOMENT</span>
             <h2>接下来，很简单。</h2>
             {[
-              ["01", "配置渠道与模型", "为渠道填写协议、API Key 和地址，再添加它支持的模型。"],
+              cloudMode
+                ? [
+                    "01",
+                    "确认云端 Agent 配置",
+                    "Plus 有效且云端服务已开放时，启用插件即可使用，无需自备 API Key。",
+                  ]
+                : ["01", "配置渠道与模型", "为渠道填写协议、API Key 和地址，再添加它支持的模型。"],
               [
                 "02",
                 "扫码并确认连接",
                 "打开微信「设置」，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫描二维码并确认连接。",
               ],
-              ["03", "发送 /help，收到使用教程", "免费了解常用命令，再开始你的第一段对话。"],
+              cloudMode
+                ? [
+                    "03",
+                    `发送 /use ${cloud?.shortcut}`,
+                    "进入云端 Agent 后直接发送文字任务；/wx stop 请求停止，结果也可在云端任务页查看。",
+                  ]
+                : ["03", "发送 /wx help，收到使用教程", "免费了解常用命令，再开始你的第一段对话。"],
             ].map(([n, title, desc]) => (
               <div className="guide-step" key={n}>
                 <span>{n}</span>
