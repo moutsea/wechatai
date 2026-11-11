@@ -43,6 +43,7 @@ export const PRIVATE_PATHS = [
     "/channels",
     "/assistants",
     "/plugins",
+    "/tasks",
     "/wechat",
     "/sessions",
     "/billing",

@@ -3,3 +3,6 @@
 /guide /docs/getting-started 301
 /guide/ /docs/getting-started 301
 /guide.html /docs/getting-started 301
+
+# Keep task detail URLs and query parameters while serving the private task shell.
+/app/tasks/* /app/tasks 200
