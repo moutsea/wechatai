@@ -833,6 +833,10 @@ app.get(
   "/api/cloud/tasks/:id",
   invoke("cloud.task", (c) => ({ id: c.req.param("id") })),
 );
+app.post(
+  "/api/cloud/tasks/:id/cancel",
+  invoke("cloud.cancel", (c) => ({ id: c.req.param("id") })),
+);
 app.get("/api/sessions", invoke("session.list"));
 app.get(
   "/api/sessions/:id/messages",

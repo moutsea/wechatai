@@ -287,7 +287,7 @@ afterEach(async () => {
 
 describe("account AGT recovery alarm", () => {
   describe.each(["getupdates", "get_qrcode_status"] as const)("while %s is pending", (kind) => {
-    it.each(["session", "plugin", "plugin-full", "connection", "bind"])(
+    it.each(["session", "plugin", "plugin-full", "connection", "bind", "task"])(
       "aborts idle polling after stopping the %s and cancels on the next alarm",
       async (target) => {
         const { stub, task } = await setup({
@@ -309,23 +309,27 @@ describe("account AGT recovery alarm", () => {
           ).toBe(true);
         await blockedPoll(stub, kind, async ({ instance, storage, signal, paths, finished }) => {
           const action =
-            target === "session"
-              ? "session.action"
-              : target.startsWith("plugin")
-                ? "plugin.save"
-                : target === "bind"
-                  ? "wechat.bind"
-                  : "wechat.disconnect";
+            target === "task"
+              ? "cloud.cancel"
+              : target === "session"
+                ? "session.action"
+                : target.startsWith("plugin")
+                  ? "plugin.save"
+                  : target === "bind"
+                    ? "wechat.bind"
+                    : "wechat.disconnect";
           const body =
-            target === "session"
-              ? { id: task.sessionId, action: "reset" }
-              : target.startsWith("plugin")
-                ? {
-                    id: task.pluginId,
-                    enabled: false,
-                    ...(target === "plugin-full" ? { name: "新的助手名称" } : {}),
-                  }
-                : { id: task.connectionId };
+            target === "task"
+              ? { id: task.id }
+              : target === "session"
+                ? { id: task.sessionId, action: "reset" }
+                : target.startsWith("plugin")
+                  ? {
+                      id: task.pluginId,
+                      enabled: false,
+                      ...(target === "plugin-full" ? { name: "新的助手名称" } : {}),
+                    }
+                  : { id: task.connectionId };
           expect(JSON.parse(await instance.api(action, body)).ok).toBe(target !== "bind");
           expect(signal.aborted).toBe(true);
           await finished;
@@ -383,6 +387,34 @@ describe("account AGT recovery alarm", () => {
       },
     );
   });
+
+  it.each(["completed", "cancelled"] as const)(
+    "honors the confirmed %s outcome after an API stop request without rebilling",
+    async (status) => {
+      const { stub, task } = await setup({
+        state: "accepted",
+        jobId: "job-one",
+        submittedAt: Date.now(),
+      });
+      const stopped = JSON.parse(await stub.api("cloud.cancel", { id: task.id }));
+      expect(stopped).toMatchObject({ ok: true, data: { status: "running", stopping: true } });
+      const result = await pass(stub, status, { enabled: false });
+      expect(result.paths.some((path) => path.endsWith("/cancel"))).toBe(false);
+      const terminal = await inspect(stub, task.id);
+      expect(terminal.task).toMatchObject({
+        state: status,
+        settled: status === "completed" ? 1 : 0,
+        delivered: 1,
+        deliveryStatus: "sent",
+      });
+      expect(terminal.ledger).toHaveLength(status === "completed" ? 1 : 0);
+      const repeated = JSON.parse(await stub.api("cloud.cancel", { id: task.id }));
+      expect(repeated.data).toMatchObject({ status, delivery: "sent" });
+      expect(repeated.data.stopping).toBeUndefined();
+      expect((await pass(stub, status)).sent).toEqual([]);
+      expect((await inspect(stub, task.id)).ledger).toEqual(terminal.ledger);
+    },
+  );
 
   it("submits, resumes after restart and atomically settles/delivers once", async () => {
     const { stub, task } = await setup();

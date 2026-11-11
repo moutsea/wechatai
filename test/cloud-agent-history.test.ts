@@ -5,6 +5,7 @@ import referralMigration from "../migrations/0003_referrals.sql?raw";
 import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import worker from "../src/server/index";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
+import { Wallet } from "../src/server/wallet";
 import type { CloudAgentTask, CloudAgentTaskPage } from "../src/shared/cloud-agent";
 import { useManualAlarms } from "./helpers/wechat-delivery";
 
@@ -53,9 +54,10 @@ beforeEach(async () => {
       state.storage.sql.exec("DELETE FROM sessions");
     });
   vi.spyOn(globalThis, "fetch").mockRejectedValue(
-    new Error("History must not call upstream services"),
+    new Error("Task API requests must not call upstream services"),
   );
 });
+
 afterEach(async () => {
   for (const { stub } of [owner, other])
     await runInDurableObject(stub, (_, state) => state.storage.deleteAlarm());
@@ -327,5 +329,186 @@ describe("account cloud task history", () => {
       credits: 1.234,
     });
     expect((await detail(value)).delivered).toBeUndefined();
+  });
+});
+
+describe("account cloud task cancellation", () => {
+  const cancel = (id: string, cookie = owner.cookie, origin = env.APP_URL) =>
+    worker.fetch(
+      new Request(`${env.APP_URL}/api/cloud/tasks/${id}/cancel`, {
+        method: "POST",
+        headers: { cookie, origin },
+      }),
+      env,
+      createExecutionContext(),
+    );
+  const pending = (change: Partial<CloudTask> = {}) =>
+    task({
+      state: "accepted",
+      upstreamStatus: "running",
+      settled: 0,
+      units: 0,
+      result: "",
+      delivered: 0,
+      deliveryStatus: "pending",
+      nextAt: Date.now() + 60_000,
+      ...change,
+    });
+
+  it("requires authentication and a trusted Origin before changing a task", async () => {
+    const value = pending();
+    await save([value]);
+    expect((await cancel(value.id, "")).status).toBe(401);
+    for (const origin of ["", "https://foreign.example.com"])
+      expect((await cancel(value.id, owner.cookie, origin)).status).toBe(403);
+    await runInDurableObject(owner.stub, (_, state) => {
+      expect(new CloudAgentStore(state.storage).get(value.id)).toEqual(value);
+      expect(state.storage.setAlarm).not.toHaveBeenCalled();
+    });
+  });
+
+  it("returns the same 404 for foreign, hidden and missing tasks", async () => {
+    const foreign = pending();
+    const hidden = pending({ hidden: 1 });
+    await save([foreign], other.stub);
+    await save([hidden]);
+    for (const id of [foreign.id, hidden.id, crypto.randomUUID()]) {
+      const response = await cancel(id);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({
+        error: "task_missing",
+        message: "找不到这个云端任务",
+      });
+    }
+    await runInDurableObject(other.stub, (_, state) => {
+      expect(new CloudAgentStore(state.storage).get(foreign.id)).toEqual(foreign);
+    });
+  });
+
+  it.each([
+    { state: "submitting", jobId: "", submittedAt: 0 },
+    { state: "submitting", jobId: "", unconfirmed: 1 },
+    { state: "accepted" },
+  ] satisfies Partial<CloudTask>[])(
+    "persists stop intent and schedules recovery without claiming cancellation (%j)",
+    async (change) => {
+      const value = pending(change);
+      await save([value]);
+      const before = Date.now();
+      const response = await cancel(value.id);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toMatchObject({
+        status: value.state === "accepted" ? "running" : "submitting",
+        stopping: true,
+        error: "已请求停止云端任务，等待确认。已发生的外部操作无法撤销。",
+      });
+      expect((await detail(value)).stopping).toBe(true);
+      await runInDurableObject(owner.stub, (_, state) => {
+        const store = new CloudAgentStore(state.storage);
+        const stopped = store.get(value.id)!;
+        expect(stopped).toMatchObject({
+          ...value,
+          stopRequested: 1,
+          stopReason: "用户请求停止云端任务。",
+          error: expect.stringContaining("等待确认"),
+          updatedAt: expect.any(Number),
+          nextAt: expect.any(Number),
+        });
+        expect(stopped.nextAt).toBeGreaterThanOrEqual(before);
+        expect(stopped.nextAt).toBeLessThanOrEqual(Date.now());
+        expect(store.countSince(0)).toBe(1);
+        expect(state.storage.setAlarm).toHaveBeenCalledOnce();
+        expect(state.storage.sql.exec("SELECT * FROM inbox").toArray()).toEqual([]);
+        expect(state.storage.sql.exec("SELECT * FROM usage").toArray()).toEqual([]);
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rearms repeated requests without changing the saved stop cause, backoff or attempt count", async () => {
+    const value = pending({
+      stopRequested: 1,
+      stopReason: "任务已超时。",
+      error: "等待上游确认停止。",
+      attempts: 4,
+    });
+    await save([value]);
+    for (let i = 0; i < 2; i++) expect((await cancel(value.id)).status).toBe(200);
+    await runInDurableObject(owner.stub, (_, state) => {
+      expect(new CloudAgentStore(state.storage).get(value.id)).toEqual(value);
+      expect(state.storage.setAlarm).toHaveBeenCalledWith(value.nextAt);
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps an earlier shared alarm when stopping a task", async () => {
+    const value = pending();
+    await save([value]);
+    await runInDurableObject(owner.stub, (_, state) => {
+      vi.spyOn(state.storage, "getAlarm").mockResolvedValue(Date.now() - 1);
+    });
+    expect((await cancel(value.id)).status).toBe(200);
+    await runInDurableObject(owner.stub, (_, state) => {
+      expect(state.storage.setAlarm).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each(["completed", "failed", "cancelled", "rejected", "accepted"] as const)(
+    "leaves a terminal or finalizing task unchanged (%s)",
+    async (state) => {
+      const value =
+        state === "accepted"
+          ? pending({
+              outcome: { id: "private-job", workspaceId: "private-workspace", status: "completed" },
+            })
+          : task({ state, ...(state !== "completed" ? { settled: 0, units: 0 } : {}) });
+      await save([value]);
+      const before = await detail(value);
+      const response = await cancel(value.id);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual(before);
+      await runInDurableObject(owner.stub, (_, context) => {
+        expect(new CloudAgentStore(context.storage).get(value.id)).toEqual(value);
+        expect(context.storage.setAlarm).not.toHaveBeenCalled();
+      });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not return content cleared while alarm scheduling was pending", async () => {
+    const value = pending();
+    await save([value]);
+    await runInDurableObject(owner.stub, (_, state) => {
+      vi.mocked(state.storage.setAlarm).mockImplementationOnce(async () => {
+        new CloudAgentStore(state.storage).hideSession(value.sessionId);
+      });
+    });
+    expect((await cancel(value.id)).status).toBe(404);
+    expect((await list()).tasks).toEqual([]);
+  });
+
+  it("allows cancellation after Plus expiry with no credits, plugin, connection or service config", async () => {
+    const value = pending();
+    await save([value]);
+    await runInDurableObject(owner.stub, (instance, state) => {
+      Object.assign(Reflect.get(instance, "env"), {
+        CLOUD_AGENT_ENABLED: "false",
+        AGT_APP_KEY: "",
+      });
+      state.storage.sql.exec("INSERT OR REPLACE INTO settings VALUES ('planUntil','0')");
+      state.storage.sql.exec("UPDATE credit_buckets SET remaining=0");
+      state.storage.sql.exec("UPDATE credit_debt SET amount=1 WHERE id=1");
+    });
+    expect((await cancel(value.id)).status).toBe(200);
+    await runInDurableObject(owner.stub, (_, state) => {
+      expect(new Wallet(state.storage).balance()).toBe(-1);
+      expect(new CloudAgentStore(state.storage).get(value.id)!.stopRequested).toBe(1);
+      expect(state.storage.setAlarm).toHaveBeenCalled();
+      expect(
+        state.storage.sql.exec("SELECT * FROM credit_ledger WHERE kind='usage'").toArray(),
+      ).toEqual([]);
+    });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

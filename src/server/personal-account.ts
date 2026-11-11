@@ -1710,6 +1710,22 @@ export class PersonalAccount extends DurableObject<Env> {
     if (!task || task.hidden) throw new AppError("task_missing", "找不到这个云端任务", 404);
     return this.cloudTaskView(task);
   }
+  private async cloudCancelTask(id: string): Promise<CloudAgentTask> {
+    const task = this.cloud.get(id);
+    if (!task || task.hidden) throw new AppError("task_missing", "找不到这个云端任务", 404);
+    if (!cloudTaskTerminal(task.state) && !task.outcome) {
+      if (!task.stopRequested)
+        this.cloud.patch(task, {
+          stopRequested: 1,
+          stopReason: "用户请求停止云端任务。",
+          error: "已请求停止云端任务，等待确认。已发生的外部操作无法撤销。",
+          nextAt: Date.now(),
+        });
+      // Rearm even on retries, without resetting the saved stop cause/backoff.
+      await this.scheduleCloudRecovery();
+    }
+    return this.cloudTask(id);
+  }
   /** Persist only the verified receipt; authoritative state comes from AGT GET. */
   async agtCallback(
     taskId: string,
@@ -2661,6 +2677,7 @@ export class PersonalAccount extends DurableObject<Env> {
           typeof p.cursor === "string" ? p.cursor : undefined,
         );
       else if (action === "cloud.task") data = this.cloudTask(String(p.id));
+      else if (action === "cloud.cancel") data = await this.cloudCancelTask(String(p.id));
       else if (
         ["notification.status", "notification.token", "notification.revoke"].includes(action)
       ) {
