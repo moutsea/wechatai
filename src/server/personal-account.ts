@@ -131,7 +131,9 @@ import {
 } from "./kimiseek";
 import { dayWindow, Wallet } from "./wallet";
 import { CloudAgentDelivery } from "./cloud-agent-delivery";
-import { CloudAgentStore, type CloudTask } from "./cloud-agent-store";
+import { CloudAgentRuntime } from "./cloud-agent-runtime";
+import { settleCloudAgentTask } from "./cloud-agent-settlement";
+import { CloudAgentStore, cloudTaskMatchesSession, type CloudTask } from "./cloud-agent-store";
 import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
 import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
@@ -240,6 +242,7 @@ export class PersonalAccount extends DurableObject<Env> {
   private claw: OpenClawRelay;
   private cloud: CloudAgentStore;
   private cloudDelivery: CloudAgentDelivery;
+  private cloudRuntime: CloudAgentRuntime;
   private personalRecords: PersonalRecordsStore;
   private personalRuns: PersonalRunStore;
   private reminderDelivery: Promise<void> | null = null;
@@ -274,10 +277,7 @@ export class PersonalAccount extends DurableObject<Env> {
             error: "微信连接已过期，请重新扫码",
           });
       },
-      wake: () => {
-        this.wechatWakeVersion++;
-        for (const poll of this.wechatPolls) poll.abort();
-      },
+      wake: () => this.wakeWechat(),
       schedule: () => this.scheduleWechat(),
     });
     this.wallet = new Wallet(ctx.storage);
@@ -285,6 +285,16 @@ export class PersonalAccount extends DurableObject<Env> {
     this.cloudDelivery = new CloudAgentDelivery(ctx.storage, (task) =>
       this.cloudDeliveryStale(task),
     );
+    this.cloudRuntime = new CloudAgentRuntime(env, this.cloud, ctx.id.toString(), {
+      stopReason: (task) => this.cloudStopReason(task),
+      finalize: async (task) => {
+        const settled = await settleCloudAgentTask(ctx.storage, task.id, (current) =>
+          this.cloudDeliveryStale(current),
+        );
+        if (settled && !settled.delivered) this.cloudDelivery.sync(settled.id);
+      },
+      deliver: (task) => this.cloudDelivery.sync(task.id),
+    });
     this.notifications = new NotificationStore(ctx.storage);
     this.membershipReminders = new MembershipReminders(ctx.storage.sql);
     this.personalRecords = new PersonalRecordsStore(ctx.storage.sql);
@@ -471,6 +481,7 @@ export class PersonalAccount extends DurableObject<Env> {
             await ctx.storage.setAlarm(Date.now() + 1000);
         }
       }
+      await this.scheduleCloudRecovery();
     });
   }
   private get sql() {
@@ -774,8 +785,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (action === "event") {
         // Alarms cannot overlap. Release idle receive requests so the active alarm
         // can finish and the persisted reply can be delivered without a 35s wait.
-        this.wechatWakeVersion++;
-        for (const poll of this.wechatPolls) poll.abort();
+        this.wakeWechat();
         await this.scheduleWechat();
       }
       if (action === "claim")
@@ -1620,6 +1630,40 @@ export class PersonalAccount extends DurableObject<Env> {
       this.connection(task.connectionId).generation !== task.generation
     );
   }
+  private cloudStopReason(task: CloudTask) {
+    if (this.plan() !== "plus") return "云端 Agent 需要 Plus，开通或续费后可提交新任务。";
+    // A possibly accepted task must be recovered even if its submission reply was lost.
+    if (!task.submittedAt && !task.unconfirmed && !task.jobId) {
+      this.refreshWallet();
+      if (this.wallet.balance() <= 0) return "credits 余额不足，请补充后再试。";
+    }
+    const plugin = this.findPlugin(task.pluginId);
+    if (!plugin?.enabled || !this.pluginAvailable(task.pluginId))
+      return "原插件已停用、删除或受套餐限制。";
+    const session = this.sessions().find((session) => session.id === task.sessionId) ?? null;
+    if (!cloudTaskMatchesSession(task, session)) return "原会话已变更、重置或归档。";
+    if (
+      !this.linkEnabled(task.connectionId) ||
+      this.connection(task.connectionId).generation !== task.generation
+    )
+      return "微信链接已变更。";
+    return undefined;
+  }
+  private cloudNextAt() {
+    const next = this.cloud.nextAt();
+    if (next === null || !this.cloud.active().some((task) => !task.stopRequested && !task.outcome))
+      return next;
+    // Expiry needs one immediate eligibility check; stopped work keeps its backoff.
+    return Math.min(next, Math.max(Date.now(), this.getSetting("planUntil", 0)));
+  }
+  private async scheduleCloudRecovery() {
+    const next = this.cloudNextAt();
+    if (next === null) return;
+    if (next <= Date.now()) this.wakeWechat();
+    const current = await this.ctx.storage.getAlarm();
+    const wake = Math.max(Date.now() + 100, next);
+    if (current === null || current > wake) await this.ctx.storage.setAlarm(wake);
+  }
   private linkSetting<T>(id: string, key: string, fallback: T): T {
     return this.getSetting(wechatLinkKey(id, key), fallback);
   }
@@ -2284,6 +2328,9 @@ export class PersonalAccount extends DurableObject<Env> {
     );
   }
   private async scheduleWechat() {
+    // Release idle polls before registry/network synchronization can delay stop intent.
+    const cloudWake = this.cloudNextAt();
+    if (cloudWake !== null && cloudWake <= Date.now()) this.wakeWechat();
     this.membershipReminders.sync(this.getSetting("planUntil", 0));
     await this.flushMembershipSchedule();
     this.attachments.expire();
@@ -2307,6 +2354,8 @@ export class PersonalAccount extends DurableObject<Env> {
       this.notifications.pendingSync() ? Date.now() + 1000 : null,
       this.execution.nextAt(),
       this.execution.dirty() ? Date.now() + 1000 : null,
+      // Recovery and cancellation continue without an active WeChat connection.
+      this.cloudNextAt(),
     ].filter((v): v is number => v !== null);
     if (links.length) {
       const activeIds = new Set(links.map((l) => l.id));
@@ -2604,8 +2653,7 @@ export class PersonalAccount extends DurableObject<Env> {
               recordConnectionId,
             ),
           );
-          this.wechatWakeVersion++;
-          for (const poll of this.wechatPolls) poll.abort();
+          this.wakeWechat();
           await this.scheduleWechat();
           await this.requireReminderSchedule();
         }
@@ -2897,6 +2945,16 @@ export class PersonalAccount extends DurableObject<Env> {
         );
       } else throw new AppError("not_found", "没有这个操作", 404);
       this.personalRuns.prune();
+      if (
+        [
+          "plugin.save",
+          "session.action",
+          "privacy.clear",
+          "assistant.delete",
+          "channel.delete",
+        ].includes(action)
+      )
+        await this.scheduleCloudRecovery();
       return JSON.stringify({ ok: true, data });
     } catch (error) {
       if (error instanceof AppError)
@@ -4115,6 +4173,7 @@ export class PersonalAccount extends DurableObject<Env> {
         connectionId,
       );
     });
+    await this.scheduleCloudRecovery();
     let qr: { qrcode: string; qrcode_img_content: string };
     try {
       qr = await wxRequest("get_bot_qrcode?bot_type=3", undefined, undefined, 15000);
@@ -4813,6 +4872,8 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.flushReminderSchedule();
       await this.flushNotificationSchedule();
       if (this.referralPending()) await this.retryReferral();
+      // Recover AGT before idle WeChat long polls can consume this pass's budget.
+      await this.cloudRuntime.process(Date.now() + 20_000);
       // Bound outbound concurrency; one idle connection must not occupy every fetch slot.
       const priority = new Map(
         this.sql
@@ -4842,6 +4903,36 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.scheduleWechat();
     }
   }
+  private wakeWechat() {
+    this.wechatWakeVersion++;
+    for (const poll of this.wechatPolls) poll.abort();
+  }
+  /** Idle requests must yield when durable cloud work becomes due. Model calls
+   * and sends keep their own budgets and are never aborted by this wakeup. */
+  private async pollWechatRequest<T>(
+    path: string,
+    body?: unknown,
+    credentials?: WxCredentials,
+    pollBaseUrl?: string,
+  ): Promise<T | null> {
+    const cloudWake = this.cloudNextAt();
+    const timeout = Math.min(
+      this.links().length > 1 ? 5000 : 35000,
+      cloudWake === null ? Infinity : cloudWake - Date.now(),
+    );
+    if (timeout <= 0) {
+      this.wakeWechat();
+      return null;
+    }
+    const poll = new AbortController();
+    this.wechatPolls.add(poll);
+    try {
+      const result = await wxRequest<T>(path, body, credentials, timeout, pollBaseUrl, poll.signal);
+      return poll.signal.aborted ? null : result;
+    } finally {
+      this.wechatPolls.delete(poll);
+    }
+  }
   private async pollWechat(
     connectionId: string,
     deadline = Date.now() + MODEL_TURN_TIMEOUT_MS,
@@ -4863,7 +4954,7 @@ export class PersonalAccount extends DurableObject<Env> {
             });
           return;
         }
-        const result = await wxRequest<{
+        const result = await this.pollWechatRequest<{
           status: string;
           bot_token?: string;
           ilink_bot_id?: string;
@@ -4874,9 +4965,9 @@ export class PersonalAccount extends DurableObject<Env> {
           `get_qrcode_status?qrcode=${encodeURIComponent(link.qrCode)}`,
           undefined,
           undefined,
-          this.links().length > 1 ? 5000 : 35000,
           link.pollBaseUrl,
         );
+        if (!result) return;
         if (
           this.connection(connectionId).generation !== link.generation ||
           !this.linkEnabled(connectionId)
@@ -5314,28 +5405,12 @@ export class PersonalAccount extends DurableObject<Env> {
           // An inbound hibernating socket delegates receive-only polling to the
           // server. Pending replies above still run normally in this account.
           if (this.receiver.socket()) return;
-          let result: { msgs?: WxMessage[]; get_updates_buf?: string; sync_buf?: string };
-          const poll = new AbortController();
-          this.wechatPolls.add(poll);
-          try {
-            result = await wxRequest(
-              "getupdates",
-              { get_updates_buf: link.cursor || "" },
-              credentials,
-              this.links().length > 1 ? 5000 : 35000,
-              undefined,
-              poll.signal,
-            );
-          } catch (error) {
-            if (
-              error instanceof Error &&
-              (error.name === "TimeoutError" || error.name === "AbortError")
-            )
-              return;
-            throw error;
-          } finally {
-            this.wechatPolls.delete(poll);
-          }
+          const result = await this.pollWechatRequest<{
+            msgs?: WxMessage[];
+            get_updates_buf?: string;
+            sync_buf?: string;
+          }>("getupdates", { get_updates_buf: link.cursor || "" }, credentials);
+          if (!result) return;
           if (
             this.connection(connectionId).generation !== link.generation ||
             !this.linkReceivable(connectionId)

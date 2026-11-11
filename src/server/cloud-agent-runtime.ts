@@ -23,7 +23,8 @@ type Host = {
  * One instance per account, called by its shared alarm. Progress and retry times
  * live in SQLite; running only prevents overlapping passes in this instance.
  * The host must persist/rearm its recovery alarm, initialize the store, and own
- * admission, settlement and delivery. This class is not wired to the account yet.
+ * admission, settlement and delivery. PersonalAccount supplies the shared alarm
+ * and the existing local settlement/delivery adapters.
  */
 export class CloudAgentRuntime {
   private running = false;
