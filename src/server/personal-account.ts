@@ -1688,7 +1688,21 @@ export class PersonalAccount extends DurableObject<Env> {
     });
   }
   private publicConnection(id: string): Connection {
-    const { status, botId, lastSeen, error, qrUrl, qrExpires } = this.connection(id);
+    const { status, botId, lastSeen, error: savedError, qrUrl, qrExpires } = this.connection(id);
+    // Recovery guidance describes the current queue, not a connection fault.
+    // Validate cached hints too, so every cancellation path and restart agrees.
+    let error = savedError === CLOUD_REPLY_WAITING_MESSAGE ? undefined : savedError;
+    if (
+      !error &&
+      status === "connected" &&
+      this.sql
+        .exec(
+          "SELECT 1 FROM inbox WHERE connectionId=? AND state='waiting_context' AND id GLOB 'cloud:*' LIMIT 1",
+          id,
+        )
+        .toArray().length
+    )
+      error = CLOUD_REPLY_WAITING_MESSAGE;
     return { status, botId, lastSeen, error, qrUrl, qrExpires };
   }
   private createLink(name: unknown) {
@@ -3282,9 +3296,10 @@ export class PersonalAccount extends DurableObject<Env> {
     if (current && ["reset", "clear", "delete", "archive"].includes(action))
       this.attachments.clear(connectionId);
     if (["reset", "clear", "delete", "archive"].includes(action)) {
+      this.cloud.stopSession(s.id);
       this.claw.cancelSession(s.id);
       this.sql.exec(
-        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE sessionId = ? AND id LIKE 'claw:%'",
+        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE sessionId = ? AND (id LIKE 'claw:%' OR id LIKE 'cloud:%')",
         s.id,
       );
     }

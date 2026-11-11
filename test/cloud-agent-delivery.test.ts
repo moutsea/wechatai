@@ -7,6 +7,7 @@ import { Wallet } from "../src/server/wallet";
 import { publicSiteUrl } from "../src/server/config";
 import type { WxMessage } from "../src/server/wechat";
 import { wechatHelp } from "../src/shared/guide";
+import { wechatLinkKey } from "../src/shared/wechat-links";
 import { PLUGIN_PROTOCOL_VERSION } from "../src/shared/plugins";
 import {
   connectForManualDelivery,
@@ -150,6 +151,223 @@ afterEach(async () => {
 });
 
 describe("durable AGT reply delivery", () => {
+  it.each(["same", "other"])(
+    "keeps recovery guidance scoped to remaining replies on the %s link",
+    async (link) => {
+      const { stub, task, plugin } = await setup();
+      await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+      expect(await deliverQueuedReplies(stub, 5, true)).toHaveLength(5);
+      let connectionId = task.connectionId;
+      if (link === "other") {
+        const snapshot = await api(stub, "wechat.create", { name: "另一个微信" });
+        connectionId = snapshot.selectedConnectionId;
+        await inAccount(stub, (storage) => {
+          storage.sql.exec(
+            "UPDATE settings SET value=(SELECT value FROM settings WHERE key='connection') WHERE key=?",
+            wechatLinkKey(connectionId, "connection"),
+          );
+        });
+      }
+      const session = await api(stub, "session.create", {
+        pluginInstanceId: plugin.id,
+        connectionId,
+      });
+      await inAccount(stub, (storage, store, delivery) => {
+        const id = crypto.randomUUID();
+        store.save({
+          ...task,
+          id,
+          sourceId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+          jobId: `job-${id}`,
+          sessionId: session.id,
+          currentSessionId: session.id,
+          connectionId,
+          invocation: { ...task.invocation!, runId: id, sessionId: session.id },
+        });
+        delivery.sync(id);
+        storage.sql.exec("UPDATE inbox SET state='waiting_context' WHERE id=?", `cloud:${id}`);
+      });
+      await api(stub, "session.action", { id: task.sessionId, action: "reset" });
+      const snapshot = await stub.snapshot();
+      expect(snapshot.connection.error).toContain("/wx help");
+      expect(snapshot.connections.find((c) => c.id === task.connectionId)?.error).toBe(
+        link === "same" ? snapshot.connection.error : undefined,
+      );
+      expect(snapshot.connections.find((c) => c.id === connectionId)?.error).toContain("/wx help");
+      await api(stub, "session.action", { id: session.id, action: "reset" });
+      expect((await stub.snapshot()).connections.every((c) => c.error === undefined)).toBe(true);
+    },
+  );
+
+  it.each(["connected", "expired"])(
+    "preserves a genuine %s connection error when waiting replies are cancelled",
+    async (status) => {
+      const { stub, task } = await setup();
+      await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+      expect(await deliverQueuedReplies(stub, 5, true)).toHaveLength(5);
+      const error =
+        status === "expired" ? "微信连接已过期，请重新扫码" : "连接暂时中断，正在自动重试";
+      await inAccount(stub, (storage) => {
+        storage.sql.exec(
+          "UPDATE settings SET value=json_set(value,'$.status',?,'$.error',?) WHERE key='connection'",
+          status,
+          error,
+        );
+      });
+      expect((await stub.snapshot()).connection.error).toBe(error);
+      await api(stub, "session.action", { id: task.sessionId, action: "reset" });
+      const snapshot = await stub.snapshot();
+      expect(snapshot.connection).toMatchObject({ status, error });
+      expect(snapshot.connections.find((c) => c.id === task.connectionId)?.error).toBe(error);
+    },
+  );
+
+  it.each(["reset", "archive"])(
+    "persists %s cancellation without erasing history or delivering after restoration",
+    async (action) => {
+      const { stub, task, inboxId } = await setup();
+      await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+      expect(await deliverQueuedReplies(stub, 5, true)).toHaveLength(5);
+      expect((await stub.snapshot()).connection.error).toContain("/wx help");
+      const before = await inAccount(stub, (storage, store) => {
+        const id = crypto.randomUUID();
+        const active: CloudTask = {
+          ...task,
+          id,
+          sourceId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(),
+          jobId: `job-${id}`,
+          state: "accepted",
+          outcome: null,
+          result: "",
+          frozen: "",
+          settled: 0,
+          units: 0,
+          delivered: 0,
+          deliveryQueuedAt: undefined,
+          request: "frozen-submit-request",
+          invocation: { ...task.invocation!, runId: id },
+          nextAt: Date.now() + 60_000,
+        };
+        const otherId = crypto.randomUUID();
+        const unrelated = {
+          ...active,
+          id: otherId,
+          sourceId: crypto.randomUUID(),
+          jobId: `job-${otherId}`,
+          sessionId: "another-session",
+        };
+        store.save(active);
+        store.save(unrelated);
+        return {
+          active,
+          unrelated,
+          balance: new Wallet(storage).balance(),
+          ledger: storage.sql.exec("SELECT * FROM credit_ledger").toArray(),
+          runs: storage.sql.exec("SELECT * FROM runs").toArray(),
+        };
+      });
+      await api(stub, "session.action", { id: task.sessionId, action });
+      expect((await stub.snapshot()).connection.error).toBeUndefined();
+      await inAccount(stub, (storage, store) => {
+        expect(store.get(before.active.id)).toMatchObject({
+          state: "accepted",
+          stopRequested: 1,
+          stale: 1,
+          hidden: 0,
+          prompt: before.active.prompt,
+          request: before.active.request,
+          invocation: before.active.invocation,
+        });
+        expect(store.get(before.active.id)!.nextAt).toBeLessThan(before.active.nextAt);
+        expect(store.get(task.id)).toMatchObject({
+          stale: 1,
+          delivered: 1,
+          deliveryStatus: "stale",
+          result: task.result,
+          frozen: task.frozen,
+          units: task.units,
+          settled: 1,
+        });
+        expect(store.get(before.unrelated.id)).toEqual(before.unrelated);
+        expect(
+          storage.sql.exec("SELECT state,reply,payload FROM inbox WHERE id=?", inboxId).one(),
+        ).toEqual({ state: "done", reply: "", payload: "{}" });
+        expect(new Wallet(storage).balance()).toBe(before.balance);
+        expect(storage.sql.exec("SELECT * FROM credit_ledger").toArray()).toEqual(before.ledger);
+        expect(storage.sql.exec("SELECT * FROM runs").toArray()).toEqual(before.runs);
+      });
+      if (action === "archive") {
+        await api(stub, "session.action", { id: task.sessionId, action: "restore" });
+        await api(stub, "session.action", { id: task.sessionId, action: "switch" });
+      }
+      await abortAllDurableObjects();
+      const restored = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(restored, (_, state) => useManualAlarms(state));
+      expect((await restored.snapshot()).connection.error).toBeUndefined();
+      await inAccount(restored, async (storage, store, delivery) => {
+        const messages = storage.sql.exec("SELECT * FROM messages").toArray();
+        // Cancellation can lose a race to a valid completion. Retain and settle
+        // that result once, but never resume automatic delivery after restoration.
+        store.patch(before.active, {
+          outcome: { ...task.outcome!, id: before.active.jobId, text: "late-cloud-answer" },
+        });
+        const completed = await settleCloudAgentTask(storage, before.active.id, () => false);
+        expect(completed).toMatchObject({
+          state: "completed",
+          stopRequested: 1,
+          stale: 1,
+          hidden: 0,
+          delivered: 1,
+          deliveryStatus: "stale",
+          result: "late-cloud-answer",
+          settled: 1,
+        });
+        const balance = new Wallet(storage).balance();
+        await settleCloudAgentTask(storage, before.active.id, () => false);
+        expect(new Wallet(storage).balance()).toBe(balance);
+        expect(
+          storage.sql
+            .exec("SELECT * FROM credit_ledger WHERE id=?", `usage:${before.active.id}`)
+            .toArray(),
+        ).toHaveLength(1);
+        expect(storage.sql.exec("SELECT * FROM messages").toArray()).toEqual(messages);
+        expect(delivery.sync(before.active.id)!.deliveryStatus).toBe("stale");
+      });
+      expect(await deliverQueuedReplies(restored)).toEqual([]);
+    },
+  );
+
+  it("keeps cloud work and queued replies when archiving is rejected", async () => {
+    const { stub, task, inboxId } = await setup();
+    const queued = await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+    await runInDurableObject(stub, async (instance) => {
+      const settings = Reflect.get(instance, "env");
+      const previous = settings.PLUS_SESSIONS;
+      settings.PLUS_SESSIONS = "1";
+      try {
+        expect(
+          JSON.parse(
+            await instance.api("session.action", {
+              id: task.sessionId,
+              action: "archive",
+            }),
+          ),
+        ).toMatchObject({ ok: false, error: "session_limit" });
+      } finally {
+        settings.PLUS_SESSIONS = previous;
+      }
+    });
+    await inAccount(stub, (storage, store) => {
+      expect(store.get(task.id)).toEqual(queued);
+      expect(storage.sql.exec("SELECT state,reply FROM inbox WHERE id=?", inboxId).one()).toEqual({
+        state: "reply",
+        reply: task.result,
+      });
+    });
+  });
+
   it.each(["clear", "delete", "privacy.clear", "assistant.delete", "channel.delete"])(
     "erases cloud content through %s without changing bills or restoring late results",
     async (action) => {
@@ -159,9 +377,10 @@ describe("durable AGT reply delivery", () => {
         "completed",
         deletingModel,
       );
-      const before = await inAccount(stub, async (storage, store, delivery) => {
-        delivery.sync(task.id);
-        storage.sql.exec("UPDATE inbox SET state='waiting_context' WHERE id=?", inboxId);
+      await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+      expect(await deliverQueuedReplies(stub, 5, true)).toHaveLength(5);
+      expect((await stub.snapshot()).connection.error).toContain("/wx help");
+      const before = await inAccount(stub, async (storage, store) => {
         const pending = (sessionId = task.sessionId): CloudTask => {
           const id = crypto.randomUUID();
           return {
@@ -207,6 +426,7 @@ describe("durable AGT reply delivery", () => {
       else if (deletingModel)
         await api(stub, action, { id: action === "assistant.delete" ? model.id : model.channelId });
       else await api(stub, "session.action", { id: task.sessionId, action });
+      expect((await stub.snapshot()).connection.error).toBeUndefined();
       expect(await deliverQueuedReplies(stub)).toEqual([]);
       await inAccount(stub, async (storage, store, delivery) => {
         const ids = action === "privacy.clear" ? [...before.ids, before.unrelated.id] : before.ids;

@@ -268,6 +268,7 @@ describe("cloud task scheduling and quota", () => {
       expect(store.get(active.id)).toMatchObject({
         state: "accepted",
         stopRequested: 1,
+        stale: 1,
         nextAt: now,
       });
       expect(store.get(pending.id)).toMatchObject({

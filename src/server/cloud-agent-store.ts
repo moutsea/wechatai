@@ -394,11 +394,12 @@ export class CloudAgentStore {
 
   /** Stop in-flight work and prevent queued results from entering a changed context. */
   private stop(column: "sessionId" | "pluginId" | "connectionId", id: string, now: number) {
+    // Restoring the original context later must not restore automatic delivery.
     this.sql.exec(
       `UPDATE cloud_tasks SET
         data = json_set(data, '$.stopReason', CASE WHEN stopRequested = 0 THEN ''
           ELSE COALESCE(json_extract(data, '$.stopReason'), json_extract(data, '$.error'), '') END),
-        stopRequested = 1, nextAt = ?, updatedAt = ?
+        stopRequested = 1, stale = 1, nextAt = ?, updatedAt = ?
         WHERE ${column} = ? AND state IN ('submitting','accepted')`,
       now,
       now,
