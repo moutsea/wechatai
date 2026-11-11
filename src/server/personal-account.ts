@@ -134,7 +134,13 @@ import { CloudAgentDelivery } from "./cloud-agent-delivery";
 import { CloudAgentRuntime } from "./cloud-agent-runtime";
 import { receiveCloudAgentCallback } from "./cloud-agent-callback-inbox";
 import { settleCloudAgentTask } from "./cloud-agent-settlement";
-import { CloudAgentStore, cloudTaskMatchesSession, type CloudTask } from "./cloud-agent-store";
+import {
+  CloudAgentStore,
+  cloudTaskMatchesSession,
+  cloudTaskTerminal,
+  type CloudTask,
+} from "./cloud-agent-store";
+import type { CloudAgentTask, CloudAgentTaskPage } from "../shared/cloud-agent";
 import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
 import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
@@ -1650,6 +1656,60 @@ export class PersonalAccount extends DurableObject<Env> {
       return "微信链接已变更。";
     return undefined;
   }
+  private cloudTaskView(task: CloudTask): CloudAgentTask {
+    const session = this.sql
+      .exec<{ title: string }>(
+        "SELECT json_extract(data, '$.title') AS title FROM sessions WHERE id=?",
+        task.sessionId,
+      )
+      .toArray()[0];
+    const upstreamStatus = task.upstreamStatus;
+    const status: CloudAgentTask["status"] =
+      task.state === "rejected"
+        ? task.stopRequested
+          ? "cancelled"
+          : "failed"
+        : task.state === "submitting" || task.state === "accepted"
+          ? task.outcome
+            ? "finalizing"
+            : task.state === "submitting"
+              ? "submitting"
+              : upstreamStatus === "queued" || upstreamStatus === "awaiting_approval"
+                ? upstreamStatus
+                : "running"
+          : task.state;
+    return {
+      id: task.id,
+      pluginInstanceId: task.pluginId,
+      pluginName: task.pluginName,
+      sessionId: task.stale || !session ? null : task.sessionId,
+      sessionTitle: session?.title ?? "已删除会话",
+      prompt: task.prompt,
+      status,
+      ...(upstreamStatus ? { upstreamStatus } : {}),
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      ...(task.result ? { result: task.result } : {}),
+      ...(task.error ? { error: task.error } : {}),
+      ...(task.settled ? { credits: task.units / 1000 } : {}),
+      ...(task.stale ? { stale: true } : {}),
+      ...(task.deliveryStatus === "sent" ? { delivered: true } : {}),
+      delivery: task.deliveryStatus,
+      ...(task.stopRequested && !cloudTaskTerminal(task.state) && !task.outcome
+        ? { stopping: true }
+        : {}),
+      ...(task.unconfirmed ? { unconfirmed: true } : {}),
+    };
+  }
+  private cloudTasks(pluginId?: string, cursor?: string): CloudAgentTaskPage {
+    const page = this.cloud.page(pluginId, cursor);
+    return { ...page, tasks: page.tasks.map((task) => this.cloudTaskView(task)) };
+  }
+  private cloudTask(id: string): CloudAgentTask {
+    const task = this.cloud.get(id);
+    if (!task || task.hidden) throw new AppError("task_missing", "找不到这个云端任务", 404);
+    return this.cloudTaskView(task);
+  }
   /** Persist only the verified receipt; authoritative state comes from AGT GET. */
   async agtCallback(
     taskId: string,
@@ -2595,6 +2655,12 @@ export class PersonalAccount extends DurableObject<Env> {
         this.setSetting("dashboardOnboardingDismissedAt", dismissedAt);
         data = { dismissedAt };
       } else if (action === "plugin.list") data = this.plugins().map((p) => this.publicPlugin(p));
+      else if (action === "cloud.tasks")
+        data = this.cloudTasks(
+          typeof p.pluginInstanceId === "string" ? p.pluginInstanceId : undefined,
+          typeof p.cursor === "string" ? p.cursor : undefined,
+        );
+      else if (action === "cloud.task") data = this.cloudTask(String(p.id));
       else if (
         ["notification.status", "notification.token", "notification.revoke"].includes(action)
       ) {

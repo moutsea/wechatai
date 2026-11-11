@@ -822,6 +822,17 @@ app.post(
   invoke("assistant.test", (c) => ({ id: c.req.param("id") })),
 );
 app.post("/api/assistants/:id/activate", invoke("assistant.activate", activationPayload));
+app.get(
+  "/api/cloud/tasks",
+  invoke("cloud.tasks", (c) => ({
+    pluginInstanceId: c.req.query("plugin"),
+    cursor: c.req.query("cursor"),
+  })),
+);
+app.get(
+  "/api/cloud/tasks/:id",
+  invoke("cloud.task", (c) => ({ id: c.req.param("id") })),
+);
 app.get("/api/sessions", invoke("session.list"));
 app.get(
   "/api/sessions/:id/messages",
