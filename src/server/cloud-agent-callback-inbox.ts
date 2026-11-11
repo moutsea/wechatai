@@ -13,7 +13,8 @@ export type CloudCallbackReceipt =
  * bounds the body stream. Uses the task's frozen key version even when new jobs
  * are disabled. Only identity/hash and a recovery wakeup are persisted: neither
  * callback status nor result can confirm a submission or authorize billing.
- * The host must schedule its shared alarm after every success, including retries.
+ * The host must recompute its shared alarm from stored due times after every
+ * success, including retries, so late receipts preserve settlement backoff.
  */
 export function receiveCloudAgentCallback(
   env: Env,

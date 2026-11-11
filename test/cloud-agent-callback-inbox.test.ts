@@ -420,6 +420,43 @@ describe("durable AGT callback inbox", () => {
     });
   });
 
+  it("acknowledges new and repeated late callbacks without bypassing frozen-outcome settlement backoff", async () => {
+    const { stub, saved } = await setup({
+      state: "accepted",
+      jobId: "job-one",
+      unconfirmed: 0,
+      outcome: {
+        id: "job-one",
+        workspaceId: "workspace-one",
+        status: "completed",
+        text: "original-result",
+      },
+      deadline: Date.now() - 1,
+      nextAt: Date.now() + 120_000,
+      attempts: 3,
+    });
+    await inStore(stub, (store, storage) => {
+      for (const delivery of ["delivery-one", "delivery-one", "delivery-two"]) {
+        const event = signed(stub.id.toString(), saved, { id: delivery });
+        event.headers.delivery = delivery;
+        expect(
+          receiveCloudAgentCallback(
+            env,
+            store,
+            stub.id.toString(),
+            saved.id,
+            event.body,
+            event.headers,
+          ),
+        ).toEqual({ ok: true });
+        expect(store.get(saved.id)).toEqual(saved);
+        expect(store.due()).toEqual([]);
+        expect(store.nextAt()).toBe(saved.nextAt);
+      }
+      expect(storage.sql.exec("SELECT * FROM cloud_callbacks").toArray()).toHaveLength(2);
+    });
+  });
+
   it("never revives a completed task or changes its settlement on a late callback", async () => {
     const { stub, saved } = await setup({
       state: "completed",

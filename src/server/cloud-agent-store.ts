@@ -78,8 +78,10 @@ export type CloudProvision = {
 
 const TERMINAL: CloudTaskState[] = ["completed", "failed", "cancelled", "rejected"];
 const TERMINAL_SQL = TERMINAL.map((state) => `'${state}'`).join(",");
+// Deadlines only interrupt upstream execution. Frozen outcomes await local
+// settlement/delivery and must retain the host's retry backoff in nextAt.
 const WAKE_AT_SQL =
-  "CASE WHEN state IN ('submitting','accepted') AND stopRequested=0 THEN MIN(nextAt,deadline) ELSE nextAt END";
+  "CASE WHEN state IN ('submitting','accepted') AND stopRequested=0 AND json_extract(data, '$.outcome') IS NULL THEN MIN(nextAt,deadline) ELSE nextAt END";
 export const cloudTaskTerminal = (state: CloudTaskState) => TERMINAL.includes(state);
 
 const cursorSchema = z.tuple([z.number().int().nonnegative(), z.string().uuid()]);
@@ -417,13 +419,13 @@ export class CloudAgentStore {
     return "new" as const;
   }
 
-  /** Verified callbacks only: commit receipt and recovery wakeup together, before alarm scheduling. */
+  /** Verified callbacks only: atomically commit receipt and wakeup if upstream work remains. */
   receiveCallback(deliveryId: string, taskId: string, hash: string, jobId: string) {
     return this.storage.transactionSync(() => {
       const task = this.get(taskId);
       if (!task) throw new AppError("cloud_task_missing", "云端任务不存在", 404);
       const delivery = this.delivery(deliveryId, taskId, hash, jobId);
-      if (delivery === "new" && !cloudTaskTerminal(task.state))
+      if (delivery === "new" && !cloudTaskTerminal(task.state) && !task.outcome)
         this.patch(task, { nextAt: Date.now() });
       return delivery;
     });

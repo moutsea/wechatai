@@ -207,6 +207,35 @@ describe("cloud task scheduling and quota", () => {
     });
   });
 
+  it.each(["completed", "failed", "cancelled"] as const)(
+    "respects settlement backoff for a frozen %s outcome while prioritizing live deadlines",
+    async (status) => {
+      await inStore(account(), (store) => {
+        const retryAt = now + 60_000;
+        const saved = task({
+          state: "accepted",
+          jobId: "finished-job",
+          outcome: { id: "finished-job", workspaceId: "workspace-1", status },
+          deadline: now - 1,
+          nextAt: retryAt,
+        });
+        store.save(saved);
+        expect(store.nextAt(now)).toBe(retryAt);
+        expect(store.due(now)).toEqual([]);
+        expect(store.due(retryAt - 1)).toEqual([]);
+        expect(store.due(retryAt)).toEqual([saved]);
+        expect(store.active()).toEqual([saved]);
+        expect(store.countSince(now)).toBe(1);
+
+        const live = task({ deadline: now + 1000, nextAt: retryAt + 1000 });
+        store.save(live);
+        expect(store.nextAt(now)).toBe(live.deadline);
+        expect(store.due(live.deadline, 1)).toEqual([live]);
+        expect(store.due(retryAt).map((value) => value.id)).toEqual([live.id, saved.id]);
+      });
+    },
+  );
+
   it("retries undelivered terminal results and counts executions independently of history visibility", async () => {
     await inStore(account(), (store) => {
       const pending = task({ state: "completed", nextAt: now + 100 });
