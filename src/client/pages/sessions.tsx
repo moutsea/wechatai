@@ -1,4 +1,6 @@
 import { isChatModel } from "../../shared/model-compatibility";
+import { readyCloudAgents } from "../../shared/wechat-readiness";
+import { isCloudAgent } from "../../shared/cloud-agent";
 import { RoleSummary } from "./role-summary";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -41,7 +43,7 @@ export function Sessions() {
   const [summaryId, setSummaryId] = useState("");
   const [operation, setOperation] = useState("");
   const [title, setTitle] = useState("");
-  const [assistantId, setAssistantId] = useState("");
+  const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const [more, setMore] = useState(false);
   const [version, setVersion] = useState(0);
@@ -159,6 +161,21 @@ export function Sessions() {
   };
   if (!data) return null;
   const textModels = data.assistants.filter(isChatModel);
+  const creationTargets = [
+    ...textModels.map((model) => ({
+      value: `model:${model.id}`,
+      label: `${model.channelName} / ${model.name} · ${model.model}`,
+      assistantId: model.id,
+      pluginInstanceId: undefined,
+    })),
+    ...readyCloudAgents(data).map((plugin) => ({
+      value: `plugin:${plugin.id}`,
+      label: `${plugin.name} · 云端 Agent`,
+      assistantId: undefined,
+      pluginInstanceId: plugin.id,
+    })),
+  ];
+  const selectedTarget = creationTargets.find((item) => item.value === target);
   const pluginName = (s: ChatSession) =>
     data.plugins?.find((p) => p.id === s.pluginInstanceId)?.name || s.pluginName;
   const sessionAvatar = (s: ChatSession) => {
@@ -173,6 +190,7 @@ export function Sessions() {
   const role = data.plugins?.find(
     (p) => p.id === session?.pluginInstanceId && p.pluginId === "wechatai/roleplay",
   );
+  const cloudSession = isCloudAgent(data.plugins?.find((p) => p.id === session?.pluginInstanceId));
   const assistant = data.assistants.find((a) => a.id === session?.assistantId);
   const visible = sessions.filter(
     (s) =>
@@ -185,10 +203,18 @@ export function Sessions() {
     setBusy(true);
     try {
       if (action === "new" || action === "new-story") {
+        if (action === "new" && !selectedTarget) {
+          notify("请选择可用的模型或云端 Agent。", true);
+          return;
+        }
         const created = await request<ChatSession>("/sessions", {
           ...json({
-            assistantId,
-            ...(action === "new-story" ? { pluginInstanceId: role?.id } : {}),
+            ...(action === "new-story"
+              ? { pluginInstanceId: role?.id }
+              : {
+                  assistantId: selectedTarget!.assistantId,
+                  pluginInstanceId: selectedTarget!.pluginInstanceId,
+                }),
             title: action === "new-story" ? "" : title,
             connectionId:
               action === "new-story"
@@ -286,9 +312,17 @@ export function Sessions() {
         action={
           <button
             className="button"
-            disabled={!textModels.length}
+            disabled={!creationTargets.length}
             onClick={() => {
-              setAssistantId(textModels[0]?.id || "");
+              const current = data.currentSession;
+              const preferred = current?.pluginInstanceId
+                ? `plugin:${current.pluginInstanceId}`
+                : `model:${current?.assistantId}`;
+              setTarget(
+                creationTargets.find((item) => item.value === preferred)?.value ??
+                  creationTargets[0]?.value ??
+                  "",
+              );
               setTitle("");
               setOperation("new");
             }}
@@ -298,6 +332,19 @@ export function Sessions() {
           </button>
         }
       />
+      {!creationTargets.length && (
+        <p className="form-note">
+          当前没有可用的文本模型或云端 Agent。请检查
+          <Link className="text-link" to={`${base}/channels`}>
+            渠道与模型
+          </Link>
+          或
+          <Link className="text-link" to={`${base}/plugins`}>
+            插件状态
+          </Link>
+          。
+        </p>
+      )}
       <div className={`sessions-workspace panel ${mobileDetail ? "is-detail" : ""}`}>
         <aside className="session-sidebar">
           <div className="session-tabs">
@@ -604,7 +651,7 @@ export function Sessions() {
               {
                 new: "开启一段新对话",
                 rename: "给会话起个名字",
-                reset: "重置模型上下文？",
+                reset: cloudSession ? "重置云端对话？" : "重置模型上下文？",
                 archive: "归档这段对话？",
                 restore: "恢复这段对话？",
                 clear: "清空会话消息？",
@@ -615,15 +662,18 @@ export function Sessions() {
           description={
             (
               {
-                new: `将为「${data.connections.find((l) => l.id === data.selectedConnectionId)?.name ?? "我的微信"}」创建并切换到新会话。`,
+                new: `将为「${data.connections.find((l) => l.id === data.selectedConnectionId)?.name ?? "我的微信"}」创建并切换到新会话。${selectedTarget?.pluginInstanceId ? "创建会话不会提交任务或消耗执行次数。已有任务继续执行，结果可在云端任务页查看。" : ""}`,
                 rename: "用一个容易找到的名字，记住这个话题。",
-                reset: "历史消息仍然保留，后续请求不再把它们发送给模型。",
-                archive: "记录会移入归档。如这是当前会话，将自动开启新会话。",
+                reset: cloudSession
+                  ? "后续任务将使用新的云端对话，历史记录及已保存的云端记忆仍保留。未结束的任务会请求停止。"
+                  : "历史消息仍然保留，后续请求不再把它们发送给模型。",
+                archive:
+                  "记录会移入归档，不会释放会话名额。如这是当前会话，仅在微信链接和模型或插件可用时自动新建，否则退出当前会话。未结束的云端任务会请求停止。",
                 restore: "会话将回到常用列表，恢复后可以手动切换继续聊。",
                 clear:
-                  "平台上的消息记录、模型上下文和对应云端任务内容都会删除，无法恢复。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。",
+                  "平台上的消息记录、模型上下文和对应云端任务内容都会删除，无法恢复。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。微信记录及云端服务中的历史与记忆不会同步删除。",
                 delete:
-                  "会话、消息和对应云端任务内容会从平台删除，无法恢复，并释放一个会话名额。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。删除当前会话后不会自动新建，微信里的消息不受影响。",
+                  "会话、消息和对应云端任务内容会从平台删除，无法恢复，并释放一个会话名额。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。删除当前会话后不会自动新建。微信记录及云端服务中的历史与记忆不会同步删除。",
               } as Record<string, string>
             )[operation]
           }
@@ -682,11 +732,12 @@ export function Sessions() {
                 </label>
                 {operation === "new" && (
                   <label>
-                    使用哪个模型
-                    <select value={assistantId} onChange={(e) => setAssistantId(e.target.value)}>
-                      {textModels.map((a) => (
-                        <option key={a.id} value={a.id}>
-                          {a.channelName} / {a.name} · {a.model}
+                    使用哪个模型或云端 Agent
+                    <select required value={target} onChange={(e) => setTarget(e.target.value)}>
+                      {!selectedTarget && <option value="">请选择可用的模型或云端 Agent</option>}
+                      {creationTargets.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
                         </option>
                       ))}
                     </select>
@@ -705,7 +756,7 @@ export function Sessions() {
               </button>
               <button
                 className={`button ${["clear", "delete"].includes(operation) ? "danger" : ""}`}
-                disabled={busy}
+                disabled={busy || (operation === "new" && !selectedTarget)}
               >
                 {busy ? "正在处理…" : "确认"}
               </button>

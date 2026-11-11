@@ -15,6 +15,7 @@ import {
 type Account = ReturnType<typeof env.ACCOUNTS.getByName>;
 const settings = {
   CLOUD_AGENT_ENABLED: "true",
+  PLUS_SESSIONS: "200",
   AGT_ORIGIN: "https://agt.example.com",
   AGT_APP_ID: "app-one",
   AGT_APP_KEY: "test-only-app-key",
@@ -78,6 +79,229 @@ afterEach(async () => {
 });
 
 describe("cloud Agent user entry", () => {
+  it.each(["service", "disabled", "expired"])(
+    "archives cloud-only history and exits cleanly when configuration is unavailable: %s",
+    async (condition) => {
+      const stub = await setup();
+      const p = await plugin(stub);
+      await send(stub, "/use 云");
+      await send(stub, "保留这份计划");
+      const task = await fullTask(stub);
+      if (condition === "disabled")
+        expect((await save(stub, { ...p, enabled: false })).ok).toBe(true);
+      else
+        await runInDurableObject(stub, (instance, state) => {
+          if (condition === "service")
+            Object.assign(Reflect.get(instance, "env"), {
+              CLOUD_AGENT_ENABLED: "false",
+              PLUS_SESSIONS: "1",
+            });
+          else
+            state.storage.sql.exec(
+              "INSERT INTO settings VALUES ('planUntil', '0') ON CONFLICT(key) DO UPDATE SET value='0'",
+            );
+        });
+      const before = await stub.snapshot();
+      const reply = await send(stub, "/wx archive");
+      expect(reply).toContain("会话已归档，当前未新建会话");
+      const after = await stub.snapshot();
+      expect(after.currentSession).toBeNull();
+      expect(after.connections.find((link) => link.id === "default")?.currentSessionId).toBe("");
+      expect(after.stats.sessions).toBe(1);
+      expect(after.wallet.balance).toBe(before.wallet.balance);
+      expect(after.ledger).toEqual(before.ledger);
+      expect(after.cloudAgent.usedToday).toBe(1);
+      await runInDurableObject(stub, (_, state) => {
+        const session = state.storage.sql
+          .exec<{ data: string }>("SELECT data FROM sessions WHERE id=?", task.sessionId)
+          .one();
+        expect(JSON.parse(session.data).archived).toBe(true);
+        expect(
+          state.storage.sql
+            .exec("SELECT content FROM messages WHERE sessionId=?", task.sessionId)
+            .toArray(),
+        ).toContainEqual({ content: "保留这份计划" });
+        expect(new CloudAgentStore(state.storage).get(task.id)).toMatchObject({
+          stopRequested: 1,
+          stale: 1,
+          hidden: 0,
+          prompt: "保留这份计划",
+        });
+      });
+      await abortAllDurableObjects();
+      const restored = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(restored, (_, state) => useManualAlarms(state));
+      expect((await restored.snapshot()).currentSession).toBeNull();
+      expect(await fullTask(restored)).toMatchObject({ id: task.id, stopRequested: 1, stale: 1 });
+    },
+  );
+
+  it.each([true, false])(
+    "archives through the API and selects a valid replacement when service availability is %s",
+    async (available) => {
+      const stub = await setup();
+      const p = await plugin(stub);
+      const model = await api(stub, "assistant.save", {
+        name: "备用文本模型",
+        baseUrl: "https://llm.example.com",
+        apiKey: "test-key",
+        protocol: "responses",
+        model: "chat-model",
+      });
+      expect(model.ok).toBe(true);
+      await send(stub, "/use 云");
+      const before = await stub.snapshot();
+      await runInDurableObject(stub, (instance) => {
+        Object.assign(Reflect.get(instance, "env"), { CLOUD_AGENT_ENABLED: String(available) });
+      });
+      const result = await api(stub, "session.action", {
+        id: before.currentSession!.id,
+        action: "archive",
+      });
+      expect(result.ok).toBe(true);
+      const after = await stub.snapshot();
+      expect(after.currentSession?.id).not.toBe(before.currentSession!.id);
+      expect(after.currentSession?.pluginInstanceId).toBe(available ? p.id : undefined);
+      expect(after.currentSession?.assistantId).toBe(available ? null : model.data.id);
+      expect(after.wallet.balance).toBe(before.wallet.balance);
+      expect(after.ledger).toEqual(before.ledger);
+      expect(after.cloudAgent).toMatchObject({ active: 0, usedToday: 0 });
+    },
+  );
+
+  it("archives through the API when no replacement is available and preserves another link's current session", async () => {
+    const stub = await setup();
+    const p = await plugin(stub);
+    await send(stub, "/use 云");
+    const first = (await stub.snapshot()).currentSession!;
+    const added = await api(stub, "wechat.create", { name: "工作微信" });
+    const secondLink = added.data.selectedConnectionId;
+    const created = await api(stub, "session.create", {
+      pluginInstanceId: p.id,
+      connectionId: secondLink,
+    });
+    expect(created.ok).toBe(true);
+    await runInDurableObject(stub, (instance) => {
+      Object.assign(Reflect.get(instance, "env"), { CLOUD_AGENT_ENABLED: "false" });
+    });
+    expect(await api(stub, "session.action", { id: first.id, action: "archive" })).toMatchObject({
+      ok: true,
+    });
+    const after = await stub.snapshot();
+    expect(after.connections.find((link) => link.id === "default")?.currentSessionId).toBe("");
+    expect(after.currentSession?.id).toBe(created.data.id);
+    expect(after.selectedConnectionId).toBe(secondLink);
+  });
+
+  it("rolls back archive, cancellation and attachment cleanup if replacement creation fails", async () => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    await send(stub, "保留计划");
+    const task = await fullTask(stub);
+    await runInDurableObject(stub, (_, state) => {
+      new AttachmentQueue(state.storage.sql).add(
+        { connectionId: "default", sessionId: task.sessionId, generation: "g1", contextStart: 0 },
+        [
+          {
+            type: 2,
+            image_item: {
+              media: { full_url: "https://novac2c.cdn.weixin.qq.com/test", aes_key: "test" },
+            },
+          },
+        ],
+        "attachment",
+      );
+      state.storage.sql.exec(
+        "CREATE TRIGGER fail_archive_replacement BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT, 'test replacement failure'); END",
+      );
+    });
+    const before = await stub.snapshot();
+    expect((await api(stub, "session.action", { id: task.sessionId, action: "archive" })).ok).toBe(
+      false,
+    );
+    const after = await stub.snapshot();
+    expect(after.currentSession).toEqual(before.currentSession);
+    expect(after.stats).toEqual(before.stats);
+    expect(after.wallet.balance).toBe(before.wallet.balance);
+    expect(after.ledger).toEqual(before.ledger);
+    await runInDurableObject(stub, (_, state) => {
+      expect(new CloudAgentStore(state.storage).get(task.id)).toEqual(task);
+      expect(state.storage.sql.exec("SELECT * FROM pending_attachments").toArray()).toHaveLength(1);
+      const row = state.storage.sql
+        .exec<{ data: string }>("SELECT data FROM sessions WHERE id=?", task.sessionId)
+        .one();
+      expect(JSON.parse(row.data).archived).toBe(false);
+    });
+  });
+
+  it("creates and selects cloud-only sessions without submitting, cancelling or charging tasks", async () => {
+    const stub = await setup();
+    const p = await plugin(stub);
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No network expected"));
+    const before = await stub.snapshot();
+    const created = await api(stub, "session.create", {
+      pluginInstanceId: p.id,
+      connectionId: "default",
+      title: "",
+    });
+    expect(created).toMatchObject({
+      ok: true,
+      data: {
+        assistantId: null,
+        pluginInstanceId: p.id,
+        connectionId: "default",
+        title: "新的对话",
+        autoTitle: true,
+      },
+    });
+    const snapshot = await stub.snapshot();
+    expect(snapshot.channels).toEqual([]);
+    expect(snapshot.assistants).toEqual([]);
+    expect(snapshot.currentSession?.id).toBe(created.data.id);
+    expect(snapshot.wallet.balance).toBe(before.wallet.balance);
+    expect(snapshot.ledger).toEqual(before.ledger);
+    expect(snapshot.cloudAgent).toMatchObject({ active: 0, usedToday: 0 });
+    expect(await tasks(stub)).toEqual([]);
+    expect(await send(stub, "整理计划")).toContain("任务已接收");
+    const task = await fullTask(stub);
+    expect(task.sessionId).toBe(created.data.id);
+    const next = await api(stub, "session.create", {
+      pluginInstanceId: p.id,
+      connectionId: "default",
+    });
+    expect(next.ok).toBe(true);
+    expect(next.data.id).not.toBe(created.data.id);
+    expect((await stub.snapshot()).currentSession?.id).toBe(next.data.id);
+    expect((await stub.snapshot()).cloudAgent).toMatchObject({ active: 1, usedToday: 1 });
+    expect(await fullTask(stub)).toMatchObject({
+      id: task.id,
+      sessionId: created.data.id,
+      stopRequested: 0,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale cloud session selection when service closes without changing the current conversation", async () => {
+    const stub = await setup();
+    const p = await plugin(stub);
+    await send(stub, "/use 云");
+    const before = await stub.snapshot();
+    await runInDurableObject(stub, (instance) => {
+      Object.assign(Reflect.get(instance, "env"), { CLOUD_AGENT_ENABLED: "false" });
+    });
+    expect(await api(stub, "session.create", { pluginInstanceId: p.id })).toMatchObject({
+      ok: false,
+      error: "cloud_agent_unavailable",
+    });
+    const after = await stub.snapshot();
+    expect(after.currentSession?.id).toBe(before.currentSession?.id);
+    expect(after.stats.sessions).toBe(before.stats.sessions);
+    expect(after.wallet.balance).toBe(before.wallet.balance);
+    expect(after.ledger).toEqual(before.ledger);
+    expect(await tasks(stub)).toEqual([]);
+  });
+
   it("saves and checks a managed plugin without a local model, upstream request or hidden task", async () => {
     const stub = await setup();
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No network expected"));

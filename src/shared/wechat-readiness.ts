@@ -1,8 +1,10 @@
 import { isChatModel } from "./model-compatibility";
-import type { Assistant, Channel } from "./types";
+import type { Assistant, Channel, Snapshot } from "./types";
 import {
   CLOUD_AGENT_PLUGIN_ID,
   cloudAgentAvailabilityIssue,
+  isCloudAgent,
+  type CloudAgentPlugin,
   type CloudAgentStatus,
 } from "./cloud-agent";
 import type { UserPlugin } from "./image-generation";
@@ -15,6 +17,13 @@ type Setup = {
   plugins?: Pick<UserPlugin, "pluginId" | "enabled">[];
 };
 type SetupIssue = { code: string; message: string };
+
+export function readyCloudAgents(setup: Pick<Snapshot, "plan" | "cloudAgent" | "plugins">) {
+  if (cloudAgentAvailabilityIssue(setup.plan, setup.cloudAgent)) return [];
+  return (setup.plugins ?? []).filter(
+    (p): p is CloudAgentPlugin => isCloudAgent(p) && p.enabled && !p.access,
+  );
+}
 
 // Configuration only: binding must not make a billable model request. Use the
 // same rules in the UI and the account, which rechecks before changing a link.

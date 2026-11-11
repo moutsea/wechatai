@@ -3584,9 +3584,37 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private changeSession(id: string, action: string, title = "") {
     this.busy();
+    if (action === "archive")
+      this.ctx.storage.transactionSync(() => this.applySessionAction(id, action, title));
+    else this.applySessionAction(id, action, title);
+    return this.snapshot();
+  }
+  private archiveReplacement(s: StoredSession) {
+    const connectionId = s.connectionId ?? DEFAULT_WECHAT_LINK;
+    if (
+      !this.linkEnabled(connectionId) &&
+      (this.links().length || this.getSetting("legacyLinkDeleted", false))
+    )
+      return null;
+    if (s.pluginInstanceId) {
+      try {
+        const plugin = this.plugin(s.pluginInstanceId, true);
+        if (plugin.pluginId !== "wechatai/notification")
+          return { assistantId: this.pluginModelId(plugin), pluginInstanceId: plugin.id };
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+        // Configuration may become unavailable while history remains manageable.
+      }
+    }
+    const models = this.assistants().filter(isChatModel);
+    const model = models.find((a) => a.id === s.assistantId) ?? models[0];
+    return model ? { assistantId: model.id, pluginInstanceId: undefined } : null;
+  }
+  private applySessionAction(id: string, action: string, title: string) {
     const s = this.session(id);
     const connectionId = s.connectionId ?? DEFAULT_WECHAT_LINK;
     const current = this.linkSetting(connectionId, "current", "") === id;
+    const replacement = action === "archive" && current ? this.archiveReplacement(s) : null;
     if (action === "switch") {
       if (s.pluginInstanceId) this.plugin(s.pluginInstanceId, true);
       if (this.links().length) this.requireLink(connectionId, true);
@@ -3624,11 +3652,7 @@ export class PersonalAccount extends DurableObject<Env> {
       s.contextStart = 0;
       s.resetAt = Math.max(Date.now(), s.resetAt + 1);
     } else if (action === "archive") {
-      if (
-        current &&
-        this.linkEnabled(connectionId) &&
-        this.sessions().length >= this.limits().sessions
-      )
+      if (replacement && this.sessions().length >= this.limits().sessions)
         throw new AppError("session_limit", "请先删除一个旧会话，为新的空会话腾出位置");
       s.archived = true;
     } else throw new AppError("invalid_action", "不支持的会话操作");
@@ -3647,23 +3671,17 @@ export class PersonalAccount extends DurableObject<Env> {
     else this.saveSession(s);
     if (current && action === "delete") this.setLinkSetting(connectionId, "current", "");
     if (current && action === "archive") {
-      const candidate = this.findPlugin(s.pluginInstanceId ?? "");
-      const replacementPlugin =
-        candidate?.enabled && this.pluginAvailable(candidate.id) ? candidate : undefined;
-      const textModels = this.assistants().filter(isChatModel);
-      const replacementModel = replacementPlugin
-        ? s.assistantId
-        : (textModels.find((a) => a.id === s.assistantId)?.id ?? textModels[0]?.id ?? null);
-      if (
-        (this.linkEnabled(connectionId) ||
-          (!this.links().length && !this.getSetting("legacyLinkDeleted", false))) &&
-        (replacementModel || isRemoteAgent(replacementPlugin) || isCloudAgent(replacementPlugin))
-      )
-        this.createSession(replacementModel, "", false, connectionId, replacementPlugin?.id);
+      if (replacement)
+        this.createSession(
+          replacement.assistantId,
+          "",
+          false,
+          connectionId,
+          replacement.pluginInstanceId,
+        );
       else this.setLinkSetting(connectionId, "current", "");
     }
     this.personalRuns.prune();
-    return this.snapshot();
   }
   private async runModel(
     id: string,
@@ -4907,10 +4925,9 @@ export class PersonalAccount extends DurableObject<Env> {
           if (command[0] === "/archive") {
             this.changeSession(s.id, "archive");
             const next = this.linkSetting(connectionId, "current", "");
-            return (
-              "会话已归档，并开始新的会话。" +
-              (next && next !== s.id ? this.roleGreeting(this.session(next)) : "")
-            );
+            return next && next !== s.id
+              ? "会话已归档，并开始新的会话。" + this.roleGreeting(this.session(next))
+              : "会话已归档，当前未新建会话。请在网页检查微信链接、模型或插件状态后，再开始新对话。";
           }
           return "微伴暂不支持这条指令。发送 /wx help 查看平台命令。";
         })();
