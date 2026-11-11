@@ -417,6 +417,18 @@ export class CloudAgentStore {
     return "new" as const;
   }
 
+  /** Verified callbacks only: commit receipt and recovery wakeup together, before alarm scheduling. */
+  receiveCallback(deliveryId: string, taskId: string, hash: string, jobId: string) {
+    return this.storage.transactionSync(() => {
+      const task = this.get(taskId);
+      if (!task) throw new AppError("cloud_task_missing", "云端任务不存在", 404);
+      const delivery = this.delivery(deliveryId, taskId, hash, jobId);
+      if (delivery === "new" && !cloudTaskTerminal(task.state))
+        this.patch(task, { nextAt: Date.now() });
+      return delivery;
+    });
+  }
+
   prune(before = Date.now() - 7 * 86_400_000) {
     this.sql.exec("DELETE FROM cloud_callbacks WHERE createdAt < ?", before);
   }
