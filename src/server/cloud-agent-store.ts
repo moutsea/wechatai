@@ -1,4 +1,5 @@
 import type { PluginInvocation } from "../shared/plugins";
+import type { ChatSession } from "../shared/types";
 import type { AgentJobView } from "./cloud-agent-client";
 import { AppError } from "./config";
 import { z } from "zod";
@@ -32,6 +33,8 @@ export type CloudTask = {
   reconcileCandidates: string[];
   hidden: number;
   deliveryStatus: "pending" | "sent" | "stale" | "failed";
+  /** Persisted with inbox creation; a missing queued reply must never be recreated. */
+  deliveryQueuedAt?: number;
   pluginContext: string | null;
   currentSessionId: string;
   pluginId: string;
@@ -85,6 +88,17 @@ const TERMINAL_SQL = TERMINAL.map((state) => `'${state}'`).join(",");
 const WAKE_AT_SQL =
   "CASE WHEN state IN ('submitting','accepted') AND stopRequested=0 AND json_extract(data, '$.outcome') IS NULL THEN MIN(nextAt,deadline) ELSE nextAt END";
 export const cloudTaskTerminal = (state: CloudTaskState) => TERMINAL.includes(state);
+/** Shared by settlement and delivery; the host checks connection/plugin selection. */
+export const cloudTaskMatchesSession = (
+  task: CloudTask,
+  session: (ChatSession & { contextStart: number }) | null,
+) =>
+  !!session &&
+  !session.archived &&
+  session.resetAt === task.resetAt &&
+  session.contextStart === task.contextStart &&
+  (session.pluginInstanceId ?? null) === task.pluginContext &&
+  (!session.connectionId || session.connectionId === task.connectionId);
 /** Older snapshots stored a stop cause only in error. An explicit empty cause
  * means a lifecycle hook requested stop before the host could explain it. */
 export const cloudTaskStopReason = (task: CloudTask) =>

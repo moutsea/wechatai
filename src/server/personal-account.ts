@@ -130,6 +130,8 @@ import {
   type KimiseekCommand,
 } from "./kimiseek";
 import { dayWindow, Wallet } from "./wallet";
+import { CloudAgentDelivery } from "./cloud-agent-delivery";
+import type { CloudTask } from "./cloud-agent-store";
 import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
 import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
@@ -228,12 +230,15 @@ type Link = Connection & {
 // Once prepared, the final delivery text replaces this metadata so retries and
 // multipart delivery retain identical content and offsets across restarts.
 type RemoteReplySource = { pluginId: string; proactive: boolean };
+const CLOUD_REPLY_WAITING_MESSAGE =
+  "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
 export class PersonalAccount extends DurableObject<Env> {
   private wallet: Wallet;
   private attachments: AttachmentQueue;
   private media: MediaStore;
   private claw: OpenClawRelay;
+  private cloudDelivery: CloudAgentDelivery;
   private personalRecords: PersonalRecordsStore;
   private personalRuns: PersonalRunStore;
   private reminderDelivery: Promise<void> | null = null;
@@ -275,6 +280,9 @@ export class PersonalAccount extends DurableObject<Env> {
       schedule: () => this.scheduleWechat(),
     });
     this.wallet = new Wallet(ctx.storage);
+    this.cloudDelivery = new CloudAgentDelivery(ctx.storage, (task) =>
+      this.cloudDeliveryStale(task),
+    );
     this.notifications = new NotificationStore(ctx.storage);
     this.membershipReminders = new MembershipReminders(ctx.storage.sql);
     this.personalRecords = new PersonalRecordsStore(ctx.storage.sql);
@@ -418,6 +426,7 @@ export class PersonalAccount extends DurableObject<Env> {
           );
       }
       this.wallet.init();
+      this.cloudDelivery.init();
       this.membershipReminders.init();
       this.claw.init();
       ctx.storage.transactionSync(() => initCallFailures(this.sql));
@@ -646,7 +655,14 @@ export class PersonalAccount extends DurableObject<Env> {
         contextToken: token,
         lastPoll: Date.now(),
         lastSeen: received ? Date.now() : link.lastSeen,
-        error: undefined,
+        error: this.sql
+          .exec(
+            "SELECT 1 FROM inbox WHERE connectionId=? AND state='waiting_context' AND id GLOB 'cloud:*' LIMIT 1",
+            connectionId,
+          )
+          .toArray().length
+          ? CLOUD_REPLY_WAITING_MESSAGE
+          : undefined,
       });
       return cursor;
     });
@@ -1596,6 +1612,17 @@ export class PersonalAccount extends DurableObject<Env> {
     if (!(session.autoTitle ?? session.title === "新的对话")) return;
     session.title = text.slice(0, length);
     session.autoTitle = false;
+  }
+  private cloudDeliveryStale(task: CloudTask) {
+    const plugin = this.findPlugin(task.pluginId);
+    return (
+      !plugin?.enabled ||
+      !this.pluginAvailable(task.pluginId) ||
+      !this.links().some((link) => link.id === task.connectionId) ||
+      !this.linkEnabled(task.connectionId) ||
+      this.linkSetting(task.connectionId, "current", "") !== task.currentSessionId ||
+      this.connection(task.connectionId).generation !== task.generation
+    );
   }
   private linkSetting<T>(id: string, key: string, fallback: T): T {
     return this.getSetting(wechatLinkKey(id, key), fallback);
@@ -5070,6 +5097,8 @@ export class PersonalAccount extends DurableObject<Env> {
               );
               return;
             }
+            const cloudTaskId = pending.id.startsWith("cloud:") ? pending.id.slice(6) : null;
+            if (cloudTaskId && !this.cloudDelivery.pending(cloudTaskId, pending.part)) return;
             const completedRun = this.sql
               .exec<{ response: string }>(
                 "SELECT response FROM runs WHERE id = ? AND status = 'complete'",
@@ -5085,6 +5114,7 @@ export class PersonalAccount extends DurableObject<Env> {
             // A deletion or disconnect can cancel this row while network I/O is
             // pending. Late results must not revive it or advance a newer part.
             const replyIsPending = () =>
+              (!cloudTaskId || this.cloudDelivery.pending(cloudTaskId, pending.part)) &&
               this.connection(connectionId).generation === link.generation &&
               !!this.sql
                 .exec(
@@ -5159,14 +5189,46 @@ export class PersonalAccount extends DurableObject<Env> {
               );
             } catch (error) {
               if (!replyIsPending()) return;
-              this.sql.exec("UPDATE inbox SET attempts = attempts + 1 WHERE id = ?", pending.id);
-              if (pending.attempts >= 4)
-                this.sql.exec(
-                  pending.id.startsWith("claw:")
-                    ? "UPDATE inbox SET state = 'waiting_context' WHERE id = ?"
-                    : "UPDATE inbox SET state = 'failed', payload = '{}', reply = '' WHERE id = ?",
-                  pending.id,
-                );
+              let waitingContext = false;
+              this.ctx.storage.transactionSync(() => {
+                this.sql.exec("UPDATE inbox SET attempts = attempts + 1 WHERE id = ?", pending.id);
+                if (
+                  pending.attempts >= 4 ||
+                  (cloudTaskId && error instanceof AppError && error.code === "context_missing")
+                ) {
+                  // Async answers have already finished execution/settlement. Keep
+                  // their exact body and cursor until a fresh inbound message wakes
+                  // them; never make a transient send failure require a new task.
+                  const durableReply = !!cloudTaskId || pending.id.startsWith("claw:");
+                  const latestToken = this.connection(connectionId).contextToken;
+                  // Ingestion may have supplied a new context while sendText was
+                  // awaiting I/O. Do not park after that wakeup has already happened.
+                  const freshContext = durableReply && !!latestToken && latestToken !== token;
+                  waitingContext = durableReply && !freshContext;
+                  if (durableReply)
+                    this.sql.exec(
+                      "UPDATE inbox SET state = ?, attempts = ? WHERE id = ?",
+                      freshContext ? "reply" : "waiting_context",
+                      freshContext ? 0 : pending.attempts + 1,
+                      pending.id,
+                    );
+                  else
+                    this.sql.exec(
+                      "UPDATE inbox SET state = 'failed', payload = '{}', reply = '' WHERE id = ?",
+                      pending.id,
+                    );
+                  if (cloudTaskId) this.cloudDelivery.sync(cloudTaskId);
+                }
+              });
+              if (
+                cloudTaskId &&
+                waitingContext &&
+                !(
+                  error instanceof AppError &&
+                  ["wechat_expired", "duplicate_wechat"].includes(error.code)
+                )
+              )
+                throw new AppError("cloud_reply_waiting", CLOUD_REPLY_WAITING_MESSAGE, 503);
               throw error;
             }
             if (pending.part + 1 >= (images.length || parts.length)) {
@@ -5183,7 +5245,7 @@ export class PersonalAccount extends DurableObject<Env> {
               const completed = this.sql
                 .exec(
                   "SELECT id FROM runs WHERE id = ? AND status = 'complete' AND sessionId IS NOT NULL",
-                  pending.id,
+                  cloudTaskId ?? pending.id,
                 )
                 .toArray().length;
               const hash =
@@ -5192,10 +5254,13 @@ export class PersonalAccount extends DurableObject<Env> {
                   : null;
               this.ctx.storage.transactionSync(() => {
                 if (!replyIsPending()) return;
-                this.sql.exec(
-                  "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id = ?",
-                  pending.id,
-                );
+                if (cloudTaskId) {
+                  if (!this.cloudDelivery.acknowledge(cloudTaskId, pending.part)) return;
+                } else
+                  this.sql.exec(
+                    "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id = ?",
+                    pending.id,
+                  );
                 // Persist only after all reply parts are acknowledged, in the same
                 // transaction as inbox completion so retries cannot count twice.
                 if (completed) {

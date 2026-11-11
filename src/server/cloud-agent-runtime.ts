@@ -15,7 +15,7 @@ type Host = {
   stopReason(task: CloudTask): string | undefined;
   /** Use settleCloudAgentTask to atomically commit billing, history and pending delivery. */
   finalize(task: CloudTask, job: AgentJobView): unknown | Promise<unknown>;
-  /** Idempotently queue/check terminal delivery; persist delivery status/nextAt. */
+  /** Use CloudAgentDelivery.sync to queue/check terminal delivery without rebilling. */
   deliver(task: CloudTask): unknown | Promise<unknown>;
 };
 

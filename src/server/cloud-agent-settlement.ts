@@ -1,6 +1,11 @@
 import type { ChatSession } from "../shared/types";
 import { prepareCloudAgentResult } from "./cloud-agent-result";
-import { CloudAgentStore, cloudTaskTerminal, type CloudTask } from "./cloud-agent-store";
+import {
+  CloudAgentStore,
+  cloudTaskMatchesSession,
+  cloudTaskTerminal,
+  type CloudTask,
+} from "./cloud-agent-store";
 import { AppError } from "./config";
 import { Wallet } from "./wallet";
 
@@ -32,15 +37,7 @@ export async function settleCloudAgentTask(
       .toArray()[0];
     const session = row ? (JSON.parse(row.data) as ChatSession & { contextStart: number }) : null;
     const stale = Boolean(
-      task.hidden ||
-      task.stale ||
-      !session ||
-      session.archived ||
-      session.resetAt !== task.resetAt ||
-      session.contextStart !== task.contextStart ||
-      (session.pluginInstanceId ?? null) !== task.pluginContext ||
-      (session.connectionId && session.connectionId !== task.connectionId) ||
-      isStale(task),
+      task.hidden || task.stale || !cloudTaskMatchesSession(task, session) || isStale(task),
     );
     const now = Date.now();
     const meter = task.hidden ? null : prepared.meter;
