@@ -53,6 +53,8 @@ export type CloudTask = {
   nextAt: number;
   attempts: number;
   stopRequested: number;
+  /** Stable stop cause, separate from temporary submission/reconciliation messages. */
+  stopReason?: string;
   settled: number;
   stale: number;
   delivered: number;
@@ -83,6 +85,10 @@ const TERMINAL_SQL = TERMINAL.map((state) => `'${state}'`).join(",");
 const WAKE_AT_SQL =
   "CASE WHEN state IN ('submitting','accepted') AND stopRequested=0 AND json_extract(data, '$.outcome') IS NULL THEN MIN(nextAt,deadline) ELSE nextAt END";
 export const cloudTaskTerminal = (state: CloudTaskState) => TERMINAL.includes(state);
+/** Older snapshots stored a stop cause only in error. An explicit empty cause
+ * means a lifecycle hook requested stop before the host could explain it. */
+export const cloudTaskStopReason = (task: CloudTask) =>
+  task.stopReason ?? (task.stopRequested ? task.error : "");
 
 const cursorSchema = z.tuple([z.number().int().nonnegative(), z.string().uuid()]);
 function parseCursor(cursor?: string) {
@@ -232,10 +238,15 @@ export class CloudAgentStore {
     // callback or deletion must not be overwritten by the earlier snapshot.
     const current = this.get(task.id) ?? task;
     const next = { ...current, ...patch, updatedAt: Date.now() };
+    // A bare stop flag must not reinterpret an earlier recovery message as its
+    // cause. Callers can supply the cause now, or let the host fill it later.
+    if (!current.stopRequested && patch.stopRequested && patch.stopReason === undefined)
+      next.stopReason = patch.error ?? "";
     if (current.hidden) {
       next.prompt = "";
       next.result = "";
       next.error = "";
+      next.stopReason = "";
       next.frozen = "";
       next.invocation = null;
       next.request = "";
@@ -278,6 +289,7 @@ export class CloudAgentStore {
         prompt: "",
         result: "",
         error: "",
+        stopReason: "",
         frozen: "",
         invocation: null,
         request: "",
@@ -369,7 +381,11 @@ export class CloudAgentStore {
   /** Stop in-flight work and prevent queued results from entering a changed context. */
   private stop(column: "sessionId" | "pluginId" | "connectionId", id: string, now: number) {
     this.sql.exec(
-      `UPDATE cloud_tasks SET stopRequested = 1, nextAt = ?, updatedAt = ? WHERE ${column} = ? AND state IN ('submitting','accepted')`,
+      `UPDATE cloud_tasks SET
+        data = json_set(data, '$.stopReason', CASE WHEN stopRequested = 0 THEN ''
+          ELSE COALESCE(json_extract(data, '$.stopReason'), json_extract(data, '$.error'), '') END),
+        stopRequested = 1, nextAt = ?, updatedAt = ?
+        WHERE ${column} = ? AND state IN ('submitting','accepted')`,
       now,
       now,
       id,

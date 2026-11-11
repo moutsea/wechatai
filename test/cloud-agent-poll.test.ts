@@ -5,6 +5,7 @@ import {
   type CloudAgentClientConfig,
 } from "../src/server/cloud-agent-client";
 import { pollCloudAgentTask } from "../src/server/cloud-agent-poll";
+import { prepareCloudAgentResult } from "../src/server/cloud-agent-result";
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
 
@@ -219,6 +220,68 @@ describe("AGT job polling and durable cancellation", () => {
       });
     },
   );
+
+  it("carries an approval stop cause through cancellation, restart and terminal preparation", async () => {
+    const { stub, saved, poll } = await setup();
+    await inStore(stub, async (store) => {
+      network((request) =>
+        request.method === "GET"
+          ? Response.json(job({ status: "awaiting_approval" }))
+          : Response.json({ cancelled: true }),
+      );
+      await poll(store);
+      expect(store.get(saved.id)).toMatchObject({
+        stopReason: "云端 Agent 暂不支持工具审批。",
+        outcome: null,
+      });
+    });
+    await abortAllDurableObjects();
+    await inStore(env.ACCOUNTS.get(stub.id), async (store) => {
+      network(() => Response.json(job({ status: "cancelled" })));
+      await poll(store, () => {
+        throw new Error("A persisted stop must not recheck current eligibility");
+      });
+      const result = (await prepareCloudAgentResult(store, saved.id))!;
+      expect(result.error).toContain("暂不支持工具审批");
+      expect(result.error).not.toMatch(/正在请求停止|后来插件/);
+      expect(result.meter).toBeNull();
+    });
+  });
+
+  it("explains a lifecycle stop that arrives while the terminal GET is in flight", async () => {
+    const { stub, saved, poll } = await setup({ error: "提交结果尚未确认，正在恢复原任务。" });
+    let stopped = false;
+    await inStore(stub, async (store) => {
+      network(() => {
+        store.stopPlugin(saved.pluginId);
+        stopped = true;
+        return Response.json(job({ status: "cancelled" }));
+      });
+      await poll(store, () => (stopped ? "插件已停用，请重新启用。" : undefined));
+      expect(store.get(saved.id)!.stopReason).toBe("插件已停用，请重新启用。");
+      const result = (await prepareCloudAgentResult(store, saved.id))!;
+      expect(result.error).toContain("插件已停用，请重新启用。");
+      expect(result.error).not.toContain("正在恢复");
+    });
+  });
+
+  it("does not replace an existing eligibility stop with an approval stop", async () => {
+    const reason = "Plus 已到期，请续费后重新发送。";
+    const { stub, saved, poll } = await setup({
+      stopRequested: 1,
+      stopReason: reason,
+      error: reason,
+    });
+    await inStore(stub, async (store) => {
+      network((request) =>
+        request.method === "GET"
+          ? Response.json(job({ status: "awaiting_approval" }))
+          : Response.json({ cancelled: true }),
+      );
+      await poll(store);
+      expect(store.get(saved.id)).toMatchObject({ stopReason: reason, error: reason });
+    });
+  });
 
   it("requests cancellation immediately for unsupported approvals and keeps the intent if cancellation fails", async () => {
     const { stub, saved, poll } = await setup();

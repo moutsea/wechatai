@@ -373,6 +373,31 @@ describe("durable AGT recovery runner", () => {
     },
   );
 
+  it.each(["lifecycle", "direct"])(
+    "fills a %s stop cause instead of reusing an earlier reconciliation progress message",
+    async (kind) => {
+      const { stub, saved, runtime } = await setup({
+        state: "accepted",
+        jobId: "job-one",
+        submittedAt: Date.now(),
+        error: "提交结果尚未确认，正在恢复原任务。",
+      });
+      const reason = "插件已停用，请重新启用。";
+      await inStore(stub, async (store) => {
+        if (kind === "lifecycle") store.stopPlugin(saved.pluginId);
+        else store.patch(saved, { stopRequested: 1 });
+        store.patch(saved, { nextAt: Date.now() + 60_000 });
+        const { runner } = runtime(store, () => reason);
+        await pass(runner);
+        expect(store.get(saved.id)).toMatchObject({
+          stopRequested: 1,
+          stopReason: reason,
+          error: reason,
+        });
+      });
+    },
+  );
+
   it("does not replace a persisted stop reason after another lifecycle hook runs", async () => {
     const reason = "用户已请求停止。";
     const { stub, saved, runtime } = await setup({ stopRequested: 1, error: reason });

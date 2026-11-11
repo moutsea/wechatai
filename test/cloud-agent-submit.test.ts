@@ -7,6 +7,7 @@ import { reconcileCloudAgentJob } from "../src/server/cloud-agent-reconcile";
 import { prepareCloudAgentRequest } from "../src/server/cloud-agent-request";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
 import { submitCloudAgentTask } from "../src/server/cloud-agent-submit";
+import { PLUGIN_PROTOCOL_VERSION, type PluginInvocation } from "../src/shared/plugins";
 
 const config: CloudAgentClientConfig = {
   origin: "https://agt.example.com",
@@ -33,6 +34,18 @@ function inStore<T>(stub: ReturnType<typeof account>, run: (store: CloudAgentSto
   });
 }
 const eligible = () => undefined;
+function invocation(task: CloudTask): PluginInvocation {
+  return {
+    protocolVersion: PLUGIN_PROTOCOL_VERSION,
+    runId: task.id,
+    instanceId: task.pluginId,
+    pluginId: "wechatai/cloud-agent",
+    pluginVersion: "1.0.0",
+    sessionId: task.sessionId,
+    messages: [{ role: "user", content: [{ type: "text", text: "你好" }] }],
+    limits: { inputTokens: 1000, outputTokens: 1000, outputImages: 0, creditUnits: null },
+  };
+}
 async function setup(change: Partial<CloudTask> = {}) {
   const stub = account();
   const now = Date.now();
@@ -129,6 +142,56 @@ afterEach(() => {
 });
 
 describe("durable AGT job submission", () => {
+  it.each(["input", "credits", "empty"])(
+    "rejects a never-attempted %s limit failure before POST",
+    async (limit) => {
+      const { stub, saved, submit } = await setup({ request: "" });
+      const calls = network(() => {
+        throw new Error("Must not submit an unusable invocation");
+      });
+      await inStore(stub, async (store) => {
+        const request = invocation(saved);
+        store.patch(saved, {
+          invocation: {
+            ...request,
+            limits: {
+              ...request.limits,
+              ...(limit === "input"
+                ? { inputTokens: 1 }
+                : { creditUnits: limit === "credits" ? 0 : 1 }),
+            },
+          },
+        });
+        expect(await submit(store)).toMatchObject({
+          state: "rejected",
+          submittedAt: 0,
+          unconfirmed: 0,
+          units: 0,
+          request: "",
+        });
+        expect(store.get(saved.id)!.error).toContain("任务未提交");
+        expect(store.get(saved.id)!.error).toContain("未扣 credits");
+        expect(store.active()).toEqual([]);
+        expect(store.countSince(0)).toBe(0);
+      });
+      expect(calls).toHaveLength(0);
+    },
+  );
+
+  it("does not reject an ambiguous original POST because its metering snapshot exceeds a limit", async () => {
+    const { stub, saved, submit } = await setup({ submittedAt: 123, unconfirmed: 1 });
+    const calls = network(() => Response.json(job(), { status: 202 }));
+    await inStore(stub, async (store) => {
+      const request = invocation(saved);
+      store.patch(saved, {
+        invocation: { ...request, limits: { ...request.limits, creditUnits: 0 } },
+      });
+      expect(await submit(store)).toMatchObject({ state: "accepted", jobId: "job-one" });
+      expect(store.countSince(0)).toBe(1);
+    });
+    expect(calls).toHaveLength(1);
+  });
+
   it("prepares a new task's encrypted body before the first POST", async () => {
     const { stub, saved, submit } = await setup({ request: "" });
     await inStore(stub, async (store) => {

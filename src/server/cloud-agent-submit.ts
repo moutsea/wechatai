@@ -4,9 +4,12 @@ import {
   type CloudAgentClientConfig,
 } from "./cloud-agent-client";
 import { cloudAgentScope } from "./cloud-agent-provision";
+import { cloudAgentMeteringFailure } from "./cloud-agent-metering";
 import { prepareCloudAgentRequest } from "./cloud-agent-request";
-import type { CloudAgentStore, CloudTask } from "./cloud-agent-store";
+import { cloudTaskStopReason, type CloudAgentStore, type CloudTask } from "./cloud-agent-store";
 import { AppError, cloudAgentEnabled } from "./config";
+import { pluginInvocationSchema } from "../shared/plugins";
+import { pluginOutputBudget } from "./plugins/gateway";
 
 /**
  * Submit from the account's serialized runner using its durable frozen request.
@@ -38,6 +41,28 @@ export async function submitCloudAgentTask(
     !stopReason(task);
   let task = current();
   if (!allowed(task)) return null;
+  // Only a never-attempted task can be rejected locally. Once POST may have
+  // happened, preserve its identity/occupancy and recover the original job.
+  if (
+    !task.submittedAt &&
+    !task.unconfirmed &&
+    !store.callbackJobs(task.id).length &&
+    task.invocation
+  ) {
+    try {
+      if (pluginOutputBudget(pluginInvocationSchema.parse(task.invocation)) <= 0)
+        throw new AppError("plugin_empty_result", "本次上限不允许返回正文", 422);
+    } catch (error) {
+      const message = cloudAgentMeteringFailure(error);
+      if (!message) throw error;
+      return store.patch(task, {
+        state: "rejected",
+        attempts: 0,
+        nextAt: Date.now(),
+        error: `任务未提交。\n\n${message}`,
+      });
+    }
+  }
   if (cloudAgentScope(config) !== cloudAgentScope(task))
     throw new AppError("cloud_config_changed", "云端服务配置已变更，原任务正在等待恢复", 503);
   const client = new CloudAgentClient(config);
@@ -85,10 +110,18 @@ export async function submitCloudAgentTask(
     // registration failed). Like 409, keep it for read-only recovery.
     store.patch(task, {
       ...(status === 400 || status === 409 ? { stopRequested: 1 } : {}),
+      ...(status === 400 || status === 409
+        ? {
+            stopReason:
+              cloudTaskStopReason(task) ||
+              (status === 409 ? "云端请求发生冲突。" : "云端提交响应异常。"),
+          }
+        : {}),
       error:
-        status === 409
+        cloudTaskStopReason(task) ||
+        (status === 409
           ? "云端请求冲突，正在核对原任务；不会重新提交。"
-          : "提交结果尚未确认，正在恢复原任务。",
+          : "提交结果尚未确认，正在恢复原任务。"),
     });
     throw error;
   }
@@ -107,7 +140,8 @@ export async function submitCloudAgentTask(
   ) {
     store.patch(task, {
       stopRequested: 1,
-      error: "云端任务关联校验失败，正在核对原任务。",
+      stopReason: cloudTaskStopReason(task) || "云端任务关联校验失败。",
+      error: cloudTaskStopReason(task) || "云端任务关联校验失败，正在核对原任务。",
     });
     throw new AppError("cloud_job_identity", "云端任务归属校验失败，暂缓恢复", 502);
   }

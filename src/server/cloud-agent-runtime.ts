@@ -2,13 +2,18 @@ import type { AgentJobView } from "./cloud-agent-client";
 import { pollCloudAgentTask } from "./cloud-agent-poll";
 import { cloudAgentScope, ensureCloudAgentProvision } from "./cloud-agent-provision";
 import { reconcileCloudAgentJob } from "./cloud-agent-reconcile";
-import { cloudTaskTerminal, type CloudAgentStore, type CloudTask } from "./cloud-agent-store";
+import {
+  cloudTaskStopReason,
+  cloudTaskTerminal,
+  type CloudAgentStore,
+  type CloudTask,
+} from "./cloud-agent-store";
 import { submitCloudAgentTask } from "./cloud-agent-submit";
 import { AppError, cloudAgentConnectionConfig, cloudAgentEnabled } from "./config";
 
 type Host = {
   stopReason(task: CloudTask): string | undefined;
-  /** Atomically settle the frozen outcome and persist terminal state/reply work. */
+  /** Prepare via prepareCloudAgentResult, then atomically settle/persist terminal reply work. */
   finalize(task: CloudTask, job: AgentJobView): unknown | Promise<unknown>;
   /** Idempotently queue/check terminal delivery; persist delivery status/nextAt. */
   deliver(task: CloudTask): unknown | Promise<unknown>;
@@ -34,7 +39,7 @@ export class CloudAgentRuntime {
     if (
       cloudTaskTerminal(task.state) ||
       task.outcome ||
-      (task.stopRequested && (task.error || task.hidden))
+      (task.stopRequested && (cloudTaskStopReason(task) || task.hidden))
     )
       return task;
     const reason =
@@ -47,6 +52,7 @@ export class CloudAgentRuntime {
     return reason
       ? this.store.patch(task, {
           stopRequested: 1,
+          stopReason: reason,
           error: reason,
           ...(!task.stopRequested ? { nextAt: Date.now() } : {}),
         })
@@ -65,7 +71,10 @@ export class CloudAgentRuntime {
   }
 
   private rejectStopped(task: CloudTask) {
-    return this.reject(task, `${task.error || "任务已停止。"}\n\n任务未提交，未扣 credits。`);
+    return this.reject(
+      task,
+      `${cloudTaskStopReason(task) || "任务已停止。"}\n\n任务未提交，未扣 credits。`,
+    );
   }
 
   private async advance(id: string) {
@@ -120,7 +129,11 @@ export class CloudAgentRuntime {
     ) {
       // Missing request data never permits reconstructing a POST. Recover the
       // original job read-only, then let the polling module honor stop intent.
-      if (!task.request && !task.stopRequested) task = this.store.patch(task, { stopRequested: 1 });
+      if (!task.request && !task.stopRequested)
+        task = this.store.patch(task, {
+          stopRequested: 1,
+          stopReason: "原始云端请求缺失。",
+        });
       const jobId = await reconcileCloudAgentJob(config, this.store, id);
       task = this.store.get(id)!;
       this.store.patch(
@@ -130,7 +143,7 @@ export class CloudAgentRuntime {
           : {
               unconfirmed: 1,
               attempts: 0,
-              error: "云端任务尚未唯一确认，正在持续核对原任务。",
+              error: cloudTaskStopReason(task) || "云端任务尚未唯一确认，正在持续核对原任务。",
               nextAt: Date.now() + (task.reconcileCursor ? 1000 : 60_000),
             },
       );

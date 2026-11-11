@@ -1,6 +1,11 @@
 import { CloudAgentClient, type CloudAgentClientConfig } from "./cloud-agent-client";
 import { cloudAgentScope } from "./cloud-agent-provision";
-import { cloudTaskTerminal, type CloudAgentStore, type CloudTask } from "./cloud-agent-store";
+import {
+  cloudTaskStopReason,
+  cloudTaskTerminal,
+  type CloudAgentStore,
+  type CloudTask,
+} from "./cloud-agent-store";
 import { AppError } from "./config";
 
 /**
@@ -25,12 +30,19 @@ export async function pollCloudAgentTask(
   if (cloudTaskTerminal(task.state) || !task.jobId) return null;
   if (task.outcome) return task;
   const requestStop = (snapshot: CloudTask) => {
+    if (snapshot.stopRequested && (cloudTaskStopReason(snapshot) || snapshot.hidden))
+      return snapshot;
     const reason =
       stopReason(snapshot) ||
       (Date.now() >= snapshot.deadline ? "任务已超时，正在请求停止。" : undefined) ||
       (snapshot.hidden ? "原任务内容已清除，正在请求停止。" : undefined);
-    return reason && !snapshot.stopRequested
-      ? store.patch(snapshot, { stopRequested: 1, error: reason, nextAt: Date.now() })
+    return reason && (!snapshot.stopRequested || !cloudTaskStopReason(snapshot))
+      ? store.patch(snapshot, {
+          stopRequested: 1,
+          stopReason: reason,
+          error: reason,
+          ...(!snapshot.stopRequested ? { nextAt: Date.now() } : {}),
+        })
       : snapshot;
   };
   task = requestStop(task);
@@ -61,6 +73,9 @@ export async function pollCloudAgentTask(
   task = current();
   if (cloudTaskTerminal(task.state) || task.jobId !== jobId) return null;
   if (task.outcome) return task;
+  // A lifecycle stop may have arrived while GET was in flight. Explain it
+  // before freezing a terminal response, which the runner will not poll again.
+  task = requestStop(task);
   if (["completed", "failed", "cancelled"].includes(job.status))
     return store.patch(task, {
       outcome: job,
@@ -69,10 +84,10 @@ export async function pollCloudAgentTask(
       nextAt: Date.now(),
     });
 
-  task = requestStop(task);
-  if (job.status === "awaiting_approval")
+  if (job.status === "awaiting_approval" && !cloudTaskStopReason(task))
     task = store.patch(task, {
       stopRequested: 1,
+      stopReason: "云端 Agent 暂不支持工具审批。",
       error: "云端 Agent 暂不支持工具审批，正在请求停止。",
       nextAt: Date.now(),
     });
