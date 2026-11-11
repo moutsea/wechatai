@@ -11,10 +11,23 @@ const config: CloudAgentClientConfig = {
   origin: "https://agt.example.com",
   appId: "app-one",
   appKey: "test-app-key",
+  tenantId: "tenant-one",
   agentId: "wechatai-v1",
   model: "test-model",
 };
 const queued = { id: "job-one", workspaceId: "workspace-one", status: "queued" };
+const appUser = {
+  id: "internal-user",
+  appId: config.appId,
+  tenantId: config.tenantId,
+  externalId: "account-external-id",
+};
+const workspace = {
+  id: "workspace-one",
+  tenantId: config.tenantId,
+  name: "stable-account-workspace",
+  accessMode: "restricted",
+};
 
 function network(reply: (request: Request) => Response | Promise<Response>) {
   const requests: Request[] = [];
@@ -33,10 +46,8 @@ afterEach(() => vi.unstubAllGlobals());
 describe("AGT client protocol", () => {
   it("registers an application user and restricted workspace, then configures the bounded profile", async () => {
     const requests = network((request) => {
-      if (request.url.endsWith("/users"))
-        return Response.json({ appUser: { id: "internal-user" } }, { status: 201 });
-      if (request.url.endsWith("/ensure"))
-        return Response.json({ workspace: { id: "workspace-one" } });
+      if (request.url.endsWith("/users")) return Response.json({ appUser }, { status: 201 });
+      if (request.url.endsWith("/ensure")) return Response.json({ workspace });
       return Response.json({ ok: true });
     });
     const client = new CloudAgentClient(config);
@@ -69,6 +80,34 @@ describe("AGT client protocol", () => {
       delegation: { visibility: "private", allowFrom: [] },
       sessionAccess: { visibility: "self", sendTo: [] },
     });
+  });
+
+  it.each([
+    { appId: "other-app" },
+    { tenantId: "other-tenant" },
+    { externalId: "other-account" },
+    { appId: undefined },
+    { tenantId: undefined },
+    { externalId: undefined },
+  ])("rejects an unverified application user identity (%j)", async (change) => {
+    network(() => Response.json({ appUser: { ...appUser, ...change } }));
+    await expect(
+      new CloudAgentClient(config).ensureAppUser(appUser.externalId),
+    ).rejects.toMatchObject({ code: "cloud_agent_identity", status: 502 });
+  });
+
+  it.each([
+    { tenantId: "other-tenant" },
+    { name: "other-account-workspace" },
+    { accessMode: "tenant" },
+    { tenantId: undefined },
+    { name: undefined },
+    { accessMode: undefined },
+  ])("rejects an unverified workspace identity or isolation mode (%j)", async (change) => {
+    network(() => Response.json({ workspace: { ...workspace, ...change } }));
+    await expect(
+      new CloudAgentClient(config).ensureWorkspace(workspace.name),
+    ).rejects.toMatchObject({ code: "cloud_agent_identity", status: 502 });
   });
 
   it("preserves frozen request bytes and idempotency keys across explicit retries without retrying on its own", async () => {

@@ -36,7 +36,6 @@ export function numberSetting(value: string, fallback: number) {
 
 /** Server-only AGT settings. Task execution persists its own configuration snapshot. */
 export type CloudAgentConfig = CloudAgentClientConfig & {
-  tenantId: string;
   workspacePrefix: string;
   maxActive: number;
   dailyLimit: number;

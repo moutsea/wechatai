@@ -5,6 +5,7 @@ export type CloudAgentClientConfig = {
   origin: string;
   appId: string;
   appKey: string;
+  tenantId: string;
   agentId: string;
   model: string;
 };
@@ -156,9 +157,19 @@ export class CloudAgentClient {
         acceptStatuses: [200, 201],
       }),
     );
-    const appUser = body.appUser as Record<string, unknown> | undefined;
-    const id = appUser && typeof appUser.id === "string" ? appUser.id : "";
+    const appUser = this.json(body.appUser);
+    const id = typeof appUser.id === "string" ? appUser.id : "";
     if (!id) throw new AppError("cloud_agent_response", "云端 Agent 未返回应用用户", 502);
+    if (
+      appUser.appId !== this.config.appId ||
+      appUser.tenantId !== this.config.tenantId ||
+      appUser.externalId !== externalId
+    )
+      throw new AppError(
+        "cloud_agent_identity",
+        "云端应用用户归属校验失败，请运营方检查应用、tenant 与凭据配置。",
+        502,
+      );
     return id;
   }
 
@@ -170,9 +181,19 @@ export class CloudAgentClient {
         acceptStatuses: [200, 201],
       }),
     );
-    const workspace = body.workspace as Record<string, unknown> | undefined;
-    const id = workspace && typeof workspace.id === "string" ? workspace.id : "";
+    const workspace = this.json(body.workspace);
+    const id = typeof workspace.id === "string" ? workspace.id : "";
     if (!id) throw new AppError("cloud_agent_response", "云端 Agent 未返回工作区", 502);
+    if (
+      workspace.tenantId !== this.config.tenantId ||
+      workspace.name !== name ||
+      workspace.accessMode !== "restricted"
+    )
+      throw new AppError(
+        "cloud_agent_identity",
+        "云端工作区归属或隔离设置校验失败，请运营方检查 AGT 配置。",
+        502,
+      );
     return id;
   }
 
