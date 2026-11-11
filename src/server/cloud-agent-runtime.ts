@@ -13,7 +13,7 @@ import { AppError, cloudAgentConnectionConfig, cloudAgentEnabled } from "./confi
 
 type Host = {
   stopReason(task: CloudTask): string | undefined;
-  /** Prepare via prepareCloudAgentResult, then atomically settle/persist terminal reply work. */
+  /** Use settleCloudAgentTask to atomically commit billing, history and pending delivery. */
   finalize(task: CloudTask, job: AgentJobView): unknown | Promise<unknown>;
   /** Idempotently queue/check terminal delivery; persist delivery status/nextAt. */
   deliver(task: CloudTask): unknown | Promise<unknown>;
