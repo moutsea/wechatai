@@ -151,6 +151,189 @@ afterEach(async () => {
 });
 
 describe("durable AGT reply delivery", () => {
+  it.each(["wechat.disconnect", "wechat.delete", "wechat.bind"])(
+    "%s stops only the old connection's tasks and prevents late delivery after restart",
+    async (action) => {
+      const { stub, task, inboxId, model } = await setup("保留的云端结果", "completed", true);
+      const otherLink = await api(stub, "wechat.create", { name: "其他微信" });
+      const otherSession = await api(stub, "session.create", {
+        assistantId: model!.id,
+        connectionId: otherLink.selectedConnectionId,
+      });
+      const before = await inAccount(stub, (storage, store, delivery) => {
+        delivery.sync(task.id);
+        storage.sql.exec("UPDATE inbox SET state='waiting_context' WHERE id=?", inboxId);
+        const id = crypto.randomUUID();
+        const active: CloudTask = {
+          ...task,
+          id,
+          sourceId: id,
+          idempotencyKey: id,
+          jobId: `job-${id}`,
+          state: "accepted",
+          outcome: null,
+          result: "",
+          frozen: "",
+          settled: 0,
+          units: 0,
+          delivered: 0,
+          deliveryQueuedAt: undefined,
+          request: "frozen-submit-request",
+          invocation: { ...task.invocation!, runId: id },
+          nextAt: Date.now() + 60_000,
+        };
+        const otherId = crypto.randomUUID();
+        const unrelated: CloudTask = {
+          ...active,
+          id: otherId,
+          sourceId: otherId,
+          idempotencyKey: otherId,
+          jobId: `job-${otherId}`,
+          sessionId: otherSession.id,
+          currentSessionId: otherSession.id,
+          connectionId: otherSession.connectionId,
+          contextStart: otherSession.contextStart,
+          resetAt: otherSession.resetAt,
+          invocation: { ...active.invocation!, runId: otherId, sessionId: otherSession.id },
+        };
+        store.save(active);
+        store.save(unrelated);
+        return {
+          active,
+          unrelated,
+          balance: new Wallet(storage).balance(),
+          ledger: storage.sql.exec("SELECT * FROM credit_ledger").toArray(),
+          messages: storage.sql.exec("SELECT * FROM messages").toArray(),
+          sessions: storage.sql.exec("SELECT * FROM sessions").toArray(),
+        };
+      });
+      const fetch = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async () =>
+          Response.json({ qrcode: "new-qr", qrcode_img_content: "https://qr.example.com/new" }),
+        );
+      await api(stub, action, { id: task.connectionId });
+      expect(fetch).toHaveBeenCalledTimes(action === "wechat.bind" ? 1 : 0);
+      fetch.mockRestore();
+      expect(
+        (await stub.snapshot()).connections.find((c) => c.id === task.connectionId)?.error,
+      ).toBeUndefined();
+      await inAccount(stub, (storage, store) => {
+        expect(store.get(before.active.id)).toMatchObject({
+          stopRequested: 1,
+          stale: 1,
+          hidden: 0,
+          prompt: before.active.prompt,
+          request: before.active.request,
+          invocation: before.active.invocation,
+        });
+        expect(store.get(before.active.id)!.nextAt).toBeLessThan(before.active.nextAt);
+        expect(store.get(task.id)).toMatchObject({
+          stale: 1,
+          delivered: 1,
+          deliveryStatus: "stale",
+          result: task.result,
+          frozen: task.frozen,
+          units: task.units,
+          settled: 1,
+        });
+        expect(store.get(before.unrelated.id)).toEqual(before.unrelated);
+        expect(
+          storage.sql.exec("SELECT state,reply,payload FROM inbox WHERE id=?", inboxId).one(),
+        ).toEqual({ state: "done", reply: "", payload: "{}" });
+        expect(new Wallet(storage).balance()).toBe(before.balance);
+        expect(storage.sql.exec("SELECT * FROM credit_ledger").toArray()).toEqual(before.ledger);
+        expect(storage.sql.exec("SELECT * FROM messages").toArray()).toEqual(before.messages);
+        expect(storage.sql.exec("SELECT * FROM sessions").toArray()).toEqual(before.sessions);
+      });
+      // Even restoring the old credentials/generation cannot revive old work.
+      if (action !== "wechat.delete") await connectForManualDelivery(stub);
+      await abortAllDurableObjects();
+      const restored = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(restored, (_, state) => useManualAlarms(state));
+      await inAccount(restored, async (storage, store, delivery) => {
+        store.patch(before.active, {
+          outcome: { ...task.outcome!, id: before.active.jobId, text: "迟到的云端结果" },
+        });
+        expect(await settleCloudAgentTask(storage, before.active.id, () => false)).toMatchObject({
+          state: "completed",
+          stopRequested: 1,
+          stale: 1,
+          delivered: 1,
+          deliveryStatus: "stale",
+          result: "迟到的云端结果",
+          settled: 1,
+        });
+        const balance = new Wallet(storage).balance();
+        await settleCloudAgentTask(storage, before.active.id, () => false);
+        expect(new Wallet(storage).balance()).toBe(balance);
+        expect(
+          storage.sql
+            .exec("SELECT * FROM credit_ledger WHERE id=?", `usage:${before.active.id}`)
+            .toArray(),
+        ).toHaveLength(1);
+        expect(storage.sql.exec("SELECT * FROM messages").toArray()).toEqual(before.messages);
+        expect(delivery.sync(before.active.id)!.deliveryStatus).toBe("stale");
+        expect(store.get(before.unrelated.id)).toEqual(before.unrelated);
+      });
+      expect(await deliverQueuedReplies(restored)).toEqual([]);
+    },
+  );
+
+  it.each(["validation", "qr"])(
+    "handles a failed rebind at %s without confusing old task eligibility",
+    async (failure) => {
+      const { stub, task, inboxId } = await setup("保留结果", "completed", failure === "qr");
+      const queued = await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("QR unavailable"));
+      expect(JSON.parse(await stub.api("wechat.bind", { id: task.connectionId })).ok).toBe(false);
+      expect(fetch).toHaveBeenCalledTimes(failure === "qr" ? 1 : 0);
+      await inAccount(stub, (storage, store) => {
+        if (failure === "validation") expect(store.get(task.id)).toEqual(queued);
+        else
+          expect(store.get(task.id)).toMatchObject({
+            stale: 1,
+            delivered: 1,
+            deliveryStatus: "stale",
+          });
+        expect(storage.sql.exec("SELECT state,reply FROM inbox WHERE id=?", inboxId).one()).toEqual(
+          failure === "validation"
+            ? { state: "reply", reply: task.result }
+            : { state: "done", reply: "" },
+        );
+      });
+    },
+  );
+
+  it.each([true, false])(
+    "does not acknowledge or resume a reply disconnected during send (failure %s)",
+    async (fail) => {
+      const { stub, task, inboxId } = await setup("长答案🌱".repeat(600));
+      await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+      expect(
+        await deliverQueuedReplies(stub, 1, fail, {
+          beforeSendResult: async (instance) => {
+            expect(
+              JSON.parse(await instance.api("wechat.disconnect", { id: task.connectionId })).ok,
+            ).toBe(true);
+          },
+        }),
+      ).toHaveLength(1);
+      await connectForManualDelivery(stub);
+      expect(await deliverQueuedReplies(stub)).toEqual([]);
+      await inAccount(stub, (storage, store) => {
+        expect(store.get(task.id)).toMatchObject({
+          stale: 1,
+          delivered: 1,
+          deliveryStatus: "stale",
+        });
+        expect(
+          storage.sql.exec("SELECT state,part,reply FROM inbox WHERE id=?", inboxId).one(),
+        ).toEqual({ state: "done", part: 0, reply: "" });
+      });
+    },
+  );
+
   it.each(["same", "other"])(
     "keeps recovery guidance scoped to remaining replies on the %s link",
     async (link) => {

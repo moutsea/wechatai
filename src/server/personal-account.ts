@@ -2351,6 +2351,7 @@ export class PersonalAccount extends DurableObject<Env> {
         status: "disconnected",
         generation: crypto.randomUUID(),
       });
+      this.cloud.stopConnection(id);
       this.attachments.clear(id);
       this.sql.exec(
         "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
@@ -4105,12 +4106,16 @@ export class PersonalAccount extends DurableObject<Env> {
     if (issue) throw new AppError(issue.code, issue.message, 422);
     if (needsLink) connectionId = this.createLink("我的微信");
     const generation = crypto.randomUUID();
-    this.setLinkSetting(connectionId, "connection", { status: "waiting", generation });
-    this.attachments.clear(connectionId);
-    this.sql.exec(
-      "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
-      connectionId,
-    );
+    this.ctx.storage.transactionSync(() => {
+      this.setLinkSetting(connectionId, "connection", { status: "waiting", generation });
+      // Starting a new binding invalidates old work even if fetching the QR fails.
+      this.cloud.stopConnection(connectionId);
+      this.attachments.clear(connectionId);
+      this.sql.exec(
+        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
+        connectionId,
+      );
+    });
     let qr: { qrcode: string; qrcode_img_content: string };
     try {
       qr = await wxRequest("get_bot_qrcode?bot_type=3", undefined, undefined, 15000);
