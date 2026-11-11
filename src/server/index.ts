@@ -16,6 +16,12 @@ import {
 } from "./analytics";
 import { connectorVersionPattern } from "../shared/openclaw-release";
 import { parseOpenClawToken, parseOpenClawPairing } from "./openclaw-token";
+import {
+  CLOUD_CALLBACK_MAX_BYTES,
+  CLOUD_CALLBACK_PATH,
+  parseCloudCallbackToken,
+  readCloudCallbackBody,
+} from "./cloud-agent-callback";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
 import { Hono } from "hono";
 import { receiverAuthorized, receiverEnabled } from "./wechat-receiver";
@@ -62,6 +68,50 @@ function dispatchBillingNotices(env: Env, ctx: Parameters<typeof app.fetch>[2]) 
   return dispatchPaymentNotices(env, (url, init) => app.fetch(new Request(url, init), env, ctx));
 }
 app.use("*", secureHeaders());
+// AGT callbacks use their own stream cap and signed credentials, so register
+// before the general body limit and browser session/Origin middleware.
+app.post(`${CLOUD_CALLBACK_PATH}/:token`, async (c) => {
+  c.header("Cache-Control", "no-store");
+  const match = parseCloudCallbackToken(c.env, c.req.param("token"));
+  if (!match) return c.json({ error: "invalid_token" }, 401);
+  try {
+    if (!(await c.env.API_LIMIT.limit({ key: `agt-callback:${match.accountId}` })).success)
+      return c.json({ error: "rate_limited" }, 429);
+    if (Number(c.req.header("content-length")) > CLOUD_CALLBACK_MAX_BYTES)
+      return c.json({ error: "body_too_large" }, 413);
+    // Read once without reformatting: the signature covers the exact UTF-8 body.
+    let rawBody: string | null;
+    try {
+      rawBody = await readCloudCallbackBody(c.req.raw);
+    } catch {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    if (rawBody === null) return c.json({ error: "body_too_large" }, 413);
+    let account: ReturnType<typeof c.env.ACCOUNTS.get>;
+    try {
+      account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(match.accountId));
+    } catch {
+      return c.json({ error: "invalid_token" }, 401);
+    }
+    const result = await account.agtCallback(match.taskId, rawBody, {
+      event: c.req.header("x-agent-event"),
+      delivery: c.req.header("x-agent-delivery"),
+      timestamp: c.req.header("x-agent-timestamp"),
+      signature: c.req.header("x-agent-signature"),
+    });
+    return result.ok ? c.json({ received: true }) : c.json({ error: result.error }, result.status);
+  } catch (error) {
+    // Do not log routing tokens, callback bodies or credentials. Persistence and
+    // alarm failures must be retryable, including a duplicate saved receipt.
+    console.error(
+      JSON.stringify({
+        event: "cloud.callback_failed",
+        errorType: error instanceof Error ? error.name : "unknown",
+      }),
+    );
+    return c.json({ error: "unavailable" }, 503);
+  }
+});
 app.use("/api/*", async (c, next) =>
   c.req.path.startsWith("/api/internal/executor/")
     ? next()

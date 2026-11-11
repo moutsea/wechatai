@@ -132,6 +132,7 @@ import {
 import { dayWindow, Wallet } from "./wallet";
 import { CloudAgentDelivery } from "./cloud-agent-delivery";
 import { CloudAgentRuntime } from "./cloud-agent-runtime";
+import { receiveCloudAgentCallback } from "./cloud-agent-callback-inbox";
 import { settleCloudAgentTask } from "./cloud-agent-settlement";
 import { CloudAgentStore, cloudTaskMatchesSession, type CloudTask } from "./cloud-agent-store";
 import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
@@ -1648,6 +1649,24 @@ export class PersonalAccount extends DurableObject<Env> {
     )
       return "微信链接已变更。";
     return undefined;
+  }
+  /** Persist only the verified receipt; authoritative state comes from AGT GET. */
+  async agtCallback(
+    taskId: string,
+    rawBody: string,
+    headers: Parameters<typeof receiveCloudAgentCallback>[5],
+  ) {
+    const result = receiveCloudAgentCallback(
+      this.env,
+      this.cloud,
+      this.ctx.id.toString(),
+      taskId,
+      rawBody,
+      headers,
+    );
+    // Retry scheduling even for duplicates, preserving the task's saved backoff.
+    if (result.ok) await this.scheduleCloudRecovery();
+    return result;
   }
   private cloudNextAt() {
     const next = this.cloud.nextAt();
