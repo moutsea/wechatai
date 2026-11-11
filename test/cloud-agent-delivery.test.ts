@@ -151,6 +151,240 @@ afterEach(async () => {
 });
 
 describe("durable AGT reply delivery", () => {
+  it.each(["disable", "save-disabled", "delete"])(
+    "persists plugin %s cancellation across re-enabling, restart and late completion",
+    async (action) => {
+      const { stub, task, inboxId, plugin } = await setup();
+      const before = await inAccount(stub, (storage, store, delivery) => {
+        delivery.sync(task.id);
+        storage.sql.exec("UPDATE inbox SET state='waiting_context' WHERE id=?", inboxId);
+        const id = crypto.randomUUID();
+        const active: CloudTask = {
+          ...task,
+          id,
+          sourceId: id,
+          idempotencyKey: id,
+          jobId: `job-${id}`,
+          state: "accepted",
+          outcome: null,
+          result: "",
+          frozen: "",
+          settled: 0,
+          units: 0,
+          delivered: 0,
+          deliveryQueuedAt: undefined,
+          request: "frozen-submit-request",
+          invocation: { ...task.invocation!, runId: id },
+          nextAt: Date.now() + 60_000,
+        };
+        const otherId = crypto.randomUUID();
+        const unrelated = {
+          ...active,
+          id: otherId,
+          sourceId: otherId,
+          jobId: `job-${otherId}`,
+          pluginId: "another-plugin",
+        };
+        store.save(active);
+        store.save(unrelated);
+        return {
+          active,
+          unrelated,
+          balance: new Wallet(storage).balance(),
+          ledger: storage.sql.exec("SELECT * FROM credit_ledger").toArray(),
+          messages: storage.sql.exec("SELECT * FROM messages").toArray(),
+          sessions: storage.sql.exec("SELECT * FROM sessions").toArray(),
+        };
+      });
+      expect((await stub.snapshot()).connection.error).toContain("/wx help");
+      if (action === "delete") await api(stub, "plugin.delete", { id: plugin.id });
+      else
+        await api(stub, "plugin.save", {
+          ...(action === "save-disabled" ? plugin : {}),
+          id: plugin.id,
+          enabled: false,
+        });
+      expect((await stub.snapshot()).connection.error).toBeUndefined();
+      await inAccount(stub, (storage, store) => {
+        expect(store.get(before.active.id)).toMatchObject({
+          stopRequested: 1,
+          stale: 1,
+          hidden: 0,
+          prompt: before.active.prompt,
+          request: before.active.request,
+          invocation: before.active.invocation,
+        });
+        expect(store.get(before.active.id)!.nextAt).toBeLessThan(before.active.nextAt);
+        expect(store.get(task.id)).toMatchObject({
+          stale: 1,
+          delivered: 1,
+          deliveryStatus: "stale",
+          result: task.result,
+          frozen: task.frozen,
+          units: task.units,
+          settled: 1,
+        });
+        expect(store.get(before.unrelated.id)).toEqual(before.unrelated);
+        expect(
+          storage.sql.exec("SELECT state,reply,payload FROM inbox WHERE id=?", inboxId).one(),
+        ).toEqual({ state: "done", reply: "", payload: "{}" });
+        expect(new Wallet(storage).balance()).toBe(before.balance);
+        expect(storage.sql.exec("SELECT * FROM credit_ledger").toArray()).toEqual(before.ledger);
+        expect(storage.sql.exec("SELECT * FROM messages").toArray()).toEqual(before.messages);
+        expect(storage.sql.exec("SELECT * FROM sessions").toArray()).toEqual(before.sessions);
+      });
+      if (action !== "delete") await api(stub, "plugin.save", { id: plugin.id, enabled: true });
+      await abortAllDurableObjects();
+      const restored = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(restored, (_, state) => useManualAlarms(state));
+      await inAccount(restored, async (storage, store, delivery) => {
+        store.patch(before.active, {
+          outcome: { ...task.outcome!, id: before.active.jobId, text: "迟到的插件结果" },
+        });
+        expect(await settleCloudAgentTask(storage, before.active.id, () => false)).toMatchObject({
+          state: "completed",
+          stopRequested: 1,
+          stale: 1,
+          delivered: 1,
+          deliveryStatus: "stale",
+          result: "迟到的插件结果",
+          settled: 1,
+        });
+        const balance = new Wallet(storage).balance();
+        await settleCloudAgentTask(storage, before.active.id, () => false);
+        expect(new Wallet(storage).balance()).toBe(balance);
+        expect(
+          storage.sql
+            .exec("SELECT * FROM credit_ledger WHERE id=?", `usage:${before.active.id}`)
+            .toArray(),
+        ).toHaveLength(1);
+        expect(storage.sql.exec("SELECT * FROM messages").toArray()).toEqual(before.messages);
+        expect(delivery.sync(before.active.id)!.deliveryStatus).toBe("stale");
+      });
+      expect(await deliverQueuedReplies(restored)).toEqual([]);
+    },
+  );
+
+  it.each(["rename", "save", "invalid"])(
+    "keeps cloud tasks and queued replies after a plugin %s edit",
+    async (action) => {
+      const { stub, task, inboxId, plugin } = await setup();
+      const queued = await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
+      if (action === "rename")
+        await api(stub, "plugin.save", { id: plugin.id, shortcut: "renamed" });
+      else if (action === "save")
+        await api(stub, "plugin.save", { ...plugin, name: "更新的插件名" });
+      else
+        expect(
+          JSON.parse(
+            await stub.api("plugin.save", {
+              ...plugin,
+              name: "",
+              enabled: false,
+            }),
+          ).ok,
+        ).toBe(false);
+      await inAccount(stub, (storage, store) => {
+        expect(store.get(task.id)).toEqual(queued);
+        expect(storage.sql.exec("SELECT state,reply FROM inbox WHERE id=?", inboxId).one()).toEqual(
+          { state: "reply", reply: task.result },
+        );
+      });
+    },
+  );
+
+  it("keeps recovery guidance for another plugin's waiting result on the same connection", async () => {
+    const { stub, task, plugin } = await setup();
+    const otherPlugin = await api(stub, "plugin.save", {
+      pluginId: "wechatai/openclaw",
+      name: "另一个插件",
+      shortcut: "other",
+    });
+    const other = await inAccount(stub, (storage, store, delivery) => {
+      const id = crypto.randomUUID();
+      store.save({
+        ...task,
+        id,
+        sourceId: id,
+        idempotencyKey: id,
+        jobId: `job-${id}`,
+        pluginId: otherPlugin.id,
+        invocation: { ...task.invocation!, runId: id, instanceId: otherPlugin.id },
+      });
+      delivery.sync(task.id);
+      delivery.sync(id);
+      storage.sql.exec(
+        "UPDATE inbox SET state='waiting_context' WHERE id IN (?,?)",
+        `cloud:${task.id}`,
+        `cloud:${id}`,
+      );
+      return store.get(id)!;
+    });
+    await api(stub, "plugin.save", { id: plugin.id, enabled: false });
+    expect((await stub.snapshot()).connection.error).toContain("/wx help");
+    await inAccount(stub, (storage, store) => {
+      expect(store.get(other.id)).toEqual(other);
+      expect(
+        storage.sql.exec("SELECT state,reply FROM inbox WHERE id=?", `cloud:${other.id}`).one(),
+      ).toEqual({ state: "waiting_context", reply: task.result });
+    });
+    await api(stub, "plugin.delete", { id: otherPlugin.id });
+    expect((await stub.snapshot()).connection.error).toBeUndefined();
+  });
+
+  it.each(["assistant.delete", "channel.delete"])(
+    "%s also stops tasks of a removed plugin invoked from another model's session",
+    async (action) => {
+      const { stub, task } = await setup();
+      const model = await api(stub, "assistant.save", {
+        name: "插件模型",
+        model: "plugin-model",
+        protocol: "chat-completions",
+        baseUrl: "https://other-llm.example.com",
+        apiKey: "test-key",
+      });
+      const plugin = await api(stub, "plugin.save", {
+        pluginId: "wechatai/roleplay",
+        name: "插件配置",
+        shortcut: "role",
+        modelId: model.id,
+        description: "测试角色",
+      });
+      const active = await inAccount(stub, (_, store) => {
+        const id = crypto.randomUUID();
+        const active: CloudTask = {
+          ...task,
+          id,
+          sourceId: id,
+          idempotencyKey: id,
+          pluginId: plugin.id,
+          invocation: { ...task.invocation!, runId: id, instanceId: plugin.id },
+          jobId: `job-${id}`,
+          state: "accepted",
+          outcome: null,
+          result: "",
+          frozen: "",
+          settled: 0,
+          units: 0,
+          delivered: 0,
+        };
+        store.save(active);
+        return active;
+      });
+      await api(stub, action, { id: action === "assistant.delete" ? model.id : model.channelId });
+      await inAccount(stub, (storage, store) => {
+        expect(store.get(active.id)).toMatchObject({ stopRequested: 1, stale: 1, hidden: 0 });
+        expect(store.get(task.id)).toEqual(task);
+        expect(storage.sql.exec("SELECT 1 FROM plugins WHERE id=?", plugin.id).toArray()).toEqual(
+          [],
+        );
+        expect(
+          storage.sql.exec("SELECT 1 FROM sessions WHERE id=?", task.sessionId).toArray(),
+        ).toHaveLength(1);
+      });
+    },
+  );
+
   it.each(["wechat.disconnect", "wechat.delete", "wechat.bind"])(
     "%s stops only the old connection's tasks and prevents late delivery after restart",
     async (action) => {

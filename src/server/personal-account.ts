@@ -1039,6 +1039,24 @@ export class PersonalAccount extends DurableObject<Env> {
           message: "此插件已停用，请在插件配置中重新启用。配置与绑定仍保留。",
         };
   }
+  private stopCloudPlugin(id: string) {
+    this.cloud.stopPlugin(id);
+    this.sql.exec(
+      "UPDATE inbox SET state='done',payload='{}',reply='' WHERE id IN (SELECT 'cloud:' || id FROM cloud_tasks WHERE pluginId=?)",
+      id,
+    );
+  }
+  private persistPlugin(plugin: StoredPlugin) {
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+        plugin.id,
+        JSON.stringify(plugin),
+      );
+      // Every save path must invalidate old work before a quick re-enable.
+      if (!plugin.enabled) this.stopCloudPlugin(plugin.id);
+    });
+  }
   private async savePlugin(id: string | undefined, raw: unknown) {
     this.busy();
     const previous = id ? this.plugin(id) : undefined;
@@ -1070,7 +1088,7 @@ export class PersonalAccount extends DurableObject<Env> {
         enabled: Reflect.get(raw, "enabled") === false ? false : previous.enabled,
       };
       this.ctx.storage.transactionSync(() => {
-        this.sql.exec("UPDATE plugins SET data=? WHERE id=?", JSON.stringify(updated), previous.id);
+        this.persistPlugin(updated);
         if (!updated.enabled && updated.pluginId === "wechatai/notification")
           this.notifications.cancel(updated.id);
       });
@@ -1095,11 +1113,7 @@ export class PersonalAccount extends DurableObject<Env> {
         encryptedKey: "",
       };
       this.ctx.storage.transactionSync(() => {
-        this.sql.exec(
-          "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
-          pluginId,
-          JSON.stringify(plugin),
-        );
+        this.persistPlugin(plugin);
         if (
           !input.enabled ||
           (previous?.pluginId === "wechatai/notification" &&
@@ -1141,11 +1155,7 @@ export class PersonalAccount extends DurableObject<Env> {
         createdAt: previous?.createdAt ?? Date.now(),
         encryptedKey: "",
       };
-      this.sql.exec(
-        "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-        p.id,
-        JSON.stringify(p),
-      );
+      this.persistPlugin(p);
       return this.publicPlugin(p);
     }
     if ((kind ?? previous?.pluginId) === "wechatai/personal-assistant") {
@@ -1166,11 +1176,7 @@ export class PersonalAccount extends DurableObject<Env> {
         encryptedKey: "",
       };
       this.ctx.storage.transactionSync(() => {
-        this.sql.exec(
-          "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
-          plugin.id,
-          JSON.stringify(plugin),
-        );
+        this.persistPlugin(plugin);
         if (
           previous?.pluginId === "wechatai/personal-assistant" &&
           previous.recordScope !== plugin.recordScope
@@ -1221,11 +1227,7 @@ export class PersonalAccount extends DurableObject<Env> {
         encryptedKey: "",
       };
       this.ctx.storage.transactionSync(() => {
-        this.sql.exec(
-          "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-          p.id,
-          JSON.stringify(p),
-        );
+        this.persistPlugin(p);
         // A role owns its story independently of the answer model. Historical
         // message model IDs remain intact when its configured model changes.
         for (const s of this.sessions().filter((s) => s.pluginInstanceId === p.id))
@@ -1250,11 +1252,7 @@ export class PersonalAccount extends DurableObject<Env> {
         createdAt: previous?.createdAt ?? Date.now(),
         encryptedKey: "",
       };
-      this.sql.exec(
-        "INSERT INTO plugins VALUES (?,?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-        p.id,
-        JSON.stringify(p),
-      );
+      this.persistPlugin(p);
       return this.publicPlugin(p);
     }
     if (kind && kind !== "wechatai/web-research")
@@ -1298,11 +1296,7 @@ export class PersonalAccount extends DurableObject<Env> {
       createdAt: previous?.createdAt ?? Date.now(),
       encryptedKey: key,
     };
-    this.sql.exec(
-      "INSERT INTO plugins VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
-      p.id,
-      JSON.stringify(p),
-    );
+    this.persistPlugin(p);
     return this.publicPlugin(p);
   }
   private activatePlugin(id: string, connectionId = this.selectedLink()) {
@@ -2624,7 +2618,10 @@ export class PersonalAccount extends DurableObject<Env> {
         this.notifications.revoke(String(p.id));
         this.personalRuns.cancelPlugin(String(p.id));
         this.personalRecords.deletePlugin(String(p.id));
-        this.sql.exec("DELETE FROM plugins WHERE id = ?", String(p.id));
+        this.ctx.storage.transactionSync(() => {
+          this.stopCloudPlugin(String(p.id));
+          this.sql.exec("DELETE FROM plugins WHERE id = ?", String(p.id));
+        });
         await this.scheduleWechat();
         await this.flushReminderSchedule();
         await this.flushNotificationSchedule();
@@ -3112,8 +3109,10 @@ export class PersonalAccount extends DurableObject<Env> {
     for (const p of this.plugins().filter(
       (p) =>
         p.pluginId !== "wechatai/personal-assistant" && "modelId" in p && ids.includes(p.modelId),
-    ))
+    )) {
+      this.stopCloudPlugin(p.id);
       this.sql.exec("DELETE FROM plugins WHERE id = ?", p.id);
+    }
     const related = this.sessions().filter(
       (s) => s.assistantId !== null && ids.includes(s.assistantId),
     );
