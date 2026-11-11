@@ -1,3 +1,5 @@
+import type { CloudAgentClientConfig } from "./cloud-agent-client";
+
 export const MODEL_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 // Leave time for bookkeeping within the 15-minute Durable Object alarm wall limit.
 export const MODEL_TURN_TIMEOUT_MS = 14 * 60 * 1000;
@@ -31,6 +33,71 @@ export function numberSetting(value: string, fallback: number) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
+
+/** Server-only AGT settings. Task execution persists its own configuration snapshot. */
+export type CloudAgentConfig = CloudAgentClientConfig & {
+  tenantId: string;
+  workspacePrefix: string;
+  maxActive: number;
+  dailyLimit: number;
+  deadlineMs: number;
+};
+
+export function cloudAgentEnabled(env: Env) {
+  return ["1", "true"].includes(secret(env, "CLOUD_AGENT_ENABLED", false).toLowerCase());
+}
+
+/** Disabling new submissions must still allow the recovery path to read credentials. */
+export function cloudAgentConfig(env: Env, forSubmission = true): CloudAgentConfig | null {
+  if (forSubmission && !cloudAgentEnabled(env)) return null;
+  const origin = secret(env, "AGT_ORIGIN", false).replace(/\/+$/, "");
+  const appId = secret(env, "AGT_APP_ID", false);
+  const appKey = secret(env, "AGT_APP_KEY", false);
+  const tenantId = secret(env, "AGT_TENANT_ID", false);
+  const model = secret(env, "AGT_MODEL", false);
+  if (!origin || !appId || !appKey || !tenantId || !model) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return null;
+  }
+  // Same origin contract as CloudAgentClient: TLS, with HTTP only on loopback.
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) return null;
+  if (parsed.origin !== origin) return null;
+  const agentId = `${secret(env, "AGT_AGENT_ID", false) || "wechatai"}-v1`;
+  const workspacePrefix = secret(env, "AGT_WORKSPACE_PREFIX", false) || "wechatai";
+  // AGT profile IDs are at most 64 characters. Workspace names allow 120;
+  // leave room for the separator and 32-character account suffix used by the runtime.
+  if (!/^[a-z][a-z0-9._-]{0,63}$/.test(agentId)) return null;
+  if (!/^[a-zA-Z0-9_-]{1,87}$/.test(workspacePrefix)) return null;
+  if (![appId, tenantId].every((id) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id))) return null;
+  return {
+    origin,
+    appId,
+    appKey,
+    tenantId,
+    agentId,
+    model,
+    workspacePrefix,
+    // Includes submissions whose upstream acceptance has not yet been confirmed.
+    maxActive: 1,
+    dailyLimit: Math.min(
+      1000,
+      Math.max(
+        1,
+        Math.floor(numberSetting(secret(env, "CLOUD_AGENT_DAILY_LIMIT", false) || "30", 30)),
+      ),
+    ),
+    deadlineMs:
+      Math.min(
+        30,
+        Math.max(1, numberSetting(secret(env, "CLOUD_AGENT_DEADLINE_MINUTES", false) || "10", 10)),
+      ) * 60_000,
+  };
+}
+
 export class AppError extends Error {
   constructor(
     public code: string,

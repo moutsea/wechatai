@@ -30,3 +30,11 @@ STRIPE_CREDITS_50000_PRICE_ID=
 BILLING_NOTIFY_TOKEN=
 # all (default) or first_payment
 BILLING_NOTIFY_SCOPE=all
+
+# AGT integration preparation; these settings alone do not expose the feature.
+# Non-secret vars go in wrangler.jsonc (private production config for production).
+AGT_APP_KEY=
+# JSON key ring, each value >=32 characters. Retain previous versions for in-flight callbacks.
+# Example shape only: {"v1":"<independent-random-secret>"}
+# Migrating from the default v1: retain the exact ENCRYPTION_KEY value as v1; add a new v2.
+AGT_CALLBACK_KEYS=
