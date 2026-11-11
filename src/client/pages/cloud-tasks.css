@@ -1,0 +1,86 @@
+.cloud-task-list {
+  display: grid;
+  gap: 16px;
+}
+.cloud-task-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cloud-task-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.cloud-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  padding: 24px;
+  align-items: start;
+}
+.cloud-task-title {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.cloud-task-title:hover {
+  text-decoration: underline;
+}
+.cloud-task-description {
+  min-width: 0;
+}
+.cloud-task-description small {
+  display: block;
+  margin-top: 8px;
+}
+.cloud-task details {
+  margin-top: 16px;
+}
+.cloud-task summary {
+  cursor: pointer;
+}
+.cloud-task-heading {
+  margin: 0;
+  font-size: 16px;
+}
+.cloud-task section + section,
+.cloud-task small + section {
+  margin-top: 20px;
+}
+.cloud-task-content {
+  max-height: 36rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.7;
+  padding: 16px;
+  background: var(--surface-soft);
+  border-radius: 8px;
+}
+.cloud-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.cloud-task-result {
+  margin: 12px 0 8px;
+  white-space: normal;
+}
+.cloud-task > .text-link {
+  justify-self: end;
+}
+@media (max-width: 600px) {
+  .cloud-task {
+    padding: 18px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cloud-task > .tag {
+    justify-self: start;
+    grid-row: 1;
+  }
+}

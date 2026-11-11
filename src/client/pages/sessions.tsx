@@ -51,20 +51,30 @@ export function Sessions() {
   const messageRequest = useRef(0);
   const messageViewport = useRef<HTMLDivElement>(null);
   const scrollIntent = useRef<"latest" | { height: number; top: number } | null>(null);
+  const pageController = useRef<AbortController | null>(null);
   selectedRef.current = selected;
+  useEffect(() => {
+    const controller = new AbortController();
+    pageController.current = controller;
+    // History deletion remounts this page; old queries must not restore content or notify.
+    return () => controller.abort();
+  }, []);
   const load = useCallback(async () => {
+    const signal = pageController.current?.signal;
+    if (!signal || signal.aborted) return;
     if (data?.plan !== "plus") {
       setLoading(false);
       return;
     }
     try {
-      const rows = await request<ChatSession[]>("/sessions");
+      const rows = await request<ChatSession[]>("/sessions", { signal });
+      if (signal.aborted) return;
       setSessions(rows);
       setSelected((prev) => (rows.some((s) => s.id === prev) ? prev : rows[0]?.id || ""));
     } catch (e) {
-      notify((e as Error).message, true);
+      if (!signal.aborted) notify((e as Error).message, true);
     } finally {
-      setLoading(false);
+      if (!signal.aborted) setLoading(false);
     }
   }, [request, data?.plan, notify]);
   useEffect(() => {
@@ -78,27 +88,25 @@ export function Sessions() {
     if (!selected || data?.plan !== "plus") {
       return;
     }
-    let canceled = false;
+    const controller = new AbortController();
     setLoadingMessages(true);
     setHasOlder(false);
     setLoadingOlder(false);
-    void request<ChatMessage[]>(`/sessions/${selected}/messages`)
+    void request<ChatMessage[]>(`/sessions/${selected}/messages`, { signal: controller.signal })
       .then((rows) => {
-        if (!canceled) {
+        if (!controller.signal.aborted) {
           scrollIntent.current = "latest";
           setMessages(rows);
           setHasOlder(rows.length === 100);
         }
       })
       .catch((e) => {
-        if (!canceled) setMessageError(e.message || "暂时无法读取消息");
+        if (!controller.signal.aborted) setMessageError(e.message || "暂时无法读取消息");
       })
       .finally(() => {
-        if (!canceled) setLoadingMessages(false);
+        if (!controller.signal.aborted) setLoadingMessages(false);
       });
-    return () => {
-      canceled = true;
-    };
+    return () => controller.abort();
   }, [selected, request, data?.plan, version, notify]);
   useLayoutEffect(() => {
     const viewport = messageViewport.current;
@@ -111,6 +119,8 @@ export function Sessions() {
     scrollIntent.current = null;
   }, [messages, loadingMessages, mobileDetail]);
   const loadOlder = async () => {
+    const signal = pageController.current?.signal;
+    if (!signal || signal.aborted) return;
     if (!messages[0] || loadingOlder) return;
     const sessionId = selected;
     const requestVersion = messageRequest.current;
@@ -118,8 +128,13 @@ export function Sessions() {
     try {
       const older = await request<ChatMessage[]>(
         `/sessions/${sessionId}/messages?before=${messages[0].id}`,
+        { signal },
       );
-      if (selectedRef.current === sessionId && messageRequest.current === requestVersion) {
+      if (
+        !signal.aborted &&
+        selectedRef.current === sessionId &&
+        messageRequest.current === requestVersion
+      ) {
         const viewport = messageViewport.current;
         if (viewport)
           scrollIntent.current = { height: viewport.scrollHeight, top: viewport.scrollTop };
@@ -127,10 +142,18 @@ export function Sessions() {
         setHasOlder(older.length === 100);
       }
     } catch (error) {
-      if (selectedRef.current === sessionId && messageRequest.current === requestVersion)
+      if (
+        !signal.aborted &&
+        selectedRef.current === sessionId &&
+        messageRequest.current === requestVersion
+      )
         notify((error as Error).message, true);
     } finally {
-      if (selectedRef.current === sessionId && messageRequest.current === requestVersion)
+      if (
+        !signal.aborted &&
+        selectedRef.current === sessionId &&
+        messageRequest.current === requestVersion
+      )
         setLoadingOlder(false);
     }
   };
@@ -156,13 +179,14 @@ export function Sessions() {
       s.archived === (tab === "archived") && s.title.toLowerCase().includes(query.toLowerCase()),
   );
   const act = async (action: string) => {
+    const signal = pageController.current?.signal;
+    if (!signal || signal.aborted) return;
     if (!session && action !== "new") return;
     setBusy(true);
     try {
       if (action === "new" || action === "new-story") {
-        const created = await request<ChatSession>(
-          "/sessions",
-          json({
+        const created = await request<ChatSession>("/sessions", {
+          ...json({
             assistantId,
             ...(action === "new-story" ? { pluginInstanceId: role?.id } : {}),
             title: action === "new-story" ? "" : title,
@@ -171,15 +195,20 @@ export function Sessions() {
                 ? (session?.connectionId ?? "default")
                 : data.selectedConnectionId,
           }),
-        );
+          signal,
+        });
+        if (signal.aborted) return;
         setSelected(created.id);
         setTab("active");
         setMobileDetail(true);
       } else {
-        await request(`/sessions/${selected}`, json({ action, title }));
+        await request(`/sessions/${selected}`, { ...json({ action, title }), signal });
       }
+      if (signal.aborted) return;
       await refresh();
+      if (signal.aborted) return;
       await load();
+      if (signal.aborted) return;
       setVersion((v) => v + 1);
       setOperation("");
       setMore(false);
@@ -199,9 +228,9 @@ export function Sessions() {
         )[action] || "操作完成",
       );
     } catch (e) {
-      notify((e as Error).message, true);
+      if (!signal.aborted) notify((e as Error).message, true);
     } finally {
-      setBusy(false);
+      if (!signal.aborted) setBusy(false);
     }
   };
   if (data.plan !== "plus")
@@ -591,9 +620,10 @@ export function Sessions() {
                 reset: "历史消息仍然保留，后续请求不再把它们发送给模型。",
                 archive: "记录会移入归档。如这是当前会话，将自动开启新会话。",
                 restore: "会话将回到常用列表，恢复后可以手动切换继续聊。",
-                clear: "平台上的消息记录和模型上下文都会删除，无法恢复。",
+                clear:
+                  "平台上的消息记录、模型上下文和对应云端任务内容都会删除，无法恢复。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。",
                 delete:
-                  "会话及其消息会从平台删除，无法恢复，并释放一个会话名额。删除当前会话后不会自动新建，微信里的消息不受影响。",
+                  "会话、消息和对应云端任务内容会从平台删除，无法恢复，并释放一个会话名额。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。删除当前会话后不会自动新建，微信里的消息不受影响。",
               } as Record<string, string>
             )[operation]
           }

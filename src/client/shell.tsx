@@ -19,6 +19,7 @@ import {
   Gift,
   Puzzle,
   Bell,
+  Cloud,
 } from "lucide-react";
 import { authClient } from "./auth";
 import { useApp } from "./context";
@@ -29,6 +30,7 @@ const items = [
   { path: "", label: "概览", en: "Overview", icon: LayoutDashboard },
   { path: "/channels", label: "渠道与模型", en: "Channels", icon: Cpu },
   { path: "/plugins", label: "插件", en: "Plugins", icon: Puzzle },
+  { path: "/tasks", label: "云端任务", en: "Cloud tasks", icon: Cloud },
   { path: "/wechat", label: "微信连接", en: "Connection", icon: Link2 },
   { path: "/sessions", label: "会话记录", en: "Conversations", icon: MessagesSquare },
   { path: "/billing", label: "会员与 credits", en: "Membership", icon: Coins },
@@ -36,7 +38,13 @@ const items = [
   { path: "/notices", label: "通知", en: "Notices", icon: Bell },
   { path: "/invite", label: "邀请好友", en: "Invite friends", icon: Gift },
 ];
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({
+  children,
+  onHistoryCleared,
+}: {
+  children: ReactNode;
+  onHistoryCleared?: () => void;
+}) {
   const { data, base, isAdmin, user, request, refresh, notify } = useApp();
   const navigation = isAdmin
     ? [...items, { path: "/admin", label: "管理后台", en: "Admin", icon: ShieldCheck }]
@@ -47,15 +55,21 @@ export function Shell({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const page = navigation.find((i) => location.pathname === base + i.path) || items[0];
+  const page =
+    navigation.find(
+      (i) =>
+        location.pathname === base + i.path ||
+        (i.path && location.pathname.startsWith(`${base}${i.path}/`)),
+    ) || items[0];
   const clear = async () => {
     setBusy(true);
     try {
       await request("/privacy/history", { method: "DELETE" });
+      onHistoryCleared?.();
       await refresh();
       setConfirm(false);
       setSettings(false);
-      notify("平台上的会话记录已删除");
+      notify("会话记录和云端任务内容已删除，未结束的云端任务已请求停止。");
     } catch (e) {
       notify((e as Error).message, true);
     } finally {
@@ -207,7 +221,7 @@ export function Shell({ children }: { children: ReactNode }) {
       {confirm && (
         <Modal
           title="删除全部会话记录？"
-          description="所有会话、归档和聊天内容将从平台删除。此操作无法恢复。"
+          description="所有会话、归档、聊天内容及云端任务内容将从平台删除，无法恢复。未结束的云端任务会请求停止，并停止向微信投递结果；已发生的外部操作无法撤销。微信里的消息和已产生的计费记录会保留。"
           onClose={() => setConfirm(false)}
         >
           <div className="modal-actions">

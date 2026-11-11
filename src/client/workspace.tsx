@@ -1,6 +1,6 @@
 import { NoticeProvider } from "./notices";
 import { Notices } from "./pages/notices";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppProvider } from "./context";
 import { Shell } from "./shell";
@@ -17,12 +17,16 @@ const Sessions = lazy(() =>
 const Plugins = lazy(() =>
   import("./pages/plugins").then((module) => ({ default: module.Plugins })),
 );
+const CloudTasks = lazy(() =>
+  import("./pages/cloud-tasks").then((module) => ({ default: module.CloudTasks })),
+);
 const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: module.Admin })));
 export function Workspace() {
+  const [historyRevision, setHistoryRevision] = useState(0);
   return (
     <AppProvider>
       <NoticeProvider>
-        <Shell>
+        <Shell onHistoryCleared={() => setHistoryRevision((value) => value + 1)}>
           <Routes>
             <Route index element={<Dashboard />} />
             <Route path="channels" element={<Channels />} />
@@ -40,6 +44,20 @@ export function Workspace() {
                 </Suspense>
               }
             />
+            <Route
+              path="tasks/:id?"
+              element={
+                <Suspense
+                  fallback={
+                    <div className="full-state" role="status">
+                      正在加载云端任务…
+                    </div>
+                  }
+                >
+                  <CloudTasks key={historyRevision} />
+                </Suspense>
+              }
+            />
             <Route path="assistants" element={<Channels />} />
             <Route path="wechat" element={<Wechat />} />
             <Route
@@ -52,7 +70,7 @@ export function Workspace() {
                     </div>
                   }
                 >
-                  <Sessions />
+                  <Sessions key={historyRevision} />
                 </Suspense>
               }
             />
