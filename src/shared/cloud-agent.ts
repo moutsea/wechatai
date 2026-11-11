@@ -1,3 +1,6 @@
+export const CLOUD_AGENT_PLUGIN_ID = "wechatai/cloud-agent";
+export const CLOUD_AGENT_VERSION = "1.0.0";
+
 /** Public task history. Never include upstream identities, credentials or raw requests. */
 export type CloudAgentTaskStatus =
   | "submitting"
