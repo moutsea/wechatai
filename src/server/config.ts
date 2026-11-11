@@ -46,15 +46,15 @@ export function cloudAgentEnabled(env: Env) {
   return ["1", "true"].includes(secret(env, "CLOUD_AGENT_ENABLED", false).toLowerCase());
 }
 
-/** Disabling new submissions must still allow the recovery path to read credentials. */
-export function cloudAgentConfig(env: Env, forSubmission = true): CloudAgentConfig | null {
-  if (forSubmission && !cloudAgentEnabled(env)) return null;
+/** Recovery needs current credentials for the same scope, not new-task defaults. */
+export function cloudAgentConnectionConfig(
+  env: Env,
+): Pick<CloudAgentClientConfig, "origin" | "appId" | "appKey" | "tenantId"> | null {
   const origin = secret(env, "AGT_ORIGIN", false).replace(/\/+$/, "");
   const appId = secret(env, "AGT_APP_ID", false);
   const appKey = secret(env, "AGT_APP_KEY", false);
   const tenantId = secret(env, "AGT_TENANT_ID", false);
-  const model = secret(env, "AGT_MODEL", false);
-  if (!origin || !appId || !appKey || !tenantId || !model) return null;
+  if (!origin || !appId || !appKey || !tenantId) return null;
   let parsed: URL;
   try {
     parsed = new URL(origin);
@@ -65,18 +65,24 @@ export function cloudAgentConfig(env: Env, forSubmission = true): CloudAgentConf
   const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
   if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) return null;
   if (parsed.origin !== origin) return null;
+  if (![appId, tenantId].every((id) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id))) return null;
+  return { origin, appId, appKey, tenantId };
+}
+
+/** Admission of new tasks requires the gate and all operator defaults to be valid. */
+export function cloudAgentConfig(env: Env): CloudAgentConfig | null {
+  if (!cloudAgentEnabled(env)) return null;
+  const connection = cloudAgentConnectionConfig(env);
+  const model = secret(env, "AGT_MODEL", false);
+  if (!connection || !model) return null;
   const agentId = `${secret(env, "AGT_AGENT_ID", false) || "wechatai"}-v1`;
   const workspacePrefix = secret(env, "AGT_WORKSPACE_PREFIX", false) || "wechatai";
   // AGT profile IDs are at most 64 characters. Workspace names allow 120;
   // leave room for the separator and 32-character account suffix used by the runtime.
   if (!/^[a-z][a-z0-9._-]{0,63}$/.test(agentId)) return null;
   if (!/^[a-zA-Z0-9_-]{1,87}$/.test(workspacePrefix)) return null;
-  if (![appId, tenantId].every((id) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(id))) return null;
   return {
-    origin,
-    appId,
-    appKey,
-    tenantId,
+    ...connection,
     agentId,
     model,
     workspacePrefix,

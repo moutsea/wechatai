@@ -1,6 +1,10 @@
 import { env } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cloudAgentConfig, cloudAgentEnabled } from "../src/server/config";
+import {
+  cloudAgentConfig,
+  cloudAgentConnectionConfig,
+  cloudAgentEnabled,
+} from "../src/server/config";
 import { CloudAgentClient } from "../src/server/cloud-agent-client";
 
 function settings(overrides: Record<string, string> = {}): Env {
@@ -32,7 +36,7 @@ describe("AGT operator configuration", () => {
       const configured = settings({ CLOUD_AGENT_ENABLED: value });
       expect(cloudAgentEnabled(configured)).toBe(false);
       expect(cloudAgentConfig(configured)).toBeNull();
-      expect(cloudAgentConfig(configured, false)?.appKey).toBe("test-only-app-key");
+      expect(cloudAgentConnectionConfig(configured)?.appKey).toBe("test-only-app-key");
     },
   );
 
@@ -60,14 +64,29 @@ describe("AGT operator configuration", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each(["AGT_ORIGIN", "AGT_APP_ID", "AGT_APP_KEY", "AGT_TENANT_ID", "AGT_MODEL"])(
+  it.each(["AGT_ORIGIN", "AGT_APP_ID", "AGT_APP_KEY", "AGT_TENANT_ID"])(
     "rejects missing %s for both submission and recovery",
     (name) => {
       const configured = settings({ [name]: "   " });
       expect(cloudAgentConfig(configured)).toBeNull();
-      expect(cloudAgentConfig(configured, false)).toBeNull();
+      expect(cloudAgentConnectionConfig(configured)).toBeNull();
     },
   );
+
+  it.each([
+    ["AGT_MODEL", ""],
+    ["AGT_AGENT_ID", "Uppercase"],
+    ["AGT_WORKSPACE_PREFIX", "first/second"],
+  ])("keeps recovery independent of invalid new-task setting %s", (name, value) => {
+    const configured = settings({ [name]: value });
+    expect(cloudAgentConfig(configured)).toBeNull();
+    expect(cloudAgentConnectionConfig(configured)).toEqual({
+      origin: "https://agt.example.com",
+      appId: "app-one",
+      tenantId: "tenant-one",
+      appKey: "test-only-app-key",
+    });
+  });
 
   it.each([
     "https://agt.example.com/",
@@ -78,6 +97,9 @@ describe("AGT operator configuration", () => {
   ])("accepts the client-compatible origin %s", (origin) => {
     const config = cloudAgentConfig(settings({ AGT_ORIGIN: origin }));
     expect(config).not.toBeNull();
+    expect(cloudAgentConnectionConfig(settings({ AGT_ORIGIN: origin }))?.origin).toBe(
+      config?.origin,
+    );
     expect(() => new CloudAgentClient(config!)).not.toThrow();
   });
 
@@ -90,6 +112,7 @@ describe("AGT operator configuration", () => {
     "https://agt.example.com/#fragment",
   ])("rejects an unsafe or non-origin AGT URL: %s", (origin) => {
     expect(cloudAgentConfig(settings({ AGT_ORIGIN: origin }))).toBeNull();
+    expect(cloudAgentConnectionConfig(settings({ AGT_ORIGIN: origin }))).toBeNull();
   });
 
   it("keeps valid operator identifiers and trims surrounding whitespace", () => {
@@ -116,6 +139,8 @@ describe("AGT operator configuration", () => {
     ["AGT_TENANT_ID", "tenant with spaces"],
   ])("rejects %s=%s instead of silently changing identity", (name, value) => {
     expect(cloudAgentConfig(settings({ [name]: value }))).toBeNull();
+    if (name === "AGT_APP_ID" || name === "AGT_TENANT_ID")
+      expect(cloudAgentConnectionConfig(settings({ [name]: value }))).toBeNull();
   });
 
   it("accepts identifiers up to the upstream profile and workspace limits", () => {

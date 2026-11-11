@@ -1,10 +1,11 @@
-import { CloudAgentClient } from "./cloud-agent-client";
+import { CloudAgentClient, type CloudAgentClientConfig } from "./cloud-agent-client";
 import type { CloudAgentStore, CloudProvision } from "./cloud-agent-store";
-import { AppError, type CloudAgentConfig } from "./config";
+import { AppError } from "./config";
 
 /** Credentials and profile versions can change without moving the account's workspace. */
-export const cloudAgentScope = (config: Pick<CloudAgentConfig, "origin" | "appId" | "tenantId">) =>
-  JSON.stringify([config.origin, config.appId, config.tenantId]);
+export const cloudAgentScope = (
+  config: Pick<CloudAgentClientConfig, "origin" | "appId" | "tenantId">,
+) => JSON.stringify([config.origin, config.appId, config.tenantId]);
 
 /**
  * Run from the account's serialized task runner. Each completed step is durable
@@ -13,7 +14,7 @@ export const cloudAgentScope = (config: Pick<CloudAgentConfig, "origin" | "appId
  * workspaceName must come from the persisted task, not newly read configuration.
  */
 export async function ensureCloudAgentProvision(
-  config: CloudAgentConfig,
+  config: CloudAgentClientConfig,
   store: CloudAgentStore,
   accountId: string,
   workspaceName: string,
