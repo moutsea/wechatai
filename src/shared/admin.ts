@@ -107,5 +107,6 @@ export const adminPluginNames: Record<string, string> = {
   "wechatai/hermes": "Hermes",
   "wechatai/roleplay": "角色扮演",
   "wechatai/personal-assistant": "个人助理",
+  "wechatai/cloud-agent": "云端 Agent",
   legacy: "历史 / 未分类调用",
 };

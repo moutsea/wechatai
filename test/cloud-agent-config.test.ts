@@ -4,6 +4,7 @@ import {
   cloudAgentConfig,
   cloudAgentConnectionConfig,
   cloudAgentEnabled,
+  cloudAgentAdminOnly,
 } from "../src/server/config";
 import { CloudAgentClient } from "../src/server/cloud-agent-client";
 
@@ -30,6 +31,18 @@ function settings(overrides: Record<string, string> = {}): Env {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AGT operator configuration", () => {
+  it("opens admin mode only with verified account access and keeps the off switch authoritative", () => {
+    const configured = settings({ CLOUD_AGENT_ENABLED: " admin " });
+    expect(cloudAgentEnabled(configured)).toBe(true);
+    expect(cloudAgentAdminOnly(configured)).toBe(true);
+    expect(cloudAgentConfig(configured)).toBeNull();
+    expect(cloudAgentConfig(configured, true)?.model).toBe("test-model");
+    expect(cloudAgentConfig(settings({ CLOUD_AGENT_ENABLED: "false" }), true)).toBeNull();
+    expect(
+      cloudAgentConfig(settings({ CLOUD_AGENT_ENABLED: "admin", AGT_MODEL: "" }), true),
+    ).toBeNull();
+  });
+
   it.each(["", "false", "0", "yes"])(
     "keeps new submissions disabled for %j and retains recovery configuration",
     (value) => {

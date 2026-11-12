@@ -42,8 +42,13 @@ export type CloudAgentConfig = CloudAgentClientConfig & {
   deadlineMs: number;
 };
 
+export function cloudAgentAdminOnly(env: Env) {
+  return secret(env, "CLOUD_AGENT_ENABLED", false).toLowerCase() === "admin";
+}
+
+/** The service can run in public or admin-only mode; account access is checked separately. */
 export function cloudAgentEnabled(env: Env) {
-  return ["1", "true"].includes(secret(env, "CLOUD_AGENT_ENABLED", false).toLowerCase());
+  return ["1", "true", "admin"].includes(secret(env, "CLOUD_AGENT_ENABLED", false).toLowerCase());
 }
 
 /** Recovery needs current credentials for the same scope, not new-task defaults. */
@@ -70,8 +75,8 @@ export function cloudAgentConnectionConfig(
 }
 
 /** Admission of new tasks requires the gate and all operator defaults to be valid. */
-export function cloudAgentConfig(env: Env): CloudAgentConfig | null {
-  if (!cloudAgentEnabled(env)) return null;
+export function cloudAgentConfig(env: Env, isAdmin = false): CloudAgentConfig | null {
+  if (!cloudAgentEnabled(env) || (cloudAgentAdminOnly(env) && !isAdmin)) return null;
   const connection = cloudAgentConnectionConfig(env);
   const model = secret(env, "AGT_MODEL", false);
   if (!connection || !model) return null;

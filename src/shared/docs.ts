@@ -137,7 +137,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "faq",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-12",
     seoTitle: "微信 AI 常见问题：连接、模型和插件排查",
     title: "常见问题",
     description: "排查微信连接、模型调用和插件问题，了解聊天数据、隐私和会员到期后的变化。",

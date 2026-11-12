@@ -15,6 +15,7 @@ export const CLOUD_AGENT_WAITING_MESSAGE =
 export const CLOUD_AGENT_PLUS_MESSAGE =
   "云端 Agent 是 Plus 会员功能，开通或续费后可提交新任务，已有任务记录仍可查看。";
 export const CLOUD_AGENT_UNAVAILABLE_MESSAGE = "运营方尚未开启云端服务，请稍后再试。";
+export const CLOUD_AGENT_ADMIN_ONLY_MESSAGE = "云端 Agent 目前仅对管理员开放内测。";
 export const cloudAgentInputSchema = z
   .object({
     name: z.string().trim().min(1).max(40).default("云端 Agent"),
@@ -26,6 +27,7 @@ export const cloudAgentInputSchema = z
 export type CloudAgentInput = z.infer<typeof cloudAgentInputSchema>;
 export type CloudAgentStatus = {
   ready: boolean;
+  adminPreview?: boolean;
   reason?: string;
   maxActive: number;
   dailyLimit: number;

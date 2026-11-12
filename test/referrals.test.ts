@@ -14,7 +14,9 @@ import worker from "../src/server/index";
 import { referralSummary, qualifyReferral, wechatIdentityHash } from "../src/server/referrals";
 import { encrypt } from "../src/server/security";
 import { Wallet } from "../src/server/wallet";
+import { CloudAgentStore } from "../src/server/cloud-agent-store";
 import type { WxMessage } from "../src/server/wechat";
+import { useManualAlarms } from "./helpers/wechat-delivery";
 
 const oauthEnv = {
   ...env,
@@ -310,6 +312,98 @@ async function tick(stub: ReturnType<typeof env.ACCOUNTS.getByName>, n = 1) {
 }
 
 describe("permanent bilateral invitation rewards", () => {
+  it("rewards a delivered cloud answer only after its final part and never twice after restart", async () => {
+    const { inviter, invitee } = await pair();
+    const { stub, wxId } = await connect(invitee);
+    await runInDurableObject(stub, async (instance, state) => {
+      await useManualAlarms(state);
+      Object.assign(Reflect.get(instance, "env"), {
+        CLOUD_AGENT_ENABLED: "true",
+        AGT_ORIGIN: "https://agt.example.com",
+        AGT_APP_ID: "app-test",
+        AGT_APP_KEY: "test-only-app-key",
+        AGT_TENANT_ID: "tenant-test",
+        AGT_MODEL: "managed-model",
+        AGT_CALLBACK_KEYS: "",
+        AGT_CALLBACK_KEY_VERSION: "v1",
+        PUBLIC_SITE_URL: "https://wechatai.app",
+      });
+    });
+    await stub.applyPayment({
+      id: "cloud-plus",
+      kind: "subscription",
+      units: 0,
+      expires: Date.now() + 86400000,
+    });
+    const saved = JSON.parse(await stub.api("plugin.save", { pluginId: "wechatai/cloud-agent" }));
+    expect(saved.ok).toBe(true);
+    const net = network(wxId);
+    await runInDurableObject(stub, async (instance, state) => {
+      const send = (text: string) =>
+        (
+          instance as unknown as {
+            processWechat(id: string, message: WxMessage, link: string): Promise<string>;
+          }
+        ).processWechat(
+          crypto.randomUUID(),
+          { item_list: [{ type: 1, text_item: { text } }] },
+          "default",
+        );
+      await send("/use 云");
+      expect(await send("整理今天的计划")).toContain("任务已接收");
+      const store = new CloudAgentStore(state.storage);
+      const task = store.active()[0];
+      // AGT validation is covered by its own tests. Start this delivery/reward
+      // regression at the persisted authoritative outcome used by recovery.
+      store.patch(task, {
+        state: "accepted",
+        jobId: "job-referral",
+        submittedAt: Date.now(),
+        outcome: {
+          id: "job-referral",
+          workspaceId: "workspace-test",
+          status: "completed",
+          text: "答".repeat(1601),
+        },
+      });
+      await (
+        Reflect.get(instance, "cloudRuntime") as { process(deadline: number): Promise<void> }
+      ).process(Date.now() + 20_000);
+      expect(store.get(task.id)).toMatchObject({ state: "completed", settled: 1, delivered: 0 });
+    });
+    const deliver = (account: typeof stub) =>
+      runInDurableObject(account, (instance) =>
+        (
+          instance as unknown as {
+            pollWechat(link: string, deadline: number, steps: number): Promise<void>;
+          }
+        ).pollWechat("default", Date.now() + 5000, 0),
+      );
+    expect((await stub.adminStats()).activation?.firstWechatReplyAt).toBeNull();
+    net.control.sendFails = true;
+    await deliver(stub);
+    net.control.sendFails = false;
+    await deliver(stub); // First of the two result parts is now acknowledged.
+    expect((await stub.adminStats()).activation?.firstWechatReplyAt).toBeNull();
+    expect(await relationship(invitee)).toMatchObject({ status: "pending" });
+    await abortAllDurableObjects();
+    const reopened = env.ACCOUNTS.getByName(invitee);
+    await runInDurableObject(reopened, (_, state) => useManualAlarms(state));
+    await deliver(reopened);
+    expect((await reopened.adminStats()).activation?.deliveredWechatReplies).toBe(1);
+    await runInDurableObject(reopened, (instance) => instance.alarm());
+    expect(await relationship(invitee)).toMatchObject({ status: "rewarded" });
+    for (const id of [inviter, invitee]) {
+      const snapshot = await env.ACCOUNTS.getByName(id).snapshot();
+      expect(snapshot.wallet.referral).toBe(500);
+      expect(snapshot.ledger.filter((row) => row.kind === "referral")).toHaveLength(1);
+    }
+    await runInDurableObject(reopened, (instance) => instance.alarm());
+    expect((await reopened.adminStats()).activation?.deliveredWechatReplies).toBe(1);
+    expect((await env.ACCOUNTS.getByName(inviter).snapshot()).wallet.referral).toBe(500);
+    expect(net.control.modelCalls).toBe(0);
+  });
+
   it("rewards both accounts only after a successful model reply is delivered, then remains idempotent across replay and restart", async () => {
     const { inviter, invitee } = await pair();
     const { stub, wxId } = await connect(invitee);

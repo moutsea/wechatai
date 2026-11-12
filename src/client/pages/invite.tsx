@@ -78,7 +78,7 @@ export function Invite() {
             <h2>
               你和好友，各得 <strong>500</strong> credits
             </h2>
-            <p>好友通过你的链接注册，完成首次微信 AI 对话，奖励就会自动到账。</p>
+            <p>好友通过你的链接注册，首次微信 AI 对话的完整回复送达后，奖励会自动到账。</p>
             <span className="invite-permanent">
               <Check size={15} /> 永久有效 · Free 与 Plus 均可参与
             </span>
@@ -119,7 +119,7 @@ export function Invite() {
           <Gift size={19} />
           <span>
             {summary.received === "pending"
-              ? "你已接受好友邀请。配置模型并在微信完成首次 AI 对话，即可领取 500 credits。"
+              ? "你已接受好友邀请。配置自己的模型或启用已开放的 Plus 云端 Agent，在微信完成首次 AI 对话并收到完整回复后，即可领取 500 credits。"
               : summary.received === "rewarded"
                 ? "你的 500 credits 受邀奖励已到账，永久有效。"
                 : summary.received === "qualified"
@@ -153,7 +153,7 @@ export function Invite() {
         {[
           [Link2, "分享专属链接", "把邀请链接发给还没注册的好友。"],
           [UserRoundPlus, "好友注册并连接", "支持邮箱、Google 或 GitHub 注册。"],
-          [MessageCircle, "聊一次，双方到账", "首次微信 AI 对话成功，各得 500 credits。"],
+          [MessageCircle, "聊一次，双方到账", "首次微信 AI 对话的完整回复送达后，各得 500 credits。"],
         ].map(([Icon, title, description], i) => {
           const StepIcon = Icon as typeof Link2;
           return (

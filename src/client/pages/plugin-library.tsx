@@ -219,6 +219,9 @@ export function PluginLibrary({
               </div>
               <p>{description}</p>
               <div className="plugin-entry-tags">
+                {id === "wechatai/cloud-agent" && data.cloudAgent.adminPreview && (
+                  <span>管理员内测</span>
+                )}
                 {tags.map((tag) => (
                   <span key={tag}>{tag}</span>
                 ))}

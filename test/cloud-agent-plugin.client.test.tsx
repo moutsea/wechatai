@@ -190,6 +190,18 @@ afterEach(async () => {
 });
 
 describe("cloud Agent plugin interactions", () => {
+  it("offers the server-authorized administrator preview with its billing rules", async () => {
+    data.cloudAgent = { ...plugin().status!, adminPreview: true };
+    await render();
+    const card = container.querySelector('article[aria-label="云端 Agent"]')!;
+    expect(card.textContent).toContain("管理员内测");
+    await click("配置 云端 Agent");
+    const dialog = container.querySelector("dialog")!;
+    expect(dialog.textContent).toContain("当前仅对管理员开放内测");
+    expect(dialog.textContent).toContain("仍按平台 credits 计费");
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it.each(["free", "plus"] as const)(
     "shows unavailable service before configuration or upgrade for %s users",
     async (plan) => {

@@ -4,6 +4,7 @@ import {
   CLOUD_AGENT_WAITING_MESSAGE,
   CLOUD_AGENT_PLUS_MESSAGE,
   CLOUD_AGENT_UNAVAILABLE_MESSAGE,
+  CLOUD_AGENT_ADMIN_ONLY_MESSAGE,
   cloudAgentAvailabilityIssue,
   cloudAgentInputSchema,
   isCloudAgent,
@@ -33,6 +34,7 @@ import {
 import { NotificationStore } from "./notification-store";
 import { createNotificationToken } from "./notification-token";
 import { readAdminAccountStats } from "./admin-account";
+import { adminAccessUntil } from "./admin";
 import { initCallFailures, recordCallFailure } from "./call-failures";
 import { adminGiftInputSchema, type AdminMembershipGift } from "../shared/admin";
 import {
@@ -97,6 +99,7 @@ import type {
 import {
   AppError,
   cloudAgentConfig,
+  cloudAgentAdminOnly,
   MODEL_RUN_LOCK_MS,
   MODEL_TURN_TIMEOUT_MS,
   numberSetting,
@@ -258,6 +261,7 @@ const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
 export class PersonalAccount extends DurableObject<Env> {
+  private cloudAdminUntil = 0;
   private wallet: Wallet;
   private attachments: AttachmentQueue;
   private media: MediaStore;
@@ -1011,11 +1015,27 @@ export class PersonalAccount extends DurableObject<Env> {
       return { code: "plugin_disabled", message: "云端 Agent 已停用，请在插件页重新启用。" };
     return null;
   }
+  private async refreshCloudAccess() {
+    const ownerId = this.getSetting("ownerId", "");
+    this.cloudAdminUntil =
+      cloudAgentAdminOnly(this.env) && ownerId ? await adminAccessUntil(this.env, ownerId) : 0;
+  }
   private cloudStatus(): CloudAgentStatus {
-    const config = cloudAgentConfig(this.env);
+    const admin = this.cloudAdminUntil > Date.now();
+    const config = cloudAgentConfig(this.env, admin);
     return {
       ready: !!config,
-      ...(!config ? { reason: CLOUD_AGENT_UNAVAILABLE_MESSAGE } : {}),
+      ...(config && cloudAgentAdminOnly(this.env) ? { adminPreview: true } : {}),
+      ...(!config
+        ? {
+            reason:
+              cloudAgentAdminOnly(this.env) && !admin
+                ? CLOUD_AGENT_ADMIN_ONLY_MESSAGE
+                : cloudAgentAdminOnly(this.env)
+                  ? "云端 Agent 连接配置尚未就绪，请先完成服务配置。"
+                  : CLOUD_AGENT_UNAVAILABLE_MESSAGE,
+          }
+        : {}),
       maxActive: config?.maxActive ?? 1,
       dailyLimit: config?.dailyLimit ?? 0,
       usedToday: this.cloud.countSince(dayWindow().start),
@@ -1752,6 +1772,7 @@ export class PersonalAccount extends DurableObject<Env> {
         this.refreshWallet();
         return {
           planUntil: this.getSetting("planUntil", 0),
+          isAdmin: this.cloudAdminUntil > Date.now(),
           plugin: this.findPlugin(pluginId) ?? null,
           session: this.sessions().find((current) => current.id === session.id) ?? null,
           connection: {
@@ -1798,6 +1819,8 @@ export class PersonalAccount extends DurableObject<Env> {
     );
   }
   private cloudStopReason(task: CloudTask) {
+    if (cloudAgentAdminOnly(this.env) && this.cloudAdminUntil <= Date.now())
+      return CLOUD_AGENT_ADMIN_ONLY_MESSAGE;
     if (this.plan() !== "plus") return "云端 Agent 需要 Plus，开通或续费后可提交新任务。";
     // A possibly accepted task must be recovered even if its submission reply was lost.
     if (!task.submittedAt && !task.unconfirmed && !task.jobId) {
@@ -2814,6 +2837,7 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   async api(action: string, payload: unknown = {}): Promise<string> {
     try {
+      await this.refreshCloudAccess();
       this.refreshWallet();
       let data: unknown;
       const p =
@@ -4599,6 +4623,7 @@ export class PersonalAccount extends DurableObject<Env> {
     deadline?: number,
     onImagePending?: (text: string) => Promise<void>,
   ) {
+    await this.refreshCloudAccess();
     this.requireLink(connectionId, true);
     // Redeliver a completed reply without re-running routing or changing the current mode.
     const completed = this.sql
@@ -5203,6 +5228,7 @@ export class PersonalAccount extends DurableObject<Env> {
     const deadline = Date.now() + MODEL_TURN_TIMEOUT_MS;
     this.refreshWallet();
     try {
+      await this.refreshCloudAccess();
       await this.flushReminderSchedule();
       await this.flushNotificationSchedule();
       if (this.referralPending()) await this.retryReferral();

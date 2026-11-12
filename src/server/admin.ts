@@ -12,14 +12,15 @@ import type {
   AdminUsers,
 } from "../shared/admin";
 
+export async function adminAccessUntil(env: Env, userId: string): Promise<number> {
+  const grant = await env.DB.prepare("SELECT expires_at FROM admin_user WHERE user_id=?")
+    .bind(userId)
+    .first<{ expires_at: number | null }>();
+  return grant ? (grant.expires_at ?? Number.MAX_SAFE_INTEGER) : 0;
+}
+
 export async function isAdmin(env: Env, userId: string): Promise<boolean> {
-  return Boolean(
-    await env.DB.prepare(
-      "SELECT 1 FROM admin_user WHERE user_id=? AND (expires_at IS NULL OR expires_at>?)",
-    )
-      .bind(userId, Date.now())
-      .first(),
-  );
+  return (await adminAccessUntil(env, userId)) > Date.now();
 }
 
 async function membershipAccount(env: Env, userId: string) {

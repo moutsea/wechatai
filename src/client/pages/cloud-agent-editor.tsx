@@ -133,6 +133,7 @@ export function CloudAgentEditor({
             /wx stop 请求停止当前会话的云端任务。
           </p>
           <p className="form-note">
+            {data.cloudAgent.adminPreview && "当前仅对管理员开放内测。"}
             {CLOUD_AGENT_COST_NOTE}平台只计任务输入与最终输出，内部模型和工具消耗不额外扣 credits。
             失败或确认取消不扣 credits；请求停止后仍可能完成，费用以最终结果为准。
             {data.cloudAgent.ready

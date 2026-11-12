@@ -1,5 +1,10 @@
 import { abortAllDurableObjects, env, runInDurableObject } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import authMigration from "../migrations/0001_auth.sql?raw";
+import billingMigration from "../migrations/0002_billing.sql?raw";
+import referralMigration from "../migrations/0003_referrals.sql?raw";
+import adminMigration from "../migrations/0005_admin.sql?raw";
+import adminExpiryMigration from "../migrations/0017_admin_expiry.sql?raw";
 import { CloudAgentStore } from "../src/server/cloud-agent-store";
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { AttachmentQueue } from "../src/server/attachments";
@@ -25,8 +30,19 @@ const settings = {
 };
 const api = async (stub: Account, action: string, value: unknown = {}) =>
   JSON.parse(await stub.api(action, value));
-async function setup(plus = true, enabled = true) {
-  const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
+beforeAll(async () => {
+  for (const migration of [
+    authMigration,
+    billingMigration,
+    referralMigration,
+    adminMigration,
+    adminExpiryMigration,
+  ])
+    await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
+});
+async function setup(plus = true, enabled: boolean | "admin" = true, ownerId?: string) {
+  const stub = env.ACCOUNTS.getByName(ownerId ?? crypto.randomUUID());
+  if (ownerId) await stub.identify(ownerId);
   await runInDurableObject(stub, async (instance, state) => {
     await useManualAlarms(state);
     Object.assign(Reflect.get(instance, "env"), settings, { CLOUD_AGENT_ENABLED: String(enabled) });
@@ -41,6 +57,19 @@ async function setup(plus = true, enabled = true) {
   await api(stub, "wechat.create", { name: "测试微信" });
   await connectForManualDelivery(stub);
   return stub;
+}
+async function trial(grant: "active" | "expired" | "none" = "active", plus = true) {
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    "INSERT INTO user(id,name,email,createdAt,updatedAt) VALUES (?,'测试管理员',?,?,?)",
+  )
+    .bind(id, `${id}@example.test`, Date.now(), Date.now())
+    .run();
+  if (grant !== "none")
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at,expires_at) VALUES (?,?,?)")
+      .bind(id, Date.now(), grant === "active" ? null : Date.now() - 1000)
+      .run();
+  return { id, stub: await setup(plus, "admin", id) };
 }
 const save = (stub: Account, value: Record<string, unknown> = {}) =>
   api(stub, "plugin.save", { pluginId: "wechatai/cloud-agent", ...value });
@@ -79,6 +108,48 @@ afterEach(async () => {
 });
 
 describe("cloud Agent user entry", () => {
+  it.each(["none", "expired"] as const)(
+    "blocks %s admin access in both configuration and WeChat",
+    async (grant) => {
+      const { stub } = await trial(grant);
+      const result = await save(stub, { isAdmin: true });
+      expect(result).toMatchObject({ ok: false, error: "cloud_agent_unavailable" });
+      expect(result.message).toContain("仅对管理员开放内测");
+      const snapshot = await api(stub, "snapshot");
+      expect(snapshot.data.cloudAgent.ready).toBe(false);
+      expect(await send(stub, "@云 测试")).not.toContain("任务已接收");
+      expect(await tasks(stub)).toHaveLength(0);
+    },
+  );
+
+  it("retains Plus requirements for an administrator", async () => {
+    const { stub } = await trial("active", false);
+    expect(await save(stub)).toMatchObject({ ok: false, error: "cloud_plus_required" });
+    expect((await api(stub, "snapshot")).data.cloudAgent.ready).toBe(true);
+  });
+
+  it("refreshes revoked administrator access before new tasks and background submission", async () => {
+    const { id, stub } = await trial();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    expect(await send(stub, "管理员测试任务")).toContain("任务已接收");
+    await env.DB.prepare("DELETE FROM admin_user WHERE user_id=?").bind(id).run();
+    expect((await api(stub, "snapshot")).data.cloudAgent.ready).toBe(false);
+    expect(await send(stub, "再创建任务").catch((error) => error.code)).toBe(
+      "cloud_agent_unavailable",
+    );
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("agt.example.com"))
+        throw new Error("Revoked account must not submit");
+      return Response.json({ ret: 0, msgs: [] });
+    });
+    await wake(stub);
+    expect(await tasks(stub)).toMatchObject([{ state: "rejected", stopRequested: 1, settled: 0 }]);
+    expect(fetch.mock.calls.some(([input]) => String(input).includes("agt.example.com"))).toBe(
+      false,
+    );
+  });
+
   it("requires explicit selection after setup and does not charge for choosing the cloud plugin", async () => {
     const stub = await setup();
     const p = await plugin(stub);
@@ -516,8 +587,8 @@ describe("cloud Agent user entry", () => {
     expect(await api(stub, "plugin.delete", { id: p.id })).toMatchObject({ ok: true });
   });
 
-  it("runs /use -> message -> provisioning -> authoritative result -> one charge and WeChat reply", async () => {
-    const stub = await setup();
+  it.each(["public", "admin"])("executes %s tasks end to end", async (mode) => {
+    const stub = mode === "admin" ? (await trial()).stub : await setup();
     const p = await plugin(stub);
     expect(await send(stub, "/use 云")).toContain("/wx stop 请求停止");
     const id = "bot:owner:101";

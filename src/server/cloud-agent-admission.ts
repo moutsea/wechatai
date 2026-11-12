@@ -11,6 +11,7 @@ import { dayWindow, Wallet } from "./wallet";
 /** Read by the account host immediately before admission, never from a browser DTO. */
 export type CloudAgentAdmissionContext = {
   planUntil: number;
+  isAdmin?: boolean;
   plugin: { id: string; pluginId: string; name: string; enabled: boolean } | null;
   session: (ChatSession & { contextStart: number }) | null;
   connection: { id: string; generation: string; currentSessionId: string; enabled: boolean };
@@ -72,7 +73,7 @@ export function admitCloudAgentTask(
       (session.connectionId && session.connectionId !== connection.id)
     )
       throw new AppError("cloud_session_unavailable", "原会话已不可用，请开始新会话后重试。", 409);
-    const config = cloudAgentConfig(env);
+    const config = cloudAgentConfig(env, current.isAdmin);
     if (!config)
       throw new AppError("cloud_agent_unavailable", "云端 Agent 服务尚未就绪，请稍后再试。", 503);
     if (new Wallet(storage).balance() <= 0)
