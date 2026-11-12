@@ -126,6 +126,20 @@ const detail = async (value: CloudTask) => (await request(`/${value.id}`)).json<
 const list = async (query = "") => (await request(query)).json<CloudAgentTaskPage>();
 
 describe("account cloud task history", () => {
+  it("exposes the readable request in list and detail while keeping execution instructions private", async () => {
+    const value = task({
+      prompt: "private-execution-input attachments/images/img_hash sandbox_compute",
+      displayPrompt: "把这张图片裁成正方形\n\n[图片 × 1]",
+    });
+    await save([value]);
+    const result = await detail(value);
+    expect(result.prompt).toBe(value.displayPrompt);
+    expect(result.prompt.slice(0, 120)).toContain("把这张图片裁成正方形");
+    expect(JSON.stringify(result)).not.toContain("private-execution-input");
+    expect(result).not.toHaveProperty("displayPrompt");
+    expect((await list()).tasks).toEqual([result]);
+  });
+
   it("requires browser authentication for both list and detail", async () => {
     const value = task();
     await save([value]);

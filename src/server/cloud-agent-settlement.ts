@@ -8,6 +8,7 @@ import {
 } from "./cloud-agent-store";
 import { AppError } from "./config";
 import { Wallet } from "./wallet";
+import type { MediaStore } from "./media";
 
 /**
  * Finalize a verified, persisted outcome in the account's initialized storage.
@@ -22,9 +23,14 @@ export async function settleCloudAgentTask(
   storage: DurableObjectStorage,
   taskId: string,
   isStale: (task: CloudTask) => boolean,
+  media?: MediaStore,
 ): Promise<CloudTask | null> {
   const store = new CloudAgentStore(storage);
-  const prepared = await prepareCloudAgentResult(store, taskId);
+  const prepared = await prepareCloudAgentResult(
+    store,
+    taskId,
+    media ? (id, runId) => media.resolve(id, runId) : undefined,
+  );
   return storage.transactionSync(() => {
     const task = store.get(taskId);
     if (!task) throw new AppError("cloud_task_missing", "云端任务不存在", 404);
@@ -41,6 +47,8 @@ export async function settleCloudAgentTask(
     );
     const now = Date.now();
     const meter = task.hidden ? null : prepared.meter;
+    if (meter && media) for (const file of task.outputFiles ?? []) media.commit(file.id);
+    if (!meter && !task.settled) media?.discardRun(task.id);
     let units = task.units;
     let settled = task.settled;
     if (meter && !settled) {
@@ -103,6 +111,7 @@ export async function settleCloudAgentTask(
       state: prepared.state,
       result: task.hidden ? "" : prepared.result,
       error: task.hidden ? "" : prepared.error,
+      ...(!meter ? { outputFiles: [] } : {}),
       units,
       settled,
       unconfirmed: 0,

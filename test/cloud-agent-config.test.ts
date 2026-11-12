@@ -66,7 +66,7 @@ describe("AGT operator configuration", () => {
       appId: "app-one",
       appKey: "test-only-app-key",
       tenantId: "tenant-one",
-      agentId: "wechatai-v1",
+      agentId: "wechatai-v2",
       workspacePrefix: "wechatai",
       maxActive: 1,
       dailyLimit: 30,
@@ -135,7 +135,7 @@ describe("AGT operator configuration", () => {
       }),
     );
     expect(config).toMatchObject({
-      agentId: "wechatai-2026.11-v1",
+      agentId: "wechatai-2026.11-v2",
       workspacePrefix: "wechatai-staging",
       appKey: "test-key",
     });

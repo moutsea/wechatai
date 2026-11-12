@@ -81,7 +81,15 @@ export class CloudAgentDelivery {
         return this.discard(task, "failed");
       if (!row) {
         if (task.deliveryQueuedAt !== undefined) return this.discard(task, "failed");
-        const body = [task.error, task.result].filter((part) => part.trim()).join("\n\n");
+        const body = [
+          task.error,
+          task.result,
+          task.state === "completed" && task.outputFiles?.length
+            ? `已生成 ${task.outputFiles.length} 个文件，将依次发送。文件也可在微伴云端任务页下载，保留 30 天。`
+            : "",
+        ]
+          .filter((part) => part.trim())
+          .join("\n\n");
         if (!body.trim()) return this.discard(task, "failed");
         const now = Date.now();
         this.storage.sql.exec(

@@ -125,6 +125,37 @@ async function click(label: string) {
 }
 
 describe("cloud task history navigation", () => {
+  it("lets the user cancel file transfer and explains that this local cancellation needs no cloud confirmation", async () => {
+    let cancelling = false;
+    handle = (path) => {
+      if (path.endsWith("/cancel")) {
+        cancelling = true;
+        return task("files", {
+          status: "finalizing",
+          canCancelFiles: true,
+          stopping: true,
+          delivery: "pending",
+        });
+      }
+      return page([
+        task("files", {
+          status: "finalizing",
+          canCancelFiles: true,
+          stopping: cancelling,
+          delivery: "pending",
+        }),
+      ]);
+    };
+    await mount();
+    expect(control("取消文件接收")).toBeDefined();
+    await click("取消文件接收");
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("本次不扣 credits"));
+    expect(notify).not.toHaveBeenCalledWith(expect.stringContaining("等待云端确认"));
+    expect((control("取消文件接收") as HTMLButtonElement).disabled).toBe(true);
+    expect(container.textContent).toContain("正在取消文件接收");
+    expect(request.mock.calls.some(([path]) => path === "/cloud/tasks/files/cancel")).toBe(true);
+  });
+
   it("shows the complete request and result for a failed stale task while keeping a list summary", async () => {
     const prompt = `请按下列要求执行：\n${"较长的任务背景。".repeat(30)}\n最后一条：保留全部验收条件。`;
     const result = "完整的第一段结果\n完整的第二段结果";

@@ -98,7 +98,62 @@ const eligible = () => undefined;
 afterEach(() => vi.restoreAllMocks());
 
 describe("durable AGT submit request preparation", () => {
-  it("retries the same private pixels after an upload failure, then reuses the frozen image references", async () => {
+  it.each(["workspace", "vision"])(
+    "retries the same private pixels after a %s upload failure, then reuses frozen references",
+    async (failure) => {
+      const pixels = Uint8Array.of(1, 2, 3);
+      const id = `img_${createHash("sha256").update(pixels).digest("hex")}`;
+      const { stub, saved } = await setup({ imageIds: [id] });
+      const config = configuredEnv({
+        CLOUD_AGENT_ENABLED: "true",
+        AGT_ORIGIN: saved.origin,
+        AGT_APP_ID: saved.appId,
+        AGT_APP_KEY: "test-app-key",
+        AGT_TENANT_ID: saved.tenantId,
+      });
+      let fail = true;
+      const upload = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(new Uint8Array(init!.body as ArrayBuffer)).toEqual(pixels);
+          const workspace = String(input).includes("/files/");
+          if (fail && workspace === (failure === "workspace")) {
+            fail = false;
+            return new Response("Unavailable", { status: 503 });
+          }
+          if (workspace) {
+            expect(String(input).endsWith(`/files/attachments/images/${id}`)).toBe(true);
+            expect(init?.method).toBe("PUT");
+            return Response.json({ size: pixels.length }, { status: 201 });
+          }
+          return Response.json(
+            { id, size: pixels.length, mediaType: "image/png" },
+            { status: 201 },
+          );
+        });
+      await inStore(stub, async (store) => {
+        store.saveImages(saved.id, [{ id, data: pixels }]);
+        await expect(
+          prepareCloudAgentRequest(config, store, stub.id.toString(), saved.id, eligible),
+        ).rejects.toMatchObject({ upstreamStatus: 503 });
+        expect(store.get(saved.id)?.request).toBe("");
+        expect(store.image(saved.id, id)).not.toBeNull();
+        const raw = await prepareCloudAgentRequest(
+          config,
+          store,
+          stub.id.toString(),
+          saved.id,
+          eligible,
+        );
+        expect(JSON.parse(raw!).images).toEqual([{ id }]);
+        expect(
+          await prepareCloudAgentRequest(config, store, stub.id.toString(), saved.id, eligible),
+        ).toBe(raw);
+      });
+      expect(upload).toHaveBeenCalledTimes(failure === "workspace" ? 3 : 4);
+    },
+  );
+  it("stops before vision upload when cancellation arrives while copying pixels to the workspace", async () => {
     const pixels = Uint8Array.of(1, 2, 3);
     const id = `img_${createHash("sha256").update(pixels).digest("hex")}`;
     const { stub, saved } = await setup({ imageIds: [id] });
@@ -106,36 +161,21 @@ describe("durable AGT submit request preparation", () => {
       CLOUD_AGENT_ENABLED: "true",
       AGT_ORIGIN: saved.origin,
       AGT_APP_ID: saved.appId,
-      AGT_APP_KEY: "test-app-key",
+      AGT_APP_KEY: "key",
       AGT_TENANT_ID: saved.tenantId,
     });
-    const upload = vi
-      .spyOn(globalThis, "fetch")
-      .mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
-        expect(new Uint8Array(init!.body as ArrayBuffer)).toEqual(pixels);
-        return Response.json({ id, size: pixels.length, mediaType: "image/png" }, { status: 201 });
-      });
-    upload.mockImplementationOnce(async () => new Response("Unavailable", { status: 503 }));
     await inStore(stub, async (store) => {
       store.saveImages(saved.id, [{ id, data: pixels }]);
-      await expect(
-        prepareCloudAgentRequest(config, store, stub.id.toString(), saved.id, eligible),
-      ).rejects.toMatchObject({ upstreamStatus: 503 });
-      expect(store.get(saved.id)?.request).toBe("");
-      expect(store.image(saved.id, id)).not.toBeNull();
-      const raw = await prepareCloudAgentRequest(
-        config,
-        store,
-        stub.id.toString(),
-        saved.id,
-        eligible,
-      );
-      expect(JSON.parse(raw!).images).toEqual([{ id }]);
+      const upload = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+        store.patch(store.get(saved.id)!, { stopRequested: 1 });
+        return Response.json({ size: pixels.length }, { status: 201 });
+      });
       expect(
         await prepareCloudAgentRequest(config, store, stub.id.toString(), saved.id, eligible),
-      ).toBe(raw);
+      ).toBeNull();
+      expect(store.get(saved.id)?.request).toBe("");
+      expect(upload).toHaveBeenCalledTimes(1);
     });
-    expect(upload).toHaveBeenCalledTimes(2);
   });
   it.each([
     [
@@ -291,7 +331,18 @@ describe("durable AGT submit request preparation", () => {
       conversationId: saved.conversationId,
       message: saved.prompt,
       skillLearningMode: "off",
-      policy: { allowTools: ["memory_search", "remember_memory"], compactionMode: "off" },
+      policy: {
+        allowTools: [
+          "memory_search",
+          "remember_memory",
+          "read_file",
+          "write_file",
+          "list_files",
+          "sandbox_compute",
+          "return_file",
+        ],
+        compactionMode: "off",
+      },
       callback: {
         includeResult: false,
         secret: cloudCallbackSecret(env, stub.id.toString(), saved.id, "v1"),

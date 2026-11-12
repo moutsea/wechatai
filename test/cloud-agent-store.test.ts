@@ -354,12 +354,17 @@ describe("cloud task history", () => {
 
   it("erases a cleared session's local content and cached runs, preserving billing and recovery identifiers", async () => {
     await inStore(account(), (store, storage) => {
-      const active = task({ prompt: "sensitive-prompt", request: "sensitive-request" });
+      const active = task({
+        prompt: "sensitive-prompt",
+        displayPrompt: "sensitive-user-request",
+        request: "sensitive-request",
+      });
       const completed = task({
         state: "completed",
         settled: 1,
         units: 1200,
         result: "sensitive-result",
+        displayPrompt: "sensitive-completed-request",
         frozen: "sensitive-metered-result",
       });
       const other = task({ sessionId: "session-2" });
@@ -384,17 +389,21 @@ describe("cloud task history", () => {
         delivered: 1,
         request: "",
         prompt: "",
+        displayPrompt: "",
       });
       expect(store.get(completed.id)).toMatchObject({
         hidden: 1,
         settled: 1,
         units: 1200,
         result: "",
+        displayPrompt: "",
         frozen: "",
       });
       expect(store.get(other.id)).toEqual(other);
       expect(store.source(active.sourceId)?.id).toBe(active.id);
       const late = store.patch(active, {
+        prompt: "sensitive-late-input",
+        displayPrompt: "sensitive-late-request",
         result: "sensitive-late-result",
         outcome: {
           id: "job-1",

@@ -101,6 +101,7 @@ export type CloudAgentTask = {
   createdAt: number;
   updatedAt: number;
   result?: string;
+  files?: { id: string; name: string; bytes: number }[];
   error?: string;
   credits?: number;
   /** The original conversation no longer permits automatic result delivery. */
@@ -108,6 +109,8 @@ export type CloudAgentTask = {
   delivered?: boolean;
   delivery: "pending" | "sent" | "stale" | "failed";
   stopping?: boolean;
+  /** Unbilled generated files are still being received and can be abandoned. */
+  canCancelFiles?: boolean;
   /** A submission attempt may exist upstream but its job id is not confirmed. */
   unconfirmed?: boolean;
 };

@@ -10,6 +10,7 @@ import {
 } from "./cloud-agent-store";
 import { AppError } from "./config";
 import { invokePlugin } from "./plugins/gateway";
+import type { ResolveOutputAsset } from "./plugins/gateway";
 
 type FrozenResult = { text: string; meter: PlatformMeter; truncated: boolean };
 export type PreparedCloudAgentResult = {
@@ -27,6 +28,7 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
     if (typeof part === "string" && part.trim() && !result.includes(part.trim()))
       result += `${result ? "\n\n" : ""}${part.trim()}`;
   }
+  if (job.invalidAttachments) result = "";
   const reason = cloudTaskStopReason(task)
     .replace(/，正在请求停止。?$/, "。")
     .trim();
@@ -50,7 +52,11 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
     state: job.status === "cancelled" ? "cancelled" : "failed",
     result: result.slice(0, 64_000),
     error: cloudAgentRetryMessage(
-      result.length > 64_000 ? `${error}\n返回内容较长，仅保留前 64,000 字符。` : error,
+      job.invalidAttachments
+        ? "云端返回的文件信息无效或超过限制，本次未扣 credits。请减少文件数量或调整要求后重试；已发生的模型 API 费用以服务商账单为准。"
+        : result.length > 64_000
+          ? `${error}\n返回内容较长，仅保留前 64,000 字符。`
+          : error,
       task,
     ),
     meter: null,
@@ -70,6 +76,7 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
 export async function prepareCloudAgentResult(
   store: CloudAgentStore,
   taskId: string,
+  resolveAsset?: ResolveOutputAsset,
 ): Promise<PreparedCloudAgentResult | null> {
   const current = () => {
     const task = store.get(taskId);
@@ -94,8 +101,29 @@ export async function prepareCloudAgentResult(
     truncated: false,
   });
   if (task.hidden) return hidden();
+  if (task.fileCancelled)
+    return {
+      state: "cancelled",
+      result: "",
+      error: cloudAgentRetryMessage(
+        "已取消生成文件的接收，本次未扣 credits；已发生的模型 API 费用以服务商账单为准。",
+        task,
+      ),
+      meter: null,
+      truncated: false,
+    };
+  if (task.fileError)
+    return {
+      state: "failed",
+      result: "",
+      error: cloudAgentRetryMessage(task.fileError, task),
+      meter: null,
+      truncated: false,
+    };
+  if (!hasCompleteCloudAnswer(job)) return unsuccessful(job, task);
+  if (job.attachments?.length && task.outputFiles?.length !== job.attachments.length)
+    throw new AppError("cloud_files_pending", "生成文件尚未保存，暂缓结算。", 503);
   if (!task.frozen) {
-    if (!hasCompleteCloudAnswer(job)) return unsuccessful(job, task);
     const invocation = task.invocation;
     if (!invocation || invocation.runId !== task.id)
       throw new AppError("cloud_invocation_missing", "原始云端调用记录缺失或不匹配，暂缓结算", 503);
@@ -104,12 +132,22 @@ export async function prepareCloudAgentResult(
     try {
       // The adapter returns only the verified result. It never re-executes AGT
       // and does not forward upstream usage or internal model/tool consumption.
-      const outcome = await invokePlugin(invocation, async (request) => ({
-        protocolVersion: PLUGIN_PROTOCOL_VERSION,
-        runId: request.runId,
-        status: "completed",
-        content: [{ type: "text", text: job.text }],
-      }));
+      const outcome = await invokePlugin(
+        invocation,
+        async (request) => ({
+          protocolVersion: PLUGIN_PROTOCOL_VERSION,
+          runId: request.runId,
+          status: "completed",
+          content: [
+            { type: "text", text: job.text ?? "" },
+            ...(task.outputFiles ?? []).map((file) => ({
+              type: file.mime.startsWith("image/") ? "image" : "file",
+              assetId: file.id,
+            })),
+          ],
+        }),
+        resolveAsset,
+      );
       frozen = {
         text: outcome.result.content
           .filter((b) => b.type === "text")

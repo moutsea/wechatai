@@ -581,7 +581,8 @@ export function PluginConfiguration({
                       <div>
                         <dt>使用费用</dt>
                         <dd>
-                          输入和最终输出按 token 扣 credits；模型 API
+                          输入和最终回复文字按 token 扣 credits，返回图片每张另计 5
+                          credits，非图片文件不另收费；模型 API
                           费用另付服务商，包括内部多次调用。失败或确认取消不收成功账单，请求停止的费用以最终结果为准。
                         </dd>
                       </div>

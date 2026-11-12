@@ -7,6 +7,7 @@ import { downloadMedia, type WxItem, type WxMessage } from "../src/server/wechat
 import { fitToolRequest } from "../src/server/llm-tools";
 import { assistantSchema, type ModelMessage } from "../src/server/llm";
 import type { Assistant, Protocol } from "../src/shared/types";
+import { generatedPdf as pdf } from "./helpers/generated-pdf";
 
 const accounts: ReturnType<typeof env.ACCOUNTS.getByName>[] = [];
 const api = async (s: (typeof accounts)[number], action: string, value: unknown = {}) =>
@@ -19,28 +20,6 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-function pdf(text = "Weather report") {
-  const stream = `BT /F1 12 Tf 30 100 Td (${text}) Tj ET`;
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-  ];
-  let source = "%PDF-1.4\n";
-  const offsets = [0];
-  objects.forEach((body, i) => {
-    offsets.push(source.length);
-    source += `${i + 1} 0 obj\n${body}\nendobj\n`;
-  });
-  const offset = source.length;
-  source += `xref\n0 6\n0000000000 65535 f \n${offsets
-    .slice(1)
-    .map((n) => String(n).padStart(10, "0") + " 00000 n \n")
-    .join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${offset}\n%%EOF\n`;
-  return strToU8(source);
-}
 const docx = (text = "会议纪要 &amp; 计划") =>
   zipSync({
     "word/document.xml": strToU8(

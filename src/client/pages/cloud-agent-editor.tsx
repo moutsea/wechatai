@@ -174,8 +174,8 @@ export function CloudAgentEditor({
           </p>
           <p className="form-note">
             {data.cloudAgent.adminPreview && "当前仅对管理员开放内测。"}
-            {CLOUD_AGENT_COST_NOTE}平台只计任务输入与最终输出，内部模型和工具消耗不额外扣 credits。
-            失败或确认取消不扣 credits；已发生的模型 API
+            {CLOUD_AGENT_COST_NOTE}内部模型和工具消耗不额外扣 credits。 失败或确认取消不扣
+            credits；已发生的模型 API
             费用仍由服务商收取。请求停止后仍可能完成，平台费用以最终结果为准。
             {data.cloudAgent.ready
               ? ` 当前每账号同时 ${data.cloudAgent.maxActive} 个任务，每日最多 ${data.cloudAgent.dailyLimit} 次，${data.cloudAgent.deadlineMinutes} 分钟后请求停止。`

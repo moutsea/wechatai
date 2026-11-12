@@ -7,7 +7,9 @@ export function cloudAgentMeteringFailure(error: unknown): string | null {
     case "input_limit_exceeded":
       return "输入超过本次平台上限，本次未扣 credits。请缩短内容后重新发送。";
     case "budget_too_small":
-      return "本次 credits 上限不足以处理输入，未扣 credits。请缩短内容后重新发送；若持续失败，请联系运营方。";
+      return "本次输入或结果图片超过单次 credits 上限，未扣 credits。请减少输入、返回图片，或提高上限后重新发送。";
+    case "plugin_image_limit":
+      return "返回图片数量超过本次上限，未扣 credits。请减少返回图片后重新发送。";
     case "plugin_empty_result":
       return "本次上限内没有可用结果，未扣 credits。请缩小任务范围后重试；若持续失败，请联系运营方。";
     default:

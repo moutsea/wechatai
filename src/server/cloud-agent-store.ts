@@ -61,11 +61,19 @@ export type CloudTask = {
   contextStart: number;
   resetAt: number;
   conversationId: string;
+  /** Full execution input, including attachment content and workspace references. */
   prompt: string;
+  /** User-facing request and attachment summary; absent on older tasks. */
+  displayPrompt?: string;
   /** Content-addressed images, private to this task until uploaded to AGT. */
   imageIds?: string[];
   /** The staged batch is consumed at admission; retries need fresh attachments. */
   hasAttachments?: boolean;
+  inputFiles?: { name: string; text: string; path: string }[];
+  outputFiles?: { id: string; name: string; mime: string; bytes: number }[];
+  fileError?: string;
+  fileStartedAt?: number;
+  fileCancelled?: boolean;
   idempotencyKey: string;
   state: CloudTaskState;
   upstreamStatus: string;
@@ -109,6 +117,17 @@ const TERMINAL_SQL = TERMINAL.map((state) => `'${state}'`).join(",");
 const WAKE_AT_SQL =
   "CASE WHEN state IN ('submitting','accepted') AND stopRequested=0 AND json_extract(data, '$.outcome') IS NULL THEN MIN(nextAt,deadline) ELSE nextAt END";
 export const cloudTaskTerminal = (state: CloudTaskState) => TERMINAL.includes(state);
+export const CLOUD_FILE_RETRY_MS = 10 * 60_000;
+/** Only the unbilled file-transfer phase can be abandoned after AGT completes. */
+export const cloudTaskFilesPending = (task: CloudTask) =>
+  !cloudTaskTerminal(task.state) &&
+  !task.hidden &&
+  !task.settled &&
+  !task.frozen &&
+  !task.fileError &&
+  task.outcome?.status === "completed" &&
+  !!task.outcome.attachments?.length &&
+  task.outputFiles?.length !== task.outcome.attachments.length;
 /** Shared by settlement and delivery; the host checks connection/plugin selection. */
 export const cloudTaskMatchesSession = (
   task: CloudTask,
@@ -307,6 +326,7 @@ export class CloudAgentStore {
       next.stopReason = patch.error ?? "";
     if (current.hidden) {
       next.prompt = "";
+      next.displayPrompt = "";
       next.result = "";
       next.error = "";
       next.stopReason = "";
@@ -316,8 +336,19 @@ export class CloudAgentStore {
       next.modelConnection = null;
       next.imageIds = [];
       next.hasAttachments = false;
+      next.inputFiles = [];
+      next.outputFiles = [];
+      next.fileError = "";
+      next.fileStartedAt = undefined;
+      next.fileCancelled = undefined;
       if (next.outcome)
-        next.outcome = { ...next.outcome, text: undefined, task: undefined, refusal: undefined };
+        next.outcome = {
+          ...next.outcome,
+          text: undefined,
+          task: undefined,
+          refusal: undefined,
+          attachments: undefined,
+        };
     }
     this.save(next);
     // AGT owns the uploaded copy once a job is confirmed. Local pixels are no
@@ -325,6 +356,29 @@ export class CloudAgentStore {
     if (next.jobId || next.hidden || cloudTaskTerminal(next.state))
       this.sql.exec("DELETE FROM cloud_task_images WHERE taskId=?", next.id);
     return next;
+  }
+
+  requestStop(task: CloudTask): "files" | "upstream" | null {
+    task = this.get(task.id) ?? task;
+    if (cloudTaskTerminal(task.state) || task.hidden) return null;
+    if (cloudTaskFilesPending(task)) {
+      if (!task.fileCancelled)
+        this.patch(task, {
+          fileCancelled: true,
+          error: "正在取消生成文件的接收，本次不扣 credits。",
+          nextAt: Date.now(),
+        });
+      return "files";
+    }
+    if (task.outcome) return null;
+    if (!task.stopRequested)
+      this.patch(task, {
+        stopRequested: 1,
+        stopReason: "用户请求停止云端任务。",
+        error: "已请求停止云端任务，等待确认。已发生的外部操作无法撤销。",
+        nextAt: Date.now(),
+      });
+    return "upstream";
   }
 
   source(sourceId: string) {
@@ -357,6 +411,7 @@ export class CloudAgentStore {
       this.patch(task, {
         hidden: 1,
         prompt: "",
+        displayPrompt: "",
         result: "",
         error: "",
         stopReason: "",
@@ -367,6 +422,11 @@ export class CloudAgentStore {
         modelConnection: null,
         imageIds: [],
         hasAttachments: false,
+        inputFiles: [],
+        outputFiles: [],
+        fileError: "",
+        fileStartedAt: undefined,
+        fileCancelled: undefined,
         stale: 1,
         delivered: 1,
         deliveryStatus: "stale",

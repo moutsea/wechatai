@@ -79,7 +79,7 @@ export function cloudAgentConfig(env: Env, isAdmin = false): CloudAgentConfig | 
   if (!cloudAgentEnabled(env) || (cloudAgentAdminOnly(env) && !isAdmin)) return null;
   const connection = cloudAgentConnectionConfig(env);
   if (!connection) return null;
-  const agentId = `${secret(env, "AGT_AGENT_ID", false) || "wechatai"}-v1`;
+  const agentId = `${secret(env, "AGT_AGENT_ID", false) || "wechatai"}-v2`;
   const workspacePrefix = secret(env, "AGT_WORKSPACE_PREFIX", false) || "wechatai";
   // AGT profile IDs are at most 64 characters. Workspace names allow 120;
   // leave room for the separator and 32-character account suffix used by the runtime.

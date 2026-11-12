@@ -7,6 +7,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDecipheriv } from "node:crypto";
 import { verifyGeneratedImage } from "../src/server/media";
+import { pngWithoutPixels } from "./helpers/generated-png";
 import { fetchGeneratedBytes } from "../src/server/plugins/image-generation";
 import { encrypt } from "../src/server/security";
 import type { WxMessage } from "../src/server/wechat";
@@ -137,6 +138,7 @@ function network() {
     failure: 0,
     failureBody: JSON.stringify({ error: { usage: 12345 } }),
     invalid: false,
+    noPixels: false,
     external: false,
     failSend: false,
     failImageSend: false,
@@ -190,7 +192,7 @@ function network() {
               : {
                   b64_json: controls.invalid
                     ? Buffer.from("<svg/>").toString("base64")
-                    : png.toString("base64"),
+                    : (controls.noPixels ? pngWithoutPixels : png).toString("base64"),
                 },
           ],
         });
@@ -560,6 +562,19 @@ describe("AI image plugin", () => {
     await expect(
       fetchGeneratedBytes("https://cdn.example.com/image", AbortSignal.timeout(1000)),
     ).rejects.toThrow("公网");
+  });
+  it("does not charge or store a PNG that has no image data", async () => {
+    const n = network();
+    n.controls.noPixels = true;
+    const { s, p } = await setup();
+    const before = (await s.snapshot()).wallet.balance;
+    const result = await api(s, "plugin.test", { id: p.data.id, query: "猫" });
+    expect(result).toMatchObject({ ok: false, error: "image_invalid" });
+    expect((await s.snapshot()).wallet.balance).toBe(before);
+    expect((await s.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+    await runInDurableObject(s, (_, state) => {
+      expect(state.storage.sql.exec("SELECT id FROM output_assets").toArray()).toEqual([]);
+    });
   });
   it("retries native WeChat delivery after restart without regenerating or charging twice", async () => {
     const n = network(),

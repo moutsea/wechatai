@@ -73,9 +73,10 @@ function recordSource(storage: DurableObjectStorage, task: Readonly<CloudTask>):
     task.createdAt,
   );
   sql.exec(
-    "INSERT INTO messages (sessionId,role,content,createdAt,model) VALUES (?,'user',?,?,?)",
+    "INSERT INTO messages (sessionId,role,content,displayContent,createdAt,model) VALUES (?,'user',?,?,?,?)",
     task.sessionId,
     task.prompt,
+    task.displayPrompt ?? task.prompt,
     task.createdAt,
     task.pluginName,
   );
@@ -102,6 +103,7 @@ function accept(
     context?: () => Context;
     commit?: (task: Readonly<CloudTask>) => undefined;
     prompt?: string;
+    displayPrompt?: string;
     images?: { mime: string; data: string }[];
   } = {},
 ) {
@@ -109,7 +111,12 @@ function accept(
     options.env ?? configuredEnv(),
     storage,
     accountId,
-    { sourceId, prompt: options.prompt ?? prompt, images: options.images },
+    {
+      sourceId,
+      prompt: options.prompt ?? prompt,
+      displayPrompt: options.displayPrompt,
+      images: options.images,
+    },
     options.context ?? (() => readContext(storage)),
     options.commit ?? ((task) => recordSource(storage, task)),
   );
@@ -194,6 +201,44 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("atomic cloud task admission", () => {
+  it("preserves separate display and execution input across restart and duplicate delivery", async () => {
+    const stub = await setup();
+    const displayPrompt = "把这张图片裁成正方形\n\n[图片 × 1]";
+    const executionPrompt = `${displayPrompt}\n附件工作区和执行说明`;
+    const first = await inAccount(stub, (storage) => {
+      const { task } = accept(storage, stub.id.toString(), "source-one", {
+        prompt: executionPrompt,
+        displayPrompt,
+      });
+      expect(task).toMatchObject({ prompt: executionPrompt, displayPrompt });
+      expect(task.invocation?.messages[0].content).toEqual([
+        { type: "text", text: executionPrompt },
+      ]);
+      expect(storage.sql.exec("SELECT content,displayContent FROM messages").one()).toEqual({
+        content: executionPrompt,
+        displayContent: displayPrompt,
+      });
+      return task;
+    });
+    await abortAllDurableObjects();
+    await inAccount(env.ACCOUNTS.get(stub.id), (storage) => {
+      expect(new CloudAgentStore(storage).get(first.id)).toEqual(first);
+      expect(
+        accept(storage, stub.id.toString(), "source-one", {
+          prompt: "changed execution input",
+          displayPrompt: "changed display input",
+          context: () => {
+            throw new Error("Duplicates must not be readmitted");
+          },
+        }),
+      ).toEqual({ task: first, created: false });
+      expect(storage.sql.exec("SELECT content,displayContent FROM messages").toArray()).toEqual([
+        { content: executionPrompt, displayContent: displayPrompt },
+      ]);
+      expect(new Wallet(storage).balance()).toBe(10_000);
+    });
+  });
+
   it("freezes the effective full-input budget independently of subsequent model edits", async () => {
     const stub = await setup();
     await inAccount(stub, (storage) => {
@@ -219,7 +264,7 @@ describe("atomic cloud task admission", () => {
         origin: settings.AGT_ORIGIN,
         appId: "app-one",
         tenantId: "tenant-one",
-        profileId: "wechatai-v1",
+        profileId: "wechatai-v2",
         model: "user-model",
         workspaceName: `test-${stub.id.toString().slice(0, 32)}`,
         callbackVersion: "v1",
@@ -247,7 +292,7 @@ describe("atomic cloud task admission", () => {
           limits: {
             inputTokens: 128_000,
             outputTokens: 8_192,
-            outputImages: 0,
+            outputImages: 4,
             creditUnits: null,
           },
         },

@@ -148,6 +148,46 @@ function mockModel(
 }
 
 describe("durable context compaction", () => {
+  it("summarizes full document history while showing only its readable display copy", async () => {
+    const { stub, sessionId } = await setup();
+    await stub.applyPayment({
+      id: "context-display-plus",
+      kind: "subscription",
+      units: 0,
+      expires: Date.now() + 86400000,
+    });
+    await seed(stub, sessionId);
+    const document = "合同交付日是2031年4月17日，违约金为每日600元。";
+    const displayContent = "总结这份合同\n\n[文件：contract.txt]";
+    const messageId = await runInDurableObject(stub, (_, state) => {
+      const { id } = state.storage.sql
+        .exec<{ id: number }>("SELECT MIN(id) AS id FROM messages WHERE sessionId=?", sessionId)
+        .one();
+      state.storage.sql.exec(
+        "UPDATE messages SET content=?,displayContent=? WHERE id=?",
+        `用户要求：总结这份合同\n附件正文：${document}`,
+        displayContent,
+        id,
+      );
+      return id;
+    });
+    const calls = mockModel("chat-completions", (summary) =>
+      summary
+        ? Response.json({ choices: [{ message: { content: `${summaryText}\n${document}` } }] })
+        : undefined,
+    );
+    await send(stub);
+    expect(calls.some((call) => call.summary && JSON.stringify(call.body).includes(document))).toBe(
+      true,
+    );
+    expect((await savedSummary(stub, sessionId)).throughId).toBeGreaterThanOrEqual(messageId);
+    expect(JSON.stringify(calls.at(-1)!.body)).toContain(document);
+    const visible = JSON.parse(await stub.api("session.messages", { id: sessionId }));
+    expect(visible.data[0].content).toBe(displayContent);
+    expect(visible.data[0]).not.toHaveProperty("displayContent");
+    expect(visible.data[0].content).not.toContain(document);
+  });
+
   it.each<Protocol>(["chat-completions", "responses", "anthropic"])(
     "summarizes and reuses history with %s, billing only the final answer once",
     async (protocol) => {

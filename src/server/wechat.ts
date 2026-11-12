@@ -26,6 +26,14 @@ export type WxMessage = {
   item_list?: WxItem[];
   create_time_ms?: number;
 };
+/** getupdates batches need not be chronological. Preserve delivery order only
+ * when the batch lacks comparable sender sequence numbers or timestamps. */
+export function orderedWechatMessages(messages: WxMessage[]) {
+  const has = (key: "seq" | "create_time_ms") =>
+    messages.every((m) => Number.isSafeInteger(m[key]) && Number(m[key]) > 0);
+  const key = has("seq") ? "seq" : has("create_time_ms") ? "create_time_ms" : null;
+  return key ? [...messages].sort((a, b) => a[key]! - b[key]!) : messages;
+}
 export type WxCredentials = { token: string; baseUrl: string; userId: string; botId: string };
 export class WechatRequestError extends AppError {
   constructor(
@@ -217,6 +225,7 @@ export type UploadedWechatImage = { downloadParam: string; aeskey: string; size:
 export async function uploadWechatImage(
   credentials: WxCredentials,
   data: Uint8Array,
+  mediaType = 1,
 ): Promise<UploadedWechatImage> {
   const key = Buffer.from(crypto.getRandomValues(new Uint8Array(16)));
   const filekey = crypto.randomUUID().replaceAll("-", "");
@@ -226,7 +235,7 @@ export async function uploadWechatImage(
     "getuploadurl",
     {
       filekey,
-      media_type: 1,
+      media_type: mediaType,
       to_user_id: credentials.userId,
       rawsize: data.length,
       rawfilemd5: createHash("md5").update(data).digest("hex"),
@@ -237,7 +246,7 @@ export async function uploadWechatImage(
     credentials,
   );
   if (!destination.upload_full_url && !destination.upload_param)
-    throw new AppError("wechat_upload", "微信暂未提供图片上传地址", 502);
+    throw new AppError("wechat_upload", "微信暂未提供附件上传地址", 502);
   const url = new URL(
     destination.upload_full_url ||
       `https://novac2c.cdn.weixin.qq.com/c2c/upload?encrypted_query_param=${encodeURIComponent(destination.upload_param!)}&filekey=${filekey}`,
@@ -249,7 +258,7 @@ export async function uploadWechatImage(
     url.username ||
     url.password
   )
-    throw new AppError("wechat_upload_host", "微信图片上传地址无效", 502);
+    throw new AppError("wechat_upload_host", "微信附件上传地址无效", 502);
   const result = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/octet-stream" },
@@ -260,8 +269,46 @@ export async function uploadWechatImage(
   await result.body?.cancel();
   const downloadParam = result.headers.get("x-encrypted-param");
   if (!result.ok || !downloadParam || downloadParam.length > 16000)
-    throw new AppError("wechat_upload", "微信图片上传失败，将自动重试", 502);
+    throw new AppError("wechat_upload", "微信附件上传失败，将自动重试", 502);
   return { downloadParam, aeskey: key.toString("hex"), size: encrypted.length };
+}
+export async function sendUploadedWechatFile(
+  credentials: WxCredentials,
+  contextToken: string,
+  clientId: string,
+  file: UploadedWechatImage,
+  name: string,
+  bytes: number,
+) {
+  await wxRequest(
+    "sendmessage",
+    {
+      msg: {
+        from_user_id: "",
+        to_user_id: credentials.userId,
+        client_id: clientId,
+        message_type: 2,
+        message_state: 2,
+        context_token: contextToken,
+        item_list: [
+          {
+            type: 4,
+            file_item: {
+              file_name: name,
+              len: String(bytes),
+              media: {
+                encrypt_query_param: file.downloadParam,
+                aes_key: Buffer.from(file.aeskey).toString("base64"),
+                encrypt_type: 1,
+              },
+            },
+          },
+        ],
+      },
+    },
+    credentials,
+    15000,
+  );
 }
 export async function sendUploadedWechatImage(
   credentials: WxCredentials,

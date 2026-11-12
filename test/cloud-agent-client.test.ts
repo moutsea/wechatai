@@ -45,6 +45,72 @@ function network(reply: (request: Request) => Response | Promise<Response>) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AGT client protocol", () => {
+  it.each([
+    [404, "cloud_file_missing"],
+    [410, "cloud_file_missing"],
+    [401, "cloud_file_rejected"],
+    [403, "cloud_file_rejected"],
+    [408, "cloud_file_unavailable"],
+    [429, "cloud_file_unavailable"],
+    [503, "cloud_file_unavailable"],
+  ])(
+    "classifies file download HTTP %s without exposing the upstream body",
+    async (status, code) => {
+      network(() => new Response("private upstream error", { status }));
+      await expect(
+        new CloudAgentClient(config).downloadFile(
+          "workspace-one",
+          {
+            path: `/outbound/results/${"a".repeat(64)}`,
+            name: "result.pdf",
+            contentType: "application/pdf",
+            size: 100,
+          },
+          appUser.externalId,
+        ),
+      ).rejects.toMatchObject({ code, message: expect.not.stringContaining("private") });
+    },
+  );
+
+  it("rejects an oversized Content-Length as a permanent file size error", async () => {
+    network(() => new Response(null, { headers: { "content-length": String(17 * 1024 * 1024) } }));
+    await expect(
+      new CloudAgentClient(config).downloadFile(
+        "workspace-one",
+        {
+          path: `/outbound/results/${"a".repeat(64)}`,
+          name: "result.pdf",
+          contentType: "application/pdf",
+          size: 100,
+        },
+        appUser.externalId,
+      ),
+    ).rejects.toMatchObject({ code: "cloud_file_size" });
+  });
+
+  it("rejects unsafe file metadata as an unusable result without losing the terminal job", () => {
+    const valid = {
+      path: `/outbound/results/${"a".repeat(64)}`,
+      name: "结果.pdf",
+      contentType: "application/pdf",
+      size: 100,
+    };
+    const job = (attachments: unknown) =>
+      parseJob({ ...queued, status: "completed", result: { text: "已生成", attachments } });
+    expect(hasCompleteCloudAnswer(job([valid]))).toBe(true);
+    for (const attachments of [
+      [{ ...valid, path: "/private/secret" }],
+      [{ ...valid, name: "../secret" }],
+      [{ ...valid, size: 17 * 1024 * 1024 }],
+      Array(5).fill(valid),
+      {},
+    ]) {
+      const invalid = job(attachments);
+      expect(invalid).toMatchObject({ status: "completed", invalidAttachments: true });
+      expect(invalid.attachments).toBeUndefined();
+      expect(hasCompleteCloudAnswer(invalid)).toBe(false);
+    }
+  });
   it("uploads private image bytes as the mapped app user and verifies the returned identity", async () => {
     const data = Uint8Array.of(1, 2, 3);
     const id = `img_${createHash("sha256").update(data).digest("hex")}`;
@@ -61,6 +127,31 @@ describe("AGT client protocol", () => {
     await expect(
       client.uploadImage("workspace-one", data, appUser.externalId),
     ).rejects.toMatchObject({ code: "cloud_image_identity" });
+  });
+  it("copies original image bytes and extracted text to private workspace files", async () => {
+    const data = Uint8Array.of(0, 137, 255, 128);
+    const requests = network(() => Response.json({ size: data.length }, { status: 201 }));
+    const client = new CloudAgentClient(config);
+    await client.uploadFile(
+      "workspace-one",
+      "attachments/images/img_one",
+      data,
+      appUser.externalId,
+    );
+    await client.uploadFile(
+      "workspace-one",
+      "attachments/说明.txt",
+      "原始正文",
+      appUser.externalId,
+    );
+    expect(new Uint8Array(await requests[0].arrayBuffer())).toEqual(data);
+    expect(await requests[1].text()).toBe("原始正文");
+    expect(requests[0].headers.get("content-type")).toBe("application/octet-stream");
+    expect(requests[1].headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    for (const request of requests) {
+      expect(request.method).toBe("PUT");
+      expect(request.headers.get("x-app-user")).toBe(appUser.externalId);
+    }
   });
   it("registers an application user and restricted workspace, then configures the bounded profile", async () => {
     const requests = network((request) => {
@@ -93,7 +184,15 @@ describe("AGT client protocol", () => {
       policy: {
         maxConcurrentJobs: 1,
         maxSteps: 12,
-        allowTools: ["memory_search", "remember_memory"],
+        allowTools: [
+          "memory_search",
+          "remember_memory",
+          "read_file",
+          "write_file",
+          "list_files",
+          "sandbox_compute",
+          "return_file",
+        ],
       },
       delegation: { visibility: "private", allowFrom: [] },
       sessionAccess: { visibility: "self", sendTo: [] },

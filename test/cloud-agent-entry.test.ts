@@ -1,22 +1,28 @@
 import { abortAllDurableObjects, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createCipheriv, createHash } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
 import { strToU8, zipSync } from "fflate";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
 import adminExpiryMigration from "../migrations/0017_admin_expiry.sql?raw";
-import { CloudAgentStore } from "../src/server/cloud-agent-store";
+import { CLOUD_FILE_RETRY_MS, CloudAgentStore } from "../src/server/cloud-agent-store";
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { AttachmentQueue, ATTACHMENT_TTL_MS } from "../src/server/attachments";
 import { prepareCloudAgentRequest } from "../src/server/cloud-agent-request";
+import { parseJob } from "../src/server/cloud-agent-client";
 import { settleCloudAgentTask } from "../src/server/cloud-agent-settlement";
 import { CloudAgentDelivery } from "../src/server/cloud-agent-delivery";
 import type { WxItem, WxMessage } from "../src/server/wechat";
 import type { CloudAgentPlugin } from "../src/shared/cloud-agent";
 import type { Protocol } from "../src/shared/types";
 import { wechatSetupIssue } from "../src/shared/wechat-readiness";
+import { gif } from "./helpers/generated-gif";
+import { pixelPng, pngWithoutPixels } from "./helpers/generated-png";
+import { generatedPdf, pdfWithMissingPage } from "./helpers/generated-pdf";
+import { countTextTokens } from "../src/server/tokenizer";
+import { creditUnits } from "../src/server/wallet";
 import {
   connectForManualDelivery,
   deliverQueuedReplies,
@@ -143,6 +149,8 @@ function fileNetwork(files: ReturnType<typeof fileFixture>[]) {
     const url = input instanceof Request ? input.url : String(input);
     const file = files.find((file) => file.url === url);
     if (file) return new Response(file.encrypted);
+    if (url.includes("agt.example.com/api/workspaces/") && url.includes("/files/"))
+      return Response.json({ size: 1 }, { status: 201 });
     throw new Error(`Unexpected endpoint ${url}`);
   });
 }
@@ -167,12 +175,778 @@ async function wake(stub: Account) {
     await instance.alarm();
   });
 }
+async function completedFile(
+  data = generatedPdf(),
+  name = "结果.pdf",
+  contentType = "application/pdf",
+  cap: number | null = null,
+) {
+  const stub = await setup();
+  await plugin(stub);
+  await send(stub, "/use 云");
+  await send(stub, "生成文件给我");
+  const task = await fullTask(stub);
+  const path = `/outbound/results/${createHash("sha256").update(data).digest("hex")}`;
+  await runInDurableObject(stub, (_, state) => {
+    const store = new CloudAgentStore(state.storage);
+    store.saveProvision({
+      scope: cloudAgentScope(task),
+      profiles: [task.profileId],
+      externalId: `wechatai:${state.id}`,
+      appUserId: "user-one",
+      workspaceId: "workspace-one",
+      configured: 1,
+      updatedAt: Date.now(),
+    });
+    store.patch(task, {
+      state: "accepted",
+      jobId: "job-one",
+      submittedAt: Date.now(),
+      invocation: { ...task.invocation!, limits: { ...task.invocation!.limits, creditUnits: cap } },
+      outcome: parseJob({
+        id: "job-one",
+        workspaceId: "workspace-one",
+        status: "completed",
+        result: {
+          text: "文件已生成。",
+          attachments: [{ path, name, contentType, size: data.length }],
+        },
+      }),
+    });
+  });
+  return { stub, task, path, data };
+}
 afterEach(async () => {
   vi.restoreAllMocks();
   await abortAllDurableObjects();
 });
 
 describe("cloud Agent user entry", () => {
+  it("discards all partially copied files when cancellation arrives during a download", async () => {
+    const { stub, task, path, data } = await completedFile();
+    const second = generatedPdf("Second file");
+    const secondPath = `/outbound/results/${createHash("sha256").update(second).digest("hex")}`;
+    await runInDurableObject(stub, (_, state) => {
+      const store = new CloudAgentStore(state.storage);
+      const current = store.get(task.id)!;
+      store.patch(current, {
+        outcome: {
+          ...current.outcome!,
+          attachments: [
+            ...current.outcome!.attachments!,
+            {
+              path: secondPath,
+              name: "第二份.pdf",
+              contentType: "application/pdf",
+              size: second.length,
+            },
+          ],
+        },
+      });
+    });
+    let cancelDuringDownload!: () => void;
+    const sentFiles: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.endsWith(path)) return new Response(data);
+      if (request.url.endsWith(secondPath)) {
+        cancelDuringDownload();
+        return new Response(second);
+      }
+      if (request.url.endsWith("sendmessage")) {
+        const body = await request.json<{ msg: { item_list: WxItem[] } }>();
+        sentFiles.push(...body.msg.item_list.filter((item) => item.type === 4));
+      }
+      return Response.json({ ret: 0, msgs: [] });
+    });
+    await runInDurableObject(stub, async (instance, state) => {
+      const store = new CloudAgentStore(state.storage);
+      cancelDuringDownload = () => {
+        expect(store.requestStop(store.get(task.id)!)).toBe("files");
+      };
+      await instance.alarm();
+    });
+    expect(await tasks(stub)).toMatchObject([{ state: "cancelled", settled: 0, outputFiles: [] }]);
+    expect(sentFiles).toEqual([]);
+    expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+    await runInDurableObject(stub, (_, state) => {
+      expect(new CloudAgentStore(state.storage).active()).toHaveLength(0);
+      expect(
+        state.storage.sql.exec("SELECT id FROM output_assets WHERE committed>=0").toArray(),
+      ).toEqual([]);
+    });
+  });
+
+  it.each([
+    {
+      name: "report.pdf",
+      type: "application/pdf",
+      data: generatedPdf(),
+      mime: "application/pdf",
+      images: 0,
+    },
+    {
+      name: "report.bin",
+      type: "application/octet-stream",
+      data: generatedPdf(),
+      mime: "application/pdf",
+      images: 0,
+    },
+    { name: "chart.png", type: "image/png", data: png, mime: "image/png", images: 1 },
+    {
+      name: "chart.bin",
+      type: "application/octet-stream",
+      data: png,
+      mime: "image/png",
+      images: 1,
+    },
+    { name: "animation.gif", type: "image/gif", data: gif, mime: "image/gif", images: 1 },
+    {
+      name: "animation.bin",
+      type: "application/octet-stream",
+      data: gif,
+      mime: "image/gif",
+      images: 1,
+    },
+    {
+      name: "chart.txt",
+      type: "text/plain",
+      data: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h10v10"/></svg>'),
+      mime: "image/svg+xml",
+      images: 1,
+    },
+    {
+      name: "report.html",
+      type: "text/html",
+      mime: "text/html",
+      images: 0,
+      data: Buffer.from(
+        '<!doctype html><html><body><h1>Report</h1><svg width="100" height="100"><circle cx="10" cy="10" r="5"/></svg></body></html>',
+      ),
+    },
+    {
+      name: "example.txt",
+      type: "text/plain",
+      mime: "text/plain",
+      images: 0,
+      data: Buffer.from(
+        'Example SVG code follows:\n<svg width="100" height="100"><path d="M0 0h10"/></svg>',
+      ),
+    },
+  ])(
+    "meters $name using its actual file contents while preserving download and delivery",
+    async ({ name, type, data, mime, images }) => {
+      const { stub, task } = await completedFile(data, name, type, images ? null : 1000);
+      const sent: WxItem[] = [];
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const request = new Request(input, init);
+        const endpoint = new URL(request.url).pathname;
+        if (endpoint.includes("/files/")) return new Response(data);
+        if (endpoint.endsWith("getuploadurl")) {
+          expect(await request.json()).toMatchObject({ media_type: 3, rawsize: data.length });
+          return Response.json({
+            ret: 0,
+            upload_full_url: "https://novac2c.cdn.weixin.qq.com/result",
+          });
+        }
+        if (endpoint === "/result")
+          return new Response(null, { headers: { "x-encrypted-param": "download" } });
+        if (endpoint.endsWith("sendmessage")) {
+          const body = await request.json<{ msg: { item_list: WxItem[] } }>();
+          sent.push(...body.msg.item_list);
+        }
+        return Response.json({ ret: 0, msgs: [] });
+      });
+      await wake(stub);
+      for (let n = 0; n < 3 && !sent.some((item) => item.type === 4); n++) await wake(stub);
+      const result = (await tasks(stub))[0];
+      expect(result).toMatchObject({
+        state: "completed",
+        settled: 1,
+        delivered: 1,
+        outputFiles: [{ name, mime }],
+      });
+      expect(sent).toContainEqual(
+        expect.objectContaining({
+          type: 4,
+          file_item: expect.objectContaining({ file_name: name }),
+        }),
+      );
+      const asset = await stub.imageAsset(result.outputFiles![0].id);
+      expect(asset.headers.get("content-type")).toBe(mime);
+      expect(Buffer.from(await asset.arrayBuffer())).toEqual(data);
+      await wake(stub);
+      await runInDurableObject(stub, (_, state) => {
+        const meters = state.storage.sql
+          .exec<{ data: string }>("SELECT data FROM platform_metering WHERE id=?", task.id)
+          .toArray();
+        expect(meters).toHaveLength(1);
+        expect(JSON.parse(meters[0].data)).toMatchObject({ outputImages: images });
+      });
+      if (images) expect(result.units).toBeGreaterThanOrEqual(5000);
+      else expect(result.units).toBeLessThan(1000);
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(1);
+    },
+  );
+
+  it.each([
+    {
+      name: "broken.pdf",
+      type: "application/pdf",
+      data: Buffer.from("%PDF-1.4\nfixture\n%%EOF\n"),
+    },
+    {
+      name: "broken.bin",
+      type: "application/octet-stream",
+      data: Buffer.from("%PDF-1.4\nfixture\n%%EOF\n"),
+    },
+    {
+      name: "broken-page.pdf",
+      type: "application/pdf",
+      data: pdfWithMissingPage,
+    },
+    { name: "no-pixels.png", type: "image/png", data: pngWithoutPixels },
+    { name: "no-pixels.bin", type: "application/octet-stream", data: pngWithoutPixels },
+    { name: "incomplete-pixels.png", type: "image/png", data: pixelPng([0, 1]) },
+    { name: "invalid-filter.png", type: "image/png", data: pixelPng([5, 1, 2, 3]) },
+    {
+      name: "broken.svg",
+      type: "image/svg+xml",
+      data: Buffer.from('<svg width="100" height="100"><path'),
+    },
+    {
+      name: "broken.txt",
+      type: "text/plain",
+      data: Buffer.from('<svg width="100" height="100"><path'),
+    },
+    { name: "broken.gif", type: "image/gif", data: gif.subarray(0, 10) },
+    { name: "broken.bin", type: "application/octet-stream", data: gif.subarray(0, 10) },
+    {
+      name: "bad-pixels.gif",
+      type: "image/gif",
+      data: Buffer.from(gif.map((value, index) => (index === 31 ? 0x7c : value))),
+    },
+  ])(
+    "rejects $name without billing, retrying or leaving files available",
+    async ({ name, type, data }) => {
+      const { stub } = await completedFile(data, name, type);
+      const sent: WxItem[] = [];
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const request = new Request(input, init);
+        if (request.url.includes("/files/")) return new Response(data);
+        if (request.url.endsWith("sendmessage")) {
+          const body = await request.json<{ msg: { item_list: WxItem[] } }>();
+          sent.push(...body.msg.item_list);
+        }
+        return Response.json({ ret: 0, msgs: [] });
+      });
+      await wake(stub);
+      await wake(stub);
+      expect(await tasks(stub)).toMatchObject([
+        {
+          state: "failed",
+          settled: 0,
+          outputFiles: [],
+          error: expect.stringContaining("未扣 credits"),
+        },
+      ]);
+      expect(fetch.mock.calls.filter(([input]) => String(input).includes("/files/"))).toHaveLength(
+        1,
+      );
+      expect(sent.some((item) => item.type === 4)).toBe(false);
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+      await runInDurableObject(stub, (_, state) => {
+        expect(new CloudAgentStore(state.storage).active()).toHaveLength(0);
+        expect(
+          state.storage.sql.exec("SELECT id FROM output_assets WHERE committed>=0").toArray(),
+        ).toEqual([]);
+      });
+      expect(await send(stub, "下一个任务")).toContain("已接收");
+    },
+  );
+
+  it("discards previously received files when a later PDF cannot be parsed", async () => {
+    const { stub, task, path, data } = await completedFile();
+    const broken = pdfWithMissingPage;
+    const brokenPath = `/outbound/results/${createHash("sha256").update(broken).digest("hex")}`;
+    await runInDurableObject(stub, (_, state) => {
+      const store = new CloudAgentStore(state.storage);
+      const current = store.get(task.id)!;
+      store.patch(current, {
+        outcome: {
+          ...current.outcome!,
+          attachments: [
+            ...current.outcome!.attachments!,
+            {
+              path: brokenPath,
+              name: "broken.pdf",
+              contentType: "application/pdf",
+              size: broken.length,
+            },
+          ],
+        },
+      });
+    });
+    const sentFiles: WxItem[] = [];
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.endsWith(path)) return new Response(data);
+      if (request.url.endsWith(brokenPath)) return new Response(broken);
+      if (request.url.endsWith("sendmessage")) {
+        const body = await request.json<{ msg: { item_list: WxItem[] } }>();
+        sentFiles.push(...body.msg.item_list.filter((item) => item.type === 4));
+      }
+      return Response.json({ ret: 0, msgs: [] });
+    });
+    await wake(stub);
+    const id = await runInDurableObject(stub, (_, state) => {
+      const assets = state.storage.sql
+        .exec<{ id: string; committed: number }>("SELECT id,committed FROM output_assets")
+        .toArray();
+      expect(assets).toHaveLength(1);
+      expect(assets[0].committed).toBe(-1);
+      expect(new CloudAgentStore(state.storage).active()).toHaveLength(0);
+      return assets[0].id;
+    });
+    await wake(stub);
+    expect(await tasks(stub)).toMatchObject([{ state: "failed", settled: 0, outputFiles: [] }]);
+    expect(fetch.mock.calls.filter(([input]) => String(input).includes("/files/"))).toHaveLength(2);
+    expect(sentFiles).toEqual([]);
+    expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+    await runInDurableObject(stub, (_, state) => {
+      expect(state.storage.sql.exec("SELECT id FROM output_assets").toArray()).toEqual([]);
+    });
+    expect((await stub.imageAsset(id)).status).toBe(404);
+    expect(await send(stub, "下一个任务")).toContain("已接收");
+  });
+
+  it.each(["credits", "images"])(
+    "rejects image output above the frozen %s cap without billing or retaining downloadable assets",
+    async (limit) => {
+      const { stub, task } = await completedFile(
+        png,
+        "chart.bin",
+        "application/octet-stream",
+        limit === "credits" ? 1000 : null,
+      );
+      if (limit === "images")
+        await runInDurableObject(stub, (_, state) => {
+          const store = new CloudAgentStore(state.storage);
+          const current = store.get(task.id)!;
+          store.patch(current, {
+            invocation: {
+              ...current.invocation!,
+              limits: { ...current.invocation!.limits, outputImages: 0 },
+            },
+          });
+        });
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        String(input).includes("/files/") ? new Response(png) : Response.json({ ret: 0, msgs: [] }),
+      );
+      await wake(stub);
+      expect(await tasks(stub)).toMatchObject([
+        {
+          state: "failed",
+          settled: 0,
+          outputFiles: [],
+          error: expect.stringContaining(
+            limit === "credits" ? "结果图片超过单次 credits 上限" : "返回图片数量超过本次上限",
+          ),
+        },
+      ]);
+      await runInDurableObject(stub, (_, state) => {
+        expect(new CloudAgentStore(state.storage).active()).toHaveLength(0);
+        expect(
+          state.storage.sql.exec("SELECT id FROM output_assets WHERE committed>=0").toArray(),
+        ).toEqual([]);
+      });
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+      expect(await send(stub, "下一个任务")).toContain("已接收");
+    },
+  );
+
+  it.each([404, 403, 413])(
+    "ends a permanent file download failure (%s) and admits another task without a charge",
+    async (status) => {
+      const { stub } = await completedFile();
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        String(input).includes("/files/")
+          ? new Response("private upstream error", { status })
+          : Response.json({ ret: 0, msgs: [] }),
+      );
+      await wake(stub);
+      const result = (await tasks(stub))[0];
+      expect(result).toMatchObject({ state: "failed", settled: 0 });
+      expect(result.error).toContain("未扣 credits");
+      expect(result.error).not.toContain("private upstream");
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+      expect(await send(stub, "下一个任务")).toContain("已接收");
+    },
+  );
+
+  it("bounds transient file recovery across restarts and frees the active slot when the transfer window expires", async () => {
+    let { stub } = await completedFile();
+    let downloads = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("/files/")) {
+        downloads++;
+        return new Response(null, { status: 503 });
+      }
+      return Response.json({ ret: 0, msgs: [] });
+    });
+    await wake(stub);
+    const task = (await tasks(stub))[0];
+    expect(task).toMatchObject({
+      state: "accepted",
+      settled: 0,
+      fileStartedAt: expect.any(Number),
+    });
+    expect(task.nextAt).toBeLessThanOrEqual(task.fileStartedAt! + CLOUD_FILE_RETRY_MS);
+    await runInDurableObject(stub, (_, state) =>
+      new CloudAgentStore(state.storage).patch(task, {
+        fileStartedAt: Date.now() - CLOUD_FILE_RETRY_MS,
+      }),
+    );
+    await abortAllDurableObjects();
+    stub = env.ACCOUNTS.get(stub.id);
+    await runInDurableObject(stub, async (instance, state) => {
+      await useManualAlarms(state);
+      Object.assign(Reflect.get(instance, "env"), settings);
+    });
+    await wake(stub);
+    expect(downloads).toBe(1);
+    expect(await tasks(stub)).toMatchObject([
+      { state: "failed", settled: 0, error: expect.stringContaining("重试已超过 10 分钟") },
+    ]);
+    expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+    expect(await send(stub, "下一个任务")).toContain("已接收");
+  });
+
+  it.each(["web", "wechat"])(
+    "cancels file transfer through %s without cancelling or rerunning the completed AGT job",
+    async (source) => {
+      const { stub, task } = await completedFile();
+      const requests: string[] = [];
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = String(input);
+        requests.push(url);
+        return url.includes("/files/")
+          ? new Response(null, { status: 503 })
+          : Response.json({ ret: 0, msgs: [] });
+      });
+      await wake(stub);
+      expect(await api(stub, "cloud.task", { id: task.id })).toMatchObject({
+        ok: true,
+        data: { status: "finalizing", canCancelFiles: true },
+      });
+      if (source === "web") {
+        expect(await api(stub, "cloud.cancel", { id: task.id })).toMatchObject({
+          ok: true,
+          data: { stopping: true },
+        });
+      } else {
+        expect(await send(stub, "/wx stop")).toContain("取消生成文件的接收");
+      }
+      await wake(stub);
+      expect(await tasks(stub)).toMatchObject([
+        {
+          state: "cancelled",
+          settled: 0,
+          outputFiles: [],
+          error: expect.stringContaining("本次未扣 credits"),
+        },
+      ]);
+      expect(requests.filter((url) => url.includes("/files/"))).toHaveLength(1);
+      expect(requests.some((url) => url.includes("/jobs"))).toBe(false);
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+      expect(await send(stub, "下一个任务")).toContain("已接收");
+    },
+  );
+
+  it.each([false, true])(
+    "returns a PDF through download and WeChat, reusing the file and bill after restart (file-only=%s)",
+    async (fileOnly) => {
+      let stub = await setup();
+      await plugin(stub);
+      await send(stub, "/use 云");
+      const input = fileFixture("中文原文.txt", "这是需要转成 PDF 的完整中文正文。");
+      const staged = fileNetwork([input]);
+      await send(stub, [input.item]);
+      await send(stub, "能不能转成 pdf 格式给我");
+      staged.mockRestore();
+      const task = await fullTask(stub);
+      const pdf = generatedPdf("Converted file");
+      const path = `/outbound/results/${createHash("sha256").update(pdf).digest("hex")}`;
+      let downloadFails = true,
+        sendFails = true,
+        downloads = 0,
+        uploads = 0;
+      let uploadKey = "",
+        encrypted: Uint8Array | undefined;
+      const sentFiles: { id: string; item: WxItem }[] = [];
+      const assertions: unknown[] = [];
+      const network = () =>
+        vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+          try {
+            const request = new Request(url, init);
+            const endpoint = new URL(request.url).pathname;
+            if (endpoint.includes("/files/") && request.method === "PUT") {
+              expect(await request.text()).toBe("这是需要转成 PDF 的完整中文正文。");
+              return Response.json({ size: 1 }, { status: 201 });
+            }
+            if (endpoint.endsWith(path)) {
+              downloads++;
+              expect(request.headers.get("x-app-user")).toBe(`wechatai:${stub.id}`);
+              return downloadFails ? new Response(null, { status: 503 }) : new Response(pdf);
+            }
+            if (endpoint.endsWith("getupdates")) return Response.json({ ret: 0, msgs: [] });
+            if (endpoint.endsWith("getuploadurl")) {
+              uploads++;
+              const body = await request.json<{
+                media_type: number;
+                aeskey: string;
+                rawsize: number;
+              }>();
+              expect(body).toMatchObject({ media_type: 3, rawsize: pdf.length });
+              uploadKey = body.aeskey;
+              return Response.json({
+                ret: 0,
+                upload_full_url: "https://novac2c.cdn.weixin.qq.com/test-output",
+              });
+            }
+            if (endpoint === "/test-output") {
+              encrypted = new Uint8Array(await request.arrayBuffer());
+              return new Response(null, { headers: { "x-encrypted-param": "private-download" } });
+            }
+            if (endpoint.endsWith("sendmessage")) {
+              const body = await request.json<{
+                msg: { client_id: string; item_list: WxItem[] };
+              }>();
+              if (body.msg.item_list[0].type === 4) {
+                sentFiles.push({ id: body.msg.client_id, item: body.msg.item_list[0] });
+                if (sendFails) return Response.json({ ret: 1 }, { status: 503 });
+              }
+              return Response.json({ ret: 0 });
+            }
+            throw new Error(`Unexpected endpoint ${endpoint}`);
+          } catch (error) {
+            assertions.push(error);
+            throw error;
+          }
+        });
+      network();
+      await runInDurableObject(stub, async (instance, state) => {
+        const store = new CloudAgentStore(state.storage);
+        store.saveProvision({
+          scope: cloudAgentScope(task),
+          profiles: [task.profileId],
+          externalId: `wechatai:${state.id}`,
+          appUserId: "user-one",
+          workspaceId: "workspace-one",
+          configured: 1,
+          updatedAt: Date.now(),
+          modelChannel: {
+            id: "file-channel",
+            fingerprint: createHash("sha256")
+              .update(JSON.stringify(task.modelConnection))
+              .digest("hex"),
+          },
+        });
+        const configured = Reflect.get(instance, "env");
+        const raw = await prepareCloudAgentRequest(
+          configured,
+          store,
+          state.id.toString(),
+          task.id,
+          () => undefined,
+        );
+        expect(JSON.parse(raw!).message).toContain("这是需要转成 PDF 的完整中文正文。");
+        store.patch(task, {
+          state: "accepted",
+          jobId: "job-one",
+          submittedAt: Date.now(),
+          outcome: parseJob({
+            id: "job-one",
+            workspaceId: "workspace-one",
+            status: "completed",
+            result: {
+              ...(fileOnly ? {} : { text: "PDF 已生成。" }),
+              attachments: [
+                { path, name: "中文原文.pdf", contentType: "application/pdf", size: pdf.length },
+              ],
+            },
+          }),
+        });
+      });
+      await wake(stub);
+      expect(await tasks(stub)).toMatchObject([{ state: "accepted", settled: 0 }]);
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+      downloadFails = false;
+      await wake(stub);
+      for (let i = 0; i < 3 && !sentFiles.length; i++) await wake(stub);
+      expect(await tasks(stub)).toMatchObject([{ state: "completed", settled: 1, delivered: 0 }]);
+      expect(sentFiles.length).toBeGreaterThan(0);
+      const downloadCount = downloads;
+      const files = (await tasks(stub))[0].outputFiles!;
+      expect(files).toHaveLength(1);
+      expect(await api(stub, "cloud.task", { id: task.id })).toMatchObject({
+        ok: true,
+        data: { files: [{ id: files[0].id, name: "中文原文.pdf", bytes: pdf.length }] },
+      });
+      const asset = await stub.imageAsset(files[0].id);
+      expect(asset.status).toBe(200);
+      expect(asset.headers.get("content-disposition")).toContain(
+        encodeURIComponent("中文原文.pdf"),
+      );
+      expect(Buffer.from(await asset.arrayBuffer())).toEqual(pdf);
+      const other = env.ACCOUNTS.getByName(crypto.randomUUID());
+      expect((await other.imageAsset(files[0].id)).status).toBe(404);
+      await abortAllDurableObjects();
+      stub = env.ACCOUNTS.get(stub.id);
+      // Keep the same upstream responses but reconstruct all account objects.
+      vi.restoreAllMocks();
+      network();
+      sendFails = false;
+      await runInDurableObject(stub, async (instance, state) => {
+        await useManualAlarms(state);
+        Object.assign(Reflect.get(instance, "env"), settings);
+        await Reflect.get(instance, "pollWechat").call(instance, "default", Date.now() + 5000, 0);
+      });
+      expect(await tasks(stub)).toMatchObject([{ state: "completed", delivered: 1 }]);
+      expect(downloads).toBe(downloadCount);
+      expect(uploads).toBe(1);
+      expect(new Set(sentFiles.map((file) => file.id)).size).toBe(1);
+      expect(sentFiles.at(-1)!.item.file_item).toMatchObject({
+        file_name: "中文原文.pdf",
+        len: String(pdf.length),
+      });
+      expect(
+        Buffer.from(sentFiles.at(-1)!.item.file_item!.media!.aes_key!, "base64").toString(),
+      ).toBe(uploadKey);
+      const decipher = createDecipheriv(
+        "aes-128-ecb",
+        Buffer.from(uploadKey, "hex"),
+        Buffer.alloc(0),
+      );
+      expect(Buffer.concat([decipher.update(encrypted!), decipher.final()])).toEqual(pdf);
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(1);
+      expect(assertions).toEqual([]);
+      expect((await api(stub, "session.action", { id: task.sessionId, action: "clear" })).ok).toBe(
+        true,
+      );
+      expect((await stub.imageAsset(files[0].id)).status).toBe(404);
+    },
+  );
+
+  it.each(["invalid PDF", "digest mismatch", "invalid metadata", "partial"])(
+    "rejects %s without charging or retrying forever",
+    async (mode) => {
+      const stub = await setup();
+      await plugin(stub);
+      await send(stub, "/use 云");
+      await send(stub, "生成 PDF");
+      const task = await fullTask(stub);
+      const invalid = Buffer.from("not a PDF");
+      const path = `/outbound/results/${mode === "digest mismatch" ? "b".repeat(64) : createHash("sha256").update(invalid).digest("hex")}`;
+      await runInDurableObject(stub, (_, state) => {
+        const store = new CloudAgentStore(state.storage);
+        store.saveProvision({
+          scope: cloudAgentScope(task),
+          profiles: [task.profileId],
+          externalId: `wechatai:${state.id}`,
+          appUserId: "user-one",
+          workspaceId: "workspace-one",
+          configured: 1,
+          updatedAt: Date.now(),
+        });
+        store.patch(task, {
+          state: "accepted",
+          jobId: "job-one",
+          outcome: parseJob({
+            id: "job-one",
+            workspaceId: "workspace-one",
+            status: "completed",
+            result: {
+              text: "已生成 PDF",
+              ...(mode === "partial" ? { task: { outcome: "partial" } } : {}),
+              attachments: [
+                {
+                  path,
+                  name: mode === "invalid metadata" ? "../结果.pdf" : "结果.pdf",
+                  contentType: "application/pdf",
+                  size: invalid.length,
+                },
+              ],
+            },
+          }),
+        });
+      });
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) =>
+        String(input).includes("/files/")
+          ? new Response(invalid)
+          : Response.json({ ret: 0, msgs: [] }),
+      );
+      await wake(stub);
+      expect(await tasks(stub)).toMatchObject([
+        {
+          state: "failed",
+          settled: 0,
+          error: expect.stringContaining(
+            mode === "partial"
+              ? "部分"
+              : mode === "invalid metadata"
+                ? "文件信息无效"
+                : "文件不完整或校验失败",
+          ),
+        },
+      ]);
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+    },
+  );
+
+  it("processes a file before its later instruction when a received batch is reversed", async () => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    const file = fileFixture("source.txt", "需要转换的完整正文");
+    fileNetwork([file]);
+    const now = Date.now();
+    const messages: WxMessage[] = [
+      {
+        message_id: 102,
+        create_time_ms: now + 1,
+        message_type: 1,
+        from_user_id: "owner",
+        item_list: [{ type: 1, text_item: { text: "能不能转成 pdf 格式给我" } }],
+      },
+      { message_id: 200, message_type: 2, from_user_id: "bot" },
+      {
+        message_id: 101,
+        create_time_ms: now,
+        message_type: 1,
+        from_user_id: "owner",
+        item_list: [file.item],
+      },
+    ];
+    const received = await runInDurableObject(stub, (instance, state) => {
+      Reflect.get(instance, "ingestWechat").call(
+        instance,
+        "default",
+        "g1",
+        "",
+        { msgs: messages },
+        { userId: "owner", botId: "bot" },
+      );
+      return state.storage.sql
+        .exec<{ id: string; payload: string }>(
+          "SELECT id,payload FROM inbox WHERE state='pending' ORDER BY createdAt,rowid",
+        )
+        .toArray();
+    });
+    for (const row of received) await send(stub, JSON.parse(row.payload).item_list, row.id);
+    expect((await fullTask(stub)).prompt).toContain("需要转换的完整正文");
+    expect(await pendingFiles(stub)).toEqual([]);
+  });
   it("defaults to the account text model and rejects explicit models outside the account", async () => {
     const stub = await setup();
     const saved = await save(stub, { modelId: "" });
@@ -917,6 +1691,7 @@ describe("cloud Agent user entry", () => {
       pluginId: p.id,
       pluginContext: p.id,
       prompt: "帮我整理计划",
+      displayPrompt: "帮我整理计划",
       settled: 0,
     });
     expect(await tasks(stub)).toHaveLength(1);
@@ -1017,6 +1792,127 @@ describe("cloud Agent user entry", () => {
       ).toEqual({ state: "done", sessionId: task.sessionId });
     });
   });
+
+  it.each(["responses", "chat-completions", "anthropic"] as const)(
+    "retains a one-off cloud document for ordinary follow-ups after restart without exposing execution text (%s)",
+    async (protocol) => {
+      let stub = await setup(true, true, undefined, protocol);
+      await plugin(stub);
+      await send(stub, "/wx new");
+      const originalSession = (await stub.snapshot()).currentSession!.id;
+      const body = "合同交付日是2031年4月17日，违约金为每日600元。";
+      const document = fileFixture("contract.txt", body);
+      const network = fileNetwork([document]);
+      await send(stub, [document.item]);
+      await send(stub, "@云 把这份合同整理成摘要", "contract-task");
+      const task = await fullTask(stub);
+      const displayPrompt = "把这份合同整理成摘要\n\n[文件：contract.txt]";
+      const result = "这是一份包含交付期限与违约责任的合同。";
+      expect(task.prompt).toContain(body);
+      expect(task.displayPrompt).toBe(displayPrompt);
+      expect(task.sessionId).toBe(originalSession);
+      await runInDurableObject(stub, async (_, state) => {
+        const store = new CloudAgentStore(state.storage);
+        store.patch(task, {
+          state: "accepted",
+          jobId: "contract-job",
+          submittedAt: Date.now(),
+          outcome: parseJob({
+            id: "contract-job",
+            workspaceId: "workspace-one",
+            status: "completed",
+            result: { text: result },
+          }),
+        });
+        const settled = await settleCloudAgentTask(state.storage, task.id, () => false);
+        expect(settled?.state).toBe("completed");
+        store.patch(settled!, { delivered: 1, deliveryStatus: "sent" });
+      });
+      network.mockRestore();
+      await abortAllDurableObjects();
+      stub = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(stub, (_, state) => {
+        expect(
+          state.storage.sql
+            .exec(
+              "SELECT content,displayContent FROM messages WHERE sessionId=? AND role='user'",
+              originalSession,
+            )
+            .toArray(),
+        ).toEqual([{ content: task.prompt, displayContent: displayPrompt }]);
+      });
+      const visible = await api(stub, "session.messages", { id: originalSession });
+      expect(visible.data[0].content).toBe(displayPrompt);
+      expect(visible.data[0]).not.toHaveProperty("displayContent");
+      expect(JSON.stringify(visible)).not.toContain(body);
+      expect(JSON.stringify(visible)).not.toContain("attachments/");
+      expect(await api(stub, "cloud.task", { id: task.id })).toMatchObject({
+        ok: true,
+        data: { prompt: displayPrompt },
+      });
+      const inputs: unknown[] = [];
+      const followup = "刚才合同里交付日和违约金分别是多少？";
+      const answer = "交付日是2031年4月17日，违约金为每日600元。";
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+        const request = new Request(url, init);
+        if (request.url.includes("cloudflare-dns.com"))
+          return Response.json({ Answer: [{ type: 1, data: "1.1.1.1" }] });
+        if (!request.url.startsWith("https://llm.example.com/"))
+          throw new Error(`Unexpected endpoint ${request.url}`);
+        inputs.push(await request.json());
+        return Response.json(
+          protocol === "responses"
+            ? {
+                status: "completed",
+                output: [{ type: "message", content: [{ type: "output_text", text: answer }] }],
+              }
+            : protocol === "anthropic"
+              ? { stop_reason: "end_turn", content: [{ type: "text", text: answer }] }
+              : { choices: [{ finish_reason: "stop", message: { content: answer } }] },
+        );
+      });
+      const balance = (await stub.snapshot()).wallet.balance;
+      expect(await send(stub, followup, "contract-followup")).toBe(answer);
+      expect(await send(stub, followup, "contract-followup")).toBe(answer);
+      expect(inputs).toHaveLength(1);
+      expect(JSON.stringify(inputs[0])).toContain(body);
+      expect(JSON.stringify(inputs[0])).toContain(result);
+      const inputTokens = [
+        task.modelConnection!.systemPrompt,
+        task.prompt,
+        result,
+        followup,
+      ].reduce((sum, text) => sum + countTextTokens(text), 0);
+      await runInDurableObject(stub, (_, state) => {
+        const row = state.storage.sql
+          .exec<{ data: string }>("SELECT data FROM platform_metering WHERE id='contract-followup'")
+          .one();
+        expect(JSON.parse(row.data)).toMatchObject({
+          inputTokens,
+          units: creditUnits(inputTokens, countTextTokens(answer)),
+        });
+      });
+      expect((await stub.snapshot()).wallet.balance).toBeCloseTo(
+        balance - creditUnits(inputTokens, countTextTokens(answer)) / 1000,
+      );
+      expect((await stub.snapshot()).currentSession!.id).toBe(originalSession);
+      expect(
+        await api(stub, "session.action", { id: originalSession, action: "clear" }),
+      ).toMatchObject({ ok: true });
+      await runInDurableObject(stub, (_, state) => {
+        expect(
+          state.storage.sql
+            .exec("SELECT * FROM messages WHERE sessionId=?", originalSession)
+            .toArray(),
+        ).toEqual([]);
+        expect(new CloudAgentStore(state.storage).get(task.id)).toMatchObject({
+          hidden: 1,
+          prompt: "",
+          displayPrompt: "",
+        });
+      });
+    },
+  );
 
   it("uses @云 once in an ordinary session, preserves mode and treats /text as task content", async () => {
     const stub = await setup();
@@ -1199,20 +2095,53 @@ describe("cloud Agent user entry", () => {
       const task = await fullTask(stub);
       expect(task.prompt).toContain("[图片 × 2]");
       expect(task.prompt).toContain("这是附带的说明文档");
+      const displayPrompt = "结合说明比较两张图\n\n[文件：report.txt]\n\n[图片 × 2]";
+      expect(task.displayPrompt).toBe(displayPrompt);
+      expect(await api(stub, "cloud.task", { id: task.id })).toMatchObject({
+        ok: true,
+        data: { prompt: displayPrompt },
+      });
+      expect(await api(stub, "cloud.tasks")).toMatchObject({
+        ok: true,
+        data: { tasks: [{ id: task.id, prompt: displayPrompt }] },
+      });
+      expect(await api(stub, "session.messages", { id: task.sessionId })).toMatchObject({
+        ok: true,
+        data: [{ role: "user", content: displayPrompt }],
+      });
       expect(task.imageIds).toHaveLength(2);
+      for (const id of task.imageIds!) expect(task.prompt).toContain(`attachments/images/${id}`);
       expect(
         task.invocation?.messages[0].content.filter((part) => part.type === "image"),
       ).toHaveLength(2);
+      expect(task.invocation?.messages[0].content.filter((part) => part.type === "text")).toEqual([
+        { type: "text", text: task.prompt },
+      ]);
       expect(await pendingFiles(stub)).toEqual([]);
       expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
       expect((await stub.snapshot()).currentSession?.id).toBe(before.currentSession?.id);
       expect(await send(stub, "重复投递", "image-task")).toContain("任务已接收");
+      expect((await fullTask(stub)).displayPrompt).toBe(displayPrompt);
       expect(network).toHaveBeenCalledTimes(3);
       await abortAllDurableObjects();
 
       const uploads: Request[] = [];
+      const workspaceImages: { path: string; bytes: Buffer }[] = [];
       network.mockImplementation(async (input, init) => {
         const request = new Request(input, init);
+        if (request.method === "PUT" && request.url.includes("/files/")) {
+          if (request.url.includes("/files/attachments/images/")) {
+            const bytes = Buffer.from(await request.arrayBuffer());
+            expect([png, Buffer.concat([png, Buffer.from("second")])]).toContainEqual(bytes);
+            workspaceImages.push({
+              path: new URL(request.url).pathname.split("/files/")[1],
+              bytes,
+            });
+            expect(request.headers.get("x-app-user")).toBe(`wechatai:${stub.id}`);
+            expect(request.headers.get("content-type")).toBe("application/octet-stream");
+          } else expect(await request.text()).toBe("这是附带的说明文档");
+          return Response.json({ size: 1 }, { status: 201 });
+        }
         expect(request.url).toBe("https://agt.example.com/api/workspaces/workspace-one/images");
         expect(request.headers.get("x-app-user")).toBe(`wechatai:${stub.id}`);
         const bytes = Buffer.from(await request.clone().arrayBuffer());
@@ -1227,6 +2156,10 @@ describe("cloud Agent user entry", () => {
         );
       });
       const restored = env.ACCOUNTS.get(stub.id);
+      expect(await api(restored, "cloud.task", { id: task.id })).toMatchObject({
+        ok: true,
+        data: { prompt: displayPrompt },
+      });
       const raw = await runInDurableObject(restored, async (instance, state) => {
         await useManualAlarms(state);
         const store = new CloudAgentStore(state.storage);
@@ -1266,6 +2199,9 @@ describe("cloud Agent user entry", () => {
         return firstRequest;
       });
       expect(uploads).toHaveLength(2);
+      expect(workspaceImages.map(({ path }) => path)).toEqual(
+        task.imageIds!.map((id) => `attachments/images/${id}`),
+      );
       expect(JSON.parse(raw!).images).toEqual(task.imageIds!.map((id) => ({ id })));
       expect(JSON.parse(raw!).message).toBe(task.prompt);
       expect(raw).not.toContain(png.toString("base64"));
@@ -1427,6 +2363,7 @@ describe("cloud Agent user entry", () => {
       expect(network).toHaveBeenCalledTimes(2);
       const task = await fullTask(stub);
       expect(task.prompt).toContain("用户要求：总结这两份文件");
+      expect(task.displayPrompt).toBe("总结这两份文件\n\n[文件：report.md、notes.docx]");
       expect(task.prompt).toContain('"name":"report.md","text":"本季营收增长 20%"');
       expect(task.prompt).toContain("下季计划扩展业务");
       expect(task.prompt).not.toContain("cdn.weixin.qq.com");

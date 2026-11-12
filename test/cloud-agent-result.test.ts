@@ -369,7 +369,7 @@ describe("durable AGT terminal result preparation", () => {
           settled: 0,
         });
         notice = store.get(task.id)!.error;
-        expect(notice).toContain(limit === "input" ? "输入超过" : "上限不足");
+        expect(notice).toContain(limit === "input" ? "输入超过" : "超过单次 credits 上限");
       });
       await abortAllDurableObjects();
       await inStore(env.ACCOUNTS.get(stub.id), async (store) => {

@@ -26,7 +26,8 @@ const labels: Record<CloudAgentTaskStatus, string> = {
 const active = (status: CloudAgentTaskStatus) =>
   ["submitting", "queued", "running", "awaiting_approval", "finalizing"].includes(status);
 
-const canStop = (task: CloudAgentTask) => active(task.status) && task.status !== "finalizing";
+const canStop = (task: CloudAgentTask) =>
+  active(task.status) && (task.status !== "finalizing" || task.canCancelFiles);
 
 // Bound both reads and mutations, even when the transport ignores AbortSignal.
 async function taskRequest<T>(
@@ -167,7 +168,9 @@ export function CloudTasks() {
       );
       notify(
         updated.stopping
-          ? "已请求停止，等待云端确认。已发生的外部操作无法撤销，费用以最终结算为准。"
+          ? updated.status === "finalizing"
+            ? "正在取消文件接收，本次不扣 credits。已发生的模型 API 费用以服务商账单为准。"
+            : "已请求停止，等待云端确认。已发生的外部操作无法撤销，费用以最终结算为准。"
           : updated.status === "cancelled"
             ? "任务已停止，费用以最终结算为准。"
             : updated.status === "finalizing"
@@ -245,7 +248,8 @@ export function CloudTasks() {
       )}
       {tasks.some(canStop) && (
         <p className="form-note">
-          停止需等待云端确认；已发生的外部操作无法撤销，费用以最终结算为准。
+          执行中的任务停止需等待云端确认，费用以最终结算为准；文件接收可取消，取消后本次不扣
+          credits。已发生的模型 API 费用以服务商账单为准。
         </p>
       )}
       {loading && !currentPage ? (
@@ -287,6 +291,19 @@ export function CloudTasks() {
                       <TaskResult id={task.id} content={task.result} />
                     </details>
                   ))}
+                {task.files?.length ? (
+                  <section aria-label="生成文件">
+                    {task.files.map((file) => (
+                      <p key={file.id}>
+                        <a href={`/api/assets/${encodeURIComponent(file.id)}`} download={file.name}>
+                          {file.name}
+                        </a>{" "}
+                        · {(file.bytes / 1024).toFixed(1)} KB
+                      </p>
+                    ))}
+                    <small>文件保留 30 天；清空或删除所属会话后不可下载。</small>
+                  </section>
+                ) : null}
                 {task.error && <small className="form-error">{task.error}</small>}
               </div>
               <span className={`tag ${task.status}`}>
@@ -300,7 +317,11 @@ export function CloudTasks() {
                   <Square size={13} />
                 )}
                 {labels[task.status]}
-                {task.stopping ? " · 停止确认中" : ""}
+                {task.stopping
+                  ? task.status === "finalizing"
+                    ? " · 正在取消文件接收"
+                    : " · 停止确认中"
+                  : ""}
               </span>
               <div className="cloud-task-meta">
                 <time
@@ -334,7 +355,13 @@ export function CloudTasks() {
                   disabled={Boolean(busy) || task.stopping}
                   onClick={() => void cancel(task)}
                 >
-                  {busy === task.id ? "正在请求停止…" : "停止"}
+                  {task.canCancelFiles
+                    ? busy === task.id
+                      ? "正在取消…"
+                      : "取消文件接收"
+                    : busy === task.id
+                      ? "正在请求停止…"
+                      : "停止"}
                 </button>
               )}
             </article>

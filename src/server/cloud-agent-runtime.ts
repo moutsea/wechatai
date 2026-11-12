@@ -5,6 +5,8 @@ import { reconcileCloudAgentJob } from "./cloud-agent-reconcile";
 import {
   cloudTaskStopReason,
   cloudTaskTerminal,
+  CLOUD_FILE_RETRY_MS,
+  cloudTaskFilesPending,
   type CloudAgentStore,
   type CloudTask,
 } from "./cloud-agent-store";
@@ -86,8 +88,8 @@ export class CloudAgentRuntime {
       if (!task.delivered) await this.host.deliver(task);
       return;
     }
-    // Local finalization retries must not depend on AGT, new configuration, the
-    // submission gate, or the original execution deadline.
+    // Resume verified outcomes without polling or re-executing AGT. Receiving
+    // result files has its own retry window, separate from the execution deadline.
     if (task.outcome) return this.host.finalize(task, task.outcome);
     task = this.stopping(task);
     if (task.stopRequested && !task.submittedAt && !task.unconfirmed && !task.jobId)
@@ -200,7 +202,14 @@ export class CloudAgentRuntime {
           if (!current || (cloudTaskTerminal(current.state) && current.delivered)) continue;
           this.store.patch(current, {
             attempts: current.attempts + 1,
-            nextAt: Date.now() + Math.min(300_000, 15_000 * 2 ** Math.min(current.attempts, 5)),
+            nextAt: Math.min(
+              Date.now() + Math.min(300_000, 15_000 * 2 ** Math.min(current.attempts, 5)),
+              cloudTaskFilesPending(current) &&
+                current.fileStartedAt !== undefined &&
+                !current.fileCancelled
+                ? current.fileStartedAt + CLOUD_FILE_RETRY_MS
+                : Infinity,
+            ),
           });
           console.warn(
             JSON.stringify({

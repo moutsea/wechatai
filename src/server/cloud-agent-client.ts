@@ -27,13 +27,18 @@ export type AgentJobView = {
   refusal?: string;
   failureCode?: CloudAgentFailureCode;
   task?: Record<string, unknown>;
+  attachments?: { path: string; name: string; contentType: string; size: number }[];
+  invalidAttachments?: true;
 };
 
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_RESPONSE_BYTES = 2_000_000;
 
+/** Stable content-addressed workspace copy, also usable by sandbox_compute. */
+export const cloudImagePath = (id: string) => `attachments/images/${id}`;
+
 // Version this policy together with config.agentId; never edit a deployed profile in place.
-export const CLOUD_AGENT_POLICY_V1 = {
+export const CLOUD_AGENT_POLICY_V2 = {
   maxSteps: 12,
   maxToolCalls: 24,
   maxConcurrentJobs: 1,
@@ -43,7 +48,15 @@ export const CLOUD_AGENT_POLICY_V1 = {
   compactionMode: "off",
   conversationHistoryMessages: 40,
   skillLearningMode: "off",
-  allowTools: ["memory_search", "remember_memory"],
+  allowTools: [
+    "memory_search",
+    "remember_memory",
+    "read_file",
+    "write_file",
+    "list_files",
+    "sandbox_compute",
+    "return_file",
+  ],
 } as const;
 
 export function cloudJobBody(input: {
@@ -59,7 +72,7 @@ export function cloudJobBody(input: {
   return {
     ...input,
     skillLearningMode: "off",
-    policy: CLOUD_AGENT_POLICY_V1,
+    policy: CLOUD_AGENT_POLICY_V2,
     callback: { ...input.callback, includeResult: false },
   };
 }
@@ -89,7 +102,7 @@ export class CloudAgentClient {
   }
 
   private async call(
-    method: "GET" | "POST" | "PATCH",
+    method: "GET" | "POST" | "PATCH" | "PUT",
     path: string,
     options: {
       body?: unknown;
@@ -187,6 +200,80 @@ export class CloudAgentClient {
     return expected;
   }
 
+  async uploadFile(
+    workspaceId: string,
+    path: string,
+    data: string | Uint8Array,
+    externalId: string,
+  ) {
+    await this.call(
+      "PUT",
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/files/${path.split("/").map(encodeURIComponent).join("/")}`,
+      {
+        rawBody: typeof data === "string" ? data : Uint8Array.from(data).buffer,
+        contentType:
+          typeof data === "string" ? "text/plain; charset=utf-8" : "application/octet-stream",
+        externalId,
+      },
+    );
+  }
+
+  async downloadFile(
+    workspaceId: string,
+    attachment: NonNullable<AgentJobView["attachments"]>[number],
+    externalId: string,
+  ) {
+    const response = await fetch(
+      `${this.config.origin}/api/workspaces/${encodeURIComponent(workspaceId)}/files/${attachment.path.slice(1).split("/").map(encodeURIComponent).join("/")}`,
+      {
+        headers: { authorization: `Bearer ${this.config.appKey}`, "x-app-user": externalId },
+        redirect: "manual",
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!response.ok) {
+      await response.body?.cancel();
+      if ([404, 410].includes(response.status))
+        throw new AppError("cloud_file_missing", "云端生成文件已不存在。", 502);
+      if (response.status < 500 && ![408, 425, 429].includes(response.status))
+        throw new AppError(
+          "cloud_file_rejected",
+          "云端文件读取被拒绝，请联系运营方检查文件访问权限。",
+          502,
+        );
+      throw new AppError("cloud_file_unavailable", "生成文件暂时无法读取，正在重试。", 502);
+    }
+    if (Number(response.headers.get("content-length")) > 16 * 1024 * 1024) {
+      await response.body?.cancel();
+      throw new AppError("cloud_file_size", "生成文件超过 16 MB。", 502);
+    }
+    const reader = response.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    if (reader)
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > 16 * 1024 * 1024) {
+            await reader.cancel();
+            throw new AppError("cloud_file_size", "生成文件超过 16 MB。", 502);
+          }
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    const data = Buffer.concat(chunks);
+    if (
+      data.length !== attachment.size ||
+      createHash("sha256").update(data).digest("hex") !== attachment.path.split("/").at(-1)
+    )
+      throw new AppError("cloud_file_identity", "生成文件校验失败，暂缓结算。", 502);
+    return data;
+  }
+
   async saveModelChannel(body: unknown, id?: string): Promise<string> {
     const path = `/api/apps/${encodeURIComponent(this.config.appId)}/model-channels`;
     const result = this.json(
@@ -268,7 +355,9 @@ export class CloudAgentClient {
           enabled: true,
           model: this.config.model,
           tags: ["wechatai"],
-          policy: CLOUD_AGENT_POLICY_V1,
+          policy: CLOUD_AGENT_POLICY_V2,
+          systemPrompt:
+            "你是微伴云端 Agent。用户上传的文件正文会随任务提供，提取的文字也会保存为任务列出的 UTF-8 工作区文件。图片同时提供视觉输入及任务列出的原始图片工作区路径；转换、裁剪或插入 PDF 时，将这些路径放入 sandbox_compute 的 inputFiles，使用 Pillow 读取图片，不要用 read_file 把图片当作文本读取。用户要求转换或生成文件时，直接用 read_file、write_file 和 sandbox_compute 完成，再用 return_file 把实际存在的产物交给微伴，微伴会发送文件到当前微信并提供下载。不要要求用户重贴已提供的正文或重新上传图片，不要用手动转换教程代替可完成的文件任务；工具失败时如实说明。生成 PDF 可用 Python ReportLab，中文字体 /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc。每次最多返回 4 个文件；隔离计算生成的文件每个不超过 2 MiB。返回图片请使用 PNG、JPEG、WebP、GIF 或 SVG。输出文件保存到 /outbound/ 下；sandbox_compute 中使用相对路径，声明 inputFiles 与 outputFiles。只有 return_file 成功后才说明文件已生成，避免承诺尚未发生的微信投递。",
           delegation: {
             visibility: "private",
             allowFrom: [],
@@ -366,10 +455,11 @@ const FINISH_REASONS = [
 /** A completed job can still contain truncated output, a refusal or a clarification. */
 export function hasCompleteCloudAnswer(
   job: AgentJobView,
-): job is AgentJobView & { status: "completed"; text: string } {
+): job is AgentJobView & { status: "completed" } {
   return (
     job.status === "completed" &&
-    !!job.text?.trim() &&
+    (!!job.text?.trim() || !!job.attachments?.length) &&
+    !job.invalidAttachments &&
     !job.refusal &&
     // Older AGT model adapters do not return a finish reason.
     (job.finishReason === undefined || job.finishReason === "stop") &&
@@ -395,6 +485,15 @@ export function parseJob(payload: unknown): AgentJobView {
       ? undefined
       : (FINISH_REASONS.find((reason) => reason === result.finishReason) ?? "unknown");
   const failureCode = status === "failed" ? cloudAgentFailureCode(job) : undefined;
+  let attachments: AgentJobView["attachments"];
+  let invalidAttachments = false;
+  if (result?.attachments !== undefined) {
+    try {
+      attachments = parseAttachments(result.attachments);
+    } catch {
+      invalidAttachments = true;
+    }
+  }
   return {
     id,
     status,
@@ -407,6 +506,8 @@ export function parseJob(payload: unknown): AgentJobView {
       : {}),
     ...(typeof job.conversationId === "string" ? { conversationId: job.conversationId } : {}),
     ...(text !== undefined ? { text } : {}),
+    ...(attachments?.length ? { attachments } : {}),
+    ...(invalidAttachments ? { invalidAttachments: true as const } : {}),
     ...(finishReason !== undefined ? { finishReason } : {}),
     ...(failureCode ? { failureCode } : {}),
     ...(typeof result?.refusal === "string" ? { refusal: result.refusal } : {}),
@@ -414,4 +515,29 @@ export function parseJob(payload: unknown): AgentJobView {
       ? { task: result.task as Record<string, unknown> }
       : {}),
   };
+}
+
+function parseAttachments(value: unknown): NonNullable<AgentJobView["attachments"]> {
+  if (!Array.isArray(value) || value.length > 4)
+    throw new AppError("cloud_agent_response", "云端文件列表无效或超过 4 个。", 502);
+  return value.map((item) => {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      !/^\/outbound\/results\/[a-f0-9]{64}$/.test(item.path) ||
+      typeof item.name !== "string" ||
+      !item.name.trim() ||
+      item.name.length > 160 ||
+      // Reject untrusted names before persisting or creating download headers.
+      // eslint-disable-next-line no-control-regex
+      /[\\/\x00-\x1f\x7f]/.test(item.name) ||
+      typeof item.contentType !== "string" ||
+      !/^[\w!#$&^.+-]+\/[\w!#$&^.+-]+$/.test(item.contentType) ||
+      !Number.isSafeInteger(item.size) ||
+      item.size < 1 ||
+      item.size > 16 * 1024 * 1024
+    )
+      throw new AppError("cloud_agent_response", "云端返回了无效的文件信息。", 502);
+    return { path: item.path, name: item.name, contentType: item.contentType, size: item.size };
+  });
 }

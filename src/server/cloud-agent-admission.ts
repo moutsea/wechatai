@@ -10,7 +10,7 @@ import { AppError, cloudAgentConfig, publicSiteUrl } from "./config";
 import { pluginOutputBudget } from "./plugins/gateway";
 import { dayWindow, Wallet } from "./wallet";
 import type { ModelMessage } from "./llm";
-import { CLOUD_AGENT_POLICY_V1 } from "./cloud-agent-client";
+import { CLOUD_AGENT_POLICY_V2 } from "./cloud-agent-client";
 
 /** Read by the account host immediately before admission, never from a browser DTO. */
 export type CloudAgentAdmissionContext = {
@@ -44,8 +44,10 @@ export function admitCloudAgentTask(
   input: {
     sourceId: string;
     prompt: string;
+    displayPrompt?: string;
     images?: ModelMessage["images"];
     hasAttachments?: boolean;
+    inputFiles?: CloudTask["inputFiles"];
   },
   context: () => CloudAgentAdmissionContext,
   commit: (task: Readonly<CloudTask>) => undefined,
@@ -145,7 +147,7 @@ export function admitCloudAgentTask(
         ...(images.length ? { images: images.map(({ id }) => ({ id })) } : {}),
       },
     ];
-    if (JSON.stringify(requiredContext).length > CLOUD_AGENT_POLICY_V1.maxContextChars)
+    if (JSON.stringify(requiredContext).length > CLOUD_AGENT_POLICY_V2.maxContextChars)
       throw new AppError(
         "cloud_input_too_long",
         "任务文字、文件正文和系统提示词超出云端上下文长度上限，请拆分文件或缩短内容。本次未创建任务。",
@@ -172,7 +174,7 @@ export function admitCloudAgentTask(
       limits: {
         inputTokens: modelInputBudget(model),
         outputTokens: model.maxOutputTokens,
-        outputImages: 0,
+        outputImages: 4,
         creditUnits: model.maxCredits > 0 ? Math.floor(model.maxCredits * 1000) : null,
       },
     });
@@ -251,6 +253,8 @@ export function admitCloudAgentTask(
       resetAt: session.resetAt,
       conversationId: `cloud-${createHash("sha256").update(JSON.stringify(conversation)).digest("hex")}`,
       prompt: input.prompt,
+      displayPrompt: input.displayPrompt ?? input.prompt,
+      ...(input.inputFiles?.length ? { inputFiles: input.inputFiles } : {}),
       ...(images.length ? { imageIds: images.map((image) => image.id) } : {}),
       ...(input.hasAttachments || images.length ? { hasAttachments: true } : {}),
       idempotencyKey: `wechatai-${crypto.randomUUID()}`,
