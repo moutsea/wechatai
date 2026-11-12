@@ -335,7 +335,18 @@ describe("permanent bilateral invitation rewards", () => {
       units: 0,
       expires: Date.now() + 86400000,
     });
-    const saved = JSON.parse(await stub.api("plugin.save", { pluginId: "wechatai/cloud-agent" }));
+    const model = (await stub.snapshot()).assistants[0];
+    expect(
+      JSON.parse(
+        await stub.api("model.save", { ...model, maxOutputTokens: 8192, contextTokens: 32000 }),
+      ).ok,
+    ).toBe(true);
+    const saved = JSON.parse(
+      await stub.api("plugin.save", {
+        pluginId: "wechatai/cloud-agent",
+        modelId: (await stub.snapshot()).assistants[0].id,
+      }),
+    );
     expect(saved.ok).toBe(true);
     const net = network(wxId);
     await runInDurableObject(stub, async (instance, state) => {

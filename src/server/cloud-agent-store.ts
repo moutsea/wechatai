@@ -1,6 +1,7 @@
 import type { PluginInvocation } from "../shared/plugins";
 import type { ChatSession } from "../shared/types";
 import type { AgentJobView } from "./cloud-agent-client";
+import type { ResolvedModel } from "./channels";
 import { AppError } from "./config";
 import { z } from "zod";
 
@@ -21,6 +22,21 @@ export type CloudTask = {
   tenantId: string;
   profileId: string;
   model: string;
+  /** Server-owned model snapshot. The provider key remains encrypted locally. */
+  modelConnection?:
+    | (Pick<
+        ResolvedModel,
+        | "id"
+        | "model"
+        | "protocol"
+        | "baseUrl"
+        | "encryptedKey"
+        | "keyContext"
+        | "systemPrompt"
+        | "contextTokens"
+        | "maxOutputTokens"
+      > & { maxInputTokens?: number })
+    | null;
   workspaceName: string;
   callbackVersion: string;
   callbackOrigin: string;
@@ -79,6 +95,7 @@ export type CloudProvision = {
   workspaceId: string;
   configured: number;
   updatedAt: number;
+  modelChannel?: { id: string; fingerprint: string };
 };
 
 const TERMINAL: CloudTaskState[] = ["completed", "failed", "cancelled", "rejected"];
@@ -264,6 +281,7 @@ export class CloudAgentStore {
       next.frozen = "";
       next.invocation = null;
       next.request = "";
+      next.modelConnection = null;
       if (next.outcome)
         next.outcome = { ...next.outcome, text: undefined, task: undefined, refusal: undefined };
     }
@@ -308,6 +326,7 @@ export class CloudAgentStore {
         invocation: null,
         request: "",
         outcome: null,
+        modelConnection: null,
         stale: 1,
         delivered: 1,
         deliveryStatus: "stale",

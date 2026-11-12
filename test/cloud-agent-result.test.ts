@@ -1,6 +1,7 @@
 import { abortAllDurableObjects, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentJobView } from "../src/server/cloud-agent-client";
+import { parseJob } from "../src/server/cloud-agent-client";
 import { prepareCloudAgentResult } from "../src/server/cloud-agent-result";
 import { CloudAgentRuntime } from "../src/server/cloud-agent-runtime";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
@@ -91,6 +92,52 @@ async function setup(job: Partial<AgentJobView> = {}, change: Partial<CloudTask>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("durable AGT terminal result preparation", () => {
+  it.each([
+    ["model_auth", "API Key"],
+    ["model_payment", "余额、套餐或可用额度"],
+    ["model_permission", "模型权限"],
+    ["model_not_found", "接口协议和模型 ID"],
+    ["model_rate_limit", "稍后重试"],
+    ["model_unavailable", "服务商状态"],
+    ["model_request_invalid", "工具调用支持"],
+    [undefined, "联系运营方"],
+  ] as const)(
+    "keeps %s guidance and fee boundaries through a persisted outcome",
+    async (failureCode, action) => {
+      const outcome = parseJob({
+        id: "job-one",
+        workspaceId: "workspace-one",
+        status: "failed",
+        failureCode,
+        error: "private-upstream-text",
+      });
+      const { stub, task } = await setup(outcome);
+      await abortAllDurableObjects();
+      await inStore(env.ACCOUNTS.get(stub.id), async (store) => {
+        const result = await prepareCloudAgentResult(store, task.id);
+        expect(result).toMatchObject({ state: "failed", meter: null });
+        expect(result?.error).toContain(action);
+        expect(result?.error).toContain("未扣 credits");
+        expect(result?.error).toContain("模型 API 费用以服务商账单为准");
+        expect(JSON.stringify(result)).not.toContain("private-upstream-text");
+        expect(await prepareCloudAgentResult(store, task.id)).toEqual(result);
+      });
+    },
+  );
+  it("explains a complete-input limit failure without charging or echoing provider errors", async () => {
+    const { stub, task } = await setup({
+      status: "failed",
+      text: undefined,
+      failureCode: "model_context_limit",
+    });
+    await inStore(stub, async (store) => {
+      const result = await prepareCloudAgentResult(store, task.id);
+      expect(result).toMatchObject({ state: "failed", meter: null, result: "" });
+      expect(result?.error).toContain("含系统提示词、历史和工具信息");
+      expect(result?.error).toContain("请新建会话");
+      expect(result?.error).toContain("未扣 credits");
+    });
+  });
   it.each([undefined, {}, { input_tokens: 0 }, { input_tokens: 1e9, output_tokens: 1e9 }])(
     "meters frozen invocation and returned text independently of upstream usage %j",
     async (usage) => {

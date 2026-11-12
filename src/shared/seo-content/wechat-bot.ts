@@ -60,7 +60,7 @@ export const wechatBotPage: SeoPage = {
 - 不需要修改微信客户端，也不需要模拟协议登录。
 - 绑定关系在微信账号这一侧，换手机不影响，换微信号要重新扫码。
 
-微伴走的就是这条路线：配置自己的模型 API Key 或已开放的云端 Agent，再用微信 ClawBot 扫码绑定；使用云端还需发送 \`/use 快捷名\` 进入插件。**没有绕过 ClawBot 的绑定方式**，普通「扫一扫」也不能替代插件里的绑定流程。完整步骤见[微信 ClawBot 插件怎么用](/wechat-clawbot)。`,
+微伴走的就是这条路线：先配置自己的模型 API Key 和文本模型，再用微信 ClawBot 扫码绑定；需要使用已开放的 Plus 云端 Agent 时，在插件中选择该模型，并发送 \`/use 快捷名\` 进入插件。**没有绕过 ClawBot 的绑定方式**，普通「扫一扫」也不能替代插件里的绑定流程。完整步骤见[微信 ClawBot 插件怎么用](/wechat-clawbot)。`,
     },
     {
       id: "scope",

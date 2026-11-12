@@ -36,10 +36,10 @@ describe("AGT operator configuration", () => {
     expect(cloudAgentEnabled(configured)).toBe(true);
     expect(cloudAgentAdminOnly(configured)).toBe(true);
     expect(cloudAgentConfig(configured)).toBeNull();
-    expect(cloudAgentConfig(configured, true)?.model).toBe("test-model");
+    expect(cloudAgentConfig(configured, true)).not.toBeNull();
     expect(cloudAgentConfig(settings({ CLOUD_AGENT_ENABLED: "false" }), true)).toBeNull();
     expect(
-      cloudAgentConfig(settings({ CLOUD_AGENT_ENABLED: "admin", AGT_MODEL: "" }), true),
+      cloudAgentConfig(settings({ CLOUD_AGENT_ENABLED: "admin", AGT_APP_KEY: "" }), true),
     ).toBeNull();
   });
 
@@ -66,7 +66,6 @@ describe("AGT operator configuration", () => {
       appId: "app-one",
       appKey: "test-only-app-key",
       tenantId: "tenant-one",
-      model: "test-model",
       agentId: "wechatai-v1",
       workspacePrefix: "wechatai",
       maxActive: 1,
@@ -87,7 +86,6 @@ describe("AGT operator configuration", () => {
   );
 
   it.each([
-    ["AGT_MODEL", ""],
     ["AGT_AGENT_ID", "Uppercase"],
     ["AGT_WORKSPACE_PREFIX", "first/second"],
   ])("keeps recovery independent of invalid new-task setting %s", (name, value) => {

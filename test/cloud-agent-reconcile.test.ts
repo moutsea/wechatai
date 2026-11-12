@@ -9,7 +9,7 @@ import {
   type CloudTask,
 } from "../src/server/cloud-agent-store";
 
-const config: CloudAgentClientConfig = {
+const config: CloudAgentClientConfig & { model: string } = {
   origin: "https://agt.example.com",
   appId: "app-one",
   appKey: "test-only-app-key",

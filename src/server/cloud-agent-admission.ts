@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { CLOUD_AGENT_PLUGIN_ID, CLOUD_AGENT_VERSION } from "../shared/cloud-agent";
 import { PLUGIN_PROTOCOL_VERSION, pluginInvocationSchema } from "../shared/plugins";
 import type { ChatSession } from "../shared/types";
+import type { ResolvedModel } from "./channels";
+import { modelInputBudget } from "../shared/context";
 import { cloudCallbackSecret, cloudCallbackVersion } from "./cloud-agent-callback";
 import { CloudAgentStore, type CloudTask } from "./cloud-agent-store";
 import { AppError, cloudAgentConfig, publicSiteUrl } from "./config";
@@ -12,6 +14,7 @@ import { dayWindow, Wallet } from "./wallet";
 export type CloudAgentAdmissionContext = {
   planUntil: number;
   isAdmin?: boolean;
+  model?: ResolvedModel;
   plugin: { id: string; pluginId: string; name: string; enabled: boolean } | null;
   session: (ChatSession & { contextStart: number }) | null;
   connection: { id: string; generation: string; currentSessionId: string; enabled: boolean };
@@ -76,6 +79,13 @@ export function admitCloudAgentTask(
     const config = cloudAgentConfig(env, current.isAdmin);
     if (!config)
       throw new AppError("cloud_agent_unavailable", "云端 Agent 服务尚未就绪，请稍后再试。", 503);
+    const model = current.model;
+    if (!model?.hasKey || !model.encryptedKey)
+      throw new AppError(
+        "cloud_model_required",
+        "请在云端 Agent 配置中选择已配置密钥的文本模型。",
+        422,
+      );
     if (new Wallet(storage).balance() <= 0)
       throw new AppError(
         "insufficient_credits",
@@ -108,7 +118,12 @@ export function admitCloudAgentTask(
       pluginVersion: CLOUD_AGENT_VERSION,
       sessionId: session.id,
       messages: [{ role: "user", content: [{ type: "text", text: input.prompt }] }],
-      limits: { inputTokens: 128_000, outputTokens: 16_000, outputImages: 0, creditUnits: null },
+      limits: {
+        inputTokens: modelInputBudget(model),
+        outputTokens: model.maxOutputTokens,
+        outputImages: 0,
+        creditUnits: model.maxCredits > 0 ? Math.floor(model.maxCredits * 1000) : null,
+      },
     });
     // Reject impossible inputs before reserving an execution or provisioning AGT.
     pluginOutputBudget(invocation);
@@ -134,6 +149,8 @@ export function admitCloudAgentTask(
       );
     }
     const conversation = [
+      model.id,
+      model.model,
       plugin.id,
       connection.id,
       connection.generation,
@@ -148,7 +165,19 @@ export function admitCloudAgentTask(
       appId: config.appId,
       tenantId: config.tenantId,
       profileId: config.agentId,
-      model: config.model,
+      model: model.model,
+      modelConnection: {
+        id: model.id,
+        model: model.model,
+        protocol: model.protocol,
+        baseUrl: model.baseUrl,
+        encryptedKey: model.encryptedKey,
+        keyContext: model.keyContext,
+        systemPrompt: model.systemPrompt,
+        contextTokens: model.contextTokens,
+        maxInputTokens: modelInputBudget(model),
+        maxOutputTokens: model.maxOutputTokens,
+      },
       workspaceName: `${config.workspacePrefix}-${accountId.slice(0, 32)}`,
       callbackVersion,
       callbackOrigin,

@@ -6,8 +6,9 @@ import {
 import { cloudJobBody } from "./cloud-agent-client";
 import { cloudAgentScope } from "./cloud-agent-provision";
 import type { CloudAgentStore, CloudTask } from "./cloud-agent-store";
-import { AppError, cloudAgentEnabled } from "./config";
+import { AppError, cloudAgentEnabled, cloudAgentConnectionConfig } from "./config";
 import { decrypt, encrypt } from "./security";
+import { prepareCloudAgentModel } from "./cloud-agent-model";
 
 /**
  * Freeze the exact submit body before any network attempt. Run from the account's
@@ -60,6 +61,20 @@ export async function prepareCloudAgentRequest(
 
   const context = `${accountId}:cloud:${task.id}`;
   if (!task.request) {
+    let selectedModel = task.model;
+    if (task.modelConnection) {
+      const connection = cloudAgentConnectionConfig(env);
+      if (!connection) throw new AppError("cloud_agent_config", "云端服务配置尚未就绪", 503);
+      selectedModel = await prepareCloudAgentModel(
+        env,
+        { ...connection, agentId: task.profileId },
+        store,
+        accountId,
+        task,
+      );
+      task = current();
+      if (!task) return null;
+    }
     let origin: URL;
     try {
       origin = new URL(task.callbackOrigin);
@@ -83,7 +98,8 @@ export async function prepareCloudAgentRequest(
       cloudJobBody({
         workspaceId: provision.workspaceId,
         agentId: task.profileId,
-        model: task.model,
+        model: selectedModel,
+        ...(task.modelConnection ? { systemPrompt: task.modelConnection.systemPrompt } : {}),
         message: task.prompt,
         conversationId: task.conversationId,
         callback: {

@@ -18,7 +18,7 @@ let data: Snapshot;
 const notify = vi.fn();
 const request = vi.fn();
 const plugin = (enabled = true): CloudAgentPlugin => ({
-  ...cloudAgentInputSchema.parse({ enabled }),
+  ...cloudAgentInputSchema.parse({ enabled, modelId: "demo-1" }),
   id: "cloud",
   pluginId: "wechatai/cloud-agent",
   version: "1.0.0",
@@ -87,14 +87,15 @@ describe("cloud Agent onboarding", () => {
     },
   );
 
-  it("keeps the guide open for a cloud-only account and sends it directly to QR setup", async () => {
+  it("keeps the guide open with a selected execution model and proceeds to QR setup", async () => {
     data.cloudAgent = plugin().status!;
     data.plugins = [plugin()];
-    await onboarding();
+    await onboarding(true);
+    await click("新手引导");
     expect(container.querySelector("dialog")).not.toBeNull();
     await click("我了解了，下一步");
-    expect(container.textContent).toContain("云端 Agent 已就绪，可以继续连接微信。");
-    expect(container.textContent).not.toContain("已配置文本模型");
+    expect(container.textContent).toContain("云端 Agent 已就绪");
+    expect(container.textContent).toContain("已选择执行模型");
     await click("下一步");
     await click("去连接微信");
     expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/wechat");
@@ -112,8 +113,8 @@ describe("cloud Agent onboarding", () => {
         data.channels = baseline.channels;
         data.assistants = baseline.assistants;
       }
-      await onboarding(withModels);
-      if (withModels) await click("新手引导");
+      await onboarding(true);
+      await click("新手引导");
       await click("我了解了，下一步");
       await click("下一步");
       const commands = [...container.querySelectorAll(".onboarding-wechat-steps code")].map(
@@ -155,7 +156,6 @@ beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   data = await createFakeApi()<Snapshot>("/dashboard");
   data.plan = "plus";
-  data.assistants = [];
   data.plugins = [];
   notify.mockReset();
   request.mockReset();
@@ -198,7 +198,7 @@ describe("cloud Agent plugin interactions", () => {
     await click("配置 云端 Agent");
     const dialog = container.querySelector("dialog")!;
     expect(dialog.textContent).toContain("当前仅对管理员开放内测");
-    expect(dialog.textContent).toContain("仍按平台 credits 计费");
+    expect(dialog.textContent).toContain("模型 API 费用另付服务商");
     expect(request).not.toHaveBeenCalled();
   });
 
@@ -234,7 +234,7 @@ describe("cloud Agent plugin interactions", () => {
     },
   );
 
-  it("creates a plugin without model fields and checks its status without a paid question modal", async () => {
+  it("selects an existing model without sending its key and checks service status", async () => {
     request.mockImplementation(async (path: string, options: RequestInit) => {
       if (path === "/plugins") {
         expect(options.method).toBe("POST");
@@ -244,7 +244,7 @@ describe("cloud Agent plugin interactions", () => {
           shortcut: "云",
           enabled: true,
         });
-        expect(body).not.toHaveProperty("modelId");
+        expect(body.modelId).toBe("demo-1");
         expect(body).not.toHaveProperty("apiKey");
         data.plugins = [plugin()];
         return plugin();
@@ -344,17 +344,16 @@ describe("cloud Agent plugin interactions", () => {
     expect(dialog.textContent).toContain("删除配置");
   });
 
-  it("permits QR binding for an eligible cloud-only account", async () => {
-    data.channels = [];
+  it("permits QR binding with a configured user model and eligible cloud plugin", async () => {
     data.plugins = [plugin()];
-    data.currentSession = null;
+    data.currentSession = { ...data.currentSession!, pluginInstanceId: "cloud" };
     data.connection = { status: "disconnected" };
     await render(<Wechat />);
     const qr = [...container.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("获取二维码"),
     )!;
     expect(qr.disabled).toBe(false);
-    expect(container.textContent).not.toContain("配置渠道与模型");
+    expect(container.textContent).not.toContain("请先在「渠道与模型」中添加渠道");
     expect(container.textContent).toContain("发送 /use 云");
     await act(async () => qr.click());
     expect(request).toHaveBeenCalledWith("/wechat/links/default/bind", { method: "POST" });

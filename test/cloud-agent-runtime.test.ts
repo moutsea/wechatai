@@ -5,6 +5,7 @@ import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { CloudAgentRuntime } from "../src/server/cloud-agent-runtime";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
 import { cloudAgentConfig } from "../src/server/config";
+import { encrypt } from "../src/server/security";
 
 const scope = { origin: "https://agt.example.com", appId: "app-one", tenantId: "tenant-one" };
 const job = (change: Partial<AgentJobView> = {}): AgentJobView => ({
@@ -448,6 +449,43 @@ describe("durable AGT recovery runner", () => {
       expect(await calls[3].json()).toMatchObject({ agentId: saved.profileId, model: saved.model });
     });
   });
+
+  it.each([403, 409])(
+    "rejects model channel permission/capacity failures (%i) without submitting or charging",
+    async (status) => {
+      const { stub, saved, runtime } = await setup();
+      const calls = network(() => new Response(null, { status }));
+      await inStore(stub, async (store) => {
+        provision(store, stub.id.toString());
+        store.patch(saved, {
+          modelConnection: {
+            id: "user-model",
+            model: "own-model",
+            protocol: "responses",
+            baseUrl: "https://llm.example.com",
+            encryptedKey: await encrypt(env, "user-api-key", `${stub.id}:channel:own`),
+            keyContext: "channel:own",
+            systemPrompt: "",
+            contextTokens: 32000,
+            maxOutputTokens: 1024,
+          },
+        });
+        const { runner, host } = runtime(store);
+        await pass(runner);
+        expect(store.get(saved.id)).toMatchObject({
+          state: "rejected",
+          submittedAt: 0,
+          settled: 0,
+          delivered: 1,
+        });
+        expect(store.countSince(0)).toBe(0);
+        expect(calls).toHaveLength(1);
+        expect(calls[0].url).toContain("/model-channels");
+        expect(host.finalize).not.toHaveBeenCalled();
+        expect(host.deliver).toHaveBeenCalledOnce();
+      });
+    },
+  );
 
   it.each([403, 429])(
     "persists an unsubmitted provisioning refusal (%i) for delivery",

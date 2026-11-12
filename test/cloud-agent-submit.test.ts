@@ -9,7 +9,7 @@ import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store
 import { submitCloudAgentTask } from "../src/server/cloud-agent-submit";
 import { PLUGIN_PROTOCOL_VERSION, type PluginInvocation } from "../src/shared/plugins";
 
-const config: CloudAgentClientConfig = {
+const config: CloudAgentClientConfig & { model: string } = {
   origin: "https://agt.example.com",
   appId: "app-one",
   tenantId: "tenant-one",

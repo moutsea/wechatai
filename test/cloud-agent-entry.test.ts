@@ -54,6 +54,14 @@ async function setup(plus = true, enabled: boolean | "admin" = true, ownerId?: s
       units: 0,
       expires: Date.now() + 86_400_000,
     });
+  await api(stub, "assistant.save", {
+    name: "用户文本模型",
+    model: "user-model",
+    protocol: "responses",
+    baseUrl: "https://llm.example.com/v1",
+    apiKey: "test-user-api-key",
+    systemPrompt: "使用用户配置的系统提示词。",
+  });
   await api(stub, "wechat.create", { name: "测试微信" });
   await connectForManualDelivery(stub);
   return stub;
@@ -71,8 +79,12 @@ async function trial(grant: "active" | "expired" | "none" = "active", plus = tru
       .run();
   return { id, stub: await setup(plus, "admin", id) };
 }
-const save = (stub: Account, value: Record<string, unknown> = {}) =>
-  api(stub, "plugin.save", { pluginId: "wechatai/cloud-agent", ...value });
+const save = async (stub: Account, value: Record<string, unknown> = {}) =>
+  api(stub, "plugin.save", {
+    pluginId: "wechatai/cloud-agent",
+    modelId: (await stub.snapshot()).assistants[0]?.id ?? "",
+    ...value,
+  });
 async function plugin(stub: Account) {
   const result = await save(stub);
   expect(result.ok, JSON.stringify(result)).toBe(true);
@@ -108,6 +120,41 @@ afterEach(async () => {
 });
 
 describe("cloud Agent user entry", () => {
+  it("requires an explicit user model and rejects models outside the account", async () => {
+    const stub = await setup();
+    expect(await save(stub, { modelId: "" })).toMatchObject({
+      ok: false,
+      error: "cloud_model_required",
+    });
+    const other = await setup();
+    expect(await save(stub, { modelId: (await other.snapshot()).assistants[0].id })).toMatchObject({
+      ok: false,
+      error: "assistant_missing",
+    });
+    expect(await tasks(stub)).toEqual([]);
+  });
+
+  it("keeps old cloud configuration editable but requires selecting a user model before use", async () => {
+    const stub = await setup();
+    const p = await plugin(stub);
+    await runInDurableObject(stub, (_, state) => {
+      const row = state.storage.sql
+        .exec<{ data: string }>("SELECT data FROM plugins WHERE id=?", p.id)
+        .one();
+      const legacy = JSON.parse(row.data);
+      delete legacy.modelId;
+      state.storage.sql.exec("UPDATE plugins SET data=? WHERE id=?", JSON.stringify(legacy), p.id);
+    });
+    const snapshot = await stub.snapshot();
+    const legacy = snapshot.plugins?.find((plugin) => plugin.id === p.id);
+    expect(legacy?.pluginId === "wechatai/cloud-agent" && legacy.access?.code).toBe(
+      "cloud_model_required",
+    );
+    await expect(send(stub, "/use 云")).rejects.toMatchObject({ code: "cloud_model_required" });
+    expect(await tasks(stub)).toEqual([]);
+    expect(await save(stub, { id: p.id, modelId: p.modelId })).toMatchObject({ ok: true });
+    expect(await send(stub, "/use 云")).toContain("已进入");
+  });
   it.each(["none", "expired"] as const)(
     "blocks %s admin access in both configuration and WeChat",
     async (grant) => {
@@ -155,8 +202,7 @@ describe("cloud Agent user entry", () => {
     const p = await plugin(stub);
     expect((await save(stub, { ...p, shortcut: "计划" })).ok).toBe(true);
     const before = await stub.snapshot();
-    expect(before.currentSession).toBeNull();
-    expect(await send(stub, "你好")).toContain("当前未选择模型或插件");
+    expect(before.currentSession?.pluginInstanceId).toBeUndefined();
     expect(await tasks(stub)).toHaveLength(0);
     await send(stub, "/use 计划");
     const selected = await stub.snapshot();
@@ -171,7 +217,7 @@ describe("cloud Agent user entry", () => {
   });
 
   it.each(["service", "disabled", "expired"])(
-    "archives cloud-only history and exits cleanly when configuration is unavailable: %s",
+    "archives cloud history and returns to the user model when cloud access is unavailable: %s",
     async (condition) => {
       const stub = await setup();
       const p = await plugin(stub);
@@ -185,7 +231,7 @@ describe("cloud Agent user entry", () => {
           if (condition === "service")
             Object.assign(Reflect.get(instance, "env"), {
               CLOUD_AGENT_ENABLED: "false",
-              PLUS_SESSIONS: "1",
+              PLUS_SESSIONS: "200",
             });
           else
             state.storage.sql.exec(
@@ -194,11 +240,11 @@ describe("cloud Agent user entry", () => {
         });
       const before = await stub.snapshot();
       const reply = await send(stub, "/wx archive");
-      expect(reply).toContain("会话已归档，当前未新建会话");
+      expect(reply).toContain("会话已归档，并开始新的会话");
       const after = await stub.snapshot();
-      expect(after.currentSession).toBeNull();
-      expect(after.connections.find((link) => link.id === "default")?.currentSessionId).toBe("");
-      expect(after.stats.sessions).toBe(1);
+      expect(after.currentSession?.pluginInstanceId).toBeUndefined();
+      expect(after.currentSession?.assistantId).toBe(p.modelId);
+      expect(after.stats.sessions).toBe(3);
       expect(after.wallet.balance).toBe(before.wallet.balance);
       expect(after.ledger).toEqual(before.ledger);
       expect(after.cloudAgent.usedToday).toBe(1);
@@ -222,7 +268,7 @@ describe("cloud Agent user entry", () => {
       await abortAllDurableObjects();
       const restored = env.ACCOUNTS.get(stub.id);
       await runInDurableObject(restored, (_, state) => useManualAlarms(state));
-      expect((await restored.snapshot()).currentSession).toBeNull();
+      expect((await restored.snapshot()).currentSession?.assistantId).toBe(p.modelId);
       expect(await fullTask(restored)).toMatchObject({ id: task.id, stopRequested: 1, stale: 1 });
     },
   );
@@ -253,14 +299,14 @@ describe("cloud Agent user entry", () => {
       const after = await stub.snapshot();
       expect(after.currentSession?.id).not.toBe(before.currentSession!.id);
       expect(after.currentSession?.pluginInstanceId).toBe(available ? p.id : undefined);
-      expect(after.currentSession?.assistantId).toBe(available ? null : model.data.id);
+      expect(after.currentSession?.assistantId).toBe(p.modelId);
       expect(after.wallet.balance).toBe(before.wallet.balance);
       expect(after.ledger).toEqual(before.ledger);
       expect(after.cloudAgent).toMatchObject({ active: 0, usedToday: 0 });
     },
   );
 
-  it("archives through the API when no replacement is available and preserves another link's current session", async () => {
+  it("archives through the API with a user model replacement and preserves another link's current session", async () => {
     const stub = await setup();
     const p = await plugin(stub);
     await send(stub, "/use 云");
@@ -279,7 +325,9 @@ describe("cloud Agent user entry", () => {
       ok: true,
     });
     const after = await stub.snapshot();
-    expect(after.connections.find((link) => link.id === "default")?.currentSessionId).toBe("");
+    expect(after.connections.find((link) => link.id === "default")?.currentSessionId).not.toBe(
+      first.id,
+    );
     expect(after.currentSession?.id).toBe(created.data.id);
     expect(after.selectedConnectionId).toBe(secondLink);
   });
@@ -339,7 +387,7 @@ describe("cloud Agent user entry", () => {
     expect(created).toMatchObject({
       ok: true,
       data: {
-        assistantId: null,
+        assistantId: p.modelId,
         pluginInstanceId: p.id,
         connectionId: "default",
         title: "新的对话",
@@ -347,8 +395,8 @@ describe("cloud Agent user entry", () => {
       },
     });
     const snapshot = await stub.snapshot();
-    expect(snapshot.channels).toEqual([]);
-    expect(snapshot.assistants).toEqual([]);
+    expect(snapshot.channels).toHaveLength(1);
+    expect(snapshot.assistants).toHaveLength(1);
     expect(snapshot.currentSession?.id).toBe(created.data.id);
     expect(snapshot.wallet.balance).toBe(before.wallet.balance);
     expect(snapshot.ledger).toEqual(before.ledger);
@@ -393,7 +441,7 @@ describe("cloud Agent user entry", () => {
     expect(await tasks(stub)).toEqual([]);
   });
 
-  it("saves and checks a managed plugin without a local model, upstream request or hidden task", async () => {
+  it("saves a user model reference and checks status without upstream calls or hidden tasks", async () => {
     const stub = await setup();
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No network expected"));
     const p = await plugin(stub);
@@ -403,7 +451,7 @@ describe("cloud Agent user entry", () => {
       access: null,
       status: { ready: true, active: 0, usedToday: 0 },
     });
-    expect(p).not.toHaveProperty("modelId");
+    expect(p.modelId).toBe((await stub.snapshot()).assistants[0].id);
     expect(p).not.toHaveProperty("encryptedKey");
     expect(p).not.toHaveProperty("apiKey");
     const checked = await api(stub, "plugin.test", { id: p.id });
@@ -463,9 +511,9 @@ describe("cloud Agent user entry", () => {
     expect(await send(stub, "整理计划")).toContain("任务已接收");
     expect((await api(stub, "wechat.disconnect", { id: "default" })).ok).toBe(true);
     const before = await stub.snapshot();
-    expect(before.channels).toEqual([]);
-    expect(before.assistants).toEqual([]);
-    expect(before.currentSession?.channelName).toBe("微伴托管");
+    expect(before.channels).toHaveLength(1);
+    expect(before.assistants).toHaveLength(1);
+    expect(before.currentSession?.channelName).toBe("用户文本模型");
     expect(wechatSetupIssue(before)).toBeNull();
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const request = new Request(input, init);
@@ -509,13 +557,9 @@ describe("cloud Agent user entry", () => {
     expect((await stub.snapshot()).ledger).toEqual(before.ledger);
   });
 
-  it.each([
-    ["service", "cloud_agent_unavailable"],
-    ["membership", "cloud_plus_required"],
-    ["disabled", "plugin_disabled"],
-  ] as const)(
-    "rejects cloud-only rebind after losing %s eligibility without disrupting the connection",
-    async (change, code) => {
+  it.each(["service", "membership", "disabled"] as const)(
+    "retains ordinary model connection readiness when cloud %s eligibility is lost",
+    async (change) => {
       const stub = await setup();
       const p = await plugin(stub);
       if (change === "service")
@@ -527,17 +571,8 @@ describe("cloud Agent user entry", () => {
           state.storage.sql.exec("UPDATE settings SET value='1' WHERE key='planUntil'");
         });
       else expect((await save(stub, { id: p.id, enabled: false })).ok).toBe(true);
-      const before = await stub.snapshot();
-      expect(wechatSetupIssue(before)?.code).toBe(code);
-      const fetch = vi
-        .spyOn(globalThis, "fetch")
-        .mockRejectedValue(new Error("No network expected"));
-      expect(await api(stub, "wechat.bind", { id: "default" })).toMatchObject({
-        ok: false,
-        error: code,
-      });
-      expect((await stub.snapshot()).connection).toEqual(before.connection);
-      expect(fetch).not.toHaveBeenCalled();
+      expect(wechatSetupIssue(await stub.snapshot())).toBeNull();
+      expect((await stub.snapshot()).assistants[0].id).toBe(p.modelId);
     },
   );
 
@@ -621,6 +656,18 @@ describe("cloud Agent user entry", () => {
       const request = new Request(input, init);
       const path = new URL(request.url).pathname;
       requests.push(`${request.method} ${path}`);
+      if (path === "/api/apps/app-one/model-channels") {
+        if (request.method === "GET") return Response.json({ channels: [] });
+        expect(await request.json()).toMatchObject({
+          provider: "openai-compatible",
+          api: "responses",
+          baseUrl: "https://llm.example.com/v1",
+          apiKey: "test-user-api-key",
+          defaultModel: "user-model",
+          isDefault: false,
+        });
+        return Response.json({ channel: { id: `mch_${"a".repeat(32)}` } });
+      }
       if (path === "/api/apps/app-one/users")
         return Response.json({
           appUser: {
@@ -642,9 +689,16 @@ describe("cloud Agent user entry", () => {
       if (path.startsWith("/api/workspaces/workspace-one/agents/")) return Response.json({});
       if (path === "/api/agent/jobs" || path === "/api/agent/workspace-one/jobs/job-one") {
         if (request.method === "POST") {
-          const body = await request.json<{ message: string; conversationId: string }>();
+          const body = await request.json<{
+            message: string;
+            conversationId: string;
+            model: string;
+            systemPrompt: string;
+          }>();
           expect(body.message).toBe(task.prompt);
           expect(body.conversationId).toBe(task.conversationId);
+          expect(body.model).toBe(`channel:mch_${"a".repeat(32)}:user-model`);
+          expect(body.systemPrompt).toBe("使用用户配置的系统提示词。");
         }
         return Response.json(
           {

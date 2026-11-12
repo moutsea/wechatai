@@ -6,7 +6,7 @@ export const pricingPage: SeoPage = {
   kind: "pricing",
   title: "价格：免费版每天 100 credits，Plus ¥9.9/月",
   description:
-    "自备 API 费用另付服务商；运营方开放的 Plus 云端 Agent 无需另付托管模型费用，仍消耗 credits 并限制次数。免费版每天 100 credits，Plus ¥9.9/月或 ¥88/年。",
+    "自备 API 费用另付服务商；运营方开放的 Plus 云端 Agent 也使用自备模型，API 费用另付服务商，仍消耗 credits 并限制次数。免费版每天 100 credits，Plus ¥9.9/月或 ¥88/年。",
   eyebrow: "价格",
   h1: "价格：我们不卖 token",
   lede: `${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
@@ -44,7 +44,7 @@ ${CLOUD_AGENT_COST_NOTE}购买 Plus 不代表云端一定可用，请先在插�
 | 消息提醒推送 | 支持 | 支持 |
 | 普通模型聊天需自带 API Key | 是 | 是 |
 | 仅使用消息提醒需模型 Key | 否 | 否 |
-| 云端 Agent | 不支持 | 运营方开放后可用，无需自备 Key，执行次数受限 |
+| 云端 Agent | 不支持 | 运营方开放后可用，使用自备文本模型，执行次数受限 |
 
 说明几件容易被忽略的事：
 
@@ -65,7 +65,7 @@ ${CLOUD_AGENT_COST_NOTE}购买 Plus 不代表云端一定可用，请先在插�
 
 例如，一次请求计量为 1000 个输入 token、1000 个输出 token，文字费用就是 1.8 credits。生成一张图片则收取 5 credits，再加上描述文字的费用。具体消耗取决于实际计量用量，可在额度明细中查看。
 
-使用自备 API 时，**credits 与服务商费用分开计算**，看总成本要把两边加起来。云端 Agent 无需填写服务商单价，平台仅按任务输入与最终输出计 credits，不计内部模型和工具消耗；次数限制仍独立生效。`,
+使用自备 API 时，**credits 与服务商费用分开计算**，看总成本要把两边加起来。云端 Agent 的模型 API 费用同样由所选服务商收取，平台仅按任务输入与最终输出计 credits，不重复计收内部模型和工具的 credits；次数限制仍独立生效。`,
     },
     {
       id: "what-is-free",
@@ -101,7 +101,7 @@ ${CLOUD_AGENT_COST_NOTE}购买 Plus 不代表云端一定可用，请先在插�
 
 使用自备 API 时，把 **微伴会员或加油包支出 + 服务商模型支出**，与另一方案在相同输入输出用量下的总价对照。免费赠额每日重置，不能按月累积；Plus 不降低自备 API 的服务商单价。
 
-上方估算器的服务商费用适用于自备 API，不代替实际账单；云端托管模型无需另付服务商，仍受平台 credits 与执行次数限制。没有对照报价与用量数据时，本站不宣称自带 Key 一定更便宜。方案取舍见 [微信 AI 的几种接入方案](/wechat-ai-options)。`,
+上方估算器的服务商费用适用于自备 API，不代替实际账单；云端 Agent 同样使用自备模型并另付 API 费用，仍受平台 credits 与执行次数限制。没有对照报价与用量数据时，本站不宣称自带 Key 一定更便宜。方案取舍见 [微信 AI 的几种接入方案](/wechat-ai-options)。`,
     },
   ],
   faq: [

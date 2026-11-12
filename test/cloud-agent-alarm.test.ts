@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { Wallet } from "../src/server/wallet";
+import { encrypt } from "../src/server/security";
 import { PLUGIN_PROTOCOL_VERSION } from "../src/shared/plugins";
 import type { PersonalAccount } from "../src/server/personal-account";
 import { connectForManualDelivery, useManualAlarms } from "./helpers/wechat-delivery";
@@ -40,7 +41,7 @@ async function setup(change: Partial<CloudTask> = {}) {
   const plugin = saved.data;
   expect(JSON.parse(await stub.api("plugin.activate", { id: plugin.id })).ok).toBe(true);
   const sessionId = (await stub.snapshot()).currentSession!.id;
-  const task = await runInDurableObject(stub, (_, state) => {
+  const task = await runInDurableObject(stub, async (_, state) => {
     const session = JSON.parse(
       state.storage.sql
         .exec<{ data: string }>("SELECT data FROM sessions WHERE id=?", sessionId)
@@ -56,6 +57,17 @@ async function setup(change: Partial<CloudTask> = {}) {
       tenantId: config.AGT_TENANT_ID,
       profileId: "profile-v1",
       model: "test-model",
+      modelConnection: {
+        id: "user-model",
+        model: "test-model",
+        protocol: "responses",
+        baseUrl: "https://llm.example.com/v1",
+        encryptedKey: await encrypt(env, "test-user-key", `${stub.id}:channel:test`),
+        keyContext: "channel:test",
+        systemPrompt: "",
+        contextTokens: 32000,
+        maxOutputTokens: 8192,
+      },
       workspaceName: "workspace-one",
       callbackVersion: "v1",
       callbackOrigin: "https://wechatai.example.com",
@@ -175,6 +187,12 @@ async function pass(
       const request = new Request(input, init);
       const path = new URL(request.url).pathname;
       paths.push(path);
+      if (path.includes("/model-channels"))
+        return Response.json(
+          request.method === "GET"
+            ? { channels: [] }
+            : { channel: { id: `mch_${"a".repeat(32)}` } },
+        );
       if (path.startsWith("/api/agent/")) {
         if (options.fail) return Response.json({ error: "unavailable" }, { status: 503 });
         return Response.json(outcome(path.endsWith("/cancel") ? "running" : status), {
@@ -445,7 +463,7 @@ describe("account AGT recovery alarm", () => {
   it("submits, resumes after restart and atomically settles/delivers once", async () => {
     const { stub, task } = await setup();
     const first = await pass(stub, "running");
-    expect(first.paths[0]).toBe("/api/agent/jobs");
+    expect(first.paths).toContain("/api/agent/jobs");
     expect(first.wakeups[0]).toBeGreaterThan(Date.now());
     expect((await inspect(stub, task.id)).task).toMatchObject({
       state: "accepted",

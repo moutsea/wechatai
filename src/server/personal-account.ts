@@ -1013,6 +1013,14 @@ export class PersonalAccount extends DurableObject<Env> {
       return { code: "cloud_plus_required", message: CLOUD_AGENT_PLUS_MESSAGE };
     if (!plugin.enabled)
       return { code: "plugin_disabled", message: "云端 Agent 已停用，请在插件页重新启用。" };
+    if (isCloudAgent(plugin)) {
+      const model = this.assistants().find((model) => model.id === plugin.modelId);
+      if (!model || !isChatModel(model) || !model.hasKey)
+        return {
+          code: "cloud_model_required",
+          message: "请编辑云端 Agent，选择已配置密钥的文本模型。",
+        };
+    }
     return null;
   }
   private async refreshCloudAccess() {
@@ -1052,7 +1060,12 @@ export class PersonalAccount extends DurableObject<Env> {
   private decodePlugin(data: string): StoredPlugin {
     const p = JSON.parse(data) as StoredPlugin;
     if (isRemoteAgent(p)) return { ...waitingMessageDefaults(OPENCLAW_WAITING_MESSAGE), ...p };
-    if (isCloudAgent(p)) return { ...waitingMessageDefaults(CLOUD_AGENT_WAITING_MESSAGE), ...p };
+    if (isCloudAgent(p))
+      return {
+        ...waitingMessageDefaults(CLOUD_AGENT_WAITING_MESSAGE),
+        ...p,
+        modelId: p.modelId ?? "",
+      };
     if (p.pluginId === "wechatai/image-generation")
       return { ...waitingMessageDefaults(IMAGE_WAITING_MESSAGE), ...p };
     if (p.pluginId === "wechatai/personal-assistant")
@@ -1102,7 +1115,12 @@ export class PersonalAccount extends DurableObject<Env> {
     }
     if (isCloudAgent(p)) {
       const { encryptedKey: _key, ...safe } = p;
-      return { ...safe, hasKey: true, access: this.cloudAccess(p), status: this.cloudStatus() };
+      return {
+        ...safe,
+        hasKey: this.assistants().some((model) => model.id === p.modelId && model.hasKey),
+        access: this.cloudAccess(p),
+        status: this.cloudStatus(),
+      };
     }
     if (isRemoteAgent(p))
       return {
@@ -1236,6 +1254,15 @@ export class PersonalAccount extends DurableObject<Env> {
             issue.code === "cloud_agent_unavailable" ? 503 : 403,
           );
       }
+      if (
+        !previous ||
+        input.enabled ||
+        (isCloudAgent(previous) && input.modelId !== previous.modelId)
+      ) {
+        if (!input.modelId)
+          throw new AppError("cloud_model_required", "请选择云端 Agent 使用的文本模型。", 422);
+        this.textAssistant(input.modelId);
+      }
       if (!previous || input.shortcut !== previous.shortcut)
         this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       const plugin: StoredPlugin = {
@@ -1246,7 +1273,15 @@ export class PersonalAccount extends DurableObject<Env> {
         createdAt: previous?.createdAt ?? Date.now(),
         encryptedKey: "",
       };
-      this.persistPlugin(plugin);
+      this.ctx.storage.transactionSync(() => {
+        this.persistPlugin(plugin);
+        for (const session of this.sessions().filter(
+          (session) => session.pluginInstanceId === plugin.id,
+        )) {
+          session.assistantId = input.modelId || null;
+          this.saveSession(session);
+        }
+      });
       await this.scheduleWechat();
       return this.publicPlugin(plugin);
     }
@@ -1773,6 +1808,7 @@ export class PersonalAccount extends DurableObject<Env> {
         return {
           planUntil: this.getSetting("planUntil", 0),
           isAdmin: this.cloudAdminUntil > Date.now(),
+          model: this.textAssistant(plugin.modelId),
           plugin: this.findPlugin(pluginId) ?? null,
           session: this.sessions().find((current) => current.id === session.id) ?? null,
           connection: {
@@ -1824,6 +1860,8 @@ export class PersonalAccount extends DurableObject<Env> {
     if (this.plan() !== "plus") return "云端 Agent 需要 Plus，开通或续费后可提交新任务。";
     // A possibly accepted task must be recovered even if its submission reply was lost.
     if (!task.submittedAt && !task.unconfirmed && !task.jobId) {
+      if (!task.modelConnection)
+        return "原云端任务未绑定用户模型，请编辑云端 Agent 选择文本模型后重新提交。";
       this.refreshWallet();
       if (this.wallet.balance() <= 0) return "credits 余额不足，请补充后再试。";
     }
@@ -2745,6 +2783,9 @@ export class PersonalAccount extends DurableObject<Env> {
     const currentPlugin = current?.pluginInstanceId
       ? this.findPlugin(current.pluginInstanceId)
       : undefined;
+    const cloudModel = isCloudAgent(currentPlugin)
+      ? assistants.find((model) => model.id === currentPlugin.modelId)
+      : undefined;
     const buckets = this.wallet.buckets();
     const window = dayWindow();
     const totals = this.sql
@@ -2780,15 +2821,16 @@ export class PersonalAccount extends DurableObject<Env> {
             assistantName:
               active?.name ??
               (current.pluginInstanceId ? (currentPlugin?.name ?? "已删除插件") : "模型"),
-            channelId: active?.channelId ?? "",
+            channelId: cloudModel?.channelId ?? active?.channelId ?? "",
             channelName:
+              cloudModel?.channelName ??
               active?.channelName ??
               (isCloudAgent(currentPlugin)
-                ? "微伴托管"
+                ? "未选择模型"
                 : current.pluginInstanceId
                   ? "远程 Agent"
                   : ""),
-            model: active?.model ?? "",
+            model: cloudModel?.model ?? active?.model ?? "",
           }
         : null,
       connection,

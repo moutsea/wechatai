@@ -7,7 +7,7 @@ import {
   type CloudAgentClientConfig,
 } from "../src/server/cloud-agent-client";
 
-const config: CloudAgentClientConfig = {
+const config: CloudAgentClientConfig & { model: string } = {
   origin: "https://agt.example.com",
   appId: "app-one",
   appKey: "test-app-key",
@@ -80,6 +80,61 @@ describe("AGT client protocol", () => {
       delegation: { visibility: "private", allowFrom: [] },
       sessionAccess: { visibility: "self", sendTo: [] },
     });
+  });
+
+  it("maps only known safe failures to actionable codes", () => {
+    const failed = { ...queued, status: "failed" };
+    expect(
+      parseJob({
+        ...failed,
+        error: "Model context window exceeded; enable context compaction or reduce the request",
+      }),
+    ).toMatchObject({ failureCode: "model_context_limit" });
+    const unknown = parseJob({ ...failed, error: "Provider error with secret=private" });
+    expect(unknown).not.toHaveProperty("failureCode");
+    expect(JSON.stringify(unknown)).not.toContain("private");
+  });
+
+  it.each([
+    [400, "model_request_invalid"],
+    [401, "model_auth"],
+    [402, "model_payment"],
+    [403, "model_permission"],
+    [404, "model_not_found"],
+    [408, "model_unavailable"],
+    [409, "model_unavailable"],
+    [422, "model_request_invalid"],
+    [429, "model_rate_limit"],
+    [503, "model_unavailable"],
+  ])("recognizes structured and exact legacy model failures (%s)", (status, code) => {
+    for (const diagnosis of [
+      { failureCode: code, error: "private-upstream-text" },
+      { error: `Model provider request failed (${status})` },
+    ]) {
+      const job = parseJob({ ...queued, status: "failed", ...diagnosis });
+      expect(job.failureCode).toBe(code);
+      expect(job).not.toHaveProperty("error");
+      expect(JSON.stringify(job)).not.toContain("private-upstream-text");
+    }
+  });
+
+  it("rejects untrusted diagnoses and does not attach model failures to other statuses", () => {
+    for (const diagnosis of [
+      { failureCode: "private-text" },
+      { failureCode: "constructor" },
+      { failureCode: {} },
+      { error: "Model provider request failed (401) private-secret" },
+      { error: "Tool failed: Model provider request failed (401)" },
+    ]) {
+      const job = parseJob({ ...queued, status: "failed", ...diagnosis });
+      expect(job).not.toHaveProperty("failureCode");
+      expect(job).not.toHaveProperty("error");
+    }
+    for (const status of ["queued", "running", "completed", "cancelled"]) {
+      expect(parseJob({ ...queued, status, failureCode: "model_auth" })).not.toHaveProperty(
+        "failureCode",
+      );
+    }
   });
 
   it.each([

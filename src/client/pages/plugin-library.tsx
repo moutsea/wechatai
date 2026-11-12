@@ -69,8 +69,8 @@ const library = [
   {
     id: "wechatai/cloud-agent",
     name: "云端 Agent",
-    description: "由微伴托管模型与工具，在微信提交文字任务，后台执行后回复结果，也可在任务页查看。",
-    tags: ["Plus 专属", "无需 API Key", "后台执行"],
+    description: "使用你配置的文本模型，在云端执行工具与文字任务，结果回复微信，也可在任务页查看。",
+    tags: ["Plus 专属", "自选模型", "后台执行"],
   },
   {
     id: "wechatai/notification",
@@ -379,7 +379,7 @@ export function PluginConfiguration({
     : null;
   const cloud = isCloudAgent(selected) ? selected : null;
   const cloudAvailability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
-  const cloudIssue = cloud ? cloudAvailability?.message : null;
+  const cloudIssue = cloud ? (cloudAvailability?.message ?? cloud.access?.message) : null;
   const canConfigure =
     canAdd &&
     (kind === "wechatai/cloud-agent"
@@ -491,8 +491,6 @@ export function PluginConfiguration({
                       {isRemoteAgent(selected) ? (
                         (selected.agents?.find((a) => a.id === selected.agentId)?.name ??
                         (selected.hasKey ? selected.agentId : "连接后自动识别"))
-                      ) : isCloudAgent(selected) ? (
-                        "微伴托管，无需填写 API Key"
                       ) : model ? (
                         <>
                           {model.channelName} / {model.name}
@@ -574,8 +572,8 @@ export function PluginConfiguration({
                       <div>
                         <dt>使用费用</dt>
                         <dd>
-                          输入和最终输出按 token 扣
-                          credits，托管模型无需另付供应商；失败或确认取消不收成功账单，请求停止的费用以最终结果为准。
+                          输入和最终输出按 token 扣 credits；模型 API
+                          费用另付服务商，包括内部多次调用。失败或确认取消不收成功账单，请求停止的费用以最终结果为准。
                         </dd>
                       </div>
                       <div>

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudAgentDelivery } from "../src/server/cloud-agent-delivery";
 import { settleCloudAgentTask } from "../src/server/cloud-agent-settlement";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
+import type { AgentJobView } from "../src/server/cloud-agent-client";
 import { Wallet } from "../src/server/wallet";
 import { publicSiteUrl } from "../src/server/config";
 import type { WxMessage } from "../src/server/wechat";
@@ -45,6 +46,7 @@ async function setup(
   text = "任务已完成🌱",
   status: "completed" | "failed" | "cancelled" = "completed",
   plainSession = false,
+  failureCode?: AgentJobView["failureCode"],
 ) {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(stub);
@@ -104,7 +106,13 @@ async function setup(
       },
       request: "",
       submittedAt: now,
-      outcome: { id: "job-one", workspaceId: "workspace-one", status, text },
+      outcome: {
+        id: "job-one",
+        workspaceId: "workspace-one",
+        status,
+        text,
+        ...(failureCode ? { failureCode } : {}),
+      },
       reconcileCursor: "",
       reconcileCandidates: [],
       hidden: 0,
@@ -151,6 +159,47 @@ afterEach(async () => {
 });
 
 describe("durable AGT reply delivery", () => {
+  it.each([
+    ["model_auth", "API Key"],
+    ["model_payment", "余额、套餐或可用额度"],
+    ["model_permission", "模型权限"],
+    ["model_not_found", "接口协议和模型 ID"],
+    ["model_rate_limit", "稍后重试"],
+    ["model_unavailable", "服务商状态"],
+    ["model_request_invalid", "工具调用支持"],
+  ] as const)(
+    "shows and delivers the same %s guidance without charging on replay",
+    async (code, action) => {
+      const { stub, task, inboxId } = await setup("", "failed", false, code);
+      const view = await api(stub, "cloud.task", { id: task.id });
+      expect(view.error).toContain(action);
+      expect(view.error).toContain("未扣 credits");
+      expect(view.error).toContain("模型 API 费用以服务商账单为准");
+      const before = await inAccount(stub, (storage, _store, delivery) => {
+        delivery.sync(task.id);
+        return {
+          ledger: storage.sql.exec("SELECT * FROM credit_ledger").toArray(),
+          balance: new Wallet(storage).balance(),
+        };
+      });
+      await abortAllDurableObjects();
+      const restored = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(restored, (_, state) => useManualAlarms(state));
+      expect((await api(restored, "cloud.task", { id: task.id })).error).toBe(view.error);
+      expect(await deliverQueuedReplies(restored)).toEqual([
+        { id: `${inboxId}:0`, text: view.error },
+      ]);
+      await inAccount(restored, async (storage, store, delivery) => {
+        await settleCloudAgentTask(storage, task.id, () => false);
+        delivery.sync(task.id);
+        expect(store.get(task.id)).toMatchObject({ units: 0, settled: 0, deliveryStatus: "sent" });
+        expect(new Wallet(storage).balance()).toBe(before.balance);
+        expect(storage.sql.exec("SELECT * FROM credit_ledger").toArray()).toEqual(before.ledger);
+        expect(storage.sql.exec("SELECT * FROM usage").toArray()).toEqual([]);
+      });
+      expect(await deliverQueuedReplies(restored)).toEqual([]);
+    },
+  );
   it.each(["disable", "save-disabled", "delete"])(
     "persists plugin %s cancellation across re-enabling, restart and late completion",
     async (action) => {

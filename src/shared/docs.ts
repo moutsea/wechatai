@@ -58,7 +58,7 @@ export const DOC_GUIDES = [
     seoTitle: "微信 AI 使用指南：选择 AI 并扫码连接",
     title: "使用指南",
     description:
-      "第一次使用微伴：先确认微信 ClawBot 入口，再配置自己的模型或已开放的 Plus 云端 Agent，扫码连接微信，把第一条消息发出去。",
+      "第一次使用微伴：先确认微信 ClawBot 入口，再配置自己的模型，可按需启用已开放的 Plus 云端 Agent，扫码连接微信，把第一条消息发出去。",
     category: "开始使用",
     group: "start",
     requirement: "需微信 ClawBot 入口",
@@ -149,10 +149,10 @@ export const DOC_GUIDES = [
   {
     slug: "cloud-agent",
     updatedAt: "2026-11-11",
-    seoTitle: "云端 Agent：无需 API Key 的微信后台任务",
+    seoTitle: "云端 Agent：使用自己的模型执行微信后台任务",
     title: "云端 Agent",
     description:
-      "运营方开放后，Plus 会员可无需自备 API Key，在微信提交文字任务；了解启用、任务查询、停止、credits 计费与远端数据保留边界。",
+      "运营方开放后，Plus 会员可选择自己配置的文本模型，在微信提交后台任务；了解启用、任务查询、停止、credits 计费与远端数据保留边界。",
     category: "插件",
     group: "plugins",
     requirement: "需要 Plus 且云端服务已开放",

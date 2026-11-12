@@ -371,24 +371,30 @@ const cloudPlugin = (): CloudAgentPlugin => ({
   },
 });
 describe("managed cloud Agent configuration", () => {
-  it("offers Plus configuration without requiring any local models", () => {
+  it("guides Plus users to configure a text model before saving cloud Agent", () => {
     data.plan = "plus";
     data.assistants = [];
     expect(library()).toContain('aria-label="配置 云端 Agent"');
     expect(library().match(/<article/g)).toHaveLength(8);
-    const editor = renderToStaticMarkup(<CloudAgentEditor plugin="new" onClose={noop} />);
-    expect(editor).toContain("无需自备模型渠道");
+    const editor = renderToStaticMarkup(
+      <MemoryRouter>
+        <CloudAgentEditor plugin="new" onClose={noop} />
+      </MemoryRouter>,
+    );
+    expect(editor).toContain("配置渠道与文本模型");
+    expect(editor).toContain('href="/app/channels"');
+    expect(editor).toMatch(/disabled=""[^>]*>保存配置/);
     expect(editor).toContain('value="disabled"');
     expect(editor).toContain("失败或确认取消不扣 credits");
-    expect(editor).toContain("请求停止后仍可能完成，费用以最终结果为准");
+    expect(editor).toContain("请求停止后仍可能完成，平台费用以最终结果为准");
     expect(editor).not.toContain('type="password"');
   });
-  it("shows quotas and managed model correctly and uses a state check instead of a paid test", () => {
+  it("shows quotas and the selected model and uses a state check instead of a paid test", () => {
     data.plan = "plus";
-    data.plugins = [cloudPlugin()];
+    data.plugins = [{ ...cloudPlugin(), modelId: data.assistants[0].id }];
     data.cloudAgent = cloudPlugin().status!;
     const html = configuration("cloud", "wechatai/cloud-agent");
-    expect(html).toContain("微伴托管，无需填写 API Key");
+    expect(html).toContain(data.assistants[0].name);
     expect(html).not.toContain("模型已删除");
     expect(html).toContain("今日 3 / 30 次");
     expect(html).toContain('href="/app/tasks?plugin=cloud"');

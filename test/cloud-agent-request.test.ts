@@ -8,7 +8,7 @@ import {
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { prepareCloudAgentRequest } from "../src/server/cloud-agent-request";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
-import { decrypt } from "../src/server/security";
+import { decrypt, encrypt } from "../src/server/security";
 
 function configuredEnv(values: Record<string, string>): Env {
   return new Proxy(env, {
@@ -97,6 +97,139 @@ const eligible = () => undefined;
 afterEach(() => vi.restoreAllMocks());
 
 describe("durable AGT submit request preparation", () => {
+  it.each([
+    [
+      "chat-completions",
+      "https://llm.example.com",
+      "chat-completions",
+      "https://llm.example.com/v1",
+    ],
+    [
+      "responses",
+      "https://llm.example.com/v1/responses",
+      "responses",
+      "https://llm.example.com/v1",
+    ],
+    [
+      "anthropic",
+      "https://llm.example.com/custom/v1/messages",
+      "messages",
+      "https://llm.example.com/custom/v1",
+    ],
+  ] as const)(
+    "uses the user's %s connection and freezes it across restart",
+    async (protocol, baseUrl, api, expectedRoot) => {
+      const { stub, saved } = await setup();
+      const settings = configuredEnv({
+        CLOUD_AGENT_ENABLED: "true",
+        AGT_ORIGIN: saved.origin,
+        AGT_APP_ID: saved.appId,
+        AGT_TENANT_ID: saved.tenantId,
+        AGT_APP_KEY: "test-app-key",
+        AGT_MODEL: "must-not-use-glm",
+      });
+      const channelId = `mch_${"a".repeat(32)}`;
+      const network = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+        const request = new Request(input, init);
+        expect(new URL(request.url).pathname).toBe(`/api/apps/${saved.appId}/model-channels`);
+        if (request.method === "GET") return Response.json({ channels: [] });
+        expect(await request.json()).toMatchObject({
+          provider: protocol === "anthropic" ? "anthropic-compatible" : "openai-compatible",
+          api,
+          baseUrl: expectedRoot,
+          apiKey: "user-provider-key",
+          defaultModel: "chosen-model",
+          isDefault: false,
+          models: [
+            {
+              id: "chosen-model",
+              contextWindowTokens: 32000,
+              maxInputTokens: 5000,
+              maxOutputTokens: 1024,
+              defaultOutputTokens: 1024,
+            },
+          ],
+        });
+        return Response.json({ channel: { id: channelId } });
+      });
+      const first = await inStore(stub, async (store) => {
+        store.patch(saved, {
+          modelConnection: {
+            id: "user-model",
+            model: "chosen-model",
+            protocol,
+            baseUrl,
+            encryptedKey: await encrypt(env, "user-provider-key", `${stub.id}:channel:user`),
+            keyContext: "channel:user",
+            systemPrompt: "用户设定",
+            contextTokens: 32000,
+            maxInputTokens: 5000,
+            maxOutputTokens: 1024,
+          },
+        });
+        return prepareCloudAgentRequest(settings, store, stub.id.toString(), saved.id, eligible);
+      });
+      expect(JSON.parse(first!)).toMatchObject({
+        model: `channel:${channelId}:chosen-model`,
+        systemPrompt: "用户设定",
+      });
+      expect(first).not.toContain("user-provider-key");
+      expect(first).not.toContain("must-not-use-glm");
+      await abortAllDurableObjects();
+      const second = await inStore(env.ACCOUNTS.get(stub.id), (store) =>
+        prepareCloudAgentRequest(settings, store, stub.id.toString(), saved.id, eligible),
+      );
+      expect(second).toBe(first);
+      expect(network).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("recovers only its own model channel after a lost creation response", async () => {
+    const { stub, saved } = await setup();
+    const settings = configuredEnv({
+      CLOUD_AGENT_ENABLED: "true",
+      AGT_ORIGIN: saved.origin,
+      AGT_APP_ID: saved.appId,
+      AGT_TENANT_ID: saved.tenantId,
+      AGT_APP_KEY: "test-app-key",
+    });
+    const owned = `mch_${"b".repeat(32)}`;
+    const foreign = `mch_${"c".repeat(32)}`;
+    let calls = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const request = new Request(input, init);
+      calls++;
+      if (request.method === "GET")
+        return Response.json({
+          channels: [
+            { id: foreign, name: "wechatai-other-account" },
+            { id: owned, name: `wechatai-${stub.id}` },
+          ],
+        });
+      expect(request.method).toBe("PATCH");
+      expect(request.url).toBe(`${saved.origin}/api/apps/${saved.appId}/model-channels/${owned}`);
+      return Response.json({ channel: { id: owned } });
+    });
+    const first = await inStore(stub, async (store) => {
+      store.patch(saved, {
+        modelConnection: {
+          id: "selected",
+          model: "selected-model",
+          protocol: "responses",
+          baseUrl: "https://llm.example.com",
+          encryptedKey: await encrypt(env, "own-user-key", `${stub.id}:channel:own`),
+          keyContext: "channel:own",
+          systemPrompt: "",
+          contextTokens: 32000,
+          maxOutputTokens: 1024,
+        },
+      });
+      return prepareCloudAgentRequest(settings, store, stub.id.toString(), saved.id, eligible);
+    });
+    expect(JSON.parse(first!).model).toBe(`channel:${owned}:selected-model`);
+    expect(calls).toBe(2);
+  });
+
   it("encrypts the complete frozen body and reuses the exact bytes after restart and config rotation", async () => {
     const { stub, saved } = await setup();
     const settings = configuredEnv({

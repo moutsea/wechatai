@@ -220,8 +220,8 @@ export function CostEstimator() {
         <p className="eyebrow">自备 API 的两笔费用</p>
         <h2 id="cost-estimator-title">先估算自己的文字用量</h2>
         <p>
-          只在浏览器内计算，无需登录。服务商单价仅用于估算自备 API 费用；使用云端 Agent
-          时无需填写，也不计其内部模型消耗。云端仍需 Plus 且服务已开放，执行次数另有限制。
+          只在浏览器内计算，无需登录。服务商单价用于估算模型 API 费用；云端 Agent
+          同样使用自备模型，可能多次调用模型，实际 API 费用以服务商账单为准。云端仍需 Plus 且服务已开放，执行次数另有限制。
         </p>
       </header>
       <div className="cost-fields">
@@ -262,7 +262,7 @@ export function CostEstimator() {
                   ? `约 ¥${estimate.modelYuan.toLocaleString("zh-CN", { maximumFractionDigits: 4 })}`
                   : "填写单价后显示"}
               </strong>
-              <p>仅适用于自备 API，费用另付服务商；云端托管模型无需另付。</p>
+              <p>模型 API 费用另付服务商；云端 Agent 的内部多次调用也可能产生 API 费用。</p>
             </div>
           </>
         ) : (

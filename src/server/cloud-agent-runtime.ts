@@ -149,14 +149,32 @@ export class CloudAgentRuntime {
             },
       );
     } else {
-      const submitted = await submitCloudAgentTask(
-        this.env,
-        config,
-        this.store,
-        this.accountId,
-        id,
-        (t) => this.host.stopReason(t),
-      );
+      let submitted: CloudTask | null;
+      try {
+        submitted = await submitCloudAgentTask(
+          this.env,
+          config,
+          this.store,
+          this.accountId,
+          id,
+          (t) => this.host.stopReason(t),
+        );
+      } catch (error) {
+        task = this.store.get(id)!;
+        if (
+          !task.submittedAt &&
+          !task.unconfirmed &&
+          !task.jobId &&
+          error instanceof AppError &&
+          error.upstreamStatus !== undefined &&
+          [400, 401, 403, 404, 409, 413, 422].includes(error.upstreamStatus)
+        )
+          return this.reject(
+            task,
+            "所选模型暂时无法接入云端，任务未提交，未扣 credits。请检查模型渠道配置；若持续失败，请联系运营方检查模型渠道权限与容量。",
+          );
+        throw error;
+      }
       if (submitted && cloudTaskTerminal(submitted.state) && !submitted.delivered)
         await this.host.deliver(submitted);
     }

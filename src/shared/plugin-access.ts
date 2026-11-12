@@ -1,7 +1,12 @@
 export const PLUGIN_LIMITS = { free: 1, plus: null } as const;
 
 export type PluginAccessIssue = {
-  code: "membership_expired" | "plugin_limit" | "plugin_disabled" | "cloud_plus_required";
+  code:
+    | "membership_expired"
+    | "plugin_limit"
+    | "plugin_disabled"
+    | "cloud_plus_required"
+    | "cloud_model_required";
   message: string;
 };
 

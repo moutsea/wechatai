@@ -9,6 +9,8 @@ import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { settleCloudAgentTask } from "../src/server/cloud-agent-settlement";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
 import { Wallet, dayWindow } from "../src/server/wallet";
+import { assistantSchema } from "../src/server/llm";
+import { encrypt } from "../src/server/security";
 import { useManualAlarms } from "./helpers/wechat-delivery";
 
 type Account = ReturnType<typeof env.ACCOUNTS.getByName>;
@@ -44,6 +46,10 @@ const row = <T>(storage: DurableObjectStorage, table: string, id: string): T | n
 };
 function readContext(storage: DurableObjectStorage): Context {
   return {
+    model: JSON.parse(
+      storage.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key='testModel'").one()
+        .value,
+    ),
     planUntil: JSON.parse(
       storage.sql.exec<{ value: string }>("SELECT value FROM settings WHERE key='planUntil'").one()
         .value,
@@ -114,7 +120,24 @@ const inAccount = <T>(stub: Account, run: (storage: DurableObjectStorage) => T) 
   });
 async function setup() {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
-  await inAccount(stub, (storage) => {
+  await inAccount(stub, async (storage) => {
+    const model = {
+      ...assistantSchema.parse({
+        name: "用户模型",
+        model: "user-model",
+        protocol: "responses",
+        baseUrl: "https://llm.example.com/v1",
+        contextTokens: 200_000,
+      }),
+      id: "user-model-config",
+      channelId: "test",
+      channelName: "用户渠道",
+      createdAt: 1,
+      hasKey: true,
+      keyContext: "channel:test",
+      encryptedKey: await encrypt(env, "test-user-api-key", `${stub.id}:channel:test`),
+    };
+    storage.sql.exec("INSERT INTO settings VALUES ('testModel', ?)", JSON.stringify(model));
     storage.sql.exec(
       "INSERT INTO settings VALUES ('planUntil', ?)",
       JSON.stringify(Date.now() + 30 * 86_400_000),
@@ -163,6 +186,21 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("atomic cloud task admission", () => {
+  it("freezes the effective full-input budget independently of subsequent model edits", async () => {
+    const stub = await setup();
+    await inAccount(stub, (storage) => {
+      const context = readContext(storage);
+      context.model!.maxInputTokens = 1024;
+      const { task } = accept(storage, stub.id.toString(), crypto.randomUUID(), {
+        context: () => context,
+      });
+      expect(task.modelConnection?.maxInputTokens).toBe(1024);
+      expect(task.invocation?.limits.inputTokens).toBe(1024);
+      context.model!.maxInputTokens = 9000;
+      expect(new CloudAgentStore(storage).get(task.id)?.modelConnection?.maxInputTokens).toBe(1024);
+    });
+  });
+
   it("commits the task and host records together with frozen metering/context, without charging", async () => {
     const stub = await setup();
     await inAccount(stub, (storage) => {
@@ -174,7 +212,7 @@ describe("atomic cloud task admission", () => {
         appId: "app-one",
         tenantId: "tenant-one",
         profileId: "wechatai-v1",
-        model: "managed-model",
+        model: "user-model",
         workspaceName: `test-${stub.id.toString().slice(0, 32)}`,
         callbackVersion: "v1",
         callbackOrigin: settings.PUBLIC_SITE_URL,
@@ -200,7 +238,7 @@ describe("atomic cloud task admission", () => {
           messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
           limits: {
             inputTokens: 128_000,
-            outputTokens: 16_000,
+            outputTokens: 8_192,
             outputImages: 0,
             creditUnits: null,
           },
@@ -377,6 +415,13 @@ describe("atomic cloud task admission", () => {
 
   it.each([
     [
+      "missing user model",
+      "cloud_model_required",
+      (c: Context) => {
+        c.model = undefined;
+      },
+    ],
+    [
       "free",
       "cloud_plus_required",
       (c: Context) => {
@@ -472,7 +517,6 @@ describe("atomic cloud task admission", () => {
 
   it.each<Partial<typeof settings>>([
     { CLOUD_AGENT_ENABLED: "false" },
-    { AGT_MODEL: "" },
     { AGT_APP_KEY: "" },
     { PUBLIC_SITE_URL: "https://wechatai.example.com/path" },
     { AGT_CALLBACK_KEY_VERSION: "v2", AGT_CALLBACK_KEYS: "{}" },
@@ -621,6 +665,15 @@ describe("atomic cloud task admission", () => {
   });
 
   it("feeds the existing request and settlement pipeline using the admitted identity and one bill", async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === "GET") return Response.json({ channels: [] });
+      expect(await request.json()).toMatchObject({
+        apiKey: "test-user-api-key",
+        defaultModel: "user-model",
+      });
+      return Response.json({ channel: { id: `mch_${"b".repeat(32)}` } });
+    });
     const stub = await setup();
     await inAccount(stub, async (storage) => {
       const first = accept(storage, stub.id.toString()).task;
@@ -646,7 +699,7 @@ describe("atomic cloud task admission", () => {
       expect(body).toMatchObject({
         message: prompt,
         conversationId: first.conversationId,
-        model: "managed-model",
+        model: `channel:mch_${"b".repeat(32)}:user-model`,
       });
       store.patch(first, {
         state: "accepted",
@@ -671,7 +724,7 @@ describe("atomic cloud task admission", () => {
         { role: "user" },
         { role: "assistant" },
       ]);
-      expect(fetch).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledTimes(2);
     });
   });
 

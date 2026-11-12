@@ -78,8 +78,7 @@ export function cloudAgentConnectionConfig(
 export function cloudAgentConfig(env: Env, isAdmin = false): CloudAgentConfig | null {
   if (!cloudAgentEnabled(env) || (cloudAgentAdminOnly(env) && !isAdmin)) return null;
   const connection = cloudAgentConnectionConfig(env);
-  const model = secret(env, "AGT_MODEL", false);
-  if (!connection || !model) return null;
+  if (!connection) return null;
   const agentId = `${secret(env, "AGT_AGENT_ID", false) || "wechatai"}-v1`;
   const workspacePrefix = secret(env, "AGT_WORKSPACE_PREFIX", false) || "wechatai";
   // AGT profile IDs are at most 64 characters. Workspace names allow 120;
@@ -89,7 +88,6 @@ export function cloudAgentConfig(env: Env, isAdmin = false): CloudAgentConfig | 
   return {
     ...connection,
     agentId,
-    model,
     workspacePrefix,
     // Includes submissions whose upstream acceptance has not yet been confirmed.
     maxActive: 1,

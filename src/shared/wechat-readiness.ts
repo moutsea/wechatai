@@ -43,7 +43,12 @@ export function wechatSetupIssue(setup: Setup): SetupIssue | null {
   if (cloud?.length && setup.cloudAgent && setup.plan) {
     const issue = cloudAgentAvailabilityIssue(setup.plan, setup.cloudAgent);
     if (issue) return issue;
-    if (cloud.some((p) => p.enabled)) return null;
+    if (cloud.some((p) => p.enabled))
+      return {
+        code: "cloud_model_required",
+        message:
+          "云端 Agent 也需要你自己的文本模型，请先配置渠道与模型，再编辑云端 Agent 选择执行模型。",
+      };
     return {
       code: "plugin_disabled",
       message: "请在「插件」中启用云端 Agent，或在「渠道与模型」中配置文本模型后连接微信。",

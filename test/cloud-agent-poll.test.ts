@@ -9,7 +9,7 @@ import { prepareCloudAgentResult } from "../src/server/cloud-agent-result";
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
 
-const config: CloudAgentClientConfig = {
+const config: CloudAgentClientConfig & { model: string } = {
   origin: "https://agt.example.com",
   appId: "app-one",
   tenantId: "tenant-one",

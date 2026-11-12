@@ -19,6 +19,7 @@ export const CLOUD_AGENT_ADMIN_ONLY_MESSAGE = "云端 Agent 目前仅对管理�
 export const cloudAgentInputSchema = z
   .object({
     name: z.string().trim().min(1).max(40).default("云端 Agent"),
+    modelId: z.string().trim().max(128).default(""),
     shortcut: pluginShortcutSchema.default("云"),
     enabled: z.boolean().default(true),
     ...waitingMessageFields(CLOUD_AGENT_WAITING_MESSAGE),

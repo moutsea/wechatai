@@ -76,7 +76,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
         <Modal
           wide
           title="把你的 AI 接入微信"
-          description="选择自己的模型或已开放的云端 Agent，再用微信扫码连接。"
+          description="先配置自己的模型，再按需启用云端 Agent，用微信扫码连接。"
           onClose={() => void dismiss()}
         >
           <div className="onboarding-content" ref={contentRef}>
@@ -101,8 +101,8 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                   <div>
                     <h3>选择适合你的 AI 接入方式。</h3>
                     <p>
-                      可以自备模型 API Key 和服务地址；云端 Agent 在服务开放后供 Plus
-                      会员使用，无需自备 API Key。
+                      先配置自己的模型 API Key 和服务地址；云端 Agent 在服务开放后供 Plus
+                      会员使用，沿用你配置的文本模型。
                     </p>
                   </div>
                 </div>
@@ -120,8 +120,8 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                     <span>微伴</span>
                     <h4>credits 与会员</h4>
                     <p>
-                      用于微伴的使用额度和功能权益。云端 Agent 按 credits
-                      结算，托管模型成本由运营方承担。
+                      用于微伴的使用额度和功能权益。云端 Agent 按 credits 结算，模型 API
+                      费用另付你选择的服务商。
                     </p>
                   </div>
                 </div>
@@ -154,8 +154,8 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                       </strong>
                       <small>
                         {cloudReady
-                          ? "无需 API Key，可继续下一步连接微信；点击管理配置"
-                          : "需要 Plus，无需自备模型；在插件页添加并启用"}
+                          ? "已选择执行模型，可继续连接微信；点击管理配置"
+                          : "需要 Plus；在插件页选择自己的文本模型并启用"}
                       </small>
                     </span>
                     <ArrowRight size={18} />
@@ -248,8 +248,8 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                     <div>
                       <strong>在微伴获取连接二维码</strong>
                       <p>
-                        进入「微信连接」，点击「获取二维码」。需先配置文本模型，或启用可用的云端
-                        Agent。
+                        先配置文本模型，再进入「微信连接」，点击「获取二维码」。使用云端 Agent
+                        时，还需在插件中选择该模型并启用。
                       </p>
                     </div>
                   </li>

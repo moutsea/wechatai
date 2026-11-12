@@ -7,6 +7,8 @@ import {
 } from "../../shared/plugin-shortcut";
 import { useState, type FormEvent } from "react";
 import { Cloud } from "lucide-react";
+import { Link } from "react-router-dom";
+import { isChatModel } from "../../shared/model-compatibility";
 import { useApp } from "../context";
 import { Modal } from "../ui";
 import { json } from "../api";
@@ -31,7 +33,7 @@ export function CloudAgentEditor({
   onClose: () => void;
   onSaved?: (id: string) => void;
 }) {
-  const { data, request, refresh, notify } = useApp();
+  const { data, base, request, refresh, notify } = useApp();
   const editSchema = cloudAgentInputSchema.safeExtend({
     shortcut: pluginShortcutForEdit(plugin === "new" ? undefined : plugin.shortcut),
   });
@@ -39,6 +41,7 @@ export function CloudAgentEditor({
     plugin === "new"
       ? {
           name: "云端 Agent",
+          modelId: data?.assistants.find(isChatModel)?.id || "",
           shortcut: "云",
           enabled: true,
           ...waitingMessageDefaults(CLOUD_AGENT_WAITING_MESSAGE),
@@ -52,12 +55,15 @@ export function CloudAgentEditor({
     isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
   if (!data) return null;
   const availability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
+  const textModels = data.assistants.filter(isChatModel);
+  const model = textModels.find((model) => model.id === form.modelId);
+  const missingModel = (plugin === "new" || form.enabled) && !model;
   const blocked = plugin === "new" || form.enabled ? availability : null;
   const update = <K extends keyof CloudAgentInput>(key: K, value: CloudAgentInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (blocked) return;
+    if (blocked || missingModel) return;
     setBusy(true);
     setError("");
     try {
@@ -82,7 +88,7 @@ export function CloudAgentEditor({
   return (
     <Modal
       title={plugin === "new" ? "添加云端 Agent" : "编辑云端 Agent"}
-      description="无需自备模型渠道。由微伴托管模型与工具，任务在后台执行。"
+      description="使用你在微伴配置的文本模型，由云端托管工具与任务执行。"
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -117,6 +123,34 @@ export function CloudAgentEditor({
             </label>
           </div>
           <label>
+            执行模型
+            <select
+              value={form.modelId}
+              onChange={(e) => update("modelId", e.target.value)}
+              required={plugin === "new" || form.enabled}
+            >
+              {!model && (
+                <option value={form.modelId} disabled>
+                  请选择文本模型
+                </option>
+              )}
+              {textModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.channelName} / {model.name}（{model.model}）
+                </option>
+              ))}
+            </select>
+            <small>
+              沿用该模型的渠道、密钥、系统提示词和输入、输出及 credits 上限。模型需支持工具调用。
+              输入上限包含每轮调用的历史与工具信息；无原生计数接口时保守估算，可能提前达到上限。
+            </small>
+            {!textModels.length && (
+              <small>
+                请先<Link to={`${base}/channels`}>配置渠道与文本模型</Link>。
+              </small>
+            )}
+          </label>
+          <label>
             状态
             <select
               value={form.enabled ? "enabled" : "disabled"}
@@ -135,23 +169,26 @@ export function CloudAgentEditor({
           <p className="form-note">
             {data.cloudAgent.adminPreview && "当前仅对管理员开放内测。"}
             {CLOUD_AGENT_COST_NOTE}平台只计任务输入与最终输出，内部模型和工具消耗不额外扣 credits。
-            失败或确认取消不扣 credits；请求停止后仍可能完成，费用以最终结果为准。
+            失败或确认取消不扣 credits；已发生的模型 API
+            费用仍由服务商收取。请求停止后仍可能完成，平台费用以最终结果为准。
             {data.cloudAgent.ready
               ? ` 当前每账号同时 ${data.cloudAgent.maxActive} 个任务，每日最多 ${data.cloudAgent.dailyLimit} 次，${data.cloudAgent.deadlineMinutes} 分钟后请求停止。`
               : "执行次数与时限以保存后的插件状态为准。"}
           </p>
           <p className="form-note">
             任务内容会发送至微伴运营方的 AGT
-            服务及模型供应商。删除微伴任务记录不会同步删除云端历史或记忆，请勿提交不希望发送的敏感信息。
+            服务及你选择的模型供应商；所选模型的渠道配置与密钥会加密同步至 AGT
+            用于执行。删除微伴任务记录不会同步删除 AGT
+            模型渠道、历史或记忆，请勿提交不希望发送的敏感信息。
           </p>
           <WaitingMessageField
             value={form}
             defaultMessage={CLOUD_AGENT_WAITING_MESSAGE}
             onChange={(value) => setForm((f) => ({ ...f, ...value }))}
           />
-          {(error || blocked) && (
+          {(error || blocked || missingModel) && (
             <p className="form-error" role="alert">
-              {error || blocked?.message}
+              {error || blocked?.message || "请选择已配置的文本模型后保存。"}
             </p>
           )}
         </div>
@@ -159,7 +196,7 @@ export function CloudAgentEditor({
           <button type="button" className="button secondary" disabled={busy} onClick={onClose}>
             取消
           </button>
-          <button className="button" disabled={busy || Boolean(blocked)}>
+          <button className="button" disabled={busy || Boolean(blocked) || missingModel}>
             {busy ? "正在保存…" : "保存配置"}
           </button>
         </div>

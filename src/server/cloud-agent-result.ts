@@ -1,6 +1,7 @@
 import { PLUGIN_PROTOCOL_VERSION, type PlatformMeter } from "../shared/plugins";
 import { hasCompleteCloudAnswer, type AgentJobView } from "./cloud-agent-client";
 import { cloudAgentMeteringFailure } from "./cloud-agent-metering";
+import { cloudAgentFailureMessage } from "./cloud-agent-failure";
 import {
   cloudTaskStopReason,
   cloudTaskTerminal,
@@ -33,7 +34,7 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
     job.status === "cancelled"
       ? [reason, "云端任务已停止，本次未扣 credits。"].filter(Boolean).join("\n\n")
       : job.status === "failed"
-        ? [reason, "云端任务执行失败，本次未扣 credits。"].filter(Boolean).join("\n\n")
+        ? [reason, cloudAgentFailureMessage(job.failureCode)].filter(Boolean).join("\n\n")
         : job.refusal
           ? "云端 Agent 未能完成本次请求，本次未扣 credits。请调整请求后重试。"
           : job.task?.question || job.task?.outcome === "clarification_required"

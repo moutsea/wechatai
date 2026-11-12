@@ -1,5 +1,6 @@
 import { AppError } from "./config";
 import { readJson } from "./security";
+import { cloudAgentFailureCode, type CloudAgentFailureCode } from "./cloud-agent-failure";
 
 export type CloudAgentClientConfig = {
   origin: string;
@@ -7,7 +8,7 @@ export type CloudAgentClientConfig = {
   appKey: string;
   tenantId: string;
   agentId: string;
-  model: string;
+  model?: string;
 };
 
 /** The subset of an AGT job this integration reads. Unknown fields are ignored. */
@@ -23,6 +24,7 @@ export type AgentJobView = {
   text?: string;
   finishReason?: (typeof FINISH_REASONS)[number];
   refusal?: string;
+  failureCode?: CloudAgentFailureCode;
   task?: Record<string, unknown>;
 };
 
@@ -49,6 +51,7 @@ export function cloudJobBody(input: {
   model: string;
   conversationId: string;
   message: string;
+  systemPrompt?: string;
   callback: { url: string; secret: string };
 }) {
   return {
@@ -84,7 +87,7 @@ export class CloudAgentClient {
   }
 
   private async call(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PATCH",
     path: string,
     options: {
       body?: unknown;
@@ -108,7 +111,7 @@ export class CloudAgentClient {
       response = await fetch(`${this.config.origin}${path}`, {
         method,
         headers,
-        ...(method === "POST"
+        ...(method !== "GET"
           ? {
               body:
                 options.rawBody ??
@@ -147,6 +150,37 @@ export class CloudAgentClient {
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       throw new AppError("cloud_agent_response", "云端 Agent 返回格式无效", 502);
     return payload as Record<string, unknown>;
+  }
+
+  async modelChannels(): Promise<{ id: string; name: string }[]> {
+    const body = this.json(
+      await this.call("GET", `/api/apps/${encodeURIComponent(this.config.appId)}/model-channels`),
+    );
+    if (!Array.isArray(body.channels))
+      throw new AppError("cloud_agent_response", "云端模型渠道返回格式无效", 502);
+    return body.channels.map((value) => {
+      const channel = this.json(value);
+      if (typeof channel.id !== "string" || typeof channel.name !== "string")
+        throw new AppError("cloud_agent_response", "云端模型渠道返回格式无效", 502);
+      return { id: channel.id, name: channel.name };
+    });
+  }
+
+  async saveModelChannel(body: unknown, id?: string): Promise<string> {
+    const path = `/api/apps/${encodeURIComponent(this.config.appId)}/model-channels`;
+    const result = this.json(
+      await this.call(id ? "PATCH" : "POST", id ? `${path}/${encodeURIComponent(id)}` : path, {
+        body,
+      }),
+    );
+    const channel = this.json(result.channel);
+    if (
+      typeof channel.id !== "string" ||
+      !/^mch_[a-f0-9]{32}$/.test(channel.id) ||
+      (id && channel.id !== id)
+    )
+      throw new AppError("cloud_agent_response", "云端模型渠道标识无效", 502);
+    return channel.id;
   }
 
   /** Idempotent on (app, externalId) inside AGT; re-registering returns the same user. */
@@ -339,6 +373,7 @@ export function parseJob(payload: unknown): AgentJobView {
     result?.finishReason == null
       ? undefined
       : (FINISH_REASONS.find((reason) => reason === result.finishReason) ?? "unknown");
+  const failureCode = status === "failed" ? cloudAgentFailureCode(job) : undefined;
   return {
     id,
     status,
@@ -352,6 +387,7 @@ export function parseJob(payload: unknown): AgentJobView {
     ...(typeof job.conversationId === "string" ? { conversationId: job.conversationId } : {}),
     ...(text !== undefined ? { text } : {}),
     ...(finishReason !== undefined ? { finishReason } : {}),
+    ...(failureCode ? { failureCode } : {}),
     ...(typeof result?.refusal === "string" ? { refusal: result.refusal } : {}),
     ...(result && result.task && typeof result.task === "object"
       ? { task: result.task as Record<string, unknown> }
