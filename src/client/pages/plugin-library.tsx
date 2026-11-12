@@ -564,13 +564,15 @@ export function PluginConfiguration({
                         <dt>任务记录</dt>
                         <dd>
                           <Link to={`${base}/tasks?plugin=${selected.id}`}>查看云端任务</Link>
+                          {" · "}
+                          <Link to="/docs/cloud-agent">使用指南</Link>
                         </dd>
                       </div>
                       <div>
                         <dt>使用费用</dt>
                         <dd>
                           输入和最终输出按 token 扣
-                          credits，托管模型无需另付供应商；失败或取消不扣费。
+                          credits，托管模型无需另付供应商；失败或确认取消不收成功账单，请求停止的费用以最终结果为准。
                         </dd>
                       </div>
                       <div>

@@ -379,7 +379,8 @@ describe("managed cloud Agent configuration", () => {
     const editor = renderToStaticMarkup(<CloudAgentEditor plugin="new" onClose={noop} />);
     expect(editor).toContain("无需自备模型渠道");
     expect(editor).toContain('value="disabled"');
-    expect(editor).toContain("失败或取消不扣费");
+    expect(editor).toContain("失败或确认取消不扣 credits");
+    expect(editor).toContain("请求停止后仍可能完成，费用以最终结果为准");
     expect(editor).not.toContain('type="password"');
   });
   it("shows quotas and managed model correctly and uses a state check instead of a paid test", () => {

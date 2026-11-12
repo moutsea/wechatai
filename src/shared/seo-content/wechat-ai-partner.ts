@@ -68,7 +68,7 @@ export const wechatAiPartnerPage: SeoPage = {
 - **不支持群聊**：只处理你与微信 ClawBot 的单聊消息，没有群聊开关。
 - **不接管好友消息**：它不会替你回复朋友的微信，也不会读取别人的聊天记录。
 - **没有社区、没有匹配**：搭子是你自己配置的模型，不是平台上的真人。
-- **模型费用自己付**：本站只收中转 credits，模型调用费用由你的 API 服务商收取，两笔账分开。
+- **自备 API 费用另付**：使用自备模型时，本站收中转 credits，模型调用费用由你的 API 服务商收取，两笔账分开。
 - **免费版有硬上限**：每天 100 credits、1 个微信链接、1 个插件；超出后要么等次日赠送，要么升级 Plus 或购买 credits。
 
 接入方式与账号风险的边界，写在[微信用 AI 会不会封号](/wechat-ai-ban-risk)。`,
@@ -108,5 +108,5 @@ export const wechatAiPartnerPage: SeoPage = {
     { label: "微信 AI 的几种方案对比", href: "/wechat-ai-options" },
     { label: "价格与免费额度", href: "/pricing" },
   ],
-  updatedAt: "2026-10-25",
+  updatedAt: "2026-11-12",
 };

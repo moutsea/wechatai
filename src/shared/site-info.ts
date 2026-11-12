@@ -7,8 +7,8 @@ export const SITE_MAINTAINER = {
 } as const;
 /** 隐私政策最近一次实质修改的日期。 */
 export const POLICY_UPDATED_AT = "2026-11-08";
-/** 服务协议最近一次实质修改的日期（改访问统计没有动条款正文）。 */
-export const TERMS_UPDATED_AT = "2026-10-10";
+/** 服务协议最近一次实质修改的日期。 */
+export const TERMS_UPDATED_AT = "2026-11-12";
 export const INFO_PAGES = {
   terms: {
     path: "/terms",

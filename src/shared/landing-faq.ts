@@ -7,7 +7,12 @@
 import { DAILY_CREDIT_DEFAULTS } from "./credits";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
-import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN } from "./pricing-copy";
+import {
+  PLUS_MONTHLY_YUAN,
+  PLUS_YEARLY_YUAN,
+  OWN_API_COST_NOTE,
+  CLOUD_AGENT_COST_NOTE,
+} from "./pricing-copy";
 
 const yuan = (value: number) => `¥${value}`;
 
@@ -16,8 +21,7 @@ export type LandingFaqItem = { question: string; answer: string };
 export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     question: "需要自己准备 API Key 吗？",
-    answer:
-      "普通模型聊天需要；只收 Webhook 通知不需要，已有 Agent 在其运行端配置模型。微伴不自带模型额度，你在自己的模型服务商处充值，把 API Key 填进来即可。模型调用费用由服务商按官方价目表收取，本站只收消息中转的 credits——两笔账分开，各自可核。",
+    answer: `普通模型聊天需要自己的 API Key；只收 Webhook 通知不需要，已有 OpenClaw、Hermes 在其运行端配置模型。${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
   },
   {
     question: "免费版有额度吗？会过期吗？",
@@ -35,12 +39,12 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     question: "从注册到在微信里聊上，要几步？",
     answer:
-      "先确认手机微信已有 ClawBot 入口；没有入口时本站无法替你开通。然后三步：注册账号 → 在「渠道与模型」里选择服务商（DeepSeek、OpenAI、Anthropic 等）并粘贴自己的 API Key，协议和请求地址会自动填好 → 扫码连接微信，之后直接在微信里说话。全程不用写代码，配置过程在文档中心有逐步截图。",
+      "先确认手机微信已有 ClawBot 入口；没有入口时本站无法替你开通。然后注册账号，配置自己的模型，或添加并启用已开放的 Plus 云端 Agent，再扫码连接微信。云端模式需先发送 /use 快捷名 选择插件。全程不用写代码，文档中心有逐步说明。",
   },
   {
     question: "可以先不注册，看看界面上有什么吗？",
     answer:
-      "无需演示账号：首页提供不收 Key、不发送真实请求的任务模拟预览。首页「从配置到聊天，都是真实界面」那几张是真实使用截图：微信里的对话、工作台的渠道配置和微信连接页都来自真实账号（图中数据为示例）；「三步」那块是界面示意，用来先看清要做的三件事。注册本身免费、不需要绑卡，配好自己的 API Key 后就能直接使用。",
+      "无需演示账号：首页提供不收 Key、不发送真实请求的任务模拟预览。首页「从配置到聊天，都是真实界面」那几张是真实使用截图：微信里的对话、工作台的渠道配置和微信连接页都来自真实账号（图中数据为示例）；「三步」那块是界面示意，用来先看清要做的三件事。注册本身免费、不需要绑卡；实际使用需配置自己的模型，或启用已开放的 Plus 云端 Agent。",
   },
   {
     question: "API Key 和聊天记录存在哪？",

@@ -283,7 +283,8 @@ export function Plugins() {
       <p className="research-billing">
         消息提醒不扣 credits。其他插件输入与最终回复按 token 计费，生成图片另计 5 credits /
         张；插件内部调用不重复计收。自备 API 的费用由服务商另行收取；云端 Agent
-        使用微伴托管模型，无需另付供应商，失败或取消不扣 credits。
+        使用微伴托管模型，无需另付供应商，失败或确认取消不扣
+        credits；请求停止后仍可能完成，费用以最终结果为准。
       </p>
       {viewing &&
         !notificationEditor &&

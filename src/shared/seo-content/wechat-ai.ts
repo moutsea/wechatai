@@ -1,16 +1,16 @@
 import type { SeoPage } from "../seo-pages";
+import { OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../pricing-copy";
 
 export const wechatAiPage: SeoPage = {
   path: "/wechat-ai",
   kind: "product",
   title: "微信 AI 助手：把自己的大模型接进微信",
   description:
-    "微信 AI 是指在自己的微信里直接调用大模型。微伴让你填入自己的 API Key，把 DeepSeek、Claude、GPT 接进微信聊天，还能挂插件、接 Agent。",
+    "微信 AI 是指在自己的微信里直接调用大模型。微伴支持自备 API Key 接入模型，也可在运营方开放后使用 Plus 云端 Agent，无需自备 Key，仍消耗 credits 并限制执行次数。",
   eyebrow: "微信 AI",
   h1: "微信 AI：把你的大模型接进微信聊天",
-  lede: "不用切换 App，也不用把问题复制到网页版。填入自己的 API Key，微信里就多了一个能换模型、能记上下文、能挂插件的 AI 联系人。",
-  answer:
-    "微信 AI 指的是在微信内直接调用大模型完成问答、写作、翻译、生图和任务处理。微伴（Wechatai）不提供模型和 token，而是把你的模型 API Key 接入微信：绑定一次后，在聊天窗口里发消息即可用，模型费用由你的 API 服务商结算。",
+  lede: "不用切换 App，也不用把问题复制到网页版。你可以自备 API Key 接入模型；不想管理 Key 时，可先在插件页确认 Plus 云端 Agent 是否开放。",
+  answer: `微信 AI 指的是在微信内直接调用大模型完成问答、写作、翻译、生图和任务处理。微伴（Wechatai）支持自备 API Key 接入模型，也提供可选云端 Agent。${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
   primaryKeyword: "微信 AI",
   secondaryKeywords: [
     "微信 AI 助手",
@@ -22,7 +22,7 @@ export const wechatAiPage: SeoPage = {
   highlights: ["自带 API Key，成本透明", "一个微信里切换多个模型", "内置 6 个常用插件"],
   steps: [
     {
-      title: "注册并添加渠道",
+      title: "自备 API：注册并添加渠道",
       text: "选择服务商并填写 API Key，确认已导入或手动添加文本模型，再点击模型行的「测试连接」。第三方地址使用「自定义」入口。",
     },
     {
@@ -49,13 +49,15 @@ export const wechatAiPage: SeoPage = {
     {
       id: "how-it-works",
       title: "微伴怎么把模型接进微信",
-      body: `微伴是一个中转服务，不是模型供应商，也不卖 token。它做三件事：
+      body: `微伴不是模型供应商，也不卖 token。使用自备 API 接入时，它做三件事：
 
 1. **接住你的 Key**：添加渠道时选择服务商并填写 API Key，保存后导入或手动添加模型。预设会填好地址和协议；第三方地址可通过「自定义」配置。微伴按渠道协议转发请求。
 2. **接住微信消息**：通过微信 ClawBot 插件把消息转成模型请求，再把回复发回聊天窗口。
 3. **加上微信里才有的东西**：会话管理、命令、插件、提醒推送、credits 计量。
 
-因此有三条边界要提前知道：模型效果取决于你选的模型；模型调用费用由你的 API 服务商收取；微伴文字部分按加权 token 收 credits，AI 生图每张 5 credits，描述文字另计，两笔账分开结算。`,
+这条接入路径的模型效果取决于你选的模型；模型调用费用由你的 API 服务商收取；微伴文字部分按加权 token 收 credits，AI 生图每张 5 credits，描述文字另计，两笔账分开结算。
+
+${CLOUD_AGENT_COST_NOTE}云端路径无需添加渠道，配置与使用步骤见[云端 Agent 指南](/docs/cloud-agent)。`,
     },
     {
       id: "what-you-can-do",
@@ -90,10 +92,12 @@ DS Chat 也可以直接回答，进入插件不代表每条回复都经过联网
     {
       id: "cost",
       title: "费用怎么算",
-      body: `费用分成两块，互不影响：
+      body: `使用自备 API 时，费用分成两块：
 
 - **微伴 credits**：文字部分每 5000 个加权 token = 1 credit，输出按 8 倍权重计入；AI 生图每张 5 credits，描述文字另计。免费版每天赠送 100 credits，Plus 每天 1000 credits。
 - **模型 API 费用**：由你的 API 服务商按自己的价目表收取，微伴不经手，也不加价。
+
+${CLOUD_AGENT_COST_NOTE}
 
 消息提醒插件的推送不扣 credits。附件（图片、文件）需要 Plus。具体价格与额度见 [价格页](/pricing) 和 [会员与 credits](/docs/credits)。`,
     },
@@ -102,7 +106,7 @@ DS Chat 也可以直接回答，进入插件不代表每条回复都经过联网
       title: "什么情况下适合，什么情况下不适合",
       body: `**适合**：已经在用某个模型 API、希望微信里随时能用；不想在手机上装一堆 App；想把手头的小工具（记账、提醒、生图）收进一个入口；想把自己的 Agent 接进微信远程调用。
 
-**不适合**：希望「点开就能用、完全不管 API Key」的人 —— 你需要先去服务商开通并拿到 Key；希望模型完全免费的人 —— 模型费用始终由服务商收取；需要企业级合规审计与数据隔离的团队 —— 请走正规的企业采购流程，本站是个人向工具。
+**先确认再选择**：不想管理 API Key 时，先查看插件页的云端开放状态；云端需要 Plus，仍消耗 credits 并限制执行次数，不是无限免费模型。需要企业级合规审计与数据隔离的团队，请走正规的企业采购流程，本站是个人向工具。
 
 微伴是 MIT 开源项目，代码公开，也可以自行部署。`,
     },
@@ -115,8 +119,7 @@ DS Chat 也可以直接回答，进入插件不代表每条回复都经过联网
     },
     {
       question: "在微信里用 AI，需要自己准备 API Key 吗？",
-      answer:
-        "需要。微伴不提供 token，也不转卖模型额度。你需要先在模型服务商（例如 DeepSeek、Anthropic、OpenAI 或兼容协议的第三方）开通并拿到 API Key，再填入微伴的渠道设置。",
+      answer: `普通模型聊天需要先在模型服务商开通并取得 API Key，再填入微伴的渠道设置。${CLOUD_AGENT_COST_NOTE}完整配置步骤见云端 Agent 指南。`,
     },
     {
       question: "一个微信能同时用几个模型？",
@@ -150,5 +153,5 @@ DS Chat 也可以直接回答，进入插件不代表每条回复都经过联网
     { label: "使用指南", href: "/docs/getting-started" },
     { label: "微信命令速查", href: "/docs/commands" },
   ],
-  updatedAt: "2026-10-24",
+  updatedAt: "2026-11-12",
 };

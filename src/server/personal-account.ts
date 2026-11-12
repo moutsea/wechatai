@@ -4692,7 +4692,9 @@ export class PersonalAccount extends DurableObject<Env> {
             const previousSessions = this.sessions(connectionId);
             const s = this.exitPlugin(connectionId);
             if (!s)
-              return wasPlugin ? "已退出插件。请先在网页添加文本模型，再开始普通聊天。" : noSession;
+              return wasPlugin
+                ? "已退出插件，当前未选择模型。可在网页添加文本模型，或发送 /use 快捷名 重新进入插件；@快捷名 问题 仅本次调用。"
+                : noSession;
             const action = previousSessions.some((previous) => previous.id === s.id)
               ? wasPlugin
                 ? "已退出插件，返回"
@@ -5037,7 +5039,8 @@ export class PersonalAccount extends DurableObject<Env> {
         )
       ).text;
     }
-    if (!active) return "欢迎来到微伴！请先在网页添加一个模型，再开始聊天。";
+    if (!active)
+      return "当前未选择模型或插件。请先在网页添加文本模型，或发送 /use 快捷名 进入已配置的插件；@快捷名 问题 可单次调用。";
     const incoming = message.item_list?.filter((i) => i.type === 2 || i.type === 4) ?? [];
     const activeSession = this.session(active);
     const invocationPlugin = once ? once.pluginId : activeSession.pluginInstanceId;

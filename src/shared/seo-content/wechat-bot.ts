@@ -1,4 +1,5 @@
 import type { SeoPage } from "../seo-pages";
+import { CLOUD_AGENT_COST_NOTE } from "../pricing-copy";
 
 export const wechatBotPage: SeoPage = {
   path: "/wechat-bot",
@@ -59,7 +60,7 @@ export const wechatBotPage: SeoPage = {
 - 不需要修改微信客户端，也不需要模拟协议登录。
 - 绑定关系在微信账号这一侧，换手机不影响，换微信号要重新扫码。
 
-微伴走的就是这条路线：你在微伴配置自己的模型 API Key，生成二维码，再用微信 ClawBot 扫码绑定。**没有绕过 ClawBot 的绑定方式**，普通「扫一扫」也不能替代插件里的绑定流程。完整步骤见[微信 ClawBot 插件怎么用](/wechat-clawbot)。`,
+微伴走的就是这条路线：配置自己的模型 API Key 或已开放的云端 Agent，再用微信 ClawBot 扫码绑定；使用云端还需发送 \`/use 快捷名\` 进入插件。**没有绕过 ClawBot 的绑定方式**，普通「扫一扫」也不能替代插件里的绑定流程。完整步骤见[微信 ClawBot 插件怎么用](/wechat-clawbot)。`,
     },
     {
       id: "scope",
@@ -71,7 +72,9 @@ export const wechatBotPage: SeoPage = {
 | 接入本机的 OpenClaw、Hermes Agent | 读取通讯录、抓取好友列表 |
 | Plus 绑定最多 10 个微信链接 | 自动加好友、群发、朋友圈相关操作 |
 
-微伴的定位是「把自选模型接进微信」的中转与插件平台：不卖 token，不提供模型额度，模型费用由你自己的 API 服务商收取；文字部分按加权 token 计 credits，免费版每天 100 credits、1 个微信链接、1 个插件，Plus 为 ¥9.9/月或 ¥88/年。`,
+微伴是把模型和 Agent 接进微信的中转与插件平台。使用自备 API 时，模型费用另付你自己的 API 服务商；文字部分按加权 token 计 credits，免费版每天 100 credits、1 个微信链接、1 个插件，Plus 为 ¥9.9/月或 ¥88/年。
+
+${CLOUD_AGENT_COST_NOTE}配置方式见[云端 Agent 指南](/docs/cloud-agent)。`,
     },
     {
       id: "risk",
@@ -87,7 +90,7 @@ export const wechatBotPage: SeoPage = {
     {
       question: "微信机器人有免费的吗？",
       answer:
-        "有。微伴免费版不收费，每天赠送 100 credits，可绑定 1 个微信链接与 1 个插件，微信侧走 ClawBot 插件通道。模型调用费用要你自己在模型服务商处支付，与 credits 是两笔账。",
+        "有。微伴免费版不收费，每天赠送 100 credits，可绑定 1 个微信链接与 1 个插件，微信侧走 ClawBot 插件通道。使用自备模型时，API 调用费用要另付模型服务商，与 credits 是两笔账。云端 Agent 需要 Plus 且服务已开放。",
     },
     {
       question: "个人号微信机器人会被封号吗？",
@@ -117,5 +120,5 @@ export const wechatBotPage: SeoPage = {
     { label: "连接微信（文档）", href: "/docs/getting-started" },
     { label: "价格与免费额度", href: "/pricing" },
   ],
-  updatedAt: "2026-10-25",
+  updatedAt: "2026-11-12",
 };

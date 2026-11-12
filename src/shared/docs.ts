@@ -1,7 +1,7 @@
-export const DOCS_INDEX_UPDATED_AT = "2026-11-09";
+export const DOCS_INDEX_UPDATED_AT = "2026-11-11";
 export const DOCS_TITLE = "微信 AI 教程与文档";
 export const DOCS_DESCRIPTION =
-  "微伴 Wechatai 使用文档：配置模型、连接微信、管理会话和 credits。附 DeepSeek、多个 OpenClaw 与 Hermes 接入教程，以及联网问答、生图和个人助理说明。";
+  "微伴 Wechatai 使用文档：配置模型、连接微信、管理会话和 credits。附 DeepSeek、OpenClaw、Hermes 与可选云端 Agent 使用教程，以及联网问答、生图和个人助理说明。";
 
 export const DOC_TUTORIALS = [
   {
@@ -54,16 +54,16 @@ export const DOC_TUTORIALS = [
 export const DOC_GUIDES = [
   {
     slug: "getting-started",
-    updatedAt: "2026-11-10",
-    seoTitle: "微信 AI 使用指南：三步连接自己的模型",
+    updatedAt: "2026-11-11",
+    seoTitle: "微信 AI 使用指南：选择 AI 并扫码连接",
     title: "使用指南",
     description:
-      "第一次使用微伴：先确认微信 ClawBot 入口，再添加自己的模型服务、扫码连接微信，把第一条消息发出去，并按需配置命令、插件和会话。",
+      "第一次使用微伴：先确认微信 ClawBot 入口，再配置自己的模型或已开放的 Plus 云端 Agent，扫码连接微信，把第一条消息发出去。",
     category: "开始使用",
     group: "start",
     requirement: "需微信 ClawBot 入口",
     minutes: 3,
-    outcome: "先确认微信 ClawBot 入口，再从添加模型走到第一条消息。",
+    outcome: "先确认微信 ClawBot 入口，再选择 AI 服务并发出第一条消息。",
   },
   {
     slug: "channels-models",
@@ -79,7 +79,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "wechat-connection",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-11",
     seoTitle: "连接微信：扫码绑定 AI 与管理多个链接",
     title: "连接微信",
     description: "创建微信链接、扫码绑定、切换当前模型，以及管理多个微信链接和重新连接。",
@@ -90,7 +90,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "commands",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-11",
     seoTitle: "微信命令速查：切换 AI 模型、插件与会话",
     title: "微信命令速查",
     description: "微伴微信命令一览：查看状态、切换渠道和插件、新建会话、清理上下文与查询 credits。",
@@ -101,7 +101,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "sessions",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-11",
     seoTitle: "微信 AI 会话与上下文：新建、切换与自动摘要",
     title: "会话与上下文",
     description: "新建、切换、归档和清理微信 AI 会话，了解自动摘要、上下文上限与网页聊天记录。",
@@ -125,7 +125,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "credits",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-11",
     seoTitle: "微伴会员与 credits：额度、计费与邀请奖励",
     title: "会员与 credits",
     description:
@@ -133,7 +133,7 @@ export const DOC_GUIDES = [
     category: "日常功能",
     group: "daily",
     minutes: 4,
-    outcome: "模型服务商的 API 费用与微伴 credits 分开计算。",
+    outcome: "区分自备 API 费用与微伴 credits，了解云端任务的计费边界。",
   },
   {
     slug: "faq",
@@ -145,6 +145,21 @@ export const DOC_GUIDES = [
     group: "daily",
     minutes: 3,
     outcome: "连不上、没有回复或模型不对，可以从这里开始排查。",
+  },
+  {
+    slug: "cloud-agent",
+    updatedAt: "2026-11-11",
+    seoTitle: "云端 Agent：无需 API Key 的微信后台任务",
+    title: "云端 Agent",
+    description:
+      "运营方开放后，Plus 会员可无需自备 API Key，在微信提交文字任务；了解启用、任务查询、停止、credits 计费与远端数据保留边界。",
+    category: "插件",
+    group: "plugins",
+    requirement: "需要 Plus 且云端服务已开放",
+    minutes: 4,
+    outcome: "在微信提交文字任务，在任务页查看进度和结果。",
+    image: "/images/plugins/cloud-agent.svg",
+    imageAlt: "云端 Agent 插件",
   },
   {
     slug: "ds-chat",

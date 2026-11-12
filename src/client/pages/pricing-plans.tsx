@@ -5,7 +5,7 @@ import { api, json } from "../api";
 import { useAuth } from "../auth";
 import { trackFunnel } from "../analytics-client";
 import { BILLING_OFFERS } from "../../shared/billing-offers";
-import { approxYuan } from "../../shared/pricing-copy";
+import { approxYuan, OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
 import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../../shared/wechat-links";
@@ -56,7 +56,10 @@ export function PricingPlans() {
     <section className="plans" aria-labelledby="plans-title">
       <div className="plans-head">
         <h2 id="plans-title">两个档位，随时切换</h2>
-        <p>模型调用费用由你的 API 服务商收取，本站只收消息中转的 credits。</p>
+        <p>
+          {OWN_API_COST_NOTE}
+          {CLOUD_AGENT_COST_NOTE}
+        </p>
       </div>
       <div className="plans-grid">
         <article className="plan plan-free">

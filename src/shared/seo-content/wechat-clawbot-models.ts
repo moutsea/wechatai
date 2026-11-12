@@ -1,4 +1,5 @@
 import type { SeoPage } from "../seo-pages";
+import { CLOUD_AGENT_COST_NOTE } from "../pricing-copy";
 
 export const wechatClawbotModelsPage: SeoPage = {
   path: "/wechat-clawbot-models",
@@ -118,7 +119,7 @@ export const wechatClawbotModelsPage: SeoPage = {
 - **平台卖 token**：你付钱给平台，平台再向模型服务商付钱。方便，但通常无法逐笔核对上游单价，切换供应商也受平台支持范围限制。
 - **自带 API Key**：你直接付给模型服务商，按官方价目表结算；微伴只收 credits 用于消息中转计量。透明，且随时可以换一家你核对过单价与可用性的服务。
 
-两种模式没有绝对优劣：不想管 Key 的人适合前者，在意成本与可替换性的人适合后者。微伴做的是后者，所以本站不卖 token，也不承诺模型免费。`,
+两种模式没有绝对优劣：不想管 Key 的人可选托管，在意模型可替换性的人可选自备 API。微伴支持自备 API，也有可选的[云端 Agent](/docs/cloud-agent)。${CLOUD_AGENT_COST_NOTE}`,
     },
   ],
   faq: [
@@ -156,5 +157,5 @@ export const wechatClawbotModelsPage: SeoPage = {
     { label: "在微信里使用 Claude", href: "/wechat-claude" },
     { label: "价格与免费额度", href: "/pricing" },
   ],
-  updatedAt: "2026-11-10",
+  updatedAt: "2026-11-12",
 };

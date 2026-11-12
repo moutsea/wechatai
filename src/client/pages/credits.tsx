@@ -3,6 +3,7 @@ import { ArrowUpRight, CreditCard } from "lucide-react";
 import { useApp } from "../context";
 import { PageHead, SectionTitle } from "../ui";
 import { formatCredits } from "../../shared/types";
+import { OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
 
 export function Credits() {
   const { data, base } = useApp();
@@ -104,8 +105,10 @@ export function Credits() {
               结算后余额可以为负数，欠额在次日赠送额度刷新、充值或邀请奖励到账时优先抵扣；未抵完的部分继续保留。邀请奖励永久有效。
             </p>
             <small>
-              Credits 是平台服务额度。使用自备 API Key，模型费用由供应商另行收取；云端 Agent
-              的托管模型无需另付供应商，按任务输入与最终输出计费，失败或取消不扣费。具体额度与套餐以「会员与
+              Credits 是平台服务额度。{OWN_API_COST_NOTE}
+              {CLOUD_AGENT_COST_NOTE}
+              云端任务按输入与最终输出计费，失败或确认取消不扣
+              credits；请求停止后仍可能完成，费用以最终结果为准。 具体额度与套餐以「会员与
               credits」页面为准。
             </small>
           </div>

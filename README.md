@@ -21,7 +21,7 @@
 - **管理会话**：在网页查看 Markdown 聊天记录，切换、归档、重置、清理会话。
 - **SaaS 基础功能**：邮箱密码与 Google / GitHub 登录、会员、credits、Stripe 支付、邀请奖励、管理后台和付款通知。
 
-模型、搜索、生图接口由用户自行配置。微伴不附送上游 API，也不托管 OpenClaw / Hermes 的运行环境。项目独立开发，与腾讯、微信和模型供应商没有官方关联。
+普通模型、搜索、生图接口由用户自行配置，API 费用另付服务商。部署方也可开放 Plus 云端 Agent，由运营方承担托管模型成本，用户按平台 credits 与执行次数使用；默认关闭。微伴不托管 OpenClaw / Hermes 的运行环境。项目独立开发，与腾讯、微信和模型供应商没有官方关联。
 
 维护者：[Coder Liang（moutsea）](https://github.com/moutsea) · [个人网站](https://coderliang.com) · [项目来源与支持](https://wechatai.app/contact#maintainer)。微伴 Wechatai（wechatai.app）通过微信 ClawBot 单聊接入，不提供群聊机器人，与同名桌面客户端或其他 WeChatAI 项目无关。
 
@@ -31,6 +31,7 @@
 
 | 插件     | 用途                                                             |
 | -------- | ---------------------------------------------------------------- |
+| 云端 Agent | 可选 Plus 功能，无需自备 API Key，文字任务在后台执行并可查询、停止 |
 | DS Chat  | 模型按需调用搜索和网页阅读工具；回答模型、搜索服务均可配置       |
 | AI 生图  | 使用自己的生图 API，在微信里生成并接收图片                       |
 | OpenClaw | 将自己运行的 OpenClaw 接入微信，支持多个配置、原生命令和主动推送 |
@@ -39,7 +40,7 @@
 | 个人助理 | 笔记、待办清单、记账、独立提醒与每日待办提醒                     |
 | 消息提醒 | 专属 Token 接收 HTTP 请求并转发到微信，不调用模型                |
 
-目前是内置插件与专用 Agent 连接器。插件市场、用户上传代码和云端托管 Agent 尚未实现。[插件开发说明](docs/plugins.md)解释了已有能力和协议预留部分。
+目前是内置插件与专用 Agent 连接器。插件市场和用户上传代码尚未实现。云端 Agent 的启用与运维见[部署说明](docs/cloud-agent.md)，操作见[使用指南](https://wechatai.app/docs/cloud-agent)。[插件开发说明](docs/plugins.md)解释了已有能力和协议预留部分。
 
 <details>
 <summary>查看配置界面</summary>

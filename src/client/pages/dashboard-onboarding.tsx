@@ -14,10 +14,11 @@ import { trackFunnel } from "../analytics-client";
 import { Modal } from "../ui";
 import { dashboardSetupProgress, shouldShowDashboardOnboarding } from "../../shared/onboarding";
 import type { Snapshot } from "../../shared/types";
+import { readyCloudAgents } from "../../shared/wechat-readiness";
 import { useKimiseekConnect } from "./kimiseek-connect";
 import "./dashboard-onboarding.css";
 
-const steps = ["了解费用", "配置模型", "连接微信"];
+const steps = ["了解费用", "选择 AI", "连接微信"];
 
 export function DashboardOnboarding({ data }: { data: Snapshot }) {
   const { base, request, refresh } = useApp();
@@ -30,6 +31,11 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
   const [error, setError] = useState("");
   const kimiseek = useKimiseekConnect(() => setStep(2));
   const progress = dashboardSetupProgress(data);
+  const cloudAgents = readyCloudAgents(data);
+  const cloud =
+    cloudAgents.find((plugin) => plugin.id === data.currentSession?.pluginInstanceId) ??
+    cloudAgents[0];
+  const cloudReady = Boolean(cloud);
   const linked = data.channels.some((c) => c.integration === "kimiseek");
   useEffect(() => {
     contentRef.current?.closest("dialog")?.scrollTo({ top: 0 });
@@ -41,8 +47,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
     setSaving(true);
     setError("");
     try {
-      if (!data.onboardingDismissedAt)
-        await request("/onboarding/dismiss", { method: "POST" });
+      if (!data.onboardingDismissedAt) await request("/onboarding/dismiss", { method: "POST" });
       setOpen(false);
       await refresh();
       if (path) navigate(path);
@@ -71,7 +76,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
         <Modal
           wide
           title="把你的 AI 接入微信"
-          description="准备好模型服务，再用微信扫码连接。"
+          description="选择自己的模型或已开放的云端 Agent，再用微信扫码连接。"
           onClose={() => void dismiss()}
         >
           <div className="onboarding-content" ref={contentRef}>
@@ -94,10 +99,10 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                     <KeyRound size={24} />
                   </span>
                   <div>
-                    <h3>你提供模型，微伴帮你接入微信。</h3>
+                    <h3>选择适合你的 AI 接入方式。</h3>
                     <p>
-                      使用前，需要准备你自己的模型 API Key（也叫 API Token），以及服务商提供的 API
-                      地址。
+                      可以自备模型 API Key 和服务地址；云端 Agent 在服务开放后供 Plus
+                      会员使用，无需自备 API Key。
                     </p>
                   </div>
                 </div>
@@ -107,27 +112,57 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                 </p>
                 <div className="onboarding-costs">
                   <div>
-                    <span>模型服务商</span>
+                    <span>自备模型</span>
                     <h4>API 余额</h4>
                     <p>模型调用可能产生费用，由 DeepSeek、KimiSeek 等服务商收取，以其价格为准。</p>
                   </div>
                   <div>
                     <span>微伴</span>
                     <h4>credits 与会员</h4>
-                    <p>用于微伴的使用额度和功能权益，不包含模型服务商的 API 费用。</p>
+                    <p>
+                      用于微伴的使用额度和功能权益。云端 Agent 按 credits
+                      结算，托管模型成本由运营方承担。
+                    </p>
                   </div>
                 </div>
                 <p className="onboarding-note">
-                  两边的额度分开计算；微伴有 credits，模型服务商余额不足时也无法回复。
+                  自备模型的 API 费用另付服务商；云端任务需要 Plus、正数 credits
+                  余额和可用执行次数，以插件页的服务状态与限额为准。
                 </p>
               </section>
             )}
             {step === 1 && (
-              <section aria-label="配置模型" className="onboarding-panel">
+              <section aria-label="选择 AI" className="onboarding-panel">
                 <div className="onboarding-section-title">
-                  <h3>选择你的模型服务</h3>
-                  <p>已经有 API Key，可以直接填写。没有的话，下面两种方式都可以。</p>
+                  <h3>选择你的 AI 服务</h3>
+                  <p>已有 API Key 可以直接填写；没有的话，可以先选择下面的服务。</p>
                 </div>
+                {data.cloudAgent.ready ? (
+                  <button
+                    className="onboarding-own-key"
+                    disabled={saving || kimiseek.busy}
+                    onClick={() => void dismiss(`${base}/plugins`)}
+                  >
+                    <Link2 size={20} />
+                    <span>
+                      <strong>
+                        {cloudReady
+                          ? "云端 Agent 已就绪"
+                          : data.plan === "plus"
+                            ? "使用云端 Agent"
+                            : "了解 Plus 云端 Agent"}
+                      </strong>
+                      <small>
+                        {cloudReady
+                          ? "无需 API Key，可继续下一步连接微信；点击管理配置"
+                          : "需要 Plus，无需自备模型；在插件页添加并启用"}
+                      </small>
+                    </span>
+                    <ArrowRight size={18} />
+                  </button>
+                ) : (
+                  <p className="onboarding-note">云端 Agent 暂未开放，请先使用自己的模型服务。</p>
+                )}
                 <button
                   className="onboarding-own-key"
                   disabled={saving || kimiseek.busy}
@@ -190,7 +225,9 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                 {progress.model && (
                   <p className="onboarding-success">
                     <Check size={16} />
-                    已配置文本模型，可以继续连接微信。
+                    {cloudReady
+                      ? "云端 Agent 已就绪，可以继续连接微信。"
+                      : "已配置文本模型，可以继续连接微信。"}
                   </p>
                 )}
               </section>
@@ -199,14 +236,21 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
               <section aria-label="连接微信" className="onboarding-panel">
                 <div className="onboarding-section-title">
                   <h3>最后一步，让微信连上你的 AI</h3>
-                  <p>先确认模型服务商有可用余额，再按下面的步骤操作。</p>
+                  <p>
+                    {cloudReady
+                      ? "云端 Agent 已就绪，按下面的步骤连接。"
+                      : "使用自己的模型时，先确认模型服务商有可用余额。"}
+                  </p>
                 </div>
                 <ol className="onboarding-wechat-steps">
                   <li>
                     <span>1</span>
                     <div>
                       <strong>在微伴获取连接二维码</strong>
-                      <p>进入「微信连接」，点击「获取二维码」。渠道和文本模型需先配置完整。</p>
+                      <p>
+                        进入「微信连接」，点击「获取二维码」。需先配置文本模型，或启用可用的云端
+                        Agent。
+                      </p>
                     </div>
                   </li>
                   <li>
@@ -219,15 +263,23 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                   <li>
                     <span>3</span>
                     <div>
-                      <strong>发一句「你好」试试</strong>
+                      <strong>{cloud ? "选择 AI，再发第一条消息" : "发一句「你好」试试"}</strong>
+                      {cloud && (
+                        <p>
+                          使用云端 Agent 时，先发送 <code>/use {cloud.shortcut}</code>
+                          ，收到进入插件的确认后，再发送文字任务，例如「帮我整理今天的计划」。
+                          扫码不会自动选择云端 Agent。
+                        </p>
+                      )}
                       <p>
-                        确认能收到 AI 回复。发送 <code>/wx help</code> 可以查看命令帮助。
+                        {!cloud && "确认能收到 AI 回复。"}
+                        发送 <code>/wx help</code> 可以查看命令帮助。
                       </p>
                     </div>
                   </li>
                 </ol>
                 {!progress.model && (
-                  <p className="onboarding-note">还没有配置完整的文本模型，请先添加渠道和模型。</p>
+                  <p className="onboarding-note">AI 服务还未就绪，请返回上一步选择并完成配置。</p>
                 )}
                 {linked && (
                   <p className="onboarding-note">
@@ -238,10 +290,13 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                 <button
                   className="button onboarding-connect"
                   disabled={saving}
-                  onClick={() => void dismiss(`${base}/${progress.model ? "wechat" : "channels"}`)}
+                  onClick={() => {
+                    if (progress.model) void dismiss(`${base}/wechat`);
+                    else setStep(1);
+                  }}
                 >
                   <Link2 size={17} />
-                  {progress.model ? "去连接微信" : "先配置渠道与模型"}
+                  {progress.model ? "去连接微信" : "先选择 AI"}
                   <ArrowRight size={16} />
                 </button>
               </section>

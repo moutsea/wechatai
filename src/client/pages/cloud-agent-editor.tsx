@@ -20,6 +20,7 @@ import {
 } from "../../shared/cloud-agent";
 import { waitingMessageDefaults } from "../../shared/waiting-message";
 import { WaitingMessageField } from "./waiting-message-field";
+import { CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
 
 export function CloudAgentEditor({
   plugin,
@@ -132,8 +133,8 @@ export function CloudAgentEditor({
             /wx stop 请求停止当前会话的云端任务。
           </p>
           <p className="form-note">
-            Plus 专属。托管模型由运营方提供，内部模型成本无需另付供应商；仍按平台输入与最终输出消耗
-            credits，失败或取消不扣费。
+            {CLOUD_AGENT_COST_NOTE}平台只计任务输入与最终输出，内部模型和工具消耗不额外扣 credits。
+            失败或确认取消不扣 credits；请求停止后仍可能完成，费用以最终结果为准。
             {data.cloudAgent.ready
               ? ` 当前每账号同时 ${data.cloudAgent.maxActive} 个任务，每日最多 ${data.cloudAgent.dailyLimit} 次，${data.cloudAgent.deadlineMinutes} 分钟后请求停止。`
               : "执行次数与时限以保存后的插件状态为准。"}

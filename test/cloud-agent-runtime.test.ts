@@ -665,6 +665,34 @@ describe("durable AGT recovery runner", () => {
     },
   );
 
+  it("reconciles and stops an unconfirmed submission when the submission gate closes", async () => {
+    const { stub, saved, values, runtime } = await setup({
+      submittedAt: Date.now(),
+      unconfirmed: 1,
+    });
+    values.CLOUD_AGENT_ENABLED = "false";
+    const calls = network((request) =>
+      Response.json(
+        new URL(request.url).pathname.endsWith("/jobs") ? { jobs: [job()], hasMore: false } : job(),
+      ),
+    );
+    await inStore(stub, async (store) => {
+      provision(store, stub.id.toString());
+      const { runner } = runtime(store);
+      await pass(runner);
+      expect(store.get(saved.id)).toMatchObject({
+        jobId: "job-one",
+        unconfirmed: 0,
+        stopRequested: 1,
+      });
+      wake(store, saved.id);
+      await pass(runner);
+      expect(calls.map((request) => request.method)).toEqual(["GET", "GET", "POST"]);
+      expect(calls[2].url).toMatch(/\/cancel$/);
+      expect(store.countSince(0)).toBe(1);
+    });
+  });
+
   it("reconciles an unknown job and cancels it with all new-task defaults invalid", async () => {
     const { stub, saved, values, runtime } = await setup({
       submittedAt: Date.now(),

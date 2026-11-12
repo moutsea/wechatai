@@ -19,7 +19,11 @@ import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { LANDING_FAQ } from "../shared/landing-faq";
 import { PLUGIN_LIMITS } from "../shared/plugin-access";
-import { PLUS_MONTHLY_YUAN } from "../shared/pricing-copy";
+import {
+  PLUS_MONTHLY_YUAN,
+  OWN_API_COST_NOTE,
+  CLOUD_AGENT_COST_NOTE,
+} from "../shared/pricing-copy";
 import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
 import { authReturnPath } from "../shared/auth";
 import { trackFunnel } from "./analytics-client";
@@ -121,7 +125,7 @@ export function Landing() {
             </p>
             <p className="hero-prerequisite">
               先<Link to="/#start">检查微信 ClawBot 入口</Link>。免费 credits
-              仅覆盖平台中转，模型费用另付；也可<Link to="/#try">免 Key 预览示例任务</Link>。
+              用于平台服务，自备模型费用另付；也可<Link to="/#try">免 Key 预览示例任务</Link>。
             </p>
             <div className="hero-trust">
               <span>
@@ -310,7 +314,10 @@ export function Landing() {
         <section className="landing-pricing" aria-labelledby="landing-pricing-title">
           <div className="landing-pricing-head">
             <h2 id="landing-pricing-title">免费能用到什么程度</h2>
-            <p>不卖 token：模型费付给你的服务商，我们只收消息中转的 credits。</p>
+            <p>
+              {OWN_API_COST_NOTE}
+              {CLOUD_AGENT_COST_NOTE}
+            </p>
           </div>
           <div className="landing-pricing-grid">
             <div className="landing-plan">

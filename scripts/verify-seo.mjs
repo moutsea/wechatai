@@ -35,6 +35,7 @@ const publicPages = [
     ["image-generation", "描述画面和比例"],
     ["roleplay", "导入角色卡与世界书"],
     ["personal-assistant", "定时提醒"],
+    ["cloud-agent", "查看进度、结果与停止任务"],
     ["notifications", "发送第一条通知"],
   ].map(([slug, marker]) => [`docs/${slug}.html`, `https://wechatai.app/docs/${slug}`, marker]),
   [

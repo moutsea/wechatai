@@ -79,6 +79,26 @@ afterEach(async () => {
 });
 
 describe("cloud Agent user entry", () => {
+  it("requires explicit selection after setup and does not charge for choosing the cloud plugin", async () => {
+    const stub = await setup();
+    const p = await plugin(stub);
+    expect((await save(stub, { ...p, shortcut: "计划" })).ok).toBe(true);
+    const before = await stub.snapshot();
+    expect(before.currentSession).toBeNull();
+    expect(await send(stub, "你好")).toContain("当前未选择模型或插件");
+    expect(await tasks(stub)).toHaveLength(0);
+    await send(stub, "/use 计划");
+    const selected = await stub.snapshot();
+    expect(selected.currentSession?.pluginInstanceId).toBe(p.id);
+    expect(selected.wallet.balance).toBe(before.wallet.balance);
+    expect(await tasks(stub)).toHaveLength(0);
+    expect(await send(stub, "帮我整理今天的计划")).toContain("任务已接收");
+    expect(await tasks(stub)).toHaveLength(1);
+    const after = await stub.snapshot();
+    expect(after.wallet.balance).toBe(before.wallet.balance);
+    expect(after.ledger.filter((entry) => entry.kind === "usage")).toHaveLength(0);
+  });
+
   it.each(["service", "disabled", "expired"])(
     "archives cloud-only history and exits cleanly when configuration is unavailable: %s",
     async (condition) => {

@@ -10,6 +10,12 @@
 export const PLUS_MONTHLY_YUAN = 9.9;
 export const PLUS_YEARLY_YUAN = 88;
 
+// 首页、价格卡、付款及协议共用费用边界，避免把自备 API 的规则套到云端托管。
+export const OWN_API_COST_NOTE =
+  "使用自备模型、搜索或生图 API 时，费用另付服务商，不包含在微伴会员或 credits 内。";
+export const CLOUD_AGENT_COST_NOTE =
+  "云端 Agent 在运营方开放后供 Plus 会员使用，无需自备 API Key；托管模型成本由运营方承担，仍按平台 credits 计费并限制执行次数。";
+
 /**
  * 折合月价（¥7.3）与正式价（¥9.90）用的是两套精度：折合价只保留一位小数，
  * 否则同一页里会同时出现「¥7.33」和「约 ¥7.3」，读者会以为不是同一个数。

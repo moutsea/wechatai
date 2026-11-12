@@ -9,6 +9,7 @@ import {
 } from "../../shared/site-info";
 import { SiteFooter } from "../site-footer";
 import { SiteHeader } from "../site-header";
+import { OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
 
 /** 「2026-10-24」→「2026 年 10 月 24 日」，让显示的日期永远跟随常量。 */
 function formatUpdatedAt(iso: string) {
@@ -39,8 +40,14 @@ function Terms() {
           计量及已开放的插件功能。具体功能与数量限制以当前产品页面为准。
         </p>
         <p>
-          模型、搜索和生图服务由你选择并配置 API Key 与服务地址；OpenClaw、Hermes 等 Agent
+          使用自备 API 时，模型、搜索和生图服务由你选择并配置 API Key 与服务地址；OpenClaw、Hermes
+          等 Agent
           运行于你连接的设备或服务。你需要取得相应使用权限，遵守这些服务的条款，并自行承担其费用、可用性与权限配置。
+        </p>
+        <p>
+          选择云端 Agent 时，由运营方托管执行环境与模型接入，无需自行部署或配置模型 Key；
+          服务是否开放及执行限制以插件页为准，使用前请查看
+          <Link to="/docs/cloud-agent">云端 Agent 指南</Link>。
         </p>
         <p>
           主动选择 KimiSeek 一键导入后，系统会按当前身份关联或创建 KimiSeek 账户，生成专用 API Key
@@ -63,13 +70,15 @@ function Terms() {
         <h2>4. 会员、credits 与付款</h2>
         <p>
           会员价格、权益、计费周期及 credits 套餐以<Link to="/app/billing">会员与 credits</Link>
-          页面和付款确认页为准。会员费用、本站 credits 与第三方 API 费用分别计算；购买 Plus
-          不包含上游模型或搜索服务费用。
+          页面和付款确认页为准。{OWN_API_COST_NOTE}
+          {CLOUD_AGENT_COST_NOTE}
         </p>
         <p>
           平台按网关边界的输入、最终输出及生成图片计量，具体换算规则见
-          <Link to="/docs/credits">credits 说明</Link>。外部 Agent
-          内部执行过程的模型费用由其供应商另行收取。每日赠送额度会刷新，不累计；购买和邀请奖励额度按相应页面规则保留。单次结算产生的欠额会抵扣后续可用额度。
+          <Link to="/docs/credits">credits 说明</Link>。你自行运行的 OpenClaw、Hermes 等 Agent
+          内部执行过程的模型费用由所用供应商另行收取；云端 Agent 内部模型与工具消耗不额外计入本站
+          credits。
+          每日赠送额度会刷新，不累计；购买和邀请奖励额度按相应页面规则保留。单次结算产生的欠额会抵扣后续可用额度。
         </p>
         <p>
           新购买的会员均为单次付费，到期手动续费；提前购买会顺延有效期。已有自动续费订阅仍可在工作台的「管理订阅」入口管理或取消后续续费，已付款权益保留至到期。遇到重复扣款、权益未到账或需要申请退款，请提供订单信息联系我们，我们会根据实际订单、使用情况及适用法律处理，不影响你依法享有的消费者权利。

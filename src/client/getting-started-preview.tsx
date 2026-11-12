@@ -217,9 +217,12 @@ export function CostEstimator() {
   return (
     <section className="cost-estimator" id="estimate" aria-labelledby="cost-estimator-title">
       <header>
-        <p className="eyebrow">两笔账，分开算</p>
+        <p className="eyebrow">自备 API 的两笔费用</p>
         <h2 id="cost-estimator-title">先估算自己的文字用量</h2>
-        <p>只在浏览器内计算，无需登录。价格请从你的服务商账单填写，不预设模型报价。</p>
+        <p>
+          只在浏览器内计算，无需登录。服务商单价仅用于估算自备 API 费用；使用云端 Agent
+          时无需填写，也不计其内部模型消耗。云端仍需 Plus 且服务已开放，执行次数另有限制。
+        </p>
       </header>
       <div className="cost-fields">
         {fields.map((label, index) => (
@@ -259,7 +262,7 @@ export function CostEstimator() {
                   ? `约 ¥${estimate.modelYuan.toLocaleString("zh-CN", { maximumFractionDigits: 4 })}`
                   : "填写单价后显示"}
               </strong>
-              <p>单独付给你的服务商，不包含在 Plus 或 credits 内。</p>
+              <p>仅适用于自备 API，费用另付服务商；云端托管模型无需另付。</p>
             </div>
           </>
         ) : (

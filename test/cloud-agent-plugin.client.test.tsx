@@ -1,15 +1,17 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Plugins } from "../src/client/pages/plugins";
 import { Wechat } from "../src/client/pages/wechat";
+import { DashboardOnboarding } from "../src/client/pages/dashboard-onboarding";
 import { useApp } from "../src/client/context";
 import { createFakeApi } from "./support/fake-api";
 import { cloudAgentInputSchema, type CloudAgentPlugin } from "../src/shared/cloud-agent";
 import type { Snapshot } from "../src/shared/types";
 
 vi.mock("../src/client/context", () => ({ useApp: vi.fn() }));
+vi.mock("../src/client/analytics-client", () => ({ trackFunnel: vi.fn() }));
 let root: Root;
 let container: HTMLDivElement;
 let data: Snapshot;
@@ -30,6 +32,114 @@ const plugin = (enabled = true): CloudAgentPlugin => ({
     active: 0,
     deadlineMinutes: 10,
   },
+});
+
+function CurrentPath() {
+  return <output data-testid="path">{useLocation().pathname}</output>;
+}
+async function onboarding(keepModels = false) {
+  if (!keepModels) {
+    data.channels = [];
+    data.assistants = [];
+  }
+  data.connections = [];
+  data.stats.messages = 0;
+  data.onboardingDismissedAt = undefined;
+  await render(
+    <>
+      <DashboardOnboarding data={data} />
+      <CurrentPath />
+    </>,
+  );
+}
+
+describe("cloud Agent onboarding", () => {
+  it.each(["free", "plus"] as const)(
+    "does not offer configuration or upgrade while the service is unavailable for %s",
+    async (plan) => {
+      data.plan = plan;
+      data.cloudAgent = { ...plugin().status!, ready: false };
+      data.plugins = [plugin()]; // Cached plugin status must not override the global gate.
+      await onboarding();
+      await click("我了解了，下一步");
+      expect(container.textContent).toContain("云端 Agent 暂未开放");
+      expect(container.textContent).not.toContain("云端 Agent 已就绪");
+      expect(container.textContent).not.toContain("了解 Plus 云端 Agent");
+      expect(container.querySelectorAll(".onboarding-own-key")).toHaveLength(1);
+    },
+  );
+
+  it.each(["free", "plus"] as const)(
+    "routes %s users to the plugin page when cloud service is available",
+    async (plan) => {
+      data.plan = plan;
+      data.cloudAgent = plugin().status!;
+      await onboarding();
+      await click("我了解了，下一步");
+      const label = plan === "plus" ? "使用云端 Agent" : "了解 Plus 云端 Agent";
+      const card = [...container.querySelectorAll("button")].find(
+        (button) => button.querySelector("strong")?.textContent === label,
+      );
+      expect(card).toBeDefined();
+      await act(async () => card!.click());
+      expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/plugins");
+      expect(request).toHaveBeenCalledExactlyOnceWith("/onboarding/dismiss", { method: "POST" });
+    },
+  );
+
+  it("keeps the guide open for a cloud-only account and sends it directly to QR setup", async () => {
+    data.cloudAgent = plugin().status!;
+    data.plugins = [plugin()];
+    await onboarding();
+    expect(container.querySelector("dialog")).not.toBeNull();
+    await click("我了解了，下一步");
+    expect(container.textContent).toContain("云端 Agent 已就绪，可以继续连接微信。");
+    expect(container.textContent).not.toContain("已配置文本模型");
+    await click("下一步");
+    await click("去连接微信");
+    expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/wechat");
+  });
+
+  it.each([false, true])(
+    "shows the selected cloud shortcut before the first task, with ordinary models: %s",
+    async (withModels) => {
+      const baseline = await createFakeApi()<Snapshot>("/dashboard");
+      const selected = { ...plugin(), id: "work-cloud", shortcut: "计划" };
+      data.cloudAgent = selected.status!;
+      data.plugins = [plugin(false), { ...plugin(), id: "other", shortcut: "其他" }, selected];
+      data.currentSession = { ...baseline.currentSession!, pluginInstanceId: selected.id };
+      if (withModels) {
+        data.channels = baseline.channels;
+        data.assistants = baseline.assistants;
+      }
+      await onboarding(withModels);
+      if (withModels) await click("新手引导");
+      await click("我了解了，下一步");
+      await click("下一步");
+      const commands = [...container.querySelectorAll(".onboarding-wechat-steps code")].map(
+        (code) => code.textContent,
+      );
+      expect(commands).toContain("/use 计划");
+      expect(commands).not.toContain("/use 云");
+      expect(commands).not.toContain("/use 其他");
+      expect(request).not.toHaveBeenCalled();
+      await click("去连接微信");
+      await render(<Wechat />);
+      expect(container.textContent).toContain("发送 /use 计划");
+      expect(container.textContent).not.toContain("发送 /use 其他");
+    },
+  );
+
+  it("returns incomplete setup to AI selection without dismissing the guide", async () => {
+    data.cloudAgent = plugin().status!;
+    await onboarding();
+    await click("我了解了，下一步");
+    await click("下一步");
+    await click("先选择 AI");
+    expect(container.textContent).toContain("选择你的 AI 服务");
+    expect(container.querySelector("dialog")).not.toBeNull();
+    expect(request).not.toHaveBeenCalled();
+  });
 });
 async function render(view = <Plugins />) {
   await act(async () => root.render(<MemoryRouter>{view}</MemoryRouter>));

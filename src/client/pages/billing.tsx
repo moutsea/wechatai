@@ -23,7 +23,7 @@ import {
   type CheckoutStatus,
   type SubscriptionInfo,
 } from "../../shared/billing";
-import { approxYuan } from "../../shared/pricing-copy";
+import { approxYuan, OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
 
 /** 年付省多少、折合月价多少，都从 BILLING_OFFERS 推导：写死的「省 ¥49」早就和 990/8800 不符了。 */
 const plusMonthlyAmount = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")?.amount ?? 0;
@@ -457,8 +457,8 @@ export function Billing() {
         </article>
       </div>
       <p className="billing-footnote">
-        Credits 是平台服务额度，自备 API Key 的模型费用由供应商另行收取；云端 Agent
-        的托管模型无需另付供应商，仍按平台规则扣 credits。
+        Credits 是平台服务额度。{OWN_API_COST_NOTE}
+        {CLOUD_AGENT_COST_NOTE}
         <Link to={`${base}/credits`}>
           查看计费规则与额度明细
           <ArrowUpRight size={14} />

@@ -43,7 +43,11 @@ export function Wechat() {
   const waiting = ["waiting", "scanned"].includes(connection.status) && !paused;
   const setupIssue = wechatSetupIssue(data);
   const cloud =
-    data.plugins?.find((p) => isCloudAgent(p) && p.enabled) ?? data.plugins?.find(isCloudAgent);
+    data.plugins?.find(
+      (p) => isCloudAgent(p) && p.enabled && p.id === data.currentSession?.pluginInstanceId,
+    ) ??
+    data.plugins?.find((p) => isCloudAgent(p) && p.enabled) ??
+    data.plugins?.find(isCloudAgent);
   const cloudMode =
     !!cloud &&
     (!data.assistants.some(isChatModel) || data.currentSession?.pluginInstanceId === cloud.id);

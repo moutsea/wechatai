@@ -388,6 +388,32 @@ describe("account AGT recovery alarm", () => {
     );
   });
 
+  it("keeps an associated task running when submissions close and honors an explicit stop", async () => {
+    const { stub, task } = await setup({
+      state: "accepted",
+      jobId: "job-one",
+      submittedAt: Date.now(),
+    });
+    const running = await pass(stub, "running", { enabled: false });
+    expect(running.paths.some((path) => path.endsWith("/cancel"))).toBe(false);
+    expect(await inspect(stub, task.id)).toMatchObject({
+      task: { state: "accepted", stopRequested: 0 },
+      ledger: [],
+    });
+    const stopped = JSON.parse(await stub.api("cloud.cancel", { id: task.id }));
+    expect(stopped).toMatchObject({ ok: true, data: { stopping: true } });
+    const stopping = await pass(stub, "running", { enabled: false, wake: task.id });
+    expect(stopping.paths.some((path) => path.endsWith("/cancel"))).toBe(true);
+    await pass(stub, "cancelled", { enabled: false, wake: task.id });
+    expect(await inspect(stub, task.id)).toMatchObject({
+      task: { state: "cancelled", stopRequested: 1, settled: 0 },
+      ledger: [],
+    });
+    await runInDurableObject(stub, (_, state) => {
+      expect(new CloudAgentStore(state.storage).countSince(0)).toBe(1);
+    });
+  });
+
   it.each(["completed", "cancelled"] as const)(
     "honors the confirmed %s outcome after an API stop request without rebilling",
     async (status) => {

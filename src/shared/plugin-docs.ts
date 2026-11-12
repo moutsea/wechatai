@@ -207,7 +207,7 @@ export const protocolSections = protocolMarkdown
   });
 export const llmsText = `# Wechatai · 微伴
 
-> 把自选的大模型接进微信的独立产品。用户填入自己的模型 API Key（OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议），绑定微信后即可在聊天窗口里对话、联网问答、生图、接 Agent。本站不提供模型额度，也不转售 token：模型费用由用户自己的 API 服务商收取，微伴文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计。
+> 把自选的大模型接进微信的独立产品。用户填入自己的模型 API Key（OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议），绑定微信后即可在聊天窗口里对话、联网问答、生图、接 Agent。自备模型的费用由用户自己的 API 服务商收取；可选 Plus 云端 Agent 在运营方开放后无需自备 API Key，托管模型成本由运营方承担，执行次数受限。微伴文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计。
 
 产品身份：微伴 Wechatai，官网 ${SITE_URL}，公开仓库 https://github.com/moutsea/wechatai，维护者 ${SITE_MAINTAINER.name}（${SITE_MAINTAINER.profile}）。这是微信 ClawBot 单聊接入服务，不是腾讯微信官方 AI，不是同名桌面客户端，不支持群聊机器人；项目来源与维护者见 ${SITE_URL}/contact#maintainer。
 
@@ -221,10 +221,11 @@ export const llmsText = `# Wechatai · 微伴
 - 接入条件：先在手机微信检查 ClawBot 入口；没有入口时本站无法开通。主动提醒受最近互动后的 24 小时回复窗口影响，过期任务不保证补发。
 - 体验与费用：${SITE_URL}/#try 提供不收 Key、不调用模型的模拟预览；${SITE_URL}/pricing#estimate 可按自填模型单价估算两笔费用。
 - 会话与插件：切换普通模型会进入目标模型最近的活动会话，没有则新建，并退出当前插件模式。旧记录保留，上下文不会自动交给新模型。\`/wx plugins\` 查看插件别名，\`/use 别名\` 进入插件，\`/exit\` 返回普通模型会话。
-- 内置插件：DS Chat（联网问答）、AI 生图、OpenClaw、Hermes、角色扮演、个人助理、消息提醒。
+- 内置插件：DS Chat（联网问答）、AI 生图、OpenClaw、Hermes、角色扮演、个人助理、消息提醒，以及运营方开放的 Plus 云端 Agent。
 - DS Chat：使用用户配置的回答模型与搜索 API，由模型判断是否需要搜索或阅读网页，也可直接回答；进入插件不代表每条回复都经过联网核验。
+- 云端 Agent：需要 Plus 且运营方已开放，无需自备模型。支持文字任务和账号记忆工具，后台结果可查询、请求停止；输入与最终输出计 credits，内部消耗不另计。使用说明：${SITE_URL}/docs/cloud-agent。
 - Agent 接入：OpenClaw 与 Hermes 由用户在自己的电脑或服务器上运行，设备和 Agent 进程需保持在线；微伴提供消息中转，不托管这两个 Agent。请求原文与最终回复经过微信和微伴，并非只转发摘要；使用云端模型或外部工具时，相关内容还会发送给用户配置的服务商。
-- 计费：模型费用归用户的 API 服务商；微伴文字部分 credits =（输入 token + 输出 token × 8）÷ 5000，AI 生图每张 5 credits，描述文字另计。免费版每天 100 credits、1 个插件、1 个微信链接；Plus ¥9.9/月或 ¥88/年，每天 1000 credits、插件不限、10 个微信链接、支持附件。
+- 计费：自备模型费用归用户的 API 服务商，云端 Agent 托管模型成本由运营方承担；微伴文字部分 credits =（输入 token + 输出 token × 8）÷ 5000，AI 生图每张 5 credits，描述文字另计。免费版每天 100 credits、1 个插件、1 个微信链接；Plus ¥9.9/月或 ¥88/年，每天 1000 credits、插件不限、10 个微信链接、支持附件。
 - 会员购买：新购买的会员为单次付费，不自动续费，到期手动续费；退款申请需联系支持，按实际订单、使用情况及适用法律处理。
 - 消息提醒 Webhook 推送不扣 credits。
 - 开源：插件协议与站点代码公开（MIT）。与微信、腾讯及模型供应商无官方关联。

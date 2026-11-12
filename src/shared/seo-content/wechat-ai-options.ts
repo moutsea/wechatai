@@ -1,4 +1,5 @@
 import type { SeoPage } from "../seo-pages";
+import { CLOUD_AGENT_COST_NOTE } from "../pricing-copy";
 
 export const wechatOptionsPage: SeoPage = {
   path: "/wechat-ai-options",
@@ -81,7 +82,9 @@ CowAgent 的具体接法见 [项目微信文档](https://docs.cowagent.ai/channe
 - **普通模型聊天免运维**：扫码绑定后即可用；接入 OpenClaw 或 Hermes 时，仍需自己运行并维护 Agent。
 - **代价**：需要你自己开通服务商并管理 Key；消息要经过中转服务转发。
 
-微伴是这一类。我们如实说明边界：**不提供 token、不承诺模型免费、无法保证第三方接入绝对不受风控影响**。自行部署可以让你管理中转服务和存储（代码是 MIT 开源），但微信消息仍经过微信，调用云端模型或外部工具时，相关内容也会发送给对应服务商。自建不等于数据完全不经过第三方。`,
+微伴的自备 API 接入属于这一类，不承诺模型免费。微伴也有可选的[云端 Agent](/docs/cloud-agent)：${CLOUD_AGENT_COST_NOTE}
+
+任何第三方接入都无法保证绝对不受风控影响。自行部署可以让你管理中转服务和存储（代码是 MIT 开源），但微信消息仍经过微信，调用云端模型或外部工具时，相关内容也会发送给对应服务商。自建不等于数据完全不经过第三方。`,
     },
     {
       id: "risk",
@@ -98,7 +101,7 @@ CowAgent 的具体接法见 [项目微信文档](https://docs.cowagent.ai/channe
       id: "choose",
       title: "怎么选：按你的情况对号入座",
       body: `- **只想偶尔问问** → 官方内置，别折腾。
-- **完全不想碰 API Key、愿意为省心付费** → 商业平台。
+- **完全不想碰 API Key、愿意为省心付费** → 商业平台，或先确认微伴 Plus 云端 Agent 是否已开放。
 - **要改代码、自己管理存储和工具、有运维能力** → 开源自建；数据流向还取决于所接的模型与外部服务。
 - **已经有一张 API Key，想随时换模型、想看清每一笔钱** → 自带 Key 中转，也就是 [微伴](/wechat-ai)。
 - **既要自动化任务又要微信推送** → 本机跑 Agent 接进微信，见 [微信接入 Agent](/wechat-agent)。
@@ -114,8 +117,7 @@ CowAgent 的具体接法见 [项目微信文档](https://docs.cowagent.ai/channe
     },
     {
       question: "微信 AI 机器人一般怎么收费？",
-      answer:
-        "商业平台通常把模型和服务费用合并为积分或套餐；自带 Key 服务通常分别结算模型费与中转费，具体规则以所选服务报价为准。微伴文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计；模型费用另付给服务商。",
+      answer: `商业平台通常把模型和服务费用合并为积分或套餐；自带 Key 服务通常分别结算模型费与中转费，具体规则以所选服务报价为准。微伴文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计；使用自备 API 时，费用另付服务商。${CLOUD_AGENT_COST_NOTE}`,
     },
     {
       question: "用第三方 AI 机器人会不会被封号？",
@@ -142,5 +144,5 @@ CowAgent 的具体接法见 [项目微信文档](https://docs.cowagent.ai/channe
     { label: "价格与免费额度", href: "/pricing" },
     { label: "微信 AI 常见问题（文档）", href: "/docs/faq" },
   ],
-  updatedAt: "2026-11-10",
+  updatedAt: "2026-11-12",
 };
