@@ -62,6 +62,10 @@ export type CloudTask = {
   resetAt: number;
   conversationId: string;
   prompt: string;
+  /** Content-addressed images, private to this task until uploaded to AGT. */
+  imageIds?: string[];
+  /** The staged batch is consumed at admission; retries need fresh attachments. */
+  hasAttachments?: boolean;
   idempotencyKey: string;
   state: CloudTaskState;
   upstreamStatus: string;
@@ -179,6 +183,9 @@ export class CloudAgentStore {
       CREATE INDEX IF NOT EXISTS cloud_tasks_plugin_page ON cloud_tasks(pluginId, createdAt DESC, id DESC);
       CREATE UNIQUE INDEX IF NOT EXISTS cloud_tasks_job ON cloud_tasks(jobId) WHERE jobId != '';
       CREATE UNIQUE INDEX IF NOT EXISTS cloud_tasks_source ON cloud_tasks(json_extract(data, '$.sourceId'));
+      CREATE TABLE IF NOT EXISTS cloud_task_images (
+        taskId TEXT NOT NULL, imageId TEXT NOT NULL, part INTEGER NOT NULL,
+        data BLOB NOT NULL, PRIMARY KEY(taskId,imageId,part));
       CREATE TABLE IF NOT EXISTS cloud_callbacks (
         deliveryId TEXT PRIMARY KEY, taskId TEXT NOT NULL, jobId TEXT NOT NULL,
         hash TEXT NOT NULL, createdAt INTEGER NOT NULL);
@@ -198,6 +205,31 @@ export class CloudAgentStore {
       "INSERT INTO cloud_provision VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data",
       JSON.stringify(value),
     );
+  }
+
+  saveImages(taskId: string, images: { id: string; data: Uint8Array }[]) {
+    this.sql.exec("DELETE FROM cloud_task_images WHERE taskId=?", taskId);
+    // Keep image bytes out of the task JSON and below SQLite's row limit.
+    for (const image of new Map(images.map((image) => [image.id, image])).values())
+      for (let offset = 0, part = 0; offset < image.data.length; offset += 256 * 1024, part++)
+        this.sql.exec(
+          "INSERT INTO cloud_task_images VALUES(?,?,?,?)",
+          taskId,
+          image.id,
+          part,
+          image.data.slice(offset, offset + 256 * 1024),
+        );
+  }
+
+  image(taskId: string, imageId: string): Uint8Array | null {
+    const rows = this.sql
+      .exec<{ data: ArrayBuffer }>(
+        "SELECT data FROM cloud_task_images WHERE taskId=? AND imageId=? ORDER BY part",
+        taskId,
+        imageId,
+      )
+      .toArray();
+    return rows.length ? Buffer.concat(rows.map((row) => Buffer.from(row.data))) : null;
   }
 
   private decode(row: Row): CloudTask {
@@ -282,10 +314,16 @@ export class CloudAgentStore {
       next.invocation = null;
       next.request = "";
       next.modelConnection = null;
+      next.imageIds = [];
+      next.hasAttachments = false;
       if (next.outcome)
         next.outcome = { ...next.outcome, text: undefined, task: undefined, refusal: undefined };
     }
     this.save(next);
+    // AGT owns the uploaded copy once a job is confirmed. Local pixels are no
+    // longer needed for recovery; terminal/hidden tasks also release them.
+    if (next.jobId || next.hidden || cloudTaskTerminal(next.state))
+      this.sql.exec("DELETE FROM cloud_task_images WHERE taskId=?", next.id);
     return next;
   }
 
@@ -327,6 +365,8 @@ export class CloudAgentStore {
         request: "",
         outcome: null,
         modelConnection: null,
+        imageIds: [],
+        hasAttachments: false,
         stale: 1,
         delivered: 1,
         deliveryStatus: "stale",
@@ -337,6 +377,7 @@ export class CloudAgentStore {
   }
 
   remove(id: string) {
+    this.sql.exec("DELETE FROM cloud_task_images WHERE taskId=?", id);
     this.sql.exec("DELETE FROM cloud_tasks WHERE id = ?", id);
   }
 

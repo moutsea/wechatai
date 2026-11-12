@@ -42,6 +42,36 @@ export const safeFileName = (value: string) =>
     // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .slice(0, 160) || "附件";
+
+/** Permanent input failures keep the batch, so replacements must start a new batch. */
+export function attachmentRetryError(error: unknown) {
+  if (
+    !(error instanceof AppError) ||
+    ![
+      "image_size",
+      "image_format",
+      "attachment_size",
+      "attachment_batch_size",
+      "file_text_size",
+      "pdf_pages",
+      "file_encoding",
+      "file_type",
+      "file_parse",
+      "file_empty",
+      "cloud_image_size",
+      "cloud_input_too_long",
+    ].includes(error.code) ||
+    error.message.includes("/cancel")
+  )
+    return error;
+  return new AppError(
+    error.code,
+    `${error.message}\n\n暂存附件仍然保留，新发附件会继续追加。若需替换、压缩或拆分附件，请先发送 /cancel 清空，再发送处理后的附件和要求。`,
+    error.status,
+    error.upstreamStatus,
+  );
+}
+
 function extension(name: string) {
   return name.split(".").at(-1)!.toLowerCase();
 }

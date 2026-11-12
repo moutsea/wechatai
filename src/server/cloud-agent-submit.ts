@@ -10,6 +10,7 @@ import { cloudTaskStopReason, type CloudAgentStore, type CloudTask } from "./clo
 import { AppError, cloudAgentEnabled } from "./config";
 import { pluginInvocationSchema } from "../shared/plugins";
 import { pluginOutputBudget } from "./plugins/gateway";
+import { cloudAgentRetryMessage } from "./cloud-agent-failure";
 
 /**
  * Submit from the account's serialized runner using its durable frozen request.
@@ -59,7 +60,7 @@ export async function submitCloudAgentTask(
         state: "rejected",
         attempts: 0,
         nextAt: Date.now(),
-        error: `任务未提交。\n\n${message}`,
+        error: cloudAgentRetryMessage(`任务未提交。\n\n${message}`, task),
       });
     }
   }
@@ -101,10 +102,12 @@ export async function submitCloudAgentTask(
         unconfirmed: 0,
         attempts: 0,
         nextAt: Date.now(),
-        error:
+        error: cloudAgentRetryMessage(
           status === 429
             ? "云端服务繁忙，任务未接收，未扣 credits，请稍后重试。"
             : "云端服务拒绝了任务，未扣 credits。请稍后重试；若持续失败，请联系运营方。",
+          task,
+        ),
       });
     // AGT's generic 400 can also follow job creation (for example, callback
     // registration failed). Like 409, keep it for read-only recovery.

@@ -10,6 +10,7 @@ import {
 } from "./cloud-agent-store";
 import { submitCloudAgentTask } from "./cloud-agent-submit";
 import { AppError, cloudAgentConnectionConfig, cloudAgentEnabled } from "./config";
+import { cloudAgentRetryMessage } from "./cloud-agent-failure";
 
 type Host = {
   stopReason(task: CloudTask): string | undefined;
@@ -65,7 +66,7 @@ export class CloudAgentRuntime {
       state: "rejected",
       unconfirmed: 0,
       attempts: 0,
-      error,
+      error: cloudAgentRetryMessage(error, task),
       nextAt: Date.now(),
     });
     if (!rejected.delivered) await this.host.deliver(rejected);

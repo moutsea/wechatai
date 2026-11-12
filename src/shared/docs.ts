@@ -112,7 +112,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "attachments",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-12",
     seoTitle: "微信 AI 图片、文件与语音使用教程",
     title: "图片、文件与语音",
     description:

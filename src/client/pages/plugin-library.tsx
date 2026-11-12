@@ -588,7 +588,8 @@ export function PluginConfiguration({
                       <div>
                         <dt>支持范围</dt>
                         <dd>
-                          文字和带微信转写文本的语音；暂不支持图片和文件。/wx stop
+                          文字、图片、可提取文字的 PDF、DOCX 和文本文件，以及带微信转写文本的语音。
+                          先发附件，再补充要求；图片需模型支持视觉，单张最大 2 MB。/wx stop
                           请求停止当前会话任务。
                         </dd>
                       </div>

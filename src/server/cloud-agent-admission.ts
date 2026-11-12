@@ -9,6 +9,8 @@ import { CloudAgentStore, type CloudTask } from "./cloud-agent-store";
 import { AppError, cloudAgentConfig, publicSiteUrl } from "./config";
 import { pluginOutputBudget } from "./plugins/gateway";
 import { dayWindow, Wallet } from "./wallet";
+import type { ModelMessage } from "./llm";
+import { CLOUD_AGENT_POLICY_V1 } from "./cloud-agent-client";
 
 /** Read by the account host immediately before admission, never from a browser DTO. */
 export type CloudAgentAdmissionContext = {
@@ -39,7 +41,12 @@ export function admitCloudAgentTask(
   env: Env,
   storage: DurableObjectStorage,
   accountId: string,
-  input: { sourceId: string; prompt: string },
+  input: {
+    sourceId: string;
+    prompt: string;
+    images?: ModelMessage["images"];
+    hasAttachments?: boolean;
+  },
   context: () => CloudAgentAdmissionContext,
   commit: (task: Readonly<CloudTask>) => undefined,
 ): { task: CloudTask; created: boolean } {
@@ -108,6 +115,42 @@ export function admitCloudAgentTask(
       );
     if (!input.prompt.trim())
       throw new AppError("invalid_cloud_prompt", "请发送文字任务，或带微信转写文本的语音。", 422);
+    // AGT's job API bounds the complete message, including extracted file text.
+    if (input.prompt.length > 50_000)
+      throw new AppError(
+        "cloud_input_too_long",
+        "组装后的任务文字最多 50,000 字符，请拆分文件或缩短要求。本次未创建任务。",
+        422,
+      );
+    if ((input.images?.length ?? 0) > 4)
+      throw new AppError("cloud_image_count", "云端任务一次最多处理 4 张图片。", 422);
+    const images = (input.images ?? []).map((image) => {
+      const data = Buffer.from(image.data, "base64");
+      if (!data.length || data.length > 2 * 1024 * 1024)
+        throw new AppError(
+          "cloud_image_size",
+          "云端 Agent 单张图片最大 2 MB，请压缩后重新发送。本次未创建任务。",
+          422,
+        );
+      return { id: `img_${createHash("sha256").update(data).digest("hex")}`, data };
+    });
+    // Check the irreducible AGT message shape, not just prompt.length: quoted
+    // file text expands again inside the serialized context. AGT checks the
+    // complete runtime context (including memory/tools) before each model call.
+    const requiredContext = [
+      ...(model.systemPrompt ? [{ role: "system", content: model.systemPrompt }] : []),
+      {
+        role: "user",
+        content: input.prompt,
+        ...(images.length ? { images: images.map(({ id }) => ({ id })) } : {}),
+      },
+    ];
+    if (JSON.stringify(requiredContext).length > CLOUD_AGENT_POLICY_V1.maxContextChars)
+      throw new AppError(
+        "cloud_input_too_long",
+        "任务文字、文件正文和系统提示词超出云端上下文长度上限，请拆分文件或缩短内容。本次未创建任务。",
+        422,
+      );
 
     const id = crypto.randomUUID();
     const invocation = pluginInvocationSchema.parse({
@@ -117,7 +160,15 @@ export function admitCloudAgentTask(
       pluginId: CLOUD_AGENT_PLUGIN_ID,
       pluginVersion: CLOUD_AGENT_VERSION,
       sessionId: session.id,
-      messages: [{ role: "user", content: [{ type: "text", text: input.prompt }] }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: input.prompt },
+            ...images.map((image) => ({ type: "image", assetId: image.id })),
+          ],
+        },
+      ],
       limits: {
         inputTokens: modelInputBudget(model),
         outputTokens: model.maxOutputTokens,
@@ -200,6 +251,8 @@ export function admitCloudAgentTask(
       resetAt: session.resetAt,
       conversationId: `cloud-${createHash("sha256").update(JSON.stringify(conversation)).digest("hex")}`,
       prompt: input.prompt,
+      ...(images.length ? { imageIds: images.map((image) => image.id) } : {}),
+      ...(input.hasAttachments || images.length ? { hasAttachments: true } : {}),
       idempotencyKey: `wechatai-${crypto.randomUUID()}`,
       state: "submitting",
       upstreamStatus: "",
@@ -220,6 +273,7 @@ export function admitCloudAgentTask(
       unconfirmed: 0,
     };
     store.save(task);
+    if (images.length) store.saveImages(task.id, images);
     commit(task);
     return { task, created: true };
   });

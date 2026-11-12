@@ -167,9 +167,10 @@ export function CloudAgentEditor({
           </label>
           <p className="form-note">
             <Cloud size={14} aria-hidden="true" />{" "}
-            请在「微信连接」扫码，已连接时可直接使用。支持文字和带微信转写文本的语音。图片、文件暂不支持；
-            需要分析附件时请切换到聊天模型。结果会回复微信；切换会话后，请在任务页查看原任务结果。
-            /wx stop 请求停止当前会话的云端任务。
+            请在「微信连接」扫码，已连接时可直接使用。支持文字、图片、可提取文字的 PDF、DOCX
+            和文本文件，以及带微信转写文本的语音。先发附件，再补充处理要求；图片需所用模型支持视觉输入，单张最大
+            2 MB。 结果会回复微信；切换会话后，请在任务页查看原任务结果。 /wx stop
+            请求停止当前会话的云端任务。
           </p>
           <p className="form-note">
             {data.cloudAgent.adminPreview && "当前仅对管理员开放内测。"}

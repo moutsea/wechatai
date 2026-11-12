@@ -1,5 +1,6 @@
 import { abortAllDurableObjects, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import {
   CLOUD_CALLBACK_PATH,
   cloudCallbackSecret,
@@ -97,6 +98,45 @@ const eligible = () => undefined;
 afterEach(() => vi.restoreAllMocks());
 
 describe("durable AGT submit request preparation", () => {
+  it("retries the same private pixels after an upload failure, then reuses the frozen image references", async () => {
+    const pixels = Uint8Array.of(1, 2, 3);
+    const id = `img_${createHash("sha256").update(pixels).digest("hex")}`;
+    const { stub, saved } = await setup({ imageIds: [id] });
+    const config = configuredEnv({
+      CLOUD_AGENT_ENABLED: "true",
+      AGT_ORIGIN: saved.origin,
+      AGT_APP_ID: saved.appId,
+      AGT_APP_KEY: "test-app-key",
+      AGT_TENANT_ID: saved.tenantId,
+    });
+    const upload = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new Uint8Array(init!.body as ArrayBuffer)).toEqual(pixels);
+        return Response.json({ id, size: pixels.length, mediaType: "image/png" }, { status: 201 });
+      });
+    upload.mockImplementationOnce(async () => new Response("Unavailable", { status: 503 }));
+    await inStore(stub, async (store) => {
+      store.saveImages(saved.id, [{ id, data: pixels }]);
+      await expect(
+        prepareCloudAgentRequest(config, store, stub.id.toString(), saved.id, eligible),
+      ).rejects.toMatchObject({ upstreamStatus: 503 });
+      expect(store.get(saved.id)?.request).toBe("");
+      expect(store.image(saved.id, id)).not.toBeNull();
+      const raw = await prepareCloudAgentRequest(
+        config,
+        store,
+        stub.id.toString(),
+        saved.id,
+        eligible,
+      );
+      expect(JSON.parse(raw!).images).toEqual([{ id }]);
+      expect(
+        await prepareCloudAgentRequest(config, store, stub.id.toString(), saved.id, eligible),
+      ).toBe(raw);
+    });
+    expect(upload).toHaveBeenCalledTimes(2);
+  });
   it.each([
     [
       "chat-completions",

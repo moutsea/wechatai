@@ -1,5 +1,7 @@
 import { abortAllDurableObjects, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { createCipheriv, createHash } from "node:crypto";
+import { strToU8, zipSync } from "fflate";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
@@ -7,9 +9,13 @@ import adminMigration from "../migrations/0005_admin.sql?raw";
 import adminExpiryMigration from "../migrations/0017_admin_expiry.sql?raw";
 import { CloudAgentStore } from "../src/server/cloud-agent-store";
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
-import { AttachmentQueue } from "../src/server/attachments";
+import { AttachmentQueue, ATTACHMENT_TTL_MS } from "../src/server/attachments";
+import { prepareCloudAgentRequest } from "../src/server/cloud-agent-request";
+import { settleCloudAgentTask } from "../src/server/cloud-agent-settlement";
+import { CloudAgentDelivery } from "../src/server/cloud-agent-delivery";
 import type { WxItem, WxMessage } from "../src/server/wechat";
 import type { CloudAgentPlugin } from "../src/shared/cloud-agent";
+import type { Protocol } from "../src/shared/types";
 import { wechatSetupIssue } from "../src/shared/wechat-readiness";
 import {
   connectForManualDelivery,
@@ -40,7 +46,12 @@ beforeAll(async () => {
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
-async function setup(plus = true, enabled: boolean | "admin" = true, ownerId?: string) {
+async function setup(
+  plus = true,
+  enabled: boolean | "admin" = true,
+  ownerId?: string,
+  protocol: Protocol = "responses",
+) {
   const stub = env.ACCOUNTS.getByName(ownerId ?? crypto.randomUUID());
   if (ownerId) await stub.identify(ownerId);
   await runInDurableObject(stub, async (instance, state) => {
@@ -57,7 +68,7 @@ async function setup(plus = true, enabled: boolean | "admin" = true, ownerId?: s
   await api(stub, "assistant.save", {
     name: "用户文本模型",
     model: "user-model",
-    protocol: "responses",
+    protocol,
     baseUrl: "https://llm.example.com/v1",
     apiKey: "test-user-api-key",
     systemPrompt: "使用用户配置的系统提示词。",
@@ -109,6 +120,43 @@ function send(
 }
 const tasks = (stub: Account) =>
   runInDurableObject(stub, (_, state) => new CloudAgentStore(state.storage).page().tasks);
+const pendingFiles = (stub: Account) =>
+  runInDurableObject(stub, (_, state) =>
+    state.storage.sql.exec("SELECT * FROM pending_attachments").toArray(),
+  );
+function fileFixture(name: string, content: string | Uint8Array) {
+  const key = Buffer.alloc(16, 7);
+  const cipher = createCipheriv("aes-128-ecb", key, Buffer.alloc(0));
+  const encrypted = Buffer.concat([
+    cipher.update(typeof content === "string" ? strToU8(content) : content),
+    cipher.final(),
+  ]);
+  const url = `https://novac2c.cdn.weixin.qq.com/${encodeURIComponent(name)}`;
+  const item: WxItem = {
+    type: 4,
+    file_item: { file_name: name, media: { full_url: url, aes_key: key.toString("base64") } },
+  };
+  return { item, url, encrypted };
+}
+function fileNetwork(files: ReturnType<typeof fileFixture>[]) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const file = files.find((file) => file.url === url);
+    if (file) return new Response(file.encrypted);
+    throw new Error(`Unexpected endpoint ${url}`);
+  });
+}
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=",
+  "base64",
+);
+function imageFixture(name = "image", data: Uint8Array = png) {
+  const file = fileFixture(name, data);
+  return {
+    ...file,
+    item: { type: 2, image_item: { media: file.item.file_item!.media } } as WxItem,
+  };
+}
 async function fullTask(stub: Account) {
   return runInDurableObject(stub, (_, state) => new CloudAgentStore(state.storage).active()[0]);
 }
@@ -1036,20 +1084,15 @@ describe("cloud Agent user entry", () => {
     },
   );
 
-  it.each([
-    { items: [{ type: 2 }] },
-    { items: [{ type: 4 }] },
-    { items: [{ type: 3, voice_item: {} }] },
-  ] satisfies { items: WxItem[] }[])(
-    "rejects unsupported input without accepting a task: %j",
-    async ({ items }) => {
-      const stub = await setup();
-      await plugin(stub);
-      await send(stub, "/use 云");
-      await expect(send(stub, items)).rejects.toMatchObject({ code: "cloud_text_only" });
-      expect(await tasks(stub)).toEqual([]);
-    },
-  );
+  it("requires transcription for voice without accepting a task", async () => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    await expect(send(stub, [{ type: 3, voice_item: {} }])).rejects.toMatchObject({
+      code: "cloud_input_unsupported",
+    });
+    expect(await tasks(stub)).toEqual([]);
+  });
 
   it("keeps a submitted /stop task active until upstream cancellation is confirmed, without resubmission or charge", async () => {
     const stub = await setup();
@@ -1101,7 +1144,7 @@ describe("cloud Agent user entry", () => {
     expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toEqual([]);
   });
 
-  it("preserves pending attachments for @云 and accepts transcribed voice after /cancel", async () => {
+  it("preserves staged images after untranscribed voice and accepts text after /cancel", async () => {
     const stub = await setup();
     await plugin(stub);
     await send(stub, "/use 云");
@@ -1120,7 +1163,9 @@ describe("cloud Agent user entry", () => {
         "attachment",
       );
     });
-    await expect(send(stub, "@云 总结附件")).rejects.toMatchObject({ code: "cloud_text_only" });
+    await expect(send(stub, [{ type: 3, voice_item: {} }])).rejects.toMatchObject({
+      code: "cloud_input_unsupported",
+    });
     await runInDurableObject(stub, (_, state) => {
       expect(state.storage.sql.exec("SELECT * FROM pending_attachments").toArray()).toHaveLength(1);
     });
@@ -1130,5 +1175,366 @@ describe("cloud Agent user entry", () => {
       "任务已接收",
     );
     expect(await fullTask(stub)).toMatchObject({ prompt: "整理计划" });
+  });
+
+  it.each(["responses", "chat-completions", "anthropic"] as const)(
+    "accepts mixed images and documents, restores private pixels and freezes references (%s)",
+    async (protocol) => {
+      const stub = await setup(true, true, undefined, protocol);
+      await plugin(stub);
+      const mention = protocol === "responses";
+      await send(stub, mention ? "/wx new" : "/use 云");
+      const before = await stub.snapshot();
+      const first = imageFixture("first");
+      const second = imageFixture("second", Buffer.concat([png, Buffer.from("second")]));
+      const document = fileFixture("report.txt", "这是附带的说明文档");
+      const network = fileNetwork([first, second, document]);
+      expect(await send(stub, [first.item])).toContain("已暂存 1 个附件");
+      expect(await send(stub, [second.item, document.item])).toContain("已暂存 3 个附件");
+      expect(network).not.toHaveBeenCalled();
+      expect(await tasks(stub)).toEqual([]);
+      expect(
+        await send(stub, mention ? "@云 结合说明比较两张图" : "结合说明比较两张图", "image-task"),
+      ).toContain("任务已接收");
+      const task = await fullTask(stub);
+      expect(task.prompt).toContain("[图片 × 2]");
+      expect(task.prompt).toContain("这是附带的说明文档");
+      expect(task.imageIds).toHaveLength(2);
+      expect(
+        task.invocation?.messages[0].content.filter((part) => part.type === "image"),
+      ).toHaveLength(2);
+      expect(await pendingFiles(stub)).toEqual([]);
+      expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
+      expect((await stub.snapshot()).currentSession?.id).toBe(before.currentSession?.id);
+      expect(await send(stub, "重复投递", "image-task")).toContain("任务已接收");
+      expect(network).toHaveBeenCalledTimes(3);
+      await abortAllDurableObjects();
+
+      const uploads: Request[] = [];
+      network.mockImplementation(async (input, init) => {
+        const request = new Request(input, init);
+        expect(request.url).toBe("https://agt.example.com/api/workspaces/workspace-one/images");
+        expect(request.headers.get("x-app-user")).toBe(`wechatai:${stub.id}`);
+        const bytes = Buffer.from(await request.clone().arrayBuffer());
+        uploads.push(request);
+        return Response.json(
+          {
+            id: `img_${createHash("sha256").update(bytes).digest("hex")}`,
+            size: bytes.length,
+            mediaType: "image/png",
+          },
+          { status: 201 },
+        );
+      });
+      const restored = env.ACCOUNTS.get(stub.id);
+      const raw = await runInDurableObject(restored, async (instance, state) => {
+        await useManualAlarms(state);
+        const store = new CloudAgentStore(state.storage);
+        expect(Buffer.from(store.image(task.id, task.imageIds![0])!)).toEqual(png);
+        store.saveProvision({
+          scope: cloudAgentScope(task),
+          profiles: [task.profileId],
+          externalId: `wechatai:${state.id}`,
+          appUserId: "user-one",
+          workspaceId: "workspace-one",
+          configured: 1,
+          updatedAt: Date.now(),
+          modelChannel: {
+            id: "image-channel",
+            fingerprint: createHash("sha256")
+              .update(JSON.stringify(task.modelConnection))
+              .digest("hex"),
+          },
+        });
+        const configured = Object.assign(Reflect.get(instance, "env"), settings);
+        const firstRequest = await prepareCloudAgentRequest(
+          configured,
+          store,
+          state.id.toString(),
+          task.id,
+          () => undefined,
+        );
+        expect(
+          await prepareCloudAgentRequest(
+            configured,
+            store,
+            state.id.toString(),
+            task.id,
+            () => undefined,
+          ),
+        ).toBe(firstRequest);
+        return firstRequest;
+      });
+      expect(uploads).toHaveLength(2);
+      expect(JSON.parse(raw!).images).toEqual(task.imageIds!.map((id) => ({ id })));
+      expect(JSON.parse(raw!).message).toBe(task.prompt);
+      expect(raw).not.toContain(png.toString("base64"));
+      await runInDurableObject(restored, (_, state) => {
+        const store = new CloudAgentStore(state.storage);
+        store.patch(task, { state: "accepted", jobId: "image-job" });
+        expect(store.image(task.id, task.imageIds![0])).toBeNull();
+      });
+    },
+  );
+
+  it("rejects oversized cloud images before creating a task and preserves the staged batch", async () => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    const image = imageFixture("large", Buffer.concat([png, Buffer.alloc(2 * 1024 * 1024)]));
+    fileNetwork([image]);
+    await send(stub, [image.item]);
+    const before = await stub.snapshot();
+    await expect(send(stub, "说明图片")).rejects.toMatchObject({ code: "cloud_image_size" });
+    expect(await tasks(stub)).toEqual([]);
+    expect(await pendingFiles(stub)).toHaveLength(1);
+    expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
+    expect((await stub.snapshot()).cloudAgent.usedToday).toBe(before.cloudAgent.usedToday);
+  });
+
+  it.each(["image", "document"] as const)(
+    "recovers a failed %s task by following the delivered resend instructions",
+    async (kind) => {
+      let stub = await setup();
+      await plugin(stub);
+      await send(stub, "/use 云");
+      const file =
+        kind === "image" ? imageFixture("retry-image") : fileFixture("report.txt", "完整文件正文");
+      fileNetwork([file]);
+      const before = await stub.snapshot();
+      await send(stub, [file.item]);
+      await send(stub, "结合附件回答");
+      const first = await fullTask(stub);
+      expect(first.hasAttachments).toBe(true);
+      expect(await pendingFiles(stub)).toEqual([]);
+      await abortAllDurableObjects();
+      stub = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(stub, async (_, state) => {
+        await useManualAlarms(state);
+        const store = new CloudAgentStore(state.storage);
+        store.patch(store.get(first.id)!, {
+          state: "accepted",
+          jobId: "failed-job",
+          outcome: {
+            id: "failed-job",
+            workspaceId: "workspace-one",
+            status: "failed",
+            failureCode: "model_context_limit",
+          },
+        });
+        const failed = await settleCloudAgentTask(state.storage, first.id, () => false);
+        expect(failed).toMatchObject({ state: "failed", settled: 0, units: 0 });
+        new CloudAgentDelivery(state.storage, () => false).sync(first.id);
+      });
+      const replies = await deliverQueuedReplies(stub, 2);
+      expect(
+        replies.some((reply) =>
+          reply.text.includes("请重新发送附件，等暂存成功后再发送完整处理要求"),
+        ),
+      ).toBe(true);
+      expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
+      expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toEqual([]);
+
+      fileNetwork([file]);
+      await send(stub, [file.item]);
+      expect(await send(stub, "结合附件重新回答")).toContain("任务已接收");
+      const retried = await fullTask(stub);
+      expect(retried.id).not.toBe(first.id);
+      expect(retried.hasAttachments).toBe(true);
+      expect(retried.prompt).toContain("结合附件重新回答");
+      if (kind === "image") expect(retried.imageIds).toEqual(first.imageIds);
+      else expect(retried.prompt).toContain("完整文件正文");
+      expect(await pendingFiles(stub)).toEqual([]);
+    },
+  );
+
+  it.each([
+    { name: "large-image", code: "cloud_image_size" },
+    { name: "long.txt", code: "cloud_input_too_long" },
+    { name: "too-long.txt", code: "file_text_size" },
+    { name: "bad.docx", code: "file_parse" },
+  ])("recovers from $code by following the clear-and-replace guidance", async ({ name, code }) => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    const image = name === "large-image";
+    const bad = image
+      ? imageFixture(name, Buffer.concat([png, Buffer.alloc(2 * 1024 * 1024)]))
+      : fileFixture(
+          name,
+          name === "bad.docx"
+            ? "不是 Word 文件"
+            : "资料".repeat(name === "long.txt" ? 25_001 : 50_001),
+        );
+    const good = image ? imageFixture("compressed") : fileFixture("short.txt", "处理后的正文");
+    fileNetwork([bad, good]);
+    await send(stub, [bad.item]);
+    const before = await stub.snapshot();
+    await expect(send(stub, "总结附件")).rejects.toMatchObject({
+      code,
+      message: expect.stringContaining("先发送 /cancel 清空"),
+    });
+    expect(await tasks(stub)).toEqual([]);
+    expect(await pendingFiles(stub)).toHaveLength(1);
+    expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
+    expect((await stub.snapshot()).cloudAgent.usedToday).toBe(before.cloudAgent.usedToday);
+
+    await send(stub, "/cancel");
+    await send(stub, [good.item]);
+    expect(await send(stub, "总结附件")).toContain("任务已接收");
+    expect(await pendingFiles(stub)).toEqual([]);
+    expect(await tasks(stub)).toHaveLength(1);
+    const task = await fullTask(stub);
+    if (image)
+      expect(task.imageIds).toEqual([`img_${createHash("sha256").update(png).digest("hex")}`]);
+    else {
+      expect(task.prompt).toContain("处理后的正文");
+      expect(task.prompt).not.toContain(name);
+    }
+  });
+
+  it.each(["default", "mention"])(
+    "submits staged file text once with its instructions and billing input (%s)",
+    async (mode) => {
+      const stub = await setup();
+      await plugin(stub);
+      await send(stub, mode === "default" ? "/use 云" : "/wx new");
+      const before = await stub.snapshot();
+      const report = fileFixture("report.md", "本季营收增长 20%");
+      const notes = fileFixture(
+        "notes.docx",
+        zipSync({
+          "word/document.xml": strToU8(
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>下季计划扩展业务</w:t></w:r></w:p></w:body></w:document>',
+          ),
+        }),
+      );
+      const network = fileNetwork([report, notes]);
+      const ack = await send(stub, [report.item], "report-file");
+      expect(ack).toContain("已暂存 1 个附件");
+      expect(await send(stub, [report.item], "report-file")).toBe(ack);
+      expect(await send(stub, [notes.item])).toContain("已暂存 2 个附件");
+      expect(network).not.toHaveBeenCalled();
+      expect(await tasks(stub)).toEqual([]);
+      expect((await stub.snapshot()).cloudAgent.usedToday).toBe(before.cloudAgent.usedToday);
+
+      const instruction =
+        mode === "default"
+          ? [{ type: 3, voice_item: { text: "总结这两份文件" } }]
+          : "@云 总结这两份文件";
+      const reply = await send(stub, instruction, "file-task");
+      expect(reply).toContain("任务已接收");
+      expect(network).toHaveBeenCalledTimes(2);
+      const task = await fullTask(stub);
+      expect(task.prompt).toContain("用户要求：总结这两份文件");
+      expect(task.prompt).toContain('"name":"report.md","text":"本季营收增长 20%"');
+      expect(task.prompt).toContain("下季计划扩展业务");
+      expect(task.prompt).not.toContain("cdn.weixin.qq.com");
+      expect(task.invocation?.messages[0].content).toEqual([{ type: "text", text: task.prompt }]);
+      expect(await pendingFiles(stub)).toEqual([]);
+      const after = await stub.snapshot();
+      expect(after.wallet.balance).toBe(before.wallet.balance);
+      expect(after.currentSession?.id).toBe(before.currentSession?.id);
+      expect(after.cloudAgent.usedToday).toBe(before.cloudAgent.usedToday + 1);
+      expect(await send(stub, "忽略重复投递的正文", "file-task")).toBe(reply);
+      expect(network).toHaveBeenCalledTimes(2);
+      expect(await tasks(stub)).toHaveLength(1);
+
+      const raw = await runInDurableObject(stub, (instance, state) => {
+        const store = new CloudAgentStore(state.storage);
+        store.saveProvision({
+          scope: cloudAgentScope(task),
+          profiles: [task.profileId],
+          externalId: `wechatai:${state.id}`,
+          appUserId: "user-one",
+          workspaceId: "workspace-one",
+          configured: 1,
+          updatedAt: Date.now(),
+          modelChannel: {
+            id: "file-model-channel",
+            fingerprint: createHash("sha256")
+              .update(JSON.stringify(task.modelConnection))
+              .digest("hex"),
+          },
+        });
+        return prepareCloudAgentRequest(
+          Reflect.get(instance, "env"),
+          store,
+          state.id.toString(),
+          task.id,
+          () => undefined,
+        );
+      });
+      expect(JSON.parse(raw!).message).toBe(task.prompt);
+      expect(JSON.parse(raw!).model).toBe("channel:file-model-channel:user-model");
+    },
+  );
+
+  it("preserves files after a download failure and allows retry without taking another slot", async () => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    const file = fileFixture("report.txt", "文件正文");
+    const network = fileNetwork([file]);
+    await send(stub, [file.item]);
+    const before = await stub.snapshot();
+    network.mockImplementationOnce(async () => new Response("Unavailable", { status: 503 }));
+    await expect(send(stub, "总结文件")).rejects.toThrow("附件下载失败");
+    expect(await pendingFiles(stub)).toHaveLength(1);
+    expect(await tasks(stub)).toEqual([]);
+    expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
+    expect((await stub.snapshot()).cloudAgent.usedToday).toBe(before.cloudAgent.usedToday);
+    expect(await send(stub, "重试总结文件")).toContain("任务已接收");
+    expect((await fullTask(stub)).prompt).toContain("文件正文");
+    expect(await pendingFiles(stub)).toEqual([]);
+  });
+
+  it.each([
+    { name: "bad.docx", content: "不是 Word 文件", code: "file_parse" },
+    { name: "long.txt", content: "资料".repeat(25_001), code: "cloud_input_too_long" },
+    {
+      name: "quoted.csv",
+      content: '"a"\n'.repeat(7_000) + "DOCUMENT_END",
+      code: "cloud_input_too_long",
+    },
+  ])("rejects unusable files before admission ($code)", async ({ name, content, code }) => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    const file = fileFixture(name, content);
+    fileNetwork([file]);
+    await send(stub, [file.item]);
+    const before = await stub.snapshot();
+    await expect(send(stub, "总结文件")).rejects.toMatchObject({ code });
+    expect(await tasks(stub)).toEqual([]);
+    expect(await pendingFiles(stub)).toHaveLength(1);
+    const after = await stub.snapshot();
+    expect(after.wallet.balance).toBe(before.wallet.balance);
+    expect(after.cloudAgent.usedToday).toBe(before.cloudAgent.usedToday);
+  });
+
+  it.each(["expired", "cancelled"])("does not submit a file after it is %s", async (mode) => {
+    const stub = await setup();
+    await plugin(stub);
+    await send(stub, "/use 云");
+    const file = fileFixture("report.txt", "不应读取的正文");
+    const network = fileNetwork([file]);
+    await send(stub, [file.item]);
+    if (mode === "expired") {
+      await runInDurableObject(stub, (_, state) => {
+        state.storage.sql.exec(
+          "UPDATE pending_attachments SET expiresAt = ?",
+          Date.now() - ATTACHMENT_TTL_MS,
+        );
+      });
+      expect(await send(stub, "总结文件")).toContain("附件已过期");
+      expect(await tasks(stub)).toEqual([]);
+    } else {
+      await send(stub, "/cancel");
+      expect(await send(stub, "只处理文字")).toContain("任务已接收");
+      expect((await fullTask(stub)).prompt).toBe("只处理文字");
+    }
+    expect(await pendingFiles(stub)).toEqual([]);
+    expect(network).not.toHaveBeenCalled();
   });
 });

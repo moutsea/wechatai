@@ -69,6 +69,28 @@ function task(overrides: Partial<CloudTask> = {}): CloudTask {
 }
 
 describe("cloud task persistence", () => {
+  it.each(["accepted", "rejected", "cleared", "removed"])(
+    "restores chunked images after restart and releases them when %s",
+    async (action) => {
+      const stub = account();
+      const saved = task({ imageIds: ["image-one"] });
+      const pixels = Buffer.alloc(700_000, 7);
+      await inStore(stub, (store, storage) => {
+        store.save(saved);
+        store.saveImages(saved.id, [{ id: "image-one", data: pixels }]);
+        expect(storage.sql.exec("SELECT * FROM cloud_task_images").toArray()).toHaveLength(3);
+      });
+      await abortAllDurableObjects();
+      await inStore(env.ACCOUNTS.get(stub.id), (store) => {
+        expect(Buffer.from(store.image(saved.id, "image-one")!)).toEqual(pixels);
+        if (action === "accepted") store.patch(saved, { state: "accepted", jobId: "job-one" });
+        if (action === "rejected") store.patch(saved, { state: "rejected" });
+        if (action === "cleared") store.hideSession(saved.sessionId);
+        if (action === "removed") store.remove(saved.id);
+        expect(store.image(saved.id, "image-one")).toBeNull();
+      });
+    },
+  );
   it("restores provisioning, frozen requests, completion evidence and callback hints after restart", async () => {
     const stub = account();
     const saved = task({

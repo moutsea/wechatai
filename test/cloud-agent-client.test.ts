@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
 import {
   CloudAgentClient,
   cloudJobBody,
@@ -44,6 +45,23 @@ function network(reply: (request: Request) => Response | Promise<Response>) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AGT client protocol", () => {
+  it("uploads private image bytes as the mapped app user and verifies the returned identity", async () => {
+    const data = Uint8Array.of(1, 2, 3);
+    const id = `img_${createHash("sha256").update(data).digest("hex")}`;
+    const requests = network(async (request) => {
+      expect(new Uint8Array(await request.clone().arrayBuffer())).toEqual(data);
+      return Response.json({ id, size: data.length, mediaType: "image/png" }, { status: 201 });
+    });
+    const client = new CloudAgentClient(config);
+    expect(await client.uploadImage("workspace-one", data, appUser.externalId)).toBe(id);
+    expect(requests[0].url).toBe("https://agt.example.com/api/workspaces/workspace-one/images");
+    expect(requests[0].headers.get("x-app-user")).toBe(appUser.externalId);
+    expect(requests[0].headers.get("content-type")).toBe("application/octet-stream");
+    network(() => Response.json({ id: "img_wrong", size: data.length }, { status: 201 }));
+    await expect(
+      client.uploadImage("workspace-one", data, appUser.externalId),
+    ).rejects.toMatchObject({ code: "cloud_image_identity" });
+  });
   it("registers an application user and restricted workspace, then configures the bounded profile", async () => {
     const requests = network((request) => {
       if (request.url.endsWith("/users")) return Response.json({ appUser }, { status: 201 });

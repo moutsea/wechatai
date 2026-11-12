@@ -3,7 +3,8 @@ import {
   cloudCallbackSecret,
   createCloudCallbackToken,
 } from "./cloud-agent-callback";
-import { cloudJobBody } from "./cloud-agent-client";
+import { CloudAgentClient, cloudJobBody } from "./cloud-agent-client";
+import { createHash } from "node:crypto";
 import { cloudAgentScope } from "./cloud-agent-provision";
 import type { CloudAgentStore, CloudTask } from "./cloud-agent-store";
 import { AppError, cloudAgentEnabled, cloudAgentConnectionConfig } from "./config";
@@ -61,6 +62,22 @@ export async function prepareCloudAgentRequest(
 
   const context = `${accountId}:cloud:${task.id}`;
   if (!task.request) {
+    const images: { id: string }[] = [];
+    if (task.imageIds?.length) {
+      const connection = cloudAgentConnectionConfig(env);
+      if (!connection) throw new AppError("cloud_agent_config", "云端服务配置尚未就绪", 503);
+      const client = new CloudAgentClient({ ...connection, agentId: task.profileId });
+      for (const id of task.imageIds) {
+        const data = store.image(task.id, id);
+        if (!data || `img_${createHash("sha256").update(data).digest("hex")}` !== id)
+          throw new AppError("cloud_image_missing", "原任务图片暂时无法读取，请稍后重试。", 503);
+        images.push({
+          id: await client.uploadImage(provision.workspaceId, data, provision.externalId),
+        });
+        task = current();
+        if (!task) return null;
+      }
+    }
     let selectedModel = task.model;
     if (task.modelConnection) {
       const connection = cloudAgentConnectionConfig(env);
@@ -101,6 +118,7 @@ export async function prepareCloudAgentRequest(
         model: selectedModel,
         ...(task.modelConnection ? { systemPrompt: task.modelConnection.systemPrompt } : {}),
         message: task.prompt,
+        ...(images.length ? { images } : {}),
         conversationId: task.conversationId,
         callback: {
           url: new URL(`${CLOUD_CALLBACK_PATH}/${token}`, origin).href,

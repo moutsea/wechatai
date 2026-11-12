@@ -92,6 +92,68 @@ async function setup(job: Partial<AgentJobView> = {}, change: Partial<CloudTask>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("durable AGT terminal result preparation", () => {
+  it("keeps image billing consistent with ordinary chat: text input and final text, with no generation charge", async () => {
+    const { stub, task } = await setup({}, { imageIds: ["private-image"] });
+    await inStore(stub, async (store) => {
+      store.patch(task, {
+        invocation: {
+          ...task.invocation!,
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "你好" },
+                { type: "image", assetId: "private-image" },
+              ],
+            },
+          ],
+        },
+      });
+      const result = await prepareCloudAgentResult(store, task.id);
+      expect(result?.meter).toMatchObject({
+        inputTokens: 2,
+        outputTokens: 3,
+        outputImages: 0,
+        units: 6,
+      });
+    });
+  });
+
+  it("suggests checking vision support when the model rejects an image request, without charging", async () => {
+    const { stub, task } = await setup(
+      { status: "failed", text: undefined, failureCode: "model_request_invalid" },
+      { imageIds: ["private-image"] },
+    );
+    await inStore(stub, async (store) => {
+      const result = await prepareCloudAgentResult(store, task.id);
+      expect(result).toMatchObject({ state: "failed", meter: null });
+      expect(result?.error).toContain("确认模型支持视觉输入");
+      expect(result?.error).toContain("未扣 credits");
+      expect(result?.error).toContain("请重新发送附件，等暂存成功后再发送完整处理要求");
+    });
+  });
+  it.each([
+    { status: "failed", failureCode: "model_context_limit" },
+    { status: "cancelled" },
+    { status: "completed", refusal: "拒绝" },
+    { status: "completed", task: { outcome: "clarification_required", question: "补充要求" } },
+    { status: "completed", task: { outcome: "partial" } },
+    { status: "completed", finishReason: "length" },
+    { status: "completed" },
+  ] satisfies Partial<AgentJobView>[])(
+    "explains how to resend consumed documents for unsuccessful outcomes %j",
+    async (job) => {
+      const { stub, task } = await setup({ ...job, text: undefined }, { hasAttachments: true });
+      await abortAllDurableObjects();
+      await inStore(env.ACCOUNTS.get(stub.id), async (store) => {
+        const result = await prepareCloudAgentResult(store, task.id);
+        expect(result?.meter).toBeNull();
+        expect(result?.error).toContain("本次暂存附件已在任务受理时清空");
+        expect(result?.error).toContain("请重新发送附件，等暂存成功后再发送完整处理要求");
+        expect(result?.error).not.toContain("/cancel");
+      });
+    },
+  );
   it.each([
     ["model_auth", "API Key"],
     ["model_payment", "余额、套餐或可用额度"],
@@ -119,6 +181,7 @@ describe("durable AGT terminal result preparation", () => {
         expect(result?.error).toContain(action);
         expect(result?.error).toContain("未扣 credits");
         expect(result?.error).toContain("模型 API 费用以服务商账单为准");
+        expect(result?.error).not.toContain("重新发送附件");
         expect(JSON.stringify(result)).not.toContain("private-upstream-text");
         expect(await prepareCloudAgentResult(store, task.id)).toEqual(result);
       });

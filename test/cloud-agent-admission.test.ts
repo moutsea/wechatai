@@ -102,13 +102,14 @@ function accept(
     context?: () => Context;
     commit?: (task: Readonly<CloudTask>) => undefined;
     prompt?: string;
+    images?: { mime: string; data: string }[];
   } = {},
 ) {
   return admitCloudAgentTask(
     options.env ?? configuredEnv(),
     storage,
     accountId,
-    { sourceId, prompt: options.prompt ?? prompt },
+    { sourceId, prompt: options.prompt ?? prompt, images: options.images },
     options.context ?? (() => readContext(storage)),
     options.commit ?? ((task) => recordSource(storage, task)),
   );
@@ -175,7 +176,14 @@ const noTasks = (storage: DurableObjectStorage) => {
   const store = new CloudAgentStore(storage);
   expect(store.page().tasks).toEqual([]);
   expect(store.countSince(dayWindow().start)).toBe(0);
-  for (const table of ["messages", "runs", "inbox", "usage", "platform_metering"])
+  for (const table of [
+    "messages",
+    "runs",
+    "inbox",
+    "usage",
+    "platform_metering",
+    "cloud_task_images",
+  ])
     expect(storage.sql.exec(`SELECT * FROM ${table}`).toArray()).toEqual([]);
 };
 beforeEach(() => {
@@ -294,6 +302,7 @@ describe("atomic cloud task admission", () => {
     await inAccount(stub, (storage) => {
       expect(() =>
         accept(storage, stub.id.toString(), "source-one", {
+          images: [{ mime: "image/png", data: Buffer.from("image-data").toString("base64") }],
           context: () => {
             new Wallet(storage).daily(100);
             return readContext(storage);
@@ -532,7 +541,7 @@ describe("atomic cloud task admission", () => {
     });
   });
 
-  it.each(["", "  \n  ", " token".repeat(128_001)])(
+  it.each(["", "  \n  ", "x".repeat(50_001), " token".repeat(128_001)])(
     "rejects empty or oversized text before consuming a slot (%#)",
     async (text) => {
       const stub = await setup();

@@ -1,6 +1,7 @@
 import { AppError } from "./config";
 import { readJson } from "./security";
 import { cloudAgentFailureCode, type CloudAgentFailureCode } from "./cloud-agent-failure";
+import { createHash } from "node:crypto";
 
 export type CloudAgentClientConfig = {
   origin: string;
@@ -52,6 +53,7 @@ export function cloudJobBody(input: {
   conversationId: string;
   message: string;
   systemPrompt?: string;
+  images?: { id: string }[];
   callback: { url: string; secret: string };
 }) {
   return {
@@ -91,7 +93,9 @@ export class CloudAgentClient {
     path: string,
     options: {
       body?: unknown;
-      rawBody?: string;
+      rawBody?: string | ArrayBuffer;
+      contentType?: string;
+      timeoutMs?: number;
       externalId?: string;
       idempotencyKey?: string;
       acceptStatuses?: number[];
@@ -102,7 +106,7 @@ export class CloudAgentClient {
       accept: "application/json",
     };
     if (options.body !== undefined || options.rawBody !== undefined)
-      headers["content-type"] = "application/json";
+      headers["content-type"] = options.contentType ?? "application/json";
     // AGT resolves `X-App-User` against the registered external id, never the internal id.
     if (options.externalId) headers["x-app-user"] = options.externalId;
     if (options.idempotencyKey) headers["idempotency-key"] = options.idempotencyKey;
@@ -119,7 +123,7 @@ export class CloudAgentClient {
             }
           : {}),
         redirect: "manual",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS),
       });
     } catch (error) {
       const name = error instanceof Error ? error.name : "";
@@ -164,6 +168,23 @@ export class CloudAgentClient {
         throw new AppError("cloud_agent_response", "云端模型渠道返回格式无效", 502);
       return { id: channel.id, name: channel.name };
     });
+  }
+
+  /** AGT deduplicates immutable image bytes inside this app user's workspace. */
+  async uploadImage(workspaceId: string, data: Uint8Array, externalId: string): Promise<string> {
+    const body = this.json(
+      await this.call("POST", `/api/workspaces/${encodeURIComponent(workspaceId)}/images`, {
+        rawBody: Uint8Array.from(data).buffer,
+        contentType: "application/octet-stream",
+        externalId,
+        acceptStatuses: [200, 201],
+        timeoutMs: 15_000,
+      }),
+    );
+    const expected = `img_${createHash("sha256").update(data).digest("hex")}`;
+    if (body.id !== expected || body.size !== data.byteLength)
+      throw new AppError("cloud_image_identity", "云端图片校验失败，请稍后重试。", 502);
+    return expected;
   }
 
   async saveModelChannel(body: unknown, id?: string): Promise<string> {

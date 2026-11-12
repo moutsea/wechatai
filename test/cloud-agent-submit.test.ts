@@ -142,6 +142,16 @@ afterEach(() => {
 });
 
 describe("durable AGT job submission", () => {
+  it("explains how to resend consumed attachments after a definitive submission rejection", async () => {
+    const { stub, saved, submit } = await setup({ hasAttachments: true });
+    network(() => new Response("private provider response", { status: 429 }));
+    await inStore(stub, async (store) => {
+      const rejected = await submit(store);
+      expect(rejected).toMatchObject({ state: "rejected", settled: 0, units: 0 });
+      expect(rejected?.error).toContain("请重新发送附件，等暂存成功后再发送完整处理要求");
+      expect(store.countSince(saved.createdAt)).toBe(0);
+    });
+  });
   it.each(["input", "credits", "empty"])(
     "rejects a never-attempted %s limit failure before POST",
     async (limit) => {

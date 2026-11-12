@@ -1,7 +1,7 @@
 import { PLUGIN_PROTOCOL_VERSION, type PlatformMeter } from "../shared/plugins";
 import { hasCompleteCloudAnswer, type AgentJobView } from "./cloud-agent-client";
 import { cloudAgentMeteringFailure } from "./cloud-agent-metering";
-import { cloudAgentFailureMessage } from "./cloud-agent-failure";
+import { cloudAgentFailureMessage, cloudAgentRetryMessage } from "./cloud-agent-failure";
 import {
   cloudTaskStopReason,
   cloudTaskTerminal,
@@ -34,7 +34,9 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
     job.status === "cancelled"
       ? [reason, "云端任务已停止，本次未扣 credits。"].filter(Boolean).join("\n\n")
       : job.status === "failed"
-        ? [reason, cloudAgentFailureMessage(job.failureCode)].filter(Boolean).join("\n\n")
+        ? [reason, cloudAgentFailureMessage(job.failureCode, Boolean(task.imageIds?.length))]
+            .filter(Boolean)
+            .join("\n\n")
         : job.refusal
           ? "云端 Agent 未能完成本次请求，本次未扣 credits。请调整请求后重试。"
           : job.task?.question || job.task?.outcome === "clarification_required"
@@ -47,7 +49,10 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
   return {
     state: job.status === "cancelled" ? "cancelled" : "failed",
     result: result.slice(0, 64_000),
-    error: result.length > 64_000 ? `${error}\n返回内容较长，仅保留前 64,000 字符。` : error,
+    error: cloudAgentRetryMessage(
+      result.length > 64_000 ? `${error}\n返回内容较长，仅保留前 64,000 字符。` : error,
+      task,
+    ),
     meter: null,
     truncated: result.length > 64_000,
   };
@@ -128,7 +133,7 @@ export async function prepareCloudAgentResult(
         return {
           state: "failed",
           result: "",
-          error: failure,
+          error: cloudAgentRetryMessage(failure, task),
           meter: null,
           truncated: false,
         };

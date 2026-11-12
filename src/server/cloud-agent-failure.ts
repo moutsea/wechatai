@@ -1,6 +1,6 @@
 const guidance = {
   model_context_limit:
-    "任务输入（含系统提示词、历史和工具信息）超过所选模型的输入上限或上下文窗口。请新建会话、缩短内容，或在「渠道与模型」中调整上限后重试。",
+    "任务输入（含系统提示词、历史和工具信息）超过云端上下文长度或所选模型的输入上限。请新建会话、减少附件或缩短内容；若为模型输入限制，也可在「渠道与模型」中调整上限后重试。",
   model_auth: "所选模型的身份验证失败。请在「渠道与模型」中检查或更新 API Key 后重试。",
   model_payment: "所选模型服务返回计费或额度错误。请检查服务商账号的余额、套餐或可用额度后重试。",
   model_permission: "所选模型服务拒绝访问。请检查 API Key 的模型权限及服务商的访问限制。",
@@ -53,9 +53,21 @@ export function cloudAgentFailureCode(job: {
   }
 }
 
-export function cloudAgentFailureMessage(code?: CloudAgentFailureCode): string {
+export function cloudAgentFailureMessage(code?: CloudAgentFailureCode, hasImages = false): string {
   const message = code
-    ? guidance[code]
+    ? code === "model_request_invalid" && hasImages
+      ? "所选模型服务拒绝了图片或其他请求参数。请确认模型支持视觉输入，并检查接口协议、图片格式和工具调用支持后重试。"
+      : guidance[code]
     : "云端任务执行失败。请稍后重试；若持续失败，请联系运营方。";
   return `${message}本次未扣 credits；已发生的模型 API 费用以服务商账单为准。`;
+}
+
+/** Applies to terminal outcomes and pre-submit rejections after local admission. */
+export function cloudAgentRetryMessage(
+  message: string,
+  task: { hasAttachments?: boolean; imageIds?: string[]; hidden?: number },
+) {
+  return !task.hidden && (task.hasAttachments || task.imageIds?.length)
+    ? `${message}\n\n本次暂存附件已在任务受理时清空。如需重试，请重新发送附件，等暂存成功后再发送完整处理要求。`
+    : message;
 }
