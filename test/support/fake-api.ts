@@ -8,6 +8,7 @@
  * 放在 `test/` 下是刻意的：生产 bundle 不应该再打进测试数据。
  */
 import { pluginShortcutForEdit } from "../../src/shared/plugin-shortcut";
+import { isChatModel } from "../../src/shared/model-compatibility";
 import { type UserNotice } from "../../src/shared/site-notices";
 import { notificationInputSchema } from "../../src/shared/notification";
 import {
@@ -247,6 +248,11 @@ export function createFakeApi({
       deadlineMinutes: 10,
     },
     planUntil: now + 20 * 86400000,
+    defaultModelId:
+      sessions.find((session) => session.id === current && !session.pluginInstanceId)
+        ?.assistantId ??
+      assistants.find(isChatModel)?.id ??
+      null,
     channels,
     assistants: assistants.map((a) => ({
       ...a,

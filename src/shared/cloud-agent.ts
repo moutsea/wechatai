@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { PluginAccessIssue } from "./plugin-access";
 import { pluginShortcutSchema } from "./plugin-shortcut";
+import { isChatModel } from "./model-compatibility";
+import type { Assistant } from "./types";
 import {
   waitingMessageFields,
   validWaitingMessage,
@@ -26,6 +28,18 @@ export const cloudAgentInputSchema = z
   })
   .refine(validWaitingMessage, waitingMessageValidation);
 export type CloudAgentInput = z.infer<typeof cloudAgentInputSchema>;
+/** Empty modelId follows the server-resolved ordinary model for the selected WeChat link. */
+export function resolveCloudAgentModel<
+  T extends Pick<Assistant, "id" | "kind" | "model" | "protocol" | "baseUrl">,
+>(
+  plugin: Pick<CloudAgentInput, "modelId">,
+  models: readonly T[],
+  defaultModelId: string | null,
+): T | undefined {
+  return models.find(
+    (model) => model.id === (plugin.modelId || defaultModelId) && isChatModel(model),
+  );
+}
 export type CloudAgentStatus = {
   ready: boolean;
   adminPreview?: boolean;

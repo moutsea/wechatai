@@ -83,7 +83,7 @@ export function admitCloudAgentTask(
     if (!model?.hasKey || !model.encryptedKey)
       throw new AppError(
         "cloud_model_required",
-        "请在云端 Agent 配置中选择已配置密钥的文本模型。",
+        "云端 Agent 的执行模型不可用，请检查所用文本模型及渠道的 API Key。",
         422,
       );
     if (new Wallet(storage).balance() <= 0)

@@ -1,4 +1,8 @@
-import { cloudAgentAvailabilityIssue, isCloudAgent } from "../../shared/cloud-agent";
+import {
+  cloudAgentAvailabilityIssue,
+  isCloudAgent,
+  resolveCloudAgentModel,
+} from "../../shared/cloud-agent";
 import {
   availablePluginIds,
   canAddPlugin,
@@ -367,9 +371,11 @@ export function PluginConfiguration({
   const canAdd = canAddPlugin(data.plan, data.plugins?.length ?? 0);
   const shortcutConflicts = conflictingShortcuts([...data.assistants, ...(data.plugins ?? [])]);
   const aliasConflict = !!selected && shortcutConflicts.has(selected.shortcut.toLowerCase());
-  const model = data.assistants.find(
-    (a) => a.id === (selected && "modelId" in selected ? selected.modelId : null),
-  );
+  const model = isCloudAgent(selected)
+    ? resolveCloudAgentModel(selected, data.assistants, data.defaultModelId)
+    : data.assistants.find(
+        (a) => a.id === (selected && "modelId" in selected ? selected.modelId : null),
+      );
   const active = selected && data.currentSession?.pluginInstanceId === selected.id;
   const connection = isRemoteAgent(selected)
     ? remoteAgentConnection({
@@ -493,9 +499,12 @@ export function PluginConfiguration({
                         (selected.hasKey ? selected.agentId : "连接后自动识别"))
                       ) : model ? (
                         <>
+                          {isCloudAgent(selected) && !selected.modelId && "默认模型："}
                           {model.channelName} / {model.name}
                           <code className="plugin-model-id">{model.model}</code>
                         </>
+                      ) : isCloudAgent(selected) && !selected.modelId ? (
+                        "尚未配置默认文本模型"
                       ) : (
                         "模型已删除"
                       )}

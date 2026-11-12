@@ -17,6 +17,7 @@ import {
   CLOUD_AGENT_WAITING_MESSAGE,
   cloudAgentAvailabilityIssue,
   cloudAgentInputSchema,
+  resolveCloudAgentModel,
   type CloudAgentInput,
   type CloudAgentPlugin,
 } from "../../shared/cloud-agent";
@@ -41,7 +42,7 @@ export function CloudAgentEditor({
     plugin === "new"
       ? {
           name: "云端 Agent",
-          modelId: data?.assistants.find(isChatModel)?.id || "",
+          modelId: "",
           shortcut: "云",
           enabled: true,
           ...waitingMessageDefaults(CLOUD_AGENT_WAITING_MESSAGE),
@@ -56,7 +57,8 @@ export function CloudAgentEditor({
   if (!data) return null;
   const availability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
   const textModels = data.assistants.filter(isChatModel);
-  const model = textModels.find((model) => model.id === form.modelId);
+  const defaultModel = resolveCloudAgentModel({ modelId: "" }, textModels, data.defaultModelId);
+  const model = resolveCloudAgentModel(form, textModels, data.defaultModelId);
   const missingModel = (plugin === "new" || form.enabled) && !model;
   const blocked = plugin === "new" || form.enabled ? availability : null;
   const update = <K extends keyof CloudAgentInput>(key: K, value: CloudAgentInput[K]) =>
@@ -124,14 +126,16 @@ export function CloudAgentEditor({
           </div>
           <label>
             执行模型
-            <select
-              value={form.modelId}
-              onChange={(e) => update("modelId", e.target.value)}
-              required={plugin === "new" || form.enabled}
-            >
-              {!model && (
+            <select value={form.modelId} onChange={(e) => update("modelId", e.target.value)}>
+              <option value="">
+                使用默认模型
+                {defaultModel
+                  ? `（${defaultModel.channelName} / ${defaultModel.name}）`
+                  : "（尚未配置文本模型）"}
+              </option>
+              {form.modelId && !model && (
                 <option value={form.modelId} disabled>
-                  请选择文本模型
+                  原模型不可用，请重新选择
                 </option>
               )}
               {textModels.map((model) => (
@@ -141,6 +145,7 @@ export function CloudAgentEditor({
               ))}
             </select>
             <small>
+              未指定时跟随当前微信选中的普通模型；进入插件后沿用上一次普通模型。也可为此插件单独选择模型。
               沿用该模型的渠道、密钥、系统提示词和输入、输出及 credits 上限。模型需支持工具调用。
               输入上限包含每轮调用的历史与工具信息；无原生计数接口时保守估算，可能提前达到上限。
             </small>
@@ -188,7 +193,11 @@ export function CloudAgentEditor({
           />
           {(error || blocked || missingModel) && (
             <p className="form-error" role="alert">
-              {error || blocked?.message || "请选择已配置的文本模型后保存。"}
+              {error ||
+                blocked?.message ||
+                (form.modelId
+                  ? "所选模型不可用，请重新选择文本模型。"
+                  : "请先在「渠道与模型」配置文本模型。")}
             </p>
           )}
         </div>

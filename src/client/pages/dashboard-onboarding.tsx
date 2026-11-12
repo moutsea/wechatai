@@ -154,8 +154,8 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                       </strong>
                       <small>
                         {cloudReady
-                          ? "已选择执行模型，可继续连接微信；点击管理配置"
-                          : "需要 Plus；在插件页选择自己的文本模型并启用"}
+                          ? "执行模型已就绪，可继续连接微信；点击管理配置"
+                          : "需要 Plus 和已配置的文本模型；在插件页启用"}
                       </small>
                     </span>
                     <ArrowRight size={18} />
@@ -249,7 +249,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                       <strong>在微伴获取连接二维码</strong>
                       <p>
                         先配置文本模型，再进入「微信连接」，点击「获取二维码」。使用云端 Agent
-                        时，还需在插件中选择该模型并启用。
+                        时，在插件页启用即可；默认使用当前微信的默认文本模型，也可单独指定。
                       </p>
                     </div>
                   </li>

@@ -95,7 +95,7 @@ describe("cloud Agent onboarding", () => {
     expect(container.querySelector("dialog")).not.toBeNull();
     await click("我了解了，下一步");
     expect(container.textContent).toContain("云端 Agent 已就绪");
-    expect(container.textContent).toContain("已选择执行模型");
+    expect(container.textContent).toContain("执行模型已就绪");
     await click("下一步");
     await click("去连接微信");
     expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/wechat");
@@ -244,10 +244,11 @@ describe("cloud Agent plugin interactions", () => {
           shortcut: "云",
           enabled: true,
         });
-        expect(body.modelId).toBe("demo-1");
+        expect(body.modelId).toBe("");
         expect(body).not.toHaveProperty("apiKey");
-        data.plugins = [plugin()];
-        return plugin();
+        const saved = { ...plugin(), modelId: body.modelId };
+        data.plugins = [saved];
+        return saved;
       }
       expect(path).toBe("/plugins/cloud/test");
       expect(JSON.parse(options.body as string)).toEqual({});
@@ -256,17 +257,60 @@ describe("cloud Agent plugin interactions", () => {
     await render();
     await click("配置 云端 Agent");
     expect(container.textContent).toContain("添加云端 Agent");
+    const modelSelect = container.querySelector("select")!;
+    expect(modelSelect.value).toBe("");
+    expect(modelSelect.selectedOptions[0].textContent).toContain("使用默认模型");
     await act(async () =>
       container
         .querySelector("form")!
         .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
     expect(container.textContent).toContain("云端 Agent 配置");
+    expect(container.textContent).toContain("默认模型：");
     await click("检查服务状态");
     expect(request).toHaveBeenCalledTimes(2);
     expect(notify).toHaveBeenLastCalledWith("云端服务已配置，请在微信发送任务验证实际运行。");
     expect(container.querySelector("textarea[required]")).toBeNull();
     expect(container.textContent).not.toContain("测试问题");
+  });
+
+  it("can switch an explicitly selected model back to the account default", async () => {
+    const selected = {
+      ...data.assistants[0],
+      id: "selected-default-b",
+      name: "已选择的默认模型 B",
+      model: "selected-model-b",
+      channelName: "渠道 B",
+    };
+    data.assistants.push(selected);
+    data.defaultModelId = selected.id;
+    data.plugins = [plugin()];
+    request.mockImplementation(async (path: string, options: RequestInit) => {
+      expect(path).toBe("/plugins/cloud");
+      expect(JSON.parse(options.body as string)).toMatchObject({ modelId: "" });
+      const saved = { ...plugin(), modelId: "" };
+      data.plugins = [saved];
+      return saved;
+    });
+    await render();
+    await click("查看 云端 Agent 配置");
+    await click("修改配置");
+    const select = container.querySelector("select")!;
+    expect(select.value).toBe("demo-1");
+    expect(select.options[0].textContent).toContain("渠道 B / 已选择的默认模型 B");
+    await act(async () => {
+      select.value = "";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () =>
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("默认模型：");
+    expect(container.textContent).toContain("已选择的默认模型 B");
+    expect(container.textContent).toContain("selected-model-b");
   });
 
   it("can re-enable a saved configuration through the editor", async () => {

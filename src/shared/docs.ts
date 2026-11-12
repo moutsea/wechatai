@@ -79,7 +79,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "wechat-connection",
-    updatedAt: "2026-11-11",
+    updatedAt: "2026-11-12",
     seoTitle: "连接微信：扫码绑定 AI 与管理多个链接",
     title: "连接微信",
     description: "创建微信链接、扫码绑定、切换当前模型，以及管理多个微信链接和重新连接。",
@@ -148,11 +148,11 @@ export const DOC_GUIDES = [
   },
   {
     slug: "cloud-agent",
-    updatedAt: "2026-11-11",
+    updatedAt: "2026-11-12",
     seoTitle: "云端 Agent：使用自己的模型执行微信后台任务",
     title: "云端 Agent",
     description:
-      "运营方开放后，Plus 会员可选择自己配置的文本模型，在微信提交后台任务；了解启用、任务查询、停止、credits 计费与远端数据保留边界。",
+      "运营方开放后，Plus 会员可在微信提交后台任务，默认跟随当前微信的普通模型，也可单独指定；了解启用、任务查询、停止、credits 计费与远端数据保留边界。",
     category: "插件",
     group: "plugins",
     requirement: "需要 Plus 且云端服务已开放",

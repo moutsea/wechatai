@@ -3,6 +3,7 @@ import {
   CLOUD_AGENT_VERSION,
   CLOUD_AGENT_WAITING_MESSAGE,
   CLOUD_AGENT_PLUS_MESSAGE,
+  resolveCloudAgentModel,
   CLOUD_AGENT_UNAVAILABLE_MESSAGE,
   CLOUD_AGENT_ADMIN_ONLY_MESSAGE,
   cloudAgentAvailabilityIssue,
@@ -1006,19 +1007,35 @@ export class PersonalAccount extends DurableObject<Env> {
       );
   }
   private pluginModelId(plugin: StoredPlugin): string | null {
-    return "modelId" in plugin ? plugin.modelId : null;
+    return "modelId" in plugin ? plugin.modelId || null : null;
   }
-  private cloudAccess(plugin: StoredPlugin): PluginAccessIssue | null {
+  private cloudModel(
+    plugin: Pick<CloudAgentPlugin, "modelId">,
+    connectionId = this.selectedLink(),
+    models = this.assistants(),
+  ) {
+    return resolveCloudAgentModel(
+      plugin,
+      models,
+      this.defaultChatModel(models, connectionId)?.id ?? null,
+    );
+  }
+  private cloudAccess(
+    plugin: StoredPlugin,
+    connectionId = this.selectedLink(),
+  ): PluginAccessIssue | null {
     if (this.plan() !== "plus")
       return { code: "cloud_plus_required", message: CLOUD_AGENT_PLUS_MESSAGE };
     if (!plugin.enabled)
       return { code: "plugin_disabled", message: "云端 Agent 已停用，请在插件页重新启用。" };
     if (isCloudAgent(plugin)) {
-      const model = this.assistants().find((model) => model.id === plugin.modelId);
-      if (!model || !isChatModel(model) || !model.hasKey)
+      const model = this.cloudModel(plugin, connectionId);
+      if (!model?.hasKey)
         return {
           code: "cloud_model_required",
-          message: "请编辑云端 Agent，选择已配置密钥的文本模型。",
+          message: plugin.modelId
+            ? "云端 Agent 所选模型不可用，请在插件配置中更换文本模型，或补全该模型渠道的 API Key。"
+            : "云端 Agent 使用当前微信的默认文本模型，请先在「渠道与模型」配置可用的文本模型及 API Key。",
         };
     }
     return null;
@@ -1078,7 +1095,7 @@ export class PersonalAccount extends DurableObject<Env> {
       .toArray()[0];
     return row ? this.decodePlugin(row.data) : undefined;
   }
-  private plugin(id: string, usable = false) {
+  private plugin(id: string, usable = false, connectionId?: string) {
     const p = this.findPlugin(id);
     if (!p) throw new AppError("plugin_missing", "插件已删除，请用 /exit 返回普通模型", 404);
     if (usable) {
@@ -1097,7 +1114,7 @@ export class PersonalAccount extends DurableObject<Env> {
             availability.message,
             availability.code === "cloud_agent_unavailable" ? 503 : 403,
           );
-        const issue = this.cloudAccess(p);
+        const issue = this.cloudAccess(p, connectionId);
         if (issue) throw new AppError(issue.code, issue.message, 403);
       }
       if (!isRemoteAgent(p) && !isCloudAgent(p) && p.pluginId !== "wechatai/notification") {
@@ -1117,7 +1134,7 @@ export class PersonalAccount extends DurableObject<Env> {
       const { encryptedKey: _key, ...safe } = p;
       return {
         ...safe,
-        hasKey: this.assistants().some((model) => model.id === p.modelId && model.hasKey),
+        hasKey: this.cloudModel(p)?.hasKey ?? false,
         access: this.cloudAccess(p),
         status: this.cloudStatus(),
       };
@@ -1259,9 +1276,13 @@ export class PersonalAccount extends DurableObject<Env> {
         input.enabled ||
         (isCloudAgent(previous) && input.modelId !== previous.modelId)
       ) {
-        if (!input.modelId)
-          throw new AppError("cloud_model_required", "请选择云端 Agent 使用的文本模型。", 422);
-        this.textAssistant(input.modelId);
+        if (input.modelId) this.textAssistant(input.modelId);
+        else if (!this.defaultChatModel())
+          throw new AppError(
+            "cloud_model_required",
+            "请先在「渠道与模型」配置文本模型，云端 Agent 将默认使用它。",
+            422,
+          );
       }
       if (!previous || input.shortcut !== previous.shortcut)
         this.requireUniqueShortcut(input.shortcut, { pluginId: id });
@@ -1453,7 +1474,7 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private activatePlugin(id: string, connectionId = this.selectedLink()) {
     this.busy();
-    const p = this.plugin(id, true);
+    const p = this.plugin(id, true, connectionId);
     if (p.pluginId === "wechatai/notification")
       throw new AppError(
         "receive_only",
@@ -1470,22 +1491,13 @@ export class PersonalAccount extends DurableObject<Env> {
   private exitPlugin(connectionId = this.selectedLink()) {
     this.busy();
     if (this.links().length) this.requireLink(connectionId, true);
-    const currentId = this.linkSetting(connectionId, "current", "");
-    const sessions = this.sessions(connectionId);
-    const current = sessions.find((s) => s.id === currentId);
-    const models = this.assistants().filter(isChatModel);
-    if (current && !current.pluginInstanceId && models.some((a) => a.id === current.assistantId))
-      return current;
-    const previous = this.linkSetting(connectionId, "lastPlainSession", "");
-    const plain = sessions.filter(
-      (s) => !s.pluginInstanceId && !s.archived && models.some((a) => a.id === s.assistantId),
-    );
-    const target = plain.find((s) => s.id === previous) ?? plain[0];
+    const models = this.assistants();
+    const target = this.defaultChatSession(connectionId, models);
     if (target) {
       this.selectSession(target);
       return target;
     }
-    const model = this.defaultChatModel(models);
+    const model = this.defaultChatModel(models, connectionId);
     if (!model) {
       this.setLinkSetting(connectionId, "current", "");
       return null;
@@ -1712,8 +1724,26 @@ export class PersonalAccount extends DurableObject<Env> {
         return resolveModel(model, channel);
       });
   }
-  private defaultChatModel(models = this.assistants()) {
-    return models.find(isChatModel);
+  private defaultChatSession(connectionId: string, models = this.assistants()) {
+    const modelIds = new Set(models.filter(isChatModel).map((model) => model.id));
+    const plain = this.sessions(connectionId).filter(
+      (session) =>
+        !session.pluginInstanceId &&
+        !session.archived &&
+        session.assistantId !== null &&
+        modelIds.has(session.assistantId),
+    );
+    const current = this.linkSetting(connectionId, "current", "");
+    const previous = this.linkSetting(connectionId, "lastPlainSession", "");
+    return (
+      plain.find((session) => session.id === current) ??
+      plain.find((session) => session.id === previous) ??
+      plain[0]
+    );
+  }
+  private defaultChatModel(models = this.assistants(), connectionId = this.selectedLink()) {
+    const session = this.defaultChatSession(connectionId, models);
+    return models.find((model) => model.id === session?.assistantId) ?? models.find(isChatModel);
   }
   private publicAssistant(a: StoredAssistant): Assistant {
     const { encryptedKey: _secret, keyContext: _binding, ...visible } = a;
@@ -1808,7 +1838,7 @@ export class PersonalAccount extends DurableObject<Env> {
         return {
           planUntil: this.getSetting("planUntil", 0),
           isAdmin: this.cloudAdminUntil > Date.now(),
-          model: this.textAssistant(plugin.modelId),
+          model: this.cloudModel(plugin, connectionId),
           plugin: this.findPlugin(pluginId) ?? null,
           session: this.sessions().find((current) => current.id === session.id) ?? null,
           connection: {
@@ -1861,7 +1891,7 @@ export class PersonalAccount extends DurableObject<Env> {
     // A possibly accepted task must be recovered even if its submission reply was lost.
     if (!task.submittedAt && !task.unconfirmed && !task.jobId) {
       if (!task.modelConnection)
-        return "原云端任务未绑定用户模型，请编辑云端 Agent 选择文本模型后重新提交。";
+        return "原云端任务未记录执行模型，请重新提交；未单独指定模型时将使用当前微信的默认文本模型。";
       this.refreshWallet();
       if (this.wallet.balance() <= 0) return "credits 余额不足，请补充后再试。";
     }
@@ -2784,7 +2814,7 @@ export class PersonalAccount extends DurableObject<Env> {
       ? this.findPlugin(current.pluginInstanceId)
       : undefined;
     const cloudModel = isCloudAgent(currentPlugin)
-      ? assistants.find((model) => model.id === currentPlugin.modelId)
+      ? this.cloudModel(currentPlugin, selectedConnectionId, assistants)
       : undefined;
     const buckets = this.wallet.buckets();
     const window = dayWindow();
@@ -2809,6 +2839,7 @@ export class PersonalAccount extends DurableObject<Env> {
       planUntil: this.getSetting("planUntil", 0),
       channels: this.channels().map((c) => this.publicChannel(c)),
       assistants: assistants.map((a) => this.publicAssistant(a)),
+      defaultModelId: this.defaultChatModel(assistants, selectedConnectionId)?.id ?? null,
       currentSession: current
         ? {
             id: current.id,
@@ -2819,6 +2850,7 @@ export class PersonalAccount extends DurableObject<Env> {
             title: current.title,
             assistantId: current.assistantId,
             assistantName:
+              cloudModel?.name ??
               active?.name ??
               (current.pluginInstanceId ? (currentPlugin?.name ?? "已删除插件") : "模型"),
             channelId: cloudModel?.channelId ?? active?.channelId ?? "",
@@ -2826,7 +2858,7 @@ export class PersonalAccount extends DurableObject<Env> {
               cloudModel?.channelName ??
               active?.channelName ??
               (isCloudAgent(currentPlugin)
-                ? "未选择模型"
+                ? "执行模型不可用"
                 : current.pluginInstanceId
                   ? "远程 Agent"
                   : ""),
@@ -3235,15 +3267,17 @@ export class PersonalAccount extends DurableObject<Env> {
       } else if (action === "session.create") {
         this.requirePlus();
         this.busy();
+        const connectionId =
+          typeof p.connectionId === "string" ? p.connectionId : this.selectedLink();
         const plugin =
           typeof p.pluginInstanceId === "string"
-            ? this.plugin(p.pluginInstanceId, true)
+            ? this.plugin(p.pluginInstanceId, true, connectionId)
             : undefined;
         data = this.createSession(
-          plugin ? ("modelId" in plugin ? plugin.modelId : null) : String(p.assistantId),
+          plugin ? this.pluginModelId(plugin) : String(p.assistantId),
           typeof p.title === "string" ? p.title : "",
           false,
-          typeof p.connectionId === "string" ? p.connectionId : this.selectedLink(),
+          connectionId,
           plugin?.id,
         );
       } else if (action === "session.action") {
@@ -3584,7 +3618,7 @@ export class PersonalAccount extends DurableObject<Env> {
     connectionId = this.selectedLink(),
     pluginInstanceId?: string,
   ) {
-    const plugin = pluginInstanceId ? this.plugin(pluginInstanceId, true) : undefined;
+    const plugin = pluginInstanceId ? this.plugin(pluginInstanceId, true, connectionId) : undefined;
     if (plugin?.pluginId === "wechatai/notification")
       throw new AppError("receive_only", "消息提醒不创建聊天会话");
     if (assistantId) {
@@ -3664,7 +3698,7 @@ export class PersonalAccount extends DurableObject<Env> {
       return null;
     if (s.pluginInstanceId) {
       try {
-        const plugin = this.plugin(s.pluginInstanceId, true);
+        const plugin = this.plugin(s.pluginInstanceId, true, connectionId);
         if (plugin.pluginId !== "wechatai/notification")
           return { assistantId: this.pluginModelId(plugin), pluginInstanceId: plugin.id };
       } catch (error) {
@@ -3682,7 +3716,7 @@ export class PersonalAccount extends DurableObject<Env> {
     const current = this.linkSetting(connectionId, "current", "") === id;
     const replacement = action === "archive" && current ? this.archiveReplacement(s) : null;
     if (action === "switch") {
-      if (s.pluginInstanceId) this.plugin(s.pluginInstanceId, true);
+      if (s.pluginInstanceId) this.plugin(s.pluginInstanceId, true, connectionId);
       if (this.links().length) this.requireLink(connectionId, true);
       if (s.archived) throw new AppError("archived_session", "请先恢复这个归档会话");
       this.selectSession(s);
@@ -4688,7 +4722,7 @@ export class PersonalAccount extends DurableObject<Env> {
       return this.resumePersonalRun(id, connectionId, deadline);
     const text = extractText(message);
     const assistants = this.assistants();
-    const defaultModel = this.defaultChatModel(assistants);
+    const defaultModel = this.defaultChatModel(assistants, connectionId);
     const currentId = this.linkSetting(connectionId, "current", "");
     const currentSession = this.sessions(connectionId).find((s) => s.id === currentId);
     const currentPlugin = currentSession?.pluginInstanceId
@@ -5025,7 +5059,7 @@ export class PersonalAccount extends DurableObject<Env> {
       const a = modelMatches[0];
       const plugin = pluginMatches[0];
       if (plugin) {
-        this.plugin(plugin.id, true);
+        this.plugin(plugin.id, true, connectionId);
         if (plugin.pluginId === "wechatai/notification")
           return "消息提醒只接收 HTTP 推送，不支持对话，也不会改变当前聊天模式。请在网页插件页面查看调用示例。";
         once = {
@@ -5112,7 +5146,7 @@ export class PersonalAccount extends DurableObject<Env> {
     const activeSession = this.session(active);
     const invocationPlugin = once ? once.pluginId : activeSession.pluginInstanceId;
     if (invocationPlugin) {
-      const plugin = this.plugin(invocationPlugin, true);
+      const plugin = this.plugin(invocationPlugin, true, connectionId);
       if (isRemoteAgent(plugin))
         return this.enqueueClaw(id, plugin.id, activeSession, content, message);
       if (isCloudAgent(plugin))

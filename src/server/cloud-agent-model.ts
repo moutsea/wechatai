@@ -18,7 +18,7 @@ export async function prepareCloudAgentModel(
   if (!model)
     throw new AppError(
       "cloud_model_required",
-      "请编辑云端 Agent，选择自己的文本模型后重新提交任务。",
+      "原云端任务未记录执行模型，请重新提交；未单独指定模型时将使用当前微信的默认文本模型。",
       422,
     );
   const provision = store.provision();

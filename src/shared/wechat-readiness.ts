@@ -47,7 +47,7 @@ export function wechatSetupIssue(setup: Setup): SetupIssue | null {
       return {
         code: "cloud_model_required",
         message:
-          "云端 Agent 也需要你自己的文本模型，请先配置渠道与模型，再编辑云端 Agent 选择执行模型。",
+          "云端 Agent 也需要你自己的文本模型，请先配置渠道与模型；未单独指定时使用当前微信的默认文本模型。",
       };
     return {
       code: "plugin_disabled",

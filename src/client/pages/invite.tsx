@@ -119,7 +119,7 @@ export function Invite() {
           <Gift size={19} />
           <span>
             {summary.received === "pending"
-              ? "你已接受好友邀请。配置自己的模型，直接聊天或选择该模型运行已开放的 Plus 云端 Agent，在微信完成首次 AI 对话并收到完整回复后，即可领取 500 credits。"
+              ? "你已接受好友邀请。配置自己的模型后，可直接聊天，或启用已开放的 Plus 云端 Agent（默认沿用微信普通模型，也可单独指定）。在微信完成首次 AI 对话并收到完整回复后，即可领取 500 credits。"
               : summary.received === "rewarded"
                 ? "你的 500 credits 受邀奖励已到账，永久有效。"
                 : summary.received === "qualified"

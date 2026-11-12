@@ -108,6 +108,8 @@ export type Snapshot = {
   plan: "free" | "plus";
   planUntil: number;
   assistants: Assistant[];
+  /** Ordinary model selected for selectedConnectionId, retained while a plugin is active. */
+  defaultModelId: string | null;
   channels: Channel[];
   currentSession: {
     pluginInstanceId?: string;

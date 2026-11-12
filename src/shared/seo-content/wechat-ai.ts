@@ -9,7 +9,7 @@ export const wechatAiPage: SeoPage = {
     "微信 AI 是指在自己的微信里直接调用大模型。微伴支持自备 API Key 接入模型，也可在运营方开放后使用 Plus 云端 Agent，沿用自备模型，仍消耗 credits 并限制执行次数。",
   eyebrow: "微信 AI",
   h1: "微信 AI：把你的大模型接进微信聊天",
-  lede: "不用切换 App，也不用把问题复制到网页版。你可以自备 API Key 接入模型；需要后台任务时，可在插件页确认 Plus 云端 Agent 是否开放，并选择自己的文本模型。",
+  lede: "不用切换 App，也不用把问题复制到网页版。你可以自备 API Key 接入模型；需要后台任务时，可在插件页确认 Plus 云端 Agent 是否开放，默认沿用微信普通模型，也可单独指定。",
   answer: `微信 AI 指的是在微信内直接调用大模型完成问答、写作、翻译、生图和任务处理。微伴（Wechatai）支持自备 API Key 接入模型，也提供可选云端 Agent。${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
   primaryKeyword: "微信 AI",
   secondaryKeywords: [
@@ -57,7 +57,7 @@ export const wechatAiPage: SeoPage = {
 
 这条接入路径的模型效果取决于你选的模型；模型调用费用由你的 API 服务商收取；微伴文字部分按加权 token 收 credits，AI 生图每张 5 credits，描述文字另计，两笔账分开结算。
 
-${CLOUD_AGENT_COST_NOTE}先在「渠道与模型」中配置文本模型，再在云端 Agent 插件中选择该模型；配置与使用步骤见[云端 Agent 指南](/docs/cloud-agent)。`,
+${CLOUD_AGENT_COST_NOTE}先在「渠道与模型」中配置可用的文本模型及 API Key，再启用已开放的云端 Agent。未单独指定模型时，跟随该微信选中的普通模型，进入插件后沿用上一次普通模型；需要固定模型时再在插件中选择。配置与使用步骤见[云端 Agent 指南](/docs/cloud-agent)。`,
     },
     {
       id: "what-you-can-do",
@@ -106,7 +106,7 @@ ${CLOUD_AGENT_COST_NOTE}
       title: "什么情况下适合，什么情况下不适合",
       body: `**适合**：已经在用某个模型 API、希望微信里随时能用；不想在手机上装一堆 App；想把手头的小工具（记账、提醒、生图）收进一个入口；想把自己的 Agent 接进微信远程调用。
 
-**先确认再选择**：需要后台执行任务时，先查看插件页的云端开放状态并选择已配置的文本模型；云端需要 Plus，仍消耗 credits 并限制执行次数，不是无限免费模型。需要企业级合规审计与数据隔离的团队，请走正规的企业采购流程，本站是个人向工具。
+**先确认再选择**：需要后台执行任务时，先查看插件页的云端开放状态；云端默认沿用对应微信的普通模型，也可单独指定。云端需要 Plus，仍消耗 credits 并限制执行次数，不是无限免费模型。需要企业级合规审计与数据隔离的团队，请走正规的企业采购流程，本站是个人向工具。
 
 微伴是 MIT 开源项目，代码公开，也可以自行部署。`,
     },
