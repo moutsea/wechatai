@@ -4,13 +4,16 @@ import { Link, MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PricingPlans } from "../src/client/pages/pricing-plans";
 
-const mocks = vi.hoisted(() => ({ api: vi.fn() }));
+const mocks = vi.hoisted(() => ({ api: vi.fn(), signedIn: true }));
 vi.mock("../src/client/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/client/api")>()),
   api: mocks.api,
 }));
 vi.mock("../src/client/auth", () => ({
-  useAuth: () => ({ data: { user: { id: "pricing-user" } }, isPending: false }),
+  useAuth: () => ({
+    data: mocks.signedIn ? { user: { id: "pricing-user" } } : null,
+    isPending: false,
+  }),
 }));
 vi.mock("../src/client/analytics-client", () => ({ trackFunnel: vi.fn() }));
 
@@ -19,6 +22,7 @@ let root: Root;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   mocks.api.mockReset().mockResolvedValue({ url: "https://checkout.stripe.com/test" });
+  mocks.signedIn = true;
   vi.spyOn(window.location, "assign").mockImplementation(() => {});
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -73,3 +77,18 @@ it("updates the selected offer when following an annual link on the pricing page
   );
   await checkout("plus_yearly", "¥88");
 });
+
+it.each(["month", "year"])(
+  "preserves the %s offer through the registration link",
+  async (interval) => {
+    mocks.signedIn = false;
+    await mount(`/pricing?interval=${interval}#plans-title`);
+    const registration = new URL(
+      container.querySelector<HTMLAnchorElement>(".plan-plus a.plan-cta")!.href,
+      "https://wechatai.app",
+    );
+    expect(registration.pathname).toBe("/register");
+    expect(registration.searchParams.get("returnTo")).toBe(`/pricing?interval=${interval}`);
+    expect(mocks.api).not.toHaveBeenCalled();
+  },
+);

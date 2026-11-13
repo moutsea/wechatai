@@ -270,9 +270,13 @@ describe("application origin validation", () => {
   });
 });
 describe("Google and GitHub OAuth", () => {
-  it("returns new and existing OAuth users to the upgrade page after authorization", async () => {
-    const returnTo = authReturnPath("/app/billing");
-    mockGitHub(`upgrade-${crypto.randomUUID()}@example.test`, 987603);
+  it.each([
+    ["/app/billing", 987603],
+    ["/pricing?interval=month", 987604],
+    ["/pricing?interval=year", 987605],
+  ])("returns new and existing OAuth users to %s after authorization", async (path, id) => {
+    const returnTo = authReturnPath(path);
+    mockGitHub(`upgrade-${crypto.randomUUID()}@example.test`, id);
     for (let i = 0; i < 2; i++) {
       const response = await finish(
         await begin("github", {
@@ -280,7 +284,7 @@ describe("Google and GitHub OAuth", () => {
           newUserCallbackURL: returnTo,
         }),
       );
-      expect(response.headers.get("location")).toBe("/app/billing");
+      expect(response.headers.get("location")).toBe(path);
       expect(cookieHeader(response)).toContain("session_token=");
     }
   });
@@ -297,6 +301,8 @@ describe("Google and GitHub OAuth", () => {
       "/app/../../login",
       "/api/auth/sign-out",
       "/application",
+      "/pricing-other",
+      "/pricing/../../api/auth/sign-out",
     ]) {
       expect(authReturnPath(path)).toBe("/app");
     }

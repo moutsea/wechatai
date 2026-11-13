@@ -3,7 +3,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AuthPage } from "../src/client/pages/auth-page";
-import { VerifyEmailPage, ResetPasswordPage } from "../src/client/pages/auth-recovery";
+import {
+  VerifyEmailPage,
+  ResetPasswordPage,
+  verificationCallback,
+} from "../src/client/pages/auth-recovery";
 import { Billing } from "../src/client/pages/billing";
 import { browserPageViewReporter, trackFunnel } from "../src/client/analytics-client";
 import { createFakeApi } from "./support/fake-api";
@@ -66,7 +70,13 @@ afterEach(async () => {
 });
 async function mount(child: ReactNode, path: string) {
   window.history.replaceState({}, "", path);
-  await act(async () => root.render(<MemoryRouter initialEntries={[path]}>{child}</MemoryRouter>));
+  await act(async () =>
+    root.render(
+      <MemoryRouter key={path} initialEntries={[path]}>
+        {child}
+      </MemoryRouter>,
+    ),
+  );
 }
 
 it.each(["loading", "error", "authenticated"])("excludes %s from register_view", async (status) => {
@@ -110,6 +120,23 @@ it("does not turn URL parameters or direct browser calls into verified successes
   trackFunnel("checkout_success");
   expect(events).toEqual([]);
 });
+
+it.each(["month", "year"])(
+  "keeps the %s purchase intent through signup and email verification",
+  async (interval) => {
+    const returnTo = `/pricing?interval=${interval}`;
+    await mount(<AuthPage register />, `/register?returnTo=${encodeURIComponent(returnTo)}`);
+    const login = container.querySelector<HTMLAnchorElement>('.auth-switch a[href^="/login"]')!;
+    expect(new URL(login.href).searchParams.get("returnTo")).toBe(returnTo);
+    const callback = verificationCallback(returnTo);
+    await mount(<VerifyEmailPage />, callback);
+    const verifiedLogin = container.querySelector<HTMLAnchorElement>("a.button.full")!;
+    expect(new URL(verifiedLogin.href).searchParams.get("returnTo")).toBe(returnTo);
+    state.auth.data = { user: { id: "verified-pricing-user" } };
+    await mount(<VerifyEmailPage />, callback);
+    expect(container.querySelector("a.button.full")?.getAttribute("href")).toBe(returnTo);
+  },
+);
 
 it("leaves recovery completion recording to the verified server transition", async () => {
   await mount(<ResetPasswordPage />, "/reset-password?recovery=1&token=review-token");

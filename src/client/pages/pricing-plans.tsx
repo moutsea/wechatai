@@ -174,8 +174,11 @@ export function PricingPlans() {
               )}
             </button>
           ) : (
-            <Link className="button plan-cta" to="/register">
-              免费开始，再升级
+            <Link
+              className="button plan-cta"
+              to={`/register?returnTo=${encodeURIComponent(`/pricing?interval=${interval}`)}`}
+            >
+              注册后继续开通 Plus
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           )}
