@@ -77,6 +77,11 @@ const routes: AppRoute[] = [
   { path: "/privacy", element: <SiteInfoPage kind="privacy" />, preload: SiteInfoPage.preload },
   { path: "/contact", element: <SiteInfoPage kind="contact" />, preload: SiteInfoPage.preload },
   {
+    path: "/developers/muse",
+    element: <OpenClawGuide kind="muse" />,
+    preload: OpenClawGuide.preload,
+  },
+  {
     path: "/developers/hermes",
     element: <OpenClawGuide kind="hermes" />,
     preload: OpenClawGuide.preload,

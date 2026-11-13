@@ -494,12 +494,12 @@ export function createFakeApi({
           sessions.find((s) => !s.pluginInstanceId && !s.archived);
         current = (plain ?? create(assistants[0].id, "新的对话")).id;
         result = snapshot();
-      } else if (/\/(openclaw|hermes)\/pair$/.test(path)) {
+      } else if (/\/(openclaw|hermes|muse)\/pair$/.test(path)) {
         result = {
           command: "# 演示预览：登录 Plus 账号后生成专属连接命令。",
           expiresAt: now + 600000,
         };
-      } else if (/\/(openclaw|hermes)\/status$/.test(path) && isRemoteAgent(previous)) {
+      } else if (/\/(openclaw|hermes|muse)\/status$/.test(path) && isRemoteAgent(previous)) {
         result = {
           hasKey: false,
           lastSeen: 0,
@@ -542,7 +542,9 @@ export function createFakeApi({
           cost: 0,
         };
       else if (
-        ["wechatai/openclaw", "wechatai/hermes"].includes(body.pluginId ?? previous?.pluginId)
+        ["wechatai/openclaw", "wechatai/hermes", "wechatai/muse"].includes(
+          body.pluginId ?? previous?.pluginId,
+        )
       ) {
         const p: UserPlugin = {
           ...openClawInputSchema

@@ -2,6 +2,8 @@ import { personalAssistantManifest } from "../shared/personal-assistant";
 import { notificationManifest, notificationMessageSchema } from "../shared/notification";
 import { notificationGuide } from "../shared/notification-docs";
 import { roleplayManifest } from "../shared/roleplay";
+import { museGuide } from "../shared/muse-docs";
+import { museManifest } from "../shared/muse";
 import { hermesGuide } from "../shared/hermes-docs";
 import { hermesManifest } from "../shared/hermes";
 import { openClawGuide } from "../shared/openclaw-docs";
@@ -71,6 +73,7 @@ export const protocolIndex = {
       imageGenerationManifest.id,
       openClawManifest.id,
       hermesManifest.id,
+      museManifest.id,
       roleplayManifest.id,
       personalAssistantManifest.id,
       notificationManifest.id,
@@ -93,6 +96,7 @@ export const protocolIndex = {
     imageGenerationManifest,
     openClawManifest,
     hermesManifest,
+    museManifest,
     roleplayManifest,
     personalAssistantManifest,
     notificationManifest,
@@ -175,6 +179,14 @@ publicPluginDocs.get("/api/plugins/hermes", (c) =>
     documentation: "/developers/hermes.md",
     transportVersion: "1",
   }),
+);
+publicPluginDocs.get("/developers/muse.md", (c) => {
+  c.header("Content-Type", "text/markdown; charset=utf-8");
+  c.header("Access-Control-Allow-Origin", "*");
+  return c.body(museGuide);
+});
+publicPluginDocs.get("/api/plugins/muse", (c) =>
+  c.json({ manifest: museManifest, documentation: "/developers/muse.md", transportVersion: "1" }),
 );
 const protocolApi = new Hono();
 const allow = "GET, HEAD, OPTIONS";

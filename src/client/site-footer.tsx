@@ -45,6 +45,7 @@ export function SiteFooter() {
           <Link to="/developers/plugins">插件开发文档</Link>
           <Link to="/developers/openclaw">OpenClaw 接入</Link>
           <Link to="/developers/hermes">Hermes 接入</Link>
+          <Link to="/developers/muse">Muse 接入</Link>
           <Link to="/wechat-agent">微信接入 Agent</Link>
           <Link to="/bring-your-own-api-key">自带 API Key</Link>
           <a href="/developers/plugins.md">协议 Markdown</a>

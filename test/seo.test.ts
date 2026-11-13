@@ -143,6 +143,7 @@ describe("search indexing boundaries", () => {
       "https://wechatai.app/developers/plugins",
       "https://wechatai.app/developers/openclaw",
       "https://wechatai.app/developers/hermes",
+      "https://wechatai.app/developers/muse",
       "https://wechatai.app/terms",
       "https://wechatai.app/privacy",
       "https://wechatai.app/contact",

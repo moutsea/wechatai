@@ -19,6 +19,7 @@ import { OpenClawEditor } from "./openclaw-editor";
 import {
   isRemoteAgent,
   type RemoteAgentPlugin,
+  remoteAgentKind,
   type RemoteAgentKind,
 } from "../../shared/remote-agent";
 import { useState, type FormEvent } from "react";
@@ -122,7 +123,7 @@ export function Plugins() {
       return;
     }
     if (p !== "new" && isRemoteAgent(p)) {
-      setAgentKind(p.pluginId === "wechatai/hermes" ? "hermes" : "openclaw");
+      setAgentKind(remoteAgentKind(p.pluginId));
       setClawEditor(p);
       return;
     }
@@ -139,8 +140,8 @@ export function Plugins() {
       setNotificationEditor("new");
       return;
     }
-    if (kind === "wechatai/openclaw" || kind === "wechatai/hermes") {
-      setAgentKind(kind === "wechatai/hermes" ? "hermes" : "openclaw");
+    if (kind === "wechatai/openclaw" || kind === "wechatai/hermes" || kind === "wechatai/muse") {
+      setAgentKind(remoteAgentKind(kind));
       setClawEditor("new");
     } else if (kind === "wechatai/personal-assistant") setPersonalEditor("new");
     else if (kind === "wechatai/roleplay") setRoleEditor("new");
@@ -309,7 +310,7 @@ export function Plugins() {
             onEdit={open}
             onTest={(p) => {
               if (isRemoteAgent(p)) {
-                setAgentKind(p.pluginId === "wechatai/hermes" ? "hermes" : "openclaw");
+                setAgentKind(remoteAgentKind(p.pluginId));
                 setClawEditor(p);
                 return;
               }

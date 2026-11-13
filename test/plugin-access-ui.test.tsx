@@ -168,9 +168,9 @@ describe("plugin entitlement controls", () => {
     expect(unreadNoticeCount(null)).toBe(0);
   });
 
-  it("offers seven general plugins and a Plus upgrade for cloud Agent", () => {
+  it("offers eight general plugins and a Plus upgrade for cloud Agent", () => {
     const html = library();
-    expect(html.match(/aria-label="配置 /g)).toHaveLength(7);
+    expect(html.match(/aria-label="配置 /g)).toHaveLength(8);
     expect(html).not.toContain("升级以添加更多");
     expect(html).toContain("开通 Plus");
   });
@@ -375,7 +375,7 @@ describe("managed cloud Agent configuration", () => {
     data.plan = "plus";
     data.assistants = [];
     expect(library()).toContain('aria-label="配置 云端 Agent"');
-    expect(library().match(/<article/g)).toHaveLength(8);
+    expect(library().match(/<article/g)).toHaveLength(9);
     const editor = renderToStaticMarkup(
       <MemoryRouter>
         <CloudAgentEditor plugin="new" onClose={noop} />

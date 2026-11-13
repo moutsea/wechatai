@@ -13,9 +13,9 @@ const labels = {
 } as const;
 const descriptions = {
   pending: "配置已保存，请执行连接命令完成连接",
-  waiting: "配对已完成，等待本机渠道上线",
-  online: "本机渠道在线，可以在微信中使用",
-  offline: "本机渠道离线，请检查 Gateway 是否运行",
+  waiting: "配对已完成，等待 Agent 连接器上线",
+  online: "Agent 连接器在线，可以在微信中使用",
+  offline: "Agent 连接器离线，请检查 Gateway 或托管环境中的 hook 是否运行",
   paused: "此配置已暂停，请查看会员与插件设置",
 } as const;
 

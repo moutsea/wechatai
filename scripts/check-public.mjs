@@ -19,7 +19,7 @@ const rules = [
   ["Private key", /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
   [
     "Wechatai credential",
-    /(?:notify1|(?:hermes|openclaw)-pair1)\.[a-f0-9]{64}\.[A-Za-z0-9_.-]{65,}/,
+    /(?:notify1|(?:hermes|openclaw|muse)-pair1)\.[a-f0-9]{64}\.[A-Za-z0-9_.-]{65,}/,
   ],
   ["Local absolute path", /(?:\/Users\/|[A-Z]:\\Users\\)[^\s"']+/],
 ];

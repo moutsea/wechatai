@@ -28,6 +28,7 @@ export const PUBLIC_PATHS = [
   "/developers/plugins",
   "/developers/openclaw",
   "/developers/hermes",
+  "/developers/muse",
   ...Object.values(INFO_PAGES).map((page) => page.path),
 ] as const;
 export const LEGACY_PATHS = ["/guide"] as const;
@@ -85,6 +86,13 @@ const DEVELOPER_PAGES = {
     description:
       "通过 Wechatai Channel 将自己的 OpenClaw Agent 接入微信。配置教程、会话隔离、定时任务与主动推送，以及供 AI agent 阅读的协议说明。",
     updatedAt: "2026-10-24",
+  },
+  "/developers/muse": {
+    title: "Muse 微信接入：托管助理与消息回复",
+    name: "Muse 接入指南",
+    description:
+      "将已有 Muse 托管助理通过 hook 连接到微伴，在微信发送文字任务、接收最终回复和授权的主动通知。",
+    updatedAt: "2026-11-13",
   },
   "/developers/hermes": {
     title: "Hermes 微信接入：定时任务与后台推送",

@@ -253,6 +253,7 @@ export const llmsText = `# Wechatai · 微伴
 - [JSON Schema](${protocolLinks.schema}): Draft 2020-12 的 Manifest、Invocation、Result、Event 和 Block 定义。
 - [消息提醒 HTTP 接入](${SITE_URL}/developers/notifications.md): 不扣 credits 的 Webhook，专属 Token、文字推送与投递状态；这是独立的通知接口，不是通用插件执行接口。
 - [OpenClaw 接入](${SITE_URL}/developers/openclaw): 把本机 Agent 接到微信。
+- [Muse 接入](${SITE_URL}/developers/muse): 在微信里使用 Muse 托管助理。
 - [Hermes 接入](${SITE_URL}/developers/hermes): 在微信里使用 Hermes。
 
 ## 使用指南

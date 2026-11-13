@@ -790,7 +790,10 @@ describe("read-only per-account statistics", () => {
           name: "private-plugin-name",
         }),
       );
-      sql.exec("INSERT INTO claw_events VALUES ('remote','agent','{}',?)", now);
+      sql.exec(
+        "INSERT INTO claw_events (id,pluginId,receipt,createdAt) VALUES ('remote','agent','{}',?)",
+        now,
+      );
       sql.exec(
         "INSERT INTO messages(sessionId,role,content,createdAt) VALUES ('s','user','private conversation',?)",
         now,

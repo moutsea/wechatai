@@ -53,7 +53,7 @@ export function OpenClawEditor({
   const [form, setForm] = useState<OpenClawInput>(() =>
     editSchema.parse(
       plugin === "new"
-        ? { name: agentName, shortcut: kind === "hermes" ? "hermes" : "claw" }
+        ? { name: agentName, shortcut: kind === "openclaw" ? "claw" : kind }
         : plugin,
     ),
   );
@@ -180,7 +180,11 @@ export function OpenClawEditor({
   return (
     <Modal
       title={`连接 ${agentName}`}
-      description="让自己的助手，从电脑走进微信。"
+      description={
+        kind === "muse"
+          ? "让 Muse 托管助理，在微信里接收任务并回复。"
+          : "让自己的助手，从电脑走进微信。"
+      }
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -207,7 +211,9 @@ export function OpenClawEditor({
                   : "在微信发送 /use " + saved?.shortcut + "，即可开始对话。"
                 : saved
                   ? connection.description
-                  : "自动安装渠道、选择默认助手并完成配对，无需填写密钥。"}
+                  : kind === "muse"
+                    ? "把连接指令发给 Muse，由它安装并启用接收消息的 hook。"
+                    : "自动安装渠道、选择默认助手并完成配对，无需填写密钥。"}
             </p>
           </div>
         </div>
@@ -229,8 +235,12 @@ export function OpenClawEditor({
             <li>
               <span>2</span>
               <div>
-                <strong>在命令行终端执行</strong>
-                <p>打开运行 {agentName} 的电脑或服务器上的命令行终端，粘贴并执行。</p>
+                <strong>{kind === "muse" ? "把指令发给 Muse" : "在命令行终端执行"}</strong>
+                <p>
+                  {kind === "muse"
+                    ? "在 Muse 主聊天中粘贴指令，让它完成安装、注册并启用 hook。"
+                    : `打开运行 ${agentName} 的电脑或服务器上的命令行终端，粘贴并执行。`}
+                </p>
               </div>
             </li>
             <li>
@@ -245,14 +255,20 @@ export function OpenClawEditor({
         {pairing && (
           <div className="claw-command-panel">
             <div className="claw-command-heading">
-              <strong>在命令行终端粘贴并执行</strong>
+              <strong>
+                {kind === "muse" ? "复制后发送到 Muse 主聊天" : "在命令行终端粘贴并执行"}
+              </strong>
               <small>
                 {secondsLeft
                   ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} 后过期`
                   : "命令已过期"}
               </small>
             </div>
-            <p>请在运行 {agentName} 的电脑或服务器上打开命令行终端，再执行下方命令。</p>
+            <p>
+              {kind === "muse"
+                ? "由 Muse 在自己的托管环境中执行安装，并按输出说明启用 hook。配对完成后仍需等待 hook 实际上线。"
+                : `请在运行 ${agentName} 的电脑或服务器上打开命令行终端，再执行下方命令。`}
+            </p>
             <pre aria-label={`${agentName} 连接命令`}>{pairing.command}</pre>
             <button
               type="button"
@@ -266,9 +282,13 @@ export function OpenClawEditor({
               }
             >
               {copied ? <Check size={15} /> : <Copy size={15} />}
-              {copied ? "已复制" : "复制连接命令"}
+              {copied ? "已复制" : kind === "muse" ? "复制 Muse 连接指令" : "复制连接命令"}
             </button>
-            <p>命令仅用于本次连接，请勿转发。支持 macOS、Linux 和 WSL。</p>
+            <p>
+              {kind === "muse"
+                ? "指令含一次性配对信息，只发给自己的 Muse，不要公开分享。需要 Muse 托管环境支持 hook。"
+                : "命令仅用于本次连接，请勿转发。支持 macOS、Linux 和 WSL。"}
+            </p>
             <div className="claw-waiting">
               <LoaderCircle size={14} className={secondsLeft ? "claw-spin" : ""} />
               {status?.pairingClaimed
@@ -335,13 +355,22 @@ export function OpenClawEditor({
         </div>
         {!connected && !limited && (
           <p className="claw-install-note">
-            需要已安装 {kind === "hermes" ? "Hermes Agent（当前稳定版）" : "OpenClaw 2026.6.10+"}
-            。执行后会安装微伴渠道并重启 Gateway，请等待当前任务完成后再连接。
+            {kind === "muse" ? (
+              "需要已有 Muse 托管助理及 hook 功能。安装程序保存配对，Muse 负责注册并启用 hook；不会创建新的微信连接。"
+            ) : (
+              <>
+                需要已安装{" "}
+                {kind === "hermes" ? "Hermes Agent（当前稳定版）" : "OpenClaw 2026.6.10+"}
+                。执行后会安装微伴渠道并重启 Gateway，请等待当前任务完成后再连接。
+              </>
+            )}
           </p>
         )}
-        {connected && pairing && (
+        {pairing && (connected || (kind === "muse" && saved?.hasKey)) && (
           <p className="claw-install-note">
-            执行新命令后会替换旧连接并重启 Gateway，旧会话推送将停止。
+            {kind === "muse"
+              ? "重新配对会替换旧连接，旧会话推送将停止。请等待当前任务完成且结果回传后再连接；网络、权限或额度暂停时，先恢复原 hook 完成回传。"
+              : "执行新命令后会替换旧连接并重启 Gateway，旧会话推送将停止。"}
           </p>
         )}
         {pollError && (
@@ -418,6 +447,11 @@ export function OpenClawEditor({
                     value={form.maxOutputTokens}
                     onChange={(e) => update("maxOutputTokens", Number(e.target.value))}
                   />
+                  {kind === "muse" && (
+                    <small>
+                      超出上限的回复会裁剪并附上提示，提示不计费。可让 Muse 精简或分段回复。
+                    </small>
+                  )}
                 </label>
               </div>
               <label className="check-label">

@@ -105,6 +105,7 @@ export const adminPluginNames: Record<string, string> = {
   "wechatai/image-generation": "AI 生图",
   "wechatai/openclaw": "OpenClaw",
   "wechatai/hermes": "Hermes",
+  "wechatai/muse": "Muse",
   "wechatai/roleplay": "角色扮演",
   "wechatai/personal-assistant": "个人助理",
   "wechatai/cloud-agent": "云端 Agent",

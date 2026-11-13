@@ -97,6 +97,13 @@ const library = [
     tags: ["角色卡导入", "关键词世界书", "独立剧情记忆"],
   },
   {
+    id: "wechatai/muse",
+    name: "Muse",
+    description:
+      "把 Muse 托管助理接入微信。由 Muse hook 接收文字任务，沿用它的工具与记忆，并回传最终回复。",
+    tags: ["Muse 托管环境", "文字与主动推送", "自备 Muse"],
+  },
+  {
     id: "wechatai/hermes",
     name: "Hermes",
     description: "把微信连到自己的 Hermes Agent。沿用它的记忆与工具，接收定时任务和后台回复。",
@@ -311,6 +318,7 @@ export function PluginLibrary({
                 id !== "wechatai/openclaw" &&
                 id !== "wechatai/notification" &&
                 id !== "wechatai/hermes" &&
+                id !== "wechatai/muse" &&
                 id !== "wechatai/cloud-agent" ? (
                 <Link className="button secondary small" to={`${base}/channels`}>
                   先添加模型 <ArrowRight size={15} />
@@ -393,6 +401,7 @@ export function PluginConfiguration({
       : kind === "wechatai/openclaw" ||
         kind === "wechatai/notification" ||
         kind === "wechatai/hermes" ||
+        kind === "wechatai/muse" ||
         data.assistants.length > 0);
   const incomplete = connection && !connection.connectedBefore;
   return (
@@ -487,7 +496,9 @@ export function PluginConfiguration({
                   </div>
                   <div>
                     <dt>
-                      {kind === "wechatai/openclaw" || kind === "wechatai/hermes"
+                      {kind === "wechatai/openclaw" ||
+                      kind === "wechatai/hermes" ||
+                      kind === "wechatai/muse"
                         ? `${remoteAgentName(kind)} 助手`
                         : kind === "wechatai/image-generation"
                           ? "生图模型"

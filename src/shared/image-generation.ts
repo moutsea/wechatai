@@ -5,6 +5,7 @@ import type { NotificationPlugin } from "./notification";
 import { pluginManifestSchema } from "./plugins";
 import type { OpenClawPlugin } from "./openclaw";
 import type { HermesPlugin } from "./hermes";
+import type { MusePlugin } from "./muse";
 import type { PersonalAssistantPlugin } from "./personal-assistant";
 import type { RoleplayPlugin } from "./roleplay";
 import type { WebResearchPlugin } from "./web-research";
@@ -40,6 +41,7 @@ export type UserPlugin =
   | ImageGenerationPlugin
   | OpenClawPlugin
   | HermesPlugin
+  | MusePlugin
   | RoleplayPlugin
   | PersonalAssistantPlugin;
 export const imageGenerationManifest = pluginManifestSchema.parse({

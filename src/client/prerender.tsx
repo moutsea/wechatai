@@ -41,6 +41,8 @@ export function renderPublicPage(path: string) {
           <DocsIndex />
         ) : path.startsWith("/docs/") && findDocArticle(path.slice(6)) ? (
           <DocArticlePage slug={path.slice(6)} />
+        ) : path === "/developers/muse" ? (
+          <OpenClawGuide kind="muse" />
         ) : path === "/developers/hermes" ? (
           <OpenClawGuide kind="hermes" />
         ) : path === "/developers/openclaw" ? (

@@ -7,6 +7,7 @@ const read = (name) => readFile(new URL(name, dir), "utf8");
 const workerDocuments = [
   ["/developers/plugins.md", "text/markdown", "给 AI agent 的起点"],
   ["/developers/openclaw.md", "text/markdown", "# OpenClaw 接入指南"],
+  ["/developers/muse.md", "text/markdown", "# Muse 接入指南"],
   ["/developers/hermes.md", "text/markdown", "# Hermes 接入指南"],
   ["/developers/notifications.md", "text/markdown", "# 消息提醒 HTTP 接入"],
   ["/llms.txt", "text/plain", "# Wechatai"],
@@ -53,6 +54,7 @@ const publicPages = [
     "https://wechatai.app/docs/hermes-in-wechat",
     "第二步：执行一键连接命令",
   ],
+  ["developers/muse.html", "https://wechatai.app/developers/muse", "Muse 接入指南"],
   ["developers/hermes.html", "https://wechatai.app/developers/hermes", "Hermes 接入指南"],
   ["developers/openclaw.html", "https://wechatai.app/developers/openclaw", "OpenClaw 接入指南"],
   ["developers/plugins.html", "https://wechatai.app/developers/plugins", "最小适配示例"],

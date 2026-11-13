@@ -426,7 +426,7 @@ for (const method of ["POST", "GET"] as const) {
   });
 }
 // Connector-only bearer scope. Browser session routes below retain Origin checks.
-for (const kind of ["openclaw", "hermes"] as const)
+for (const kind of ["openclaw", "hermes", "muse"] as const)
   app.post(`/api/${kind}/:action`, async (c) => {
     c.header("Cache-Control", "no-store");
     const parser = c.req.param("action") === "pair" ? parseOpenClawPairing : parseOpenClawToken;
@@ -746,6 +746,17 @@ app.get(
   "/api/plugins/:id/hermes/status",
   invoke("plugin.hermesStatus", (c) => ({ id: c.req.param("id") })),
 );
+for (const [method, suffix, action] of [
+  ["post", "pair", "Pair"],
+  ["post", "token", "Token"],
+  ["delete", "token", "Revoke"],
+  ["get", "status", "Status"],
+] as const)
+  app[method](
+    `/api/plugins/:id/muse/${suffix}`,
+    invoke(`plugin.muse${action}`, (c) => ({ id: c.req.param("id") })),
+  );
+
 app.post(
   "/api/plugins/exit",
   invoke("plugin.exit", (c) => c.req.json()),

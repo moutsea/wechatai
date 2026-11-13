@@ -65,9 +65,11 @@ import {
   type RemoteAgentKind,
 } from "../shared/remote-agent";
 import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
+import { museInputSchema, type MusePlugin } from "../shared/muse";
 import {
   signOpenClawToken,
   hermesConnectCommand,
+  museConnectCommand,
   signOpenClawPairing,
   deriveOpenClawSecret,
   openClawConnectCommand,
@@ -238,6 +240,7 @@ type StoredPlugin = (
   | Omit<ImageGenerationPlugin, "hasKey">
   | Omit<OpenClawPlugin, "hasKey">
   | Omit<HermesPlugin, "hasKey">
+  | Omit<MusePlugin, "hasKey">
 ) & {
   encryptedKey: string;
 };
@@ -1332,9 +1335,15 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.scheduleWechat();
       return this.publicPlugin(plugin);
     }
-    if (["wechatai/openclaw", "wechatai/hermes"].includes(kind ?? previous?.pluginId)) {
+    if (
+      ["wechatai/openclaw", "wechatai/hermes", "wechatai/muse"].includes(kind ?? previous?.pluginId)
+    ) {
       const input = (
-        (kind ?? previous?.pluginId) === "wechatai/hermes" ? hermesInputSchema : openClawInputSchema
+        (kind ?? previous?.pluginId) === "wechatai/muse"
+          ? museInputSchema
+          : (kind ?? previous?.pluginId) === "wechatai/hermes"
+            ? hermesInputSchema
+            : openClawInputSchema
       )
         .safeExtend({ shortcut: editableShortcut })
         .parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
@@ -2978,8 +2987,13 @@ export class PersonalAccount extends DurableObject<Env> {
         p.maxInputTokens === undefined
       )
         p.maxInputTokens = this.assistant(p.id).maxInputTokens;
-      const remoteAction = /^plugin\.(claw|hermes)(Pair|Token|Revoke|Status)$/.exec(action);
-      const remoteKind: RemoteAgentKind = remoteAction?.[1] === "hermes" ? "hermes" : "openclaw";
+      const remoteAction = /^plugin\.(claw|hermes|muse)(Pair|Token|Revoke|Status)$/.exec(action);
+      const remoteKind: RemoteAgentKind =
+        remoteAction?.[1] === "muse"
+          ? "muse"
+          : remoteAction?.[1] === "hermes"
+            ? "hermes"
+            : "openclaw";
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
         throw new AppError("plugin_type", "插件类型不匹配", 403);
       if (action === "snapshot") data = this.snapshot();
@@ -3094,17 +3108,26 @@ export class PersonalAccount extends DurableObject<Env> {
         await this.flushReminderSchedule();
         await this.flushNotificationSchedule();
         data = this.snapshot();
-      } else if (action === "plugin.clawPair" || action === "plugin.hermesPair") {
+      } else if (
+        action === "plugin.clawPair" ||
+        action === "plugin.hermesPair" ||
+        action === "plugin.musePair"
+      ) {
         const pairing = this.claw.createPairing(String(p.id), this.ctx.id.toString());
         const code = signOpenClawPairing(this.env, pairing.unsigned, remoteKind);
         data = {
-          command: (remoteKind === "hermes" ? hermesConnectCommand : openClawConnectCommand)(
-            this.env.APP_URL,
-            code,
-          ),
+          command: (remoteKind === "muse"
+            ? museConnectCommand
+            : remoteKind === "hermes"
+              ? hermesConnectCommand
+              : openClawConnectCommand)(this.env.APP_URL, code),
           expiresAt: pairing.expiresAt,
         };
-      } else if (action === "plugin.clawToken" || action === "plugin.hermesToken") {
+      } else if (
+        action === "plugin.clawToken" ||
+        action === "plugin.hermesToken" ||
+        action === "plugin.museToken"
+      ) {
         data = {
           token: signOpenClawToken(
             this.env,
@@ -3113,11 +3136,19 @@ export class PersonalAccount extends DurableObject<Env> {
           ),
           endpoint: this.env.APP_URL,
         };
-      } else if (action === "plugin.clawRevoke" || action === "plugin.hermesRevoke") {
+      } else if (
+        action === "plugin.clawRevoke" ||
+        action === "plugin.hermesRevoke" ||
+        action === "plugin.museRevoke"
+      ) {
         this.plugin(String(p.id));
         this.claw.revoke(String(p.id));
         data = { ok: true };
-      } else if (action === "plugin.clawStatus" || action === "plugin.hermesStatus") {
+      } else if (
+        action === "plugin.clawStatus" ||
+        action === "plugin.hermesStatus" ||
+        action === "plugin.museStatus"
+      ) {
         const plugin = this.plugin(String(p.id));
         if (!isRemoteAgent(plugin)) throw new AppError("plugin_type", "不是远程 Agent 配置");
         data = {
@@ -3351,6 +3382,7 @@ export class PersonalAccount extends DurableObject<Env> {
         this.busy();
         this.ctx.storage.transactionSync(() => {
           this.sql.exec("DELETE FROM messages");
+          this.claw.clearHistory();
           for (const session of this.sessions()) this.claw.cancelSession(session.id);
           this.sql.exec("DELETE FROM sessions");
           this.sql.exec("DELETE FROM context_summaries");
@@ -3617,6 +3649,7 @@ export class PersonalAccount extends DurableObject<Env> {
     );
     for (const session of related) {
       this.cloud.hideSession(session.id);
+      this.claw.clearHistory(session.id);
       this.sql.exec("DELETE FROM messages WHERE sessionId = ?", session.id);
       this.sql.exec("DELETE FROM runs WHERE sessionId = ?", session.id);
       this.sql.exec(
@@ -3800,6 +3833,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.revokeMedia(s.id);
       this.ctx.storage.transactionSync(() => {
         this.cloud.hideSession(id);
+        this.claw.clearHistory(id);
         this.sql.exec("DELETE FROM messages WHERE sessionId = ?", id);
         this.sql.exec("DELETE FROM context_summaries WHERE sessionId = ?", id);
         this.sql.exec("DELETE FROM runs WHERE sessionId = ?", id);
@@ -4906,7 +4940,9 @@ export class PersonalAccount extends DurableObject<Env> {
               p.pluginId === "wechatai/image-generation"
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
-                  ? `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
+                  ? p.pluginId === "wechatai/muse"
+                    ? "之后的文字消息会交给你的 Muse 托管助理。微伴命令使用 /wx 前缀；Muse 原生命令暂不支持。"
+                    : `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
                   : isCloudAgent(p)
                     ? "之后直接发送文字即可提交云端任务；结果会回复微信，也可在云端任务页查看。/wx stop 请求停止，/wx new 开始新对话。"
                     : p.pluginId === "wechatai/roleplay"

@@ -98,6 +98,7 @@ export class OpenClawRelay {
     for (const [table, column, definition] of [
       ["claw_jobs", "command", "TEXT NOT NULL DEFAULT ''"],
       ["claw_jobs", "lane", "TEXT NOT NULL DEFAULT 'message'"],
+      ["claw_events", "sessionId", "TEXT NOT NULL DEFAULT ''"],
       ["claw_connectors", "nativeCommands", "INTEGER NOT NULL DEFAULT 0"],
       ["claw_connectors", "connectorVersion", "TEXT NOT NULL DEFAULT ''"],
       ["claw_connectors", "versionSeenAt", "INTEGER NOT NULL DEFAULT 0"],
@@ -253,6 +254,23 @@ export class OpenClawRelay {
     );
     this.sql.exec("DELETE FROM claw_routes WHERE sessionId = ?", sessionId);
   }
+  clearHistory(sessionId?: string) {
+    // Keep settlement/dedupe metadata, but never replay deleted conversation text.
+    // Session ownership survives route resets, revocation and re-pairing.
+    const scope = sessionId ? " WHERE sessionId = ?" : "";
+    const bindings = sessionId ? [sessionId] : [];
+    // Proactive/failed runs intentionally have no sessionId (they do not qualify
+    // for referral rewards), so remove their response cache through the receipt.
+    this.sql.exec(
+      `DELETE FROM runs WHERE id IN (SELECT 'claw:' || id FROM claw_events${scope})`,
+      ...bindings,
+    );
+    this.sql.exec(
+      `UPDATE claw_events SET receipt = json_set(receipt, '$.acceptedText', '', '$.historyCleared', json('true'))
+       WHERE json_type(receipt, '$.acceptedText') = 'text'${sessionId ? " AND sessionId = ?" : ""}`,
+      ...bindings,
+    );
+  }
   authenticate(pluginId: string, secret: string) {
     const row = this.sql
       .exec<{ tokenHash: string }>(
@@ -274,6 +292,12 @@ export class OpenClawRelay {
     const previous = this.sql.exec<Job>("SELECT * FROM claw_jobs WHERE id = ?", id).toArray()[0];
     if (previous) return previous;
     const command = nativeCommand(text) ?? "";
+    if (command && plugin.pluginId === "wechatai/muse")
+      throw new AppError(
+        "muse_command_unsupported",
+        "Muse 暂不支持通过微信执行原生命令。请用文字描述要求；微伴命令使用 /wx 前缀。",
+        422,
+      );
     if (command && !this.status(pluginId).nativeCommands)
       throw new AppError(
         "connector_upgrade_required",
@@ -302,7 +326,7 @@ export class OpenClawRelay {
     )
       throw new AppError(
         "claw_queue_full",
-        `${remoteAgentName(plugin.pluginId)} 待处理任务较多，请等待本机处理后再发送`,
+        `${remoteAgentName(plugin.pluginId)} 待处理任务较多，请等待 Agent 处理后再发送`,
         429,
       );
     const existing = this.sql
@@ -450,7 +474,12 @@ export class OpenClawRelay {
             queueMs: Date.now() - job.createdAt,
           }),
         );
-        return { claimed: job.state === "pending" };
+        return {
+          claimed: true,
+          ...(plugin.pluginId === "wechatai/muse"
+            ? { maxOutputTokens: Math.min(plugin.maxOutputTokens, job.outputLimit) }
+            : {}),
+        };
       }
       if (action === "heartbeat") {
         const { agents, nativeCommands, connectorVersion } = z
@@ -511,16 +540,20 @@ export class OpenClawRelay {
         throw new AppError("invalid_event", "主动推送必须包含文本");
       const failed = event.status === "failed";
       if (!failed && !job && !event.text.trim()) throw new AppError("empty_result", "结果不能为空");
+      const outputLimit = Math.min(
+        plugin.maxOutputTokens,
+        job?.outputLimit ?? plugin.maxOutputTokens,
+        job?.lane === "control" ? 256 : Infinity,
+      );
       const text = failed
-        ? `${remoteAgentName(plugin.pluginId)} 未完成这次任务，本次未扣费。请检查本机运行状态后重新发送；为避免重复执行工具，中断的任务不会自动重跑。`
-        : limitTextTokens(
-            event.text.trim(),
-            Math.min(
-              plugin.maxOutputTokens,
-              job?.outputLimit ?? plugin.maxOutputTokens,
-              job?.lane === "control" ? 256 : Infinity,
-            ),
-          );
+        ? `${remoteAgentName(plugin.pluginId)} 未完成这次任务，本次未扣费。请检查 Agent 运行状态后重新发送；为避免重复执行工具，中断的任务不会自动重跑。`
+        : limitTextTokens(event.text.trim(), outputLimit);
+      const truncated = !failed && text !== event.text.trim();
+      // Platform guidance is displayed and recorded, but is not model output to bill.
+      const displayText =
+        plugin.pluginId === "wechatai/muse" && truncated
+          ? `【回复已截断】以下仅为部分结果，已达到此任务的 ${outputLimit} tokens 回复上限。请让 Muse 每次只回复一部分，或在网页 Muse 配置的「更多设置」中调高「回复上限」后重新请求。此提示不计 credits。\n\n${text}`
+          : text;
       const inputTokens = failed ? 0 : (job?.inputTokens ?? 0);
       const outputTokens = failed ? 0 : countTextTokens(text);
       const units = job?.lane === "control" ? 0 : creditUnits(inputTokens, outputTokens);
@@ -528,7 +561,7 @@ export class OpenClawRelay {
       this.hooks.deliver({
         id,
         route,
-        text,
+        text: displayText,
         inputTokens,
         outputTokens,
         units,
@@ -546,14 +579,18 @@ export class OpenClawRelay {
         id,
         status: "queued",
         cost: units / 1000,
-        truncated: !failed && text !== event.text.trim(),
+        truncated,
+        // Muse builds its recent transcript from this durable acknowledgement.
+        // Keep the accepted text in the receipt so retries cannot change history.
+        ...(plugin.pluginId === "wechatai/muse" ? { acceptedText: displayText } : {}),
       };
       this.sql.exec(
-        "INSERT INTO claw_events VALUES (?,?,?,?)",
+        "INSERT INTO claw_events (id,pluginId,receipt,createdAt,sessionId) VALUES (?,?,?,?,?)",
         receiptId,
         pluginId,
         JSON.stringify(receipt),
         Date.now(),
+        route.sessionId,
       );
       console.info(
         JSON.stringify({
