@@ -39,6 +39,7 @@ import {
   DEFAULT_INPUT_TOKENS,
   DEFAULT_OUTPUT_TOKENS,
   MAX_CONTEXT_TOKENS,
+  MAX_OUTPUT_TOKENS,
   modelInputBudget,
 } from "../../shared/context";
 import { TOKENS_PER_CREDIT, OUTPUT_TOKEN_WEIGHT } from "../../shared/credits";
@@ -705,7 +706,7 @@ export function Channels() {
                       type="number"
                       required
                       min={64}
-                      max={8192}
+                      max={MAX_OUTPUT_TOKENS}
                       value={form.maxOutputTokens}
                       onChange={(e) => update("maxOutputTokens", Number(e.target.value))}
                     />

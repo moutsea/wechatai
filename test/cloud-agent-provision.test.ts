@@ -220,20 +220,22 @@ describe("durable AGT account provisioning", () => {
     const rotated = { ...config, appKey: "test-only-rotated-key" };
     expect(await provision(stub, rotated)).toEqual(saved);
     expect(network.calls).toHaveLength(3);
-    const upgraded = await provision(stub, {
+    await provision(stub, { ...rotated, agentId: "wechatai-v2" });
+    await abortAllDurableObjects();
+    const upgraded = await provision(env.ACCOUNTS.get(stub.id), {
       ...rotated,
-      agentId: "wechatai-v2",
+      agentId: "wechatai-v3",
       model: "new-model",
     });
     expect(upgraded).toMatchObject({
       externalId: saved.externalId,
       appUserId: saved.appUserId,
       workspaceId: saved.workspaceId,
-      profiles: ["wechatai-v1", "wechatai-v2"],
+      profiles: ["wechatai-v1", "wechatai-v2", "wechatai-v3"],
     });
-    expect(network.calls).toHaveLength(4);
-    expect(network.calls[3].authorization).toBe(`Bearer ${rotated.appKey}`);
-    expect([...network.profiles.values()]).toEqual(["test-model", "new-model"]);
+    expect(network.calls).toHaveLength(5);
+    expect(network.calls[4].authorization).toBe(`Bearer ${rotated.appKey}`);
+    expect([...network.profiles.values()]).toEqual(["test-model", "test-model", "new-model"]);
   });
 
   it.each([

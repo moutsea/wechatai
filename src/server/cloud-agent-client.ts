@@ -38,9 +38,10 @@ const MAX_RESPONSE_BYTES = 2_000_000;
 export const cloudImagePath = (id: string) => `attachments/images/${id}`;
 
 // Version this policy together with config.agentId; never edit a deployed profile in place.
-export const CLOUD_AGENT_POLICY_V2 = {
+export const CLOUD_AGENT_POLICY_V3 = {
   maxSteps: 12,
   maxToolCalls: 24,
+  maxOutputRecoveryAttempts: 1,
   maxConcurrentJobs: 1,
   maxContextChars: 60_000,
   modelTimeoutMs: 120_000,
@@ -72,7 +73,7 @@ export function cloudJobBody(input: {
   return {
     ...input,
     skillLearningMode: "off",
-    policy: CLOUD_AGENT_POLICY_V2,
+    policy: CLOUD_AGENT_POLICY_V3,
     callback: { ...input.callback, includeResult: false },
   };
 }
@@ -355,9 +356,9 @@ export class CloudAgentClient {
           enabled: true,
           model: this.config.model,
           tags: ["wechatai"],
-          policy: CLOUD_AGENT_POLICY_V2,
+          policy: CLOUD_AGENT_POLICY_V3,
           systemPrompt:
-            "你是微伴云端 Agent。用户上传的文件正文会随任务提供，提取的文字也会保存为任务列出的 UTF-8 工作区文件。图片同时提供视觉输入及任务列出的原始图片工作区路径；转换、裁剪或插入 PDF 时，将这些路径放入 sandbox_compute 的 inputFiles，使用 Pillow 读取图片，不要用 read_file 把图片当作文本读取。用户要求转换或生成文件时，直接用 read_file、write_file 和 sandbox_compute 完成，再用 return_file 把实际存在的产物交给微伴，微伴会发送文件到当前微信并提供下载。不要要求用户重贴已提供的正文或重新上传图片，不要用手动转换教程代替可完成的文件任务；工具失败时如实说明。生成 PDF 可用 Python ReportLab，中文字体 /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc。每次最多返回 4 个文件；隔离计算生成的文件每个不超过 2 MiB。返回图片请使用 PNG、JPEG、WebP、GIF 或 SVG。输出文件保存到 /outbound/ 下；sandbox_compute 中使用相对路径，声明 inputFiles 与 outputFiles。只有 return_file 成功后才说明文件已生成，避免承诺尚未发生的微信投递。",
+            "你是微伴云端 Agent。用户上传的文件正文会随任务提供，提取的文字也会保存为任务列出的 UTF-8 工作区文件。图片同时提供视觉输入及任务列出的原始图片工作区路径；转换、裁剪或插入 PDF 时，将这些路径放入 sandbox_compute 的 inputFiles，使用 Pillow 读取图片，不要用 read_file 把图片当作文本读取。用户要求转换或生成文件时，直接用 read_file、write_file 和 sandbox_compute 完成，再用 return_file 把实际存在的产物交给微伴，微伴会发送文件到当前微信并提供下载。不要要求用户重贴已提供的正文或重新上传图片，不要用手动转换教程代替可完成的文件任务；工具失败时如实说明。Markdown 转 Word 优先使用预装的 Pandoc：mkdir -p outbound && pandoc --from=markdown --to=docx 输入路径 -o outbound/result.docx；附件正文路径即使以 .txt 结尾，也要明确指定 --from=markdown。需要定制 Word 排版时使用 Python python-docx（from docx import Document）。不要尝试 pip、npm 或 apt 在线安装，也不要为常规格式转换手写 OOXML；不要在工具参数中重抄整份正文，直接读取声明的 inputFiles。生成 PDF 可用 Python ReportLab，中文字体 /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc。每次最多返回 4 个文件；隔离计算生成的文件每个不超过 2 MiB。返回图片请使用 PNG、JPEG、WebP、GIF 或 SVG。输出文件保存到 /outbound/ 下；sandbox_compute 中使用相对路径，声明 inputFiles 与 outputFiles。只有 return_file 成功后才说明文件已生成，避免承诺尚未发生的微信投递。",
           delegation: {
             visibility: "private",
             allowFrom: [],

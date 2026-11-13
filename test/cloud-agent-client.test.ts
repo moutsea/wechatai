@@ -184,6 +184,7 @@ describe("AGT client protocol", () => {
       policy: {
         maxConcurrentJobs: 1,
         maxSteps: 12,
+        maxOutputRecoveryAttempts: 1,
         allowTools: [
           "memory_search",
           "remember_memory",
@@ -196,6 +197,7 @@ describe("AGT client protocol", () => {
       },
       delegation: { visibility: "private", allowFrom: [] },
       sessionAccess: { visibility: "self", sendTo: [] },
+      systemPrompt: expect.stringContaining("pandoc --from=markdown --to=docx"),
     });
   });
 
@@ -346,7 +348,13 @@ describe("AGT client protocol", () => {
       conversationId: "conversation-one",
       message: "你好",
       skillLearningMode: "off",
-      policy: { maxConcurrentJobs: 1, maxSteps: 12, maxToolCalls: 24, skillLearningMode: "off" },
+      policy: {
+        maxConcurrentJobs: 1,
+        maxSteps: 12,
+        maxToolCalls: 24,
+        maxOutputRecoveryAttempts: 1,
+        skillLearningMode: "off",
+      },
       callback: { includeResult: false },
     });
   });

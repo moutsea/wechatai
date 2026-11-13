@@ -10,7 +10,7 @@ import { AppError, cloudAgentConfig, publicSiteUrl } from "./config";
 import { pluginOutputBudget } from "./plugins/gateway";
 import { dayWindow, Wallet } from "./wallet";
 import type { ModelMessage } from "./llm";
-import { CLOUD_AGENT_POLICY_V2 } from "./cloud-agent-client";
+import { CLOUD_AGENT_POLICY_V3 } from "./cloud-agent-client";
 
 /** Read by the account host immediately before admission, never from a browser DTO. */
 export type CloudAgentAdmissionContext = {
@@ -147,7 +147,7 @@ export function admitCloudAgentTask(
         ...(images.length ? { images: images.map(({ id }) => ({ id })) } : {}),
       },
     ];
-    if (JSON.stringify(requiredContext).length > CLOUD_AGENT_POLICY_V2.maxContextChars)
+    if (JSON.stringify(requiredContext).length > CLOUD_AGENT_POLICY_V3.maxContextChars)
       throw new AppError(
         "cloud_input_too_long",
         "任务文字、文件正文和系统提示词超出云端上下文长度上限，请拆分文件或缩短内容。本次未创建任务。",

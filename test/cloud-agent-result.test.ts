@@ -240,7 +240,7 @@ describe("durable AGT terminal result preparation", () => {
     { text: "背景说明", task: { question: "需要查询哪一天？" }, hint: "补充信息" },
     { text: undefined, task: { outcome: "clarification_required" }, hint: "补充信息" },
     { text: undefined, refusal: "无法处理该请求", hint: "调整请求" },
-    { text: "中途截断", finishReason: "length", hint: "完整结果" },
+    { text: "中途截断", finishReason: "length", hint: "单次输出达到长度上限" },
     { text: "内容受限", finishReason: "content_filter", hint: "完整结果" },
     { text: "工具尚未完成", finishReason: "tool_calls", hint: "完整结果" },
     { text: "异常结束", finishReason: "error", hint: "完整结果" },
@@ -261,11 +261,75 @@ describe("durable AGT terminal result preparation", () => {
         });
         expect(result!.error).toContain(hint);
         expect(result!.error).toContain("未扣 credits");
-        if (job.text?.trim()) expect(result!.result).toContain(job.text);
+        if (job.text?.trim()) {
+          if ("finishReason" in job) expect(result!.result).toBe("");
+          else expect(result!.result).toContain(job.text);
+        }
         if ("task" in job && job.task && "question" in job.task)
           expect(result!.result).toContain(job.task.question);
         if ("refusal" in job) expect(result!.result).toContain(job.refusal);
         expect(store.get(task.id)!.frozen).toBe("");
+      });
+    },
+  );
+
+  it("does not deliver a truncated Word-generation plan or charge for it", async () => {
+    const text =
+      "Word 库不能安装，所以我改为手工构建标准 .docx。现在开始解析 Markdown 格式并制作文件：";
+    const { stub, task } = await setup({ text, finishReason: "length" }, { hasAttachments: true });
+    await inStore(stub, async (store) => {
+      const result = await prepareCloudAgentResult(store, task.id);
+      expect(result).toMatchObject({ state: "failed", meter: null, result: "" });
+      expect(result!.error).toContain("单次输出达到长度上限");
+      expect(result!.error).toContain("将任务拆分为多次处理后重试");
+      expect(result!.error).not.toContain("提高");
+      expect(result!.error).toContain("重新发送附件");
+      expect(result!.error).not.toContain("现在开始");
+      expect(store.get(task.id)!.outcome!.text).toBe(text);
+      expect(store.get(task.id)!.frozen).toBe("");
+    });
+  });
+
+  it.each([
+    [2048, true],
+    [8192, false],
+    [undefined, false],
+  ] as const)(
+    "uses the persisted output limit %s for actionable length-limit guidance",
+    async (maxOutputTokens, canIncrease) => {
+      const { stub, task } = await setup(
+        { text: "现在开始制作文件", finishReason: "length" },
+        {
+          modelConnection:
+            maxOutputTokens === undefined
+              ? undefined
+              : {
+                  id: "model-one",
+                  model: "user-model",
+                  protocol: "responses",
+                  baseUrl: "https://llm.example.com/v1",
+                  encryptedKey: "encrypted-test-key",
+                  keyContext: "channel-one",
+                  systemPrompt: "测试提示词",
+                  contextTokens: 128000,
+                  maxOutputTokens,
+                },
+        },
+      );
+      await abortAllDurableObjects();
+      await inStore(env.ACCOUNTS.get(stub.id), async (store) => {
+        const result = await prepareCloudAgentResult(store, task.id);
+        expect(result).toMatchObject({ state: "failed", result: "", meter: null });
+        expect(result!.error).toContain("本次未扣 credits");
+        expect(result!.error).toContain("模型 API 费用以服务商账单为准");
+        if (canIncrease) {
+          expect(result!.error).toContain("提高该模型的「输出 Token 上限」");
+          expect(result!.error).toContain("分批处理后重试");
+        } else {
+          expect(result!.error).not.toContain("提高");
+          expect(result!.error).toContain("将任务拆分为多次处理后重试");
+        }
+        expect(await prepareCloudAgentResult(store, task.id)).toEqual(result);
       });
     },
   );

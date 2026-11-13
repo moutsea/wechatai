@@ -1,4 +1,5 @@
 import { PLUGIN_PROTOCOL_VERSION, type PlatformMeter } from "../shared/plugins";
+import { MAX_OUTPUT_TOKENS } from "../shared/context";
 import { hasCompleteCloudAnswer, type AgentJobView } from "./cloud-agent-client";
 import { cloudAgentMeteringFailure } from "./cloud-agent-metering";
 import { cloudAgentFailureMessage, cloudAgentRetryMessage } from "./cloud-agent-failure";
@@ -24,7 +25,10 @@ export type PreparedCloudAgentResult = {
 
 function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentResult {
   let result = "";
-  for (const part of [job.text, job.refusal, job.task?.question]) {
+  // An interrupted turn may only contain a plan or an unfinished tool call.
+  // It is not a result and must not promise work after the task has ended.
+  const interrupted = job.finishReason !== undefined && job.finishReason !== "stop";
+  for (const part of [interrupted ? undefined : job.text, job.refusal, job.task?.question]) {
     if (typeof part === "string" && part.trim() && !result.includes(part.trim()))
       result += `${result ? "\n\n" : ""}${part.trim()}`;
   }
@@ -32,6 +36,11 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
   const reason = cloudTaskStopReason(task)
     .replace(/，正在请求停止。?$/, "。")
     .trim();
+  const outputLimit = task.modelConnection?.maxOutputTokens;
+  const outputHint =
+    outputLimit !== undefined && outputLimit < MAX_OUTPUT_TOKENS
+      ? "可在「渠道与模型」中适当提高该模型的「输出 Token 上限」，或减少单次输出、分批处理后重试。"
+      : "请减少单次输出，或将任务拆分为多次处理后重试。";
   const error =
     job.status === "cancelled"
       ? [reason, "云端任务已停止，本次未扣 credits。"].filter(Boolean).join("\n\n")
@@ -45,9 +54,11 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
             ? "任务需要补充信息，本次未扣 credits。请补充后重新发送。"
             : job.task?.outcome === "partial"
               ? "任务只完成了部分工作，本次未扣 credits。"
-              : job.finishReason && job.finishReason !== "stop"
-                ? "云端未返回完整结果，本次未扣 credits。可缩小任务范围或调整请求后重试。"
-                : "云端任务没有返回可用结果，本次未扣 credits。";
+              : job.finishReason === "length"
+                ? `模型单次输出达到长度上限，任务未完成，本次未扣 credits。${outputHint}已发生的模型 API 费用以服务商账单为准。`
+                : job.finishReason && job.finishReason !== "stop"
+                  ? "云端未返回完整结果，本次未扣 credits。可缩小任务范围或调整请求后重试。"
+                  : "云端任务没有返回可用结果，本次未扣 credits。";
   return {
     state: job.status === "cancelled" ? "cancelled" : "failed",
     result: result.slice(0, 64_000),

@@ -838,6 +838,73 @@ describe("cloud Agent user entry", () => {
     },
   );
 
+  it.each([2048, 8192])(
+    "uses the original %i output limit when a Word task is truncated",
+    async (maxOutputTokens) => {
+      let stub = await setup();
+      const model = (await stub.snapshot()).assistants[0];
+      expect((await api(stub, "model.save", { ...model, maxOutputTokens })).ok).toBe(true);
+      await plugin(stub);
+      await send(stub, "/use 云");
+      const file = fileFixture("方案.md", "# 转换验证\n\n请保留这份完整正文。");
+      fileNetwork([file]);
+      await send(stub, [file.item]);
+      await send(stub, "请转为 Word 给我");
+      const task = await fullTask(stub);
+      expect(task.modelConnection?.maxOutputTokens).toBe(maxOutputTokens);
+      // Later edits must not change guidance for the already accepted task.
+      expect(
+        (
+          await api(stub, "model.save", {
+            ...model,
+            maxOutputTokens: maxOutputTokens === 2048 ? 8192 : 2048,
+          })
+        ).ok,
+      ).toBe(true);
+      expect(await pendingFiles(stub)).toEqual([]);
+      await runInDurableObject(stub, (_, state) => {
+        const store = new CloudAgentStore(state.storage);
+        store.patch(task, {
+          state: "accepted",
+          jobId: "word-job",
+          outcome: parseJob({
+            id: "word-job",
+            workspaceId: "workspace-one",
+            status: "completed",
+            result: { text: "现在开始解析 Markdown 格式并制作文件：", finishReason: "length" },
+          }),
+        });
+      });
+      await abortAllDurableObjects();
+      stub = env.ACCOUNTS.get(stub.id);
+      vi.restoreAllMocks();
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ ret: 0, msgs: [] }));
+      await wake(stub);
+      expect(await tasks(stub)).toMatchObject([
+        {
+          state: "failed",
+          settled: 0,
+          result: "",
+          error: expect.stringContaining("输出达到长度上限"),
+        },
+      ]);
+      await runInDurableObject(stub, (_, state) => {
+        const reply = state.storage.sql
+          .exec<{ reply: string }>("SELECT reply FROM inbox WHERE id=?", `cloud:${task.id}`)
+          .one().reply;
+        if (maxOutputTokens < 8192) expect(reply).toContain("提高该模型的「输出 Token 上限」");
+        else {
+          expect(reply).toContain("将任务拆分为多次处理后重试");
+          expect(reply).not.toContain("提高");
+        }
+        expect(reply).toContain("重新发送附件");
+        expect(reply).not.toContain("现在开始");
+      });
+      const result = await stub.snapshot();
+      expect(result.ledger.filter((row) => row.kind === "usage")).toHaveLength(0);
+    },
+  );
+
   it.each(["invalid PDF", "digest mismatch", "invalid metadata", "partial"])(
     "rejects %s without charging or retrying forever",
     async (mode) => {

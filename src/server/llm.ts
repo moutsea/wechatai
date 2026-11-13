@@ -11,6 +11,7 @@ import {
   DEFAULT_INPUT_TOKENS,
   DEFAULT_OUTPUT_TOKENS,
   MAX_CONTEXT_TOKENS,
+  MAX_OUTPUT_TOKENS,
 } from "../shared/context";
 export type ModelMessage = {
   role: "user" | "assistant";
@@ -35,7 +36,7 @@ export const assistantSchema = z.object({
     .default(""),
   apiKey: z.string().max(2000).optional(),
   maxInputTokens: z.number().int().min(512).max(MAX_CONTEXT_TOKENS).default(DEFAULT_INPUT_TOKENS),
-  maxOutputTokens: z.number().int().min(64).max(8192).default(DEFAULT_OUTPUT_TOKENS),
+  maxOutputTokens: z.number().int().min(64).max(MAX_OUTPUT_TOKENS).default(DEFAULT_OUTPUT_TOKENS),
   contextTokens: z.number().int().min(512).max(MAX_CONTEXT_TOKENS).default(DEFAULT_CONTEXT_TOKENS),
   // Zero disables the optional per-turn spending limit. Existing saved limits are retained.
   maxCredits: z.number().min(0).max(1000).default(0),

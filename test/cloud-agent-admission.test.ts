@@ -264,7 +264,7 @@ describe("atomic cloud task admission", () => {
         origin: settings.AGT_ORIGIN,
         appId: "app-one",
         tenantId: "tenant-one",
-        profileId: "wechatai-v2",
+        profileId: "wechatai-v3",
         model: "user-model",
         workspaceName: `test-${stub.id.toString().slice(0, 32)}`,
         callbackVersion: "v1",
