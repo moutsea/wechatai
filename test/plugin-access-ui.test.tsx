@@ -374,7 +374,7 @@ describe("managed cloud Agent configuration", () => {
   it("guides Plus users to configure a text model before saving cloud Agent", () => {
     data.plan = "plus";
     data.assistants = [];
-    expect(library()).toContain('aria-label="配置 云端 Agent"');
+    expect(library()).toContain('aria-label="配置 小薇"');
     expect(library().match(/<article/g)).toHaveLength(9);
     const editor = renderToStaticMarkup(
       <MemoryRouter>
@@ -405,7 +405,7 @@ describe("managed cloud Agent configuration", () => {
   it("blocks activation for expired membership or unavailable service while retaining maintenance", () => {
     data.plugins = [cloudPlugin()];
     let html = configuration("cloud", "wechatai/cloud-agent");
-    expect(html).toContain("云端 Agent 是 Plus 会员功能");
+    expect(html).toContain("小薇是 Plus 会员功能");
     expect(html).toMatch(/disabled=""[^>]*>设为默认插件/);
     expect(html).toContain("删除配置");
     data.plan = "plus";

@@ -49,7 +49,7 @@ function unsuccessful(job: AgentJobView, task: CloudTask): PreparedCloudAgentRes
             .filter(Boolean)
             .join("\n\n")
         : job.refusal
-          ? "云端 Agent 未能完成本次请求，本次未扣 credits。请调整请求后重试。"
+          ? "小薇未能完成本次请求，本次未扣 credits。请调整请求后重试。"
           : job.task?.question || job.task?.outcome === "clarification_required"
             ? "任务需要补充信息，本次未扣 credits。请补充后重新发送。"
             : job.task?.outcome === "partial"

@@ -251,8 +251,9 @@ describe("durable AGT submit request preparation", () => {
       });
       expect(JSON.parse(first!)).toMatchObject({
         model: `channel:${channelId}:chosen-model`,
-        systemPrompt: "用户设定",
+        systemPrompt: expect.stringContaining("用户设定"),
       });
+      expect(JSON.parse(first!).systemPrompt).toContain("小薇");
       expect(first).not.toContain("user-provider-key");
       expect(first).not.toContain("must-not-use-glm");
       await abortAllDurableObjects();

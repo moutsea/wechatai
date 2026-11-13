@@ -11,6 +11,8 @@ import {
 
 export const CLOUD_AGENT_PLUGIN_ID = "wechatai/cloud-agent";
 export const CLOUD_AGENT_VERSION = "1.0.0";
+export const CLOUD_AGENT_NAME = "小薇";
+export const CLOUD_AGENT_SHORTCUT = "小薇";
 // Used before the first workspace is provisioned; existing workspaces report their own quota.
 export const CLOUD_AGENT_STORAGE_BYTES = 500 * 1024 * 1024;
 export const CLOUD_AGENT_FILE_LIMITS_NOTE =
@@ -24,16 +26,16 @@ export type CloudAgentStorageUsage = {
 };
 
 export const CLOUD_AGENT_WAITING_MESSAGE =
-  "任务已接收，正在提交云端 Agent；结果会在微信回复，也可在云端任务页查看。";
+  "任务已接收，正在提交小薇；结果会在微信回复，也可在云端任务页查看。";
 export const CLOUD_AGENT_PLUS_MESSAGE =
-  "云端 Agent 是 Plus 会员功能，开通或续费后可提交新任务，已有任务记录仍可查看。";
+  "小薇是 Plus 会员功能，开通或续费后可提交新任务，已有任务记录仍可查看。";
 export const CLOUD_AGENT_UNAVAILABLE_MESSAGE = "运营方尚未开启云端服务，请稍后再试。";
-export const CLOUD_AGENT_ADMIN_ONLY_MESSAGE = "云端 Agent 目前仅对管理员开放内测。";
+export const CLOUD_AGENT_ADMIN_ONLY_MESSAGE = "小薇目前仅对管理员开放内测。";
 export const cloudAgentInputSchema = z
   .object({
-    name: z.string().trim().min(1).max(40).default("云端 Agent"),
+    name: z.string().trim().min(1).max(40).default(CLOUD_AGENT_NAME),
     modelId: z.string().trim().max(128).default(""),
-    shortcut: pluginShortcutSchema.default("云"),
+    shortcut: pluginShortcutSchema.default(CLOUD_AGENT_SHORTCUT),
     enabled: z.boolean().default(true),
     ...waitingMessageFields(CLOUD_AGENT_WAITING_MESSAGE),
   })

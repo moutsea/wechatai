@@ -1,0 +1,106 @@
+.cost-estimator {
+  color: #243d35;
+  width: min(1120px, calc(100% - 40px));
+  margin: 72px auto;
+  padding: 30px;
+  border: 1px solid #dbe6df;
+  border-radius: 20px;
+  background: #f7faf6;
+  box-sizing: border-box;
+}
+.cost-estimator > header {
+  max-width: 720px;
+  margin-bottom: 28px;
+}
+.cost-estimator h2 {
+  font-size: clamp(25px, 3vw, 36px);
+  line-height: 1.3;
+  letter-spacing: -0.025em;
+  margin: 12px 0;
+}
+.cost-estimator p {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #496158;
+}
+.cost-estimator a {
+  color: #176449;
+  text-underline-offset: 4px;
+}
+.cost-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.cost-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: #354e42;
+}
+.cost-fields input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #aebfb2;
+  border-radius: 8px;
+  background: white;
+  padding: 12px;
+  font: inherit;
+  color: #243d35;
+}
+.cost-results {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin: 26px 0;
+}
+.cost-results > div {
+  padding: 22px;
+  background: white;
+  border: 1px solid #dbe6df;
+  border-radius: 12px;
+}
+.cost-results span {
+  display: block;
+  font-size: 14px;
+}
+.cost-results strong {
+  display: block;
+  margin: 12px 0;
+  font-size: clamp(22px, 3vw, 30px);
+  overflow-wrap: anywhere;
+}
+.cost-estimator :focus-visible {
+  outline: 3px solid #358460;
+  outline-offset: 4px;
+}
+.hero-prerequisite {
+  max-width: 520px;
+  color: #425e4e !important;
+  font-size: 14px !important;
+  line-height: 1.8 !important;
+}
+.hero-prerequisite a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 760px) {
+  .cost-results,
+  .cost-fields {
+    grid-template-columns: 1fr;
+  }
+  .cost-estimator {
+    margin: 40px auto;
+    padding: 22px;
+  }
+}
+
+#estimate {
+  scroll-margin-top: 100px;
+}
+.cost-estimator p.cost-estimator-note {
+  font-size: 14px;
+  line-height: 1.75;
+}

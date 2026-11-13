@@ -108,6 +108,6 @@ export const adminPluginNames: Record<string, string> = {
   "wechatai/muse": "Muse",
   "wechatai/roleplay": "角色扮演",
   "wechatai/personal-assistant": "个人助理",
-  "wechatai/cloud-agent": "云端 Agent",
+  "wechatai/cloud-agent": "小薇",
   legacy: "历史 / 未分类调用",
 };

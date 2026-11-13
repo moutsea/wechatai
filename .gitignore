@@ -27,6 +27,8 @@ integrations/openclaw/version.js
 design/image-assets/originals/
 design/image-assets/brand-references/*
 !design/image-assets/brand-references/sources.json
+# Keep generated design originals local; commit production assets and provenance.
+output/imagegen/*.png
 # Local databases and diagnostic exports
 *.sqlite
 *.sqlite-shm

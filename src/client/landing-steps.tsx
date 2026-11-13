@@ -1,19 +1,15 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Cpu, QrCode, Sprout } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, QrCode } from "lucide-react";
+import { CHANNEL_PROVIDERS } from "../shared/channel-providers";
 import "./landing-steps.css";
 
 const steps = [
   {
-    title: "选择服务商并配置模型",
-    // 胶囊标签在 390px 一分三列，超过 5 个字就折成两行，把三个 tab 的高度拉得参差不齐。
-    // 标签用短名，完整含义交给面板里的 h3 与描述。
+    title: "接入你常用的模型",
     tab: "配置模型",
-    // 现在添加渠道是「选服务商 → 粘 Key」，协议和地址会自动填好；
-    // 旧文案还要求用户自己填服务地址和协议，会让第一次用的人以为要懂 API 细节。
     description:
-      "在「添加渠道」里选好服务商（DeepSeek、OpenAI、Anthropic 等），粘贴你自己的 API Key，接口协议与请求地址会自动填好，再添加想用的模型。",
-    details: ["支持三种常见 LLM 协议", "一键获取可用模型，也可以手动添加"],
+      "支持 DeepSeek、硅基流动、阿里云、OpenAI、Anthropic 等渠道，填入 API Key，一键同步模型。",
     guide: "/docs/channels-models",
     guideLabel: "查看模型配置教程",
   },
@@ -21,55 +17,64 @@ const steps = [
     title: "连接你的微信",
     tab: "连接微信",
     description:
-      "在工作台获取二维码。打开微信设置，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫码并确认连接。",
-    details: [
-      "手机浏览时，可用电脑或另一台设备展示二维码",
-      "连接后发出第一条消息，收到欢迎和教程入口",
-    ],
+      "在工作台获取二维码，用微信 ClawBot 扫码确认。手机浏览时，可用另一台设备展示二维码。",
     guide: "/docs/wechat-connection#connect",
     guideLabel: "查看微信连接教程",
   },
   {
     title: "像平常一样聊天",
     tab: "开始聊天",
-    description: "打开微信里的对话，直接向模型提问。想换一个模型或开启新话题，发送命令就能完成。",
-    details: ["发送 /models 查看模型，按需切换", "发送 /new 开始新话题，保留旧记录"],
+    description: "打开微信对话，直接向 AI 提问。切换模型、开启新话题，一条命令就能完成。",
     guide: "/docs/commands",
     guideLabel: "查看微信命令速查",
   },
 ];
 
+const providerLabels: Record<string, string> = {
+  kimi: "Kimi",
+  qwen: "阿里云百炼",
+  volcengine: "火山方舟",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+  xai: "Grok / xAI",
+};
+
+const providerLogos: Record<string, string> = {
+  deepseek: "/images/channels/deepseek.png",
+  kimi: "/images/channels/kimi.png",
+  zhipu: "/images/channels/zhipu.png",
+  qwen: "/images/channels/qwen.png",
+  volcengine: "/images/channels/volcengine.png",
+  minimax: "/images/channels/minimax.webp",
+  siliconflow: "/images/channels/siliconflow.png",
+  openai: "/images/channels/openai.png",
+  anthropic: "/images/channels/anthropic.png",
+  gemini: "/images/channels/gemini.png",
+  openrouter: "/images/channels/openrouter.webp",
+  xai: "/images/channels/xai.png",
+};
+
 function StepPreview({ step }: { step: number }) {
   if (step === 0)
     return (
-      <div className="steps-preview" aria-hidden="true">
-        <div className="steps-config">
-          <div className="steps-config-heading">
-            <span>
-              <Cpu size={21} />
-            </span>
-            <strong>我的模型渠道</strong>
-          </div>
-          <div className="steps-config-field">
-            <span>服务商</span>
-            <div>DeepSeek</div>
-          </div>
-          <div className="steps-config-field">
-            <span>API Key</span>
-            <div className="steps-key-placeholder">••••••••••••••••••••</div>
-          </div>
-          {/* 地址与协议是选完服务商后自动补的，示意里降级成一行说明，避免用户以为要自己填 URL。 */}
-          <p className="steps-config-hint">协议与请求地址自动填好 · api.deepseek.com</p>
-          <div className="steps-config-models">
-            <span>
-              <Check size={14} /> DeepSeek
-            </span>
-            <span>Claude</span>
-            <span>GPT</span>
-          </div>
-          <div className="steps-preview-success">
-            <Check size={15} /> 模型已就绪
-          </div>
+      <div className="steps-preview">
+        <div className="steps-providers">
+          <strong>支持的模型渠道</strong>
+          <ul className="steps-provider-grid">
+            {CHANNEL_PROVIDERS.filter((provider) => !provider.codingPlan).map((provider) => (
+              <li key={provider.id}>
+                <img
+                  src={providerLogos[provider.id]}
+                  width={28}
+                  height={28}
+                  alt=""
+                  loading="lazy"
+                />
+                <span>{providerLabels[provider.id] ?? provider.name}</span>
+              </li>
+            ))}
+          </ul>
+          <p>也支持 Coding Plan 与自定义兼容渠道</p>
         </div>
       </div>
     );
@@ -83,6 +88,7 @@ function StepPreview({ step }: { step: number }) {
             <QrCode size={116} strokeWidth={1.3} />
           </div>
           <span>微信 ClawBot 扫一扫 · 在手机上确认</span>
+          <p className="steps-qr-note">示意图，请在工作台获取二维码</p>
           <div className="steps-preview-success">
             <Check size={15} /> 个人专属连接
           </div>
@@ -93,12 +99,12 @@ function StepPreview({ step }: { step: number }) {
     <div className="steps-preview" aria-hidden="true">
       <div className="steps-chat">
         <div className="steps-chat-heading">
-          <Sprout size={18} /> 微伴 <span>DeepSeek</span>
+          <img src="/favicon.svg" width={22} height={22} alt="" /> 微伴 <span>DeepSeek</span>
         </div>
         <div className="steps-chat-body">
           <div className="steps-chat-sent">帮我想三个周末出游的点子。</div>
           <div className="steps-chat-received">当然。你想去户外走走，还是在城市里慢慢逛？</div>
-          <div className="steps-chat-command">/new</div>
+          <div className="steps-chat-command">/wx new</div>
           <div className="steps-chat-note">已开始新会话，原会话已保留。</div>
         </div>
       </div>
@@ -106,7 +112,7 @@ function StepPreview({ step }: { step: number }) {
   );
 }
 
-export function LandingSteps() {
+export function LandingSteps({ startAction }: { startAction: ReactNode }) {
   const [activeStep, setActiveStep] = useState(0);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const move = (offset: number) =>
@@ -135,18 +141,17 @@ export function LandingSteps() {
   };
 
   return (
-    <section
-      className="landing-steps"
-      id="how"
-      aria-labelledby="how-title"
-      aria-roledescription="轮播"
-    >
+    <section className="landing-steps" id="how" aria-labelledby="how-title">
       <div className="steps-heading">
-        <div className="eyebrow">THREE SMALL STEPS</div>
-        <h2 id="how-title">聊模型，三步开始。</h2>
-        <p>
-          已有 Agent 或只收通知？<Link to="/#connect">选择其他接入方式</Link>。
-        </p>
+        <div className="eyebrow">轻松开始</div>
+        <h2 id="how-title">2 分钟配置，免费开始</h2>
+        <div className="steps-actions">
+          {startAction}
+          <Link className="button secondary" to="/docs/getting-started">
+            查看入门教程
+            <ArrowUpRight size={16} aria-hidden="true" />
+          </Link>
+        </div>
       </div>
       <div className="steps-tabs" role="tablist" aria-label="使用步骤">
         {steps.map((step, index) => (
@@ -177,23 +182,16 @@ export function LandingSteps() {
             id={`step-panel-${index}`}
             role="tabpanel"
             aria-labelledby={`step-tab-${index}`}
+            tabIndex={0}
             hidden={activeStep !== index}
           >
             <div className="steps-copy">
               <span className="steps-page-number">STEP {String(index + 1).padStart(2, "0")}</span>
               <h3>{step.title}</h3>
               <p>{step.description}</p>
-              <ul>
-                {step.details.map((detail) => (
-                  <li key={detail}>
-                    <Check size={16} />
-                    {detail}
-                  </li>
-                ))}
-              </ul>
               <Link className="text-link" to={step.guide}>
                 {step.guideLabel}
-                <ArrowUpRight size={16} />
+                <ArrowUpRight size={16} aria-hidden="true" />
               </Link>
             </div>
             <StepPreview step={index} />
@@ -211,13 +209,17 @@ export function LandingSteps() {
         </span>
         <div>
           <button type="button" aria-label="上一步" onClick={() => move(-1)}>
-            <ArrowLeft size={19} />
+            <ArrowLeft size={19} aria-hidden="true" />
           </button>
           <button type="button" aria-label="下一步" onClick={() => move(1)}>
-            <ArrowRight size={19} />
+            <ArrowRight size={19} aria-hidden="true" />
           </button>
         </div>
       </div>
+      <p className="steps-alternatives">
+        配置模型、连接微信、开始聊天。也可以<Link to="/wechat-agent">连接已有 Agent</Link>或
+        <Link to="/docs/notifications">接收服务通知</Link>。
+      </p>
     </section>
   );
 }

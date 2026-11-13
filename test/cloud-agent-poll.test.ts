@@ -231,7 +231,7 @@ describe("AGT job polling and durable cancellation", () => {
       );
       await poll(store);
       expect(store.get(saved.id)).toMatchObject({
-        stopReason: "云端 Agent 暂不支持工具审批。",
+        stopReason: "小薇暂不支持工具审批。",
         outcome: null,
       });
     });
@@ -297,7 +297,7 @@ describe("AGT job polling and durable cancellation", () => {
         state: "accepted",
         stopRequested: 1,
         outcome: null,
-        error: "云端 Agent 暂不支持工具审批，正在请求停止。",
+        error: "小薇暂不支持工具审批，正在请求停止。",
       });
     });
   });

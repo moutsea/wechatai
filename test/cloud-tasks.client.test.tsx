@@ -36,7 +36,7 @@ const notify = vi.fn();
 const task = (id: string, patch: Partial<CloudAgentTask> = {}): CloudAgentTask => ({
   id,
   pluginInstanceId: "cloud",
-  pluginName: "云端 Agent",
+  pluginName: "小薇",
   sessionId: "session",
   sessionTitle: "原会话",
   prompt: `任务 ${id}`,
@@ -752,7 +752,7 @@ describe("cloud task status, cost and delivery", () => {
   });
 
   it.each([
-    ["plus", true, "配置云端 Agent", "/app/plugins"],
+    ["plus", true, "配置小薇", "/app/plugins"],
     ["free", true, "了解 Plus", "/app/billing"],
     ["plus", false, "查看使用指南", "/docs/cloud-agent"],
   ] as const)(

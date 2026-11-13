@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Check, ChevronDown, Sprout } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { SiteHeader } from "../site-header";
-import { CostEstimator } from "../getting-started-preview";
+import { CostEstimator } from "../cost-estimator";
 import { PricingPlans } from "./pricing-plans";
 import { SiteFooter } from "../site-footer";
 
@@ -118,7 +118,7 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
             </Link>
           </div>
           <p className="hero-prerequisite">
-            <Link to="/#start">注册前检查接入条件</Link> ·{" "}
+            <Link to="/wechat-clawbot">注册前检查接入条件</Link> ·{" "}
             <Link to="/pricing#estimate">估算平台与模型费用</Link>
           </p>
           <ul className="seopage-highlights">

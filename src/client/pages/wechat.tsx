@@ -201,11 +201,11 @@ export function Wechat() {
         <div className="gentle-tip wechat-link-note" role="status">
           <ShieldCheck size={20} />
           <div>
-            <h3>{cloudMode ? "请检查云端 Agent 配置" : "普通模型聊天尚未就绪"}</h3>
+            <h3>{cloudMode ? "请检查小薇配置" : "普通模型聊天尚未就绪"}</h3>
             <p>{setupIssue.message}</p>
             <p>可以先扫码连接微信；接入已有 Agent 或只收通知，可在「插件」中配置，无需另配模型。</p>
             <Link className="text-link" to={`${base}${cloudSetupIssue ? "/plugins" : "/channels"}`}>
-              {cloudSetupIssue ? "管理云端 Agent" : "配置渠道与模型"}
+              {cloudSetupIssue ? "管理小薇" : "配置渠道与模型"}
               <ArrowUpRight size={14} />
             </Link>
           </div>
@@ -403,7 +403,7 @@ export function Wechat() {
                   : cloudMode
                     ? [
                         "01",
-                        "确认云端 Agent 配置",
+                        "确认小薇配置",
                         "默认使用当前微信的默认文本模型，也可在插件中单独指定；Plus 有效且云端服务已开放时可使用。",
                       ]
                     : [
@@ -432,7 +432,7 @@ export function Wechat() {
                     ? [
                         "03",
                         `发送 /use ${cloud?.shortcut}`,
-                        "进入云端 Agent 后直接发送文字任务；/wx stop 请求停止，结果也可在云端任务页查看。",
+                        "进入小薇后直接发送文字任务；/wx stop 请求停止，结果也可在云端任务页查看。",
                       ]
                     : [
                         "03",

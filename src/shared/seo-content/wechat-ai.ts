@@ -6,11 +6,11 @@ export const wechatAiPage: SeoPage = {
   kind: "product",
   title: "微信 AI 助手：把自己的大模型接进微信",
   description:
-    "微信 AI 是指在自己的微信里直接调用大模型。微伴支持自备 API Key 接入模型，也可在运营方开放后使用 Plus 云端 Agent，沿用自备模型，仍消耗 credits 并限制执行次数。",
+    "微信 AI 是指在自己的微信里直接调用大模型。微伴支持自备 API Key 接入模型，也可在运营方开放后使用 Plus 云端助手小薇，沿用自备模型，仍消耗 credits 并限制执行次数。",
   eyebrow: "微信 AI",
   h1: "微信 AI：把你的大模型接进微信聊天",
-  lede: "不用切换 App，也不用把问题复制到网页版。你可以自备 API Key 接入模型；需要后台任务时，可在插件页确认 Plus 云端 Agent 是否开放，默认沿用微信普通模型，也可单独指定。",
-  answer: `微信 AI 指的是在微信内直接调用大模型完成问答、写作、翻译、生图和任务处理。微伴（Wechatai）支持自备 API Key 接入模型，也提供可选云端 Agent。${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
+  lede: "不用切换 App，也不用把问题复制到网页版。你可以自备 API Key 接入模型；需要后台任务时，可在插件页确认 Plus 云端助手小薇是否开放，默认沿用微信普通模型，也可单独指定。",
+  answer: `微信 AI 指的是在微信内直接调用大模型完成问答、写作、翻译、生图和任务处理。微伴（Wechatai）支持自备 API Key 接入模型，也提供云端助手小薇。${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
   primaryKeyword: "微信 AI",
   secondaryKeywords: [
     "微信 AI 助手",
@@ -57,7 +57,7 @@ export const wechatAiPage: SeoPage = {
 
 这条接入路径的模型效果取决于你选的模型；模型调用费用由你的 API 服务商收取；微伴文字部分按加权 token 收 credits，AI 生图每张 5 credits，描述文字另计，两笔账分开结算。
 
-${CLOUD_AGENT_COST_NOTE}先在「渠道与模型」中配置可用的文本模型及 API Key，再启用已开放的云端 Agent。未单独指定模型时，跟随该微信选中的普通模型，进入插件后沿用上一次普通模型；需要固定模型时再在插件中选择。配置与使用步骤见[云端 Agent 指南](/docs/cloud-agent)。`,
+${CLOUD_AGENT_COST_NOTE}先在「渠道与模型」中配置可用的文本模型及 API Key，再启用已开放的小薇。未单独指定模型时，跟随该微信选中的普通模型，进入插件后沿用上一次普通模型；需要固定模型时再在插件中选择。配置与使用步骤见[小薇指南](/docs/cloud-agent)。`,
     },
     {
       id: "what-you-can-do",
@@ -119,7 +119,7 @@ ${CLOUD_AGENT_COST_NOTE}
     },
     {
       question: "在微信里用 AI，需要自己准备 API Key 吗？",
-      answer: `普通模型聊天需要先在模型服务商开通并取得 API Key，再填入微伴的渠道设置。${CLOUD_AGENT_COST_NOTE}完整配置步骤见云端 Agent 指南。`,
+      answer: `普通模型聊天需要先在模型服务商开通并取得 API Key，再填入微伴的渠道设置。${CLOUD_AGENT_COST_NOTE}完整配置步骤见小薇指南。`,
     },
     {
       question: "一个微信能同时用几个模型？",

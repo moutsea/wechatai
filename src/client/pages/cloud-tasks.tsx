@@ -210,7 +210,7 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
           空间与文件说明 <ChevronDown size={14} />
         </summary>
         <p className="form-note">
-          同账号的云端 Agent
+          同账号的小薇
           共用此空间，用于工作文件、附件及任务运行数据。空间不足时无法继续写入。删除任务记录不会释放云端空间。
         </p>
         <p className="form-note">{CLOUD_AGENT_FILE_LIMITS_NOTE}</p>
@@ -358,13 +358,13 @@ export function CloudTasks() {
   return (
     <div className={`page-enter cloud-tasks${id ? " cloud-task-detail" : ""}`}>
       <PageHead
-        eyebrow="CLOUD AGENT"
+        eyebrow="XIAOWEI"
         title={id ? "任务详情" : "云端任务"}
-        description="从微信发起，在后台执行。进度、处理结果和生成文件都在这里。"
+        description="小薇在微伴云端帮你做事。进度、处理结果和生成文件都在这里。"
         action={
           <div className="cloud-tasks-actions">
             <Link className="button secondary" to={`${base}/plugins`}>
-              配置 Agent <ArrowUpRight size={15} />
+              配置小薇 <ArrowUpRight size={15} />
             </Link>
             <button
               className="button secondary"
@@ -573,10 +573,10 @@ export function CloudTasks() {
                   plugin || cursor
                     ? "已接收的云端任务会显示在这里，可返回全部任务查看其他记录。"
                     : !data.cloudAgent.ready
-                      ? "云端 Agent 暂时不可用，已有任务记录仍可查看。"
+                      ? "小薇暂时不可用，已有任务记录仍可查看。"
                       : data.plan === "plus"
-                        ? "在插件页配置云端 Agent 后，从微信发送文字或附件处理要求，即可在这里查看进度与结果。"
-                        : "云端 Agent 已向 Plus 会员开放。开通后可配置自己的模型，从微信提交任务。"
+                        ? "在插件页配置小薇后，从微信发送文字或附件处理要求，即可在这里查看进度与结果。"
+                        : "小薇已向 Plus 会员开放。开通后可配置自己的模型，从微信提交任务。"
                 }
                 action={
                   !plugin && !cursor ? (
@@ -591,7 +591,7 @@ export function CloudTasks() {
                       {!data.cloudAgent.ready
                         ? "查看使用指南"
                         : data.plan === "plus"
-                          ? "配置云端 Agent"
+                          ? "配置小薇"
                           : "了解 Plus"}
                       <ArrowUpRight size={15} />
                     </Link>

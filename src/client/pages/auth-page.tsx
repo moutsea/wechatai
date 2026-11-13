@@ -227,7 +227,7 @@ function AuthForm({ register }: { register: boolean }) {
         {register && (
           <p className="auth-policies">
             注册前请先<Link to="/wechat-clawbot">检查手机微信 ClawBot 入口</Link>。聊模型需自备
-            Key，服务商费用另计；没有入口时可先<Link to="/#try">体验模拟预览</Link>。
+            Key，服务商费用另计；也可先<Link to="/docs/getting-started">查看配置教程</Link>。
           </p>
         )}
         <p className="auth-policies">

@@ -39,12 +39,12 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
   {
     question: "从注册到在微信里聊上，要几步？",
     answer:
-      "先确认手机微信已有 ClawBot 入口，再注册并扫码绑定。聊模型或运行 Plus 云端 Agent 需配置文本模型；已有 Muse、Hermes、OpenClaw 可按各自指南配对，无需另配本站模型。使用 Agent 前发送 /use 快捷名。只收通知则发送 /wx help 后配置消息提醒 Token。",
+      "先确认手机微信已有 ClawBot 入口，再注册并扫码绑定。聊模型或运行 Plus 云端助手小薇需配置文本模型；已有 Muse、Hermes、OpenClaw 可按各自指南配对，无需另配本站模型。使用 Agent 前发送 /use 快捷名。只收通知则发送 /wx help 后配置消息提醒 Token。",
   },
   {
     question: "可以先不注册，看看界面上有什么吗？",
     answer:
-      "无需演示账号：首页提供不收 Key、不发送真实请求的任务模拟预览。真实截图区来自微信与工作台账号（图中数据为示例），三步教程中的界面是示意。注册与扫码无需模型 Key；普通聊天和云端 Agent 执行任务前需配置模型，已有外部 Agent 或只收通知无需另配本站模型。",
+      "可以。公开文档提供配置步骤与界面截图，无需注册即可阅读；首页的对话、任务和扫码展示均为功能示意。注册与扫码无需模型 Key；普通聊天和小薇执行任务前需配置模型，已有外部 Agent 或只收通知无需另配本站模型。",
   },
   {
     question: "API Key 和聊天记录存在哪？",

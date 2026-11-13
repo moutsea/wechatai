@@ -35,6 +35,10 @@ export type AgentJobView = {
 const REQUEST_TIMEOUT_MS = 5_000;
 const MAX_RESPONSE_BYTES = 2_000_000;
 
+// Applied to each new job so already-provisioned profiles also use the current identity.
+const XIAOWEI_IDENTITY =
+  "你对用户使用的名字是「小薇」，是运行在微伴云端的 AI 助手。你通过微信接收任务，使用用户在微伴配置的模型与已授权工具处理文件、生成文档和执行任务。用亲切、清楚的中文沟通；如用户另有语言要求则遵从。你的助手身份与底层模型品牌不同，不要自称 OpenClaw、WorkBuddy 或某个固定模型。只说明实际可用的能力，如实报告完成情况。";
+
 /** Stable content-addressed workspace copy, also usable by sandbox_compute. */
 export const cloudImagePath = (id: string) => `attachments/images/${id}`;
 
@@ -73,6 +77,7 @@ export function cloudJobBody(input: {
 }) {
   return {
     ...input,
+    systemPrompt: [input.systemPrompt, XIAOWEI_IDENTITY].filter(Boolean).join("\n\n"),
     skillLearningMode: "off",
     policy: CLOUD_AGENT_POLICY_V3,
     callback: { ...input.callback, includeResult: false },
@@ -92,14 +97,14 @@ export class CloudAgentClient {
     try {
       origin = new URL(config.origin);
     } catch {
-      throw new AppError("cloud_agent_config", "云端 Agent 服务地址无效", 503);
+      throw new AppError("cloud_agent_config", "小薇服务地址无效", 503);
     }
     const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(origin.hostname);
     if (
       origin.origin !== config.origin.replace(/\/+$/, "") ||
       (origin.protocol !== "https:" && !(origin.protocol === "http:" && loopback))
     )
-      throw new AppError("cloud_agent_config", "云端 Agent 服务地址无效", 503);
+      throw new AppError("cloud_agent_config", "小薇服务地址无效", 503);
     this.config = { ...config, origin: origin.origin };
   }
 
@@ -144,7 +149,7 @@ export class CloudAgentClient {
       const name = error instanceof Error ? error.name : "";
       throw new AppError(
         "cloud_agent_unreachable",
-        "云端 Agent 暂时无法连接。",
+        "小薇暂时无法连接。",
         ["TimeoutError", "AbortError"].includes(name) ? 504 : 502,
       );
     }
@@ -153,21 +158,21 @@ export class CloudAgentClient {
       await response.body?.cancel();
       throw new AppError(
         response.status === 409 ? "cloud_agent_conflict" : "cloud_agent_failed",
-        `云端 Agent 请求失败（${response.status}）。`,
+        `小薇请求失败（${response.status}）。`,
         response.status === 429 ? 429 : 502,
         response.status,
       );
     }
     if (options.acceptStatuses && !options.acceptStatuses.includes(response.status)) {
       await response.body?.cancel();
-      throw new AppError("cloud_agent_response", "云端 Agent 返回了意外状态", 502);
+      throw new AppError("cloud_agent_response", "小薇返回了意外状态", 502);
     }
     return readJson(response, MAX_RESPONSE_BYTES);
   }
 
   private json(payload: unknown): Record<string, unknown> {
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
-      throw new AppError("cloud_agent_response", "云端 Agent 返回格式无效", 502);
+      throw new AppError("cloud_agent_response", "小薇返回格式无效", 502);
     return payload as Record<string, unknown>;
   }
 
@@ -328,7 +333,7 @@ export class CloudAgentClient {
     );
     const appUser = this.json(body.appUser);
     const id = typeof appUser.id === "string" ? appUser.id : "";
-    if (!id) throw new AppError("cloud_agent_response", "云端 Agent 未返回应用用户", 502);
+    if (!id) throw new AppError("cloud_agent_response", "小薇未返回应用用户", 502);
     if (
       appUser.appId !== this.config.appId ||
       appUser.tenantId !== this.config.tenantId ||
@@ -352,7 +357,7 @@ export class CloudAgentClient {
     );
     const workspace = this.json(body.workspace);
     const id = typeof workspace.id === "string" ? workspace.id : "";
-    if (!id) throw new AppError("cloud_agent_response", "云端 Agent 未返回工作区", 502);
+    if (!id) throw new AppError("cloud_agent_response", "小薇未返回工作区", 502);
     if (
       workspace.tenantId !== this.config.tenantId ||
       workspace.name !== name ||
@@ -377,14 +382,14 @@ export class CloudAgentClient {
       {
         body: {
           id: this.config.agentId,
-          name: "微伴云端 Agent",
-          description: "由微伴托管的通用助手",
+          name: "小薇",
+          description: "运行在微伴云端的小薇助手，无需用户自行安装或部署。",
           enabled: true,
           model: this.config.model,
           tags: ["wechatai"],
           policy: CLOUD_AGENT_POLICY_V3,
           systemPrompt:
-            "你是微伴云端 Agent。用户上传的文件正文会随任务提供，提取的文字也会保存为任务列出的 UTF-8 工作区文件。图片同时提供视觉输入及任务列出的原始图片工作区路径；转换、裁剪或插入 PDF 时，将这些路径放入 sandbox_compute 的 inputFiles，使用 Pillow 读取图片，不要用 read_file 把图片当作文本读取。用户要求转换或生成文件时，直接用 read_file、write_file 和 sandbox_compute 完成，再用 return_file 把实际存在的产物交给微伴，微伴会发送文件到当前微信并提供下载。不要要求用户重贴已提供的正文或重新上传图片，不要用手动转换教程代替可完成的文件任务；工具失败时如实说明。Markdown 转 Word 优先使用预装的 Pandoc：mkdir -p outbound && pandoc --from=markdown --to=docx 输入路径 -o outbound/result.docx；附件正文路径即使以 .txt 结尾，也要明确指定 --from=markdown。需要定制 Word 排版时使用 Python python-docx（from docx import Document）。不要尝试 pip、npm 或 apt 在线安装，也不要为常规格式转换手写 OOXML；不要在工具参数中重抄整份正文，直接读取声明的 inputFiles。生成 PDF 可用 Python ReportLab，中文字体 /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc。每次最多返回 4 个文件；隔离计算生成的文件每个不超过 2 MiB。返回图片请使用 PNG、JPEG、WebP、GIF 或 SVG。输出文件保存到 /outbound/ 下；sandbox_compute 中使用相对路径，声明 inputFiles 与 outputFiles。只有 return_file 成功后才说明文件已生成，避免承诺尚未发生的微信投递。",
+            "你是小薇，运行在微伴云端的 AI 助手。用户上传的文件正文会随任务提供，提取的文字也会保存为任务列出的 UTF-8 工作区文件。图片同时提供视觉输入及任务列出的原始图片工作区路径；转换、裁剪或插入 PDF 时，将这些路径放入 sandbox_compute 的 inputFiles，使用 Pillow 读取图片，不要用 read_file 把图片当作文本读取。用户要求转换或生成文件时，直接用 read_file、write_file 和 sandbox_compute 完成，再用 return_file 把实际存在的产物交给微伴，微伴会发送文件到当前微信并提供下载。不要要求用户重贴已提供的正文或重新上传图片，不要用手动转换教程代替可完成的文件任务；工具失败时如实说明。Markdown 转 Word 优先使用预装的 Pandoc：mkdir -p outbound && pandoc --from=markdown --to=docx 输入路径 -o outbound/result.docx；附件正文路径即使以 .txt 结尾，也要明确指定 --from=markdown。需要定制 Word 排版时使用 Python python-docx（from docx import Document）。不要尝试 pip、npm 或 apt 在线安装，也不要为常规格式转换手写 OOXML；不要在工具参数中重抄整份正文，直接读取声明的 inputFiles。生成 PDF 可用 Python ReportLab，中文字体 /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc。每次最多返回 4 个文件；隔离计算生成的文件每个不超过 2 MiB。返回图片请使用 PNG、JPEG、WebP、GIF 或 SVG。输出文件保存到 /outbound/ 下；sandbox_compute 中使用相对路径，声明 inputFiles 与 outputFiles。只有 return_file 成功后才说明文件已生成，避免承诺尚未发生的微信投递。",
           delegation: {
             visibility: "private",
             allowFrom: [],
@@ -451,7 +456,7 @@ export class CloudAgentClient {
       typeof body.hasMore !== "boolean" ||
       (body.hasMore && (typeof body.nextCursor !== "string" || !body.nextCursor))
     )
-      throw new AppError("cloud_agent_response", "云端 Agent 返回的任务列表格式无效", 502);
+      throw new AppError("cloud_agent_response", "小薇返回的任务列表格式无效", 502);
     const jobs = body.jobs.map((job) => parseJob(job));
     return {
       jobs,
@@ -498,13 +503,13 @@ export function hasCompleteCloudAnswer(
 
 export function parseJob(payload: unknown): AgentJobView {
   if (!payload || typeof payload !== "object" || Array.isArray(payload))
-    throw new AppError("cloud_agent_response", "云端 Agent 返回的任务格式无效", 502);
+    throw new AppError("cloud_agent_response", "小薇返回的任务格式无效", 502);
   const job = payload as Record<string, unknown>;
   const id = typeof job.id === "string" ? job.id : "";
   const status = JOB_STATUSES.find((s) => s === job.status);
   const workspaceId = typeof job.workspaceId === "string" ? job.workspaceId : "";
   if (!id || !status || !workspaceId)
-    throw new AppError("cloud_agent_response", "云端 Agent 返回的任务格式无效", 502);
+    throw new AppError("cloud_agent_response", "小薇返回的任务格式无效", 502);
   const result = job.result as Record<string, unknown> | undefined;
   const text = result && typeof result.text === "string" ? result.text : undefined;
   const finishReason =

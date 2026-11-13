@@ -31,7 +31,7 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
       {
         id: "before-setup",
         title: "开始前：确认路径与条件",
-        body: "本页负责逐步配置与验证。还没有决定托管聊天还是本机 Agent？先看[DeepSeek 选型对比](/wechat-deepseek)。动手前先确认手机微信「我 → 设置 → 功能 → 插件」里有「微信 ClawBot」：没有这个入口时，微伴无法替你开通，也不必先付款或提交 Key，可先看[首页模拟预览](/#try)。确认入口后再准备服务商 Key 与余额；测试连接与正式聊天均可能产生费用。",
+        body: "本页负责逐步配置与验证。还没有决定托管聊天还是本机 Agent？先看[DeepSeek 选型对比](/wechat-deepseek)。动手前先确认手机微信「我 → 设置 → 功能 → 插件」里有「微信 ClawBot」：没有这个入口时，微伴无法替你开通，也不必先付款或提交 Key，可先看[带截图的配置教程](/docs/deepseek-in-wechat#channel)。确认入口后再准备服务商 Key 与余额；测试连接与正式聊天均可能产生费用。",
       },
       {
         id: "prepare",

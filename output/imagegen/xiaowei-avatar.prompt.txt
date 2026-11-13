@@ -1,0 +1,7 @@
+Use case: stylized-concept
+Asset type: square product avatar for Xiaowei (小薇), a friendly assistant running in Wechatai's cloud, used at 32–96px in a Chinese productivity app and 112–160px on its landing page.
+Primary request: create a memorable, polished avatar of a friendly adult Chinese woman assistant, calm, capable and approachable, with a short gently curved dark bob haircut and a tiny mint-green two-leaf hair clip. Her simple ivory top and deep emerald-green collar suggest an everyday helper, not a sci-fi character. A tiny soft cloud motif appears as a subtle pin on the collar.
+Style/medium: refined softly shaded 3D editorial illustration, smooth matte clay-like surfaces, clean readable silhouette, restrained detail, contemporary premium productivity software branding. Charming but clearly adult; not an anime teenager, not a photoreal person.
+Composition/framing: one single centered head-and-shoulders portrait, face large and clearly legible, eyes looking at viewer, very slight friendly smile. Head fills about 65% of canvas height, keep entire hair and shoulders inside square with generous safe margin for circular cropping. No hands. A clean pale mint background with a single very soft cloud-shaped halo. Soft even studio light, emerald and ivory palette with warm natural skin tones.
+Text: none.
+Constraints: one consistent character, no letters, no writing, no logos, no watermark, no frame, no headset, no gadgets, no collage, no multiple options, no decorative UI. Background fully opaque pale mint. Ready to use as an app avatar.

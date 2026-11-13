@@ -65,9 +65,9 @@ describe("cloud Agent onboarding", () => {
       data.plugins = [plugin()]; // Cached plugin status must not override the global gate.
       await onboarding();
       await click("我了解了，下一步");
-      expect(container.textContent).toContain("云端 Agent 暂未开放");
-      expect(container.textContent).not.toContain("云端 Agent 已就绪");
-      expect(container.textContent).not.toContain("了解 Plus 云端 Agent");
+      expect(container.textContent).toContain("小薇暂未开放");
+      expect(container.textContent).not.toContain("小薇已就绪");
+      expect(container.textContent).not.toContain("了解 Plus 云端助手小薇");
       expect(container.textContent).toContain("接入已有 Agent 或接收通知");
     },
   );
@@ -79,7 +79,7 @@ describe("cloud Agent onboarding", () => {
       data.cloudAgent = plugin().status!;
       await onboarding();
       await click("我了解了，下一步");
-      const label = plan === "plus" ? "使用云端 Agent" : "了解 Plus 云端 Agent";
+      const label = plan === "plus" ? "使用小薇" : "了解 Plus 云端助手小薇";
       const card = [...container.querySelectorAll("button")].find(
         (button) => button.querySelector("strong")?.textContent === label,
       );
@@ -97,7 +97,7 @@ describe("cloud Agent onboarding", () => {
     await click("新手引导");
     expect(container.querySelector("dialog")).not.toBeNull();
     await click("我了解了，下一步");
-    expect(container.textContent).toContain("云端 Agent 已就绪");
+    expect(container.textContent).toContain("小薇已就绪");
     expect(container.textContent).toContain("执行模型已就绪");
     await click("下一步");
     await click("去连接微信");
@@ -139,7 +139,7 @@ describe("cloud Agent onboarding", () => {
       expect(commands).not.toContain("/use 云");
       expect(commands).not.toContain("/use 其他");
       expect(commands).not.toContain("/use muse");
-      expect(container.textContent).toContain("云端 Agent 已就绪，按下面的步骤连接。");
+      expect(container.textContent).toContain("小薇已就绪，按下面的步骤连接。");
       expect(container.textContent).not.toContain("Agent 无需使用微伴的模型配置");
       expect(request).not.toHaveBeenCalled();
       await click("去连接微信");
@@ -375,9 +375,9 @@ describe("cloud Agent plugin interactions", () => {
   it("offers the server-authorized administrator preview with its billing rules", async () => {
     data.cloudAgent = { ...plugin().status!, adminPreview: true };
     await render();
-    const card = container.querySelector('article[aria-label="云端 Agent"]')!;
+    const card = container.querySelector('article[aria-label="小薇"]')!;
     expect(card.textContent).toContain("管理员内测");
-    await click("配置 云端 Agent");
+    await click("配置 小薇");
     const dialog = container.querySelector("dialog")!;
     expect(dialog.textContent).toContain("当前仅对管理员开放内测");
     expect(dialog.textContent).toContain("模型 API 费用另付服务商");
@@ -398,24 +398,23 @@ describe("cloud Agent plugin interactions", () => {
         reason: "运营方尚未开启云端服务，请稍后再试。",
       };
       await render();
-      const card = container.querySelector('article[aria-label="云端 Agent"]')!;
+      const card = container.querySelector('article[aria-label="小薇"]')!;
       expect(card.textContent).toContain("暂未开放");
       expect(card.textContent).toContain("运营方尚未开启云端服务");
       expect(card.querySelector('a[href="/app/billing"]')).toBeNull();
-      expect(card.querySelector('button[aria-label="配置 云端 Agent"]')).toBeNull();
+      expect(card.querySelector('button[aria-label="配置 小薇"]')).toBeNull();
       expect(card.querySelector("button")!.disabled).toBe(true);
       expect(request).not.toHaveBeenCalled();
       data.cloudAgent = { ...data.cloudAgent, ready: true, reason: undefined };
       await render();
-      const restored = container.querySelector('article[aria-label="云端 Agent"]')!;
+      const restored = container.querySelector('article[aria-label="小薇"]')!;
       if (plan === "free")
         expect(restored.querySelector('a[href="/app/billing"]')?.textContent).toContain(
           "开通 Plus",
         );
       else
         expect(
-          restored.querySelector<HTMLButtonElement>('button[aria-label="配置 云端 Agent"]')
-            ?.disabled,
+          restored.querySelector<HTMLButtonElement>('button[aria-label="配置 小薇"]')?.disabled,
         ).toBe(false);
     },
   );
@@ -427,7 +426,8 @@ describe("cloud Agent plugin interactions", () => {
         const body = JSON.parse(options.body as string);
         expect(body).toMatchObject({
           pluginId: "wechatai/cloud-agent",
-          shortcut: "云",
+          name: "小薇",
+          shortcut: "小薇",
           enabled: true,
         });
         expect(body.modelId).toBe("");
@@ -441,8 +441,8 @@ describe("cloud Agent plugin interactions", () => {
       return { text: "云端服务已配置，请在微信发送任务验证实际运行。", cost: 0 };
     });
     await render();
-    await click("配置 云端 Agent");
-    expect(container.textContent).toContain("添加云端 Agent");
+    await click("配置 小薇");
+    expect(container.textContent).toContain("添加小薇");
     const modelSelect = container.querySelector("select")!;
     expect(modelSelect.value).toBe("");
     expect(modelSelect.selectedOptions[0].textContent).toContain("使用默认模型");
@@ -451,7 +451,7 @@ describe("cloud Agent plugin interactions", () => {
         .querySelector("form")!
         .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
-    expect(container.textContent).toContain("云端 Agent 配置");
+    expect(container.textContent).toContain("小薇 配置");
     expect(container.textContent).toContain("默认模型：");
     await click("检查服务状态");
     expect(request).toHaveBeenCalledTimes(2);
@@ -479,7 +479,7 @@ describe("cloud Agent plugin interactions", () => {
       return saved;
     });
     await render();
-    await click("查看 云端 Agent 配置");
+    await click("查看 小薇 配置");
     await click("修改配置");
     const select = container.querySelector("select")!;
     expect(select.value).toBe("demo-1");
@@ -509,7 +509,7 @@ describe("cloud Agent plugin interactions", () => {
       return plugin();
     });
     await render();
-    await click("查看 云端 Agent 配置");
+    await click("查看 小薇 配置");
     await click("修改配置");
     const select = [...container.querySelectorAll("select")].find(
       (select) => select.value === "disabled",
@@ -535,7 +535,7 @@ describe("cloud Agent plugin interactions", () => {
       return plugin(false);
     });
     await render();
-    await click("查看 云端 Agent 配置");
+    await click("查看 小薇 配置");
     expect(container.textContent).not.toContain("添加另一组配置");
     expect(container.textContent).toContain("/wx stop");
     await click("修改配置");
@@ -566,7 +566,7 @@ describe("cloud Agent plugin interactions", () => {
     data.plugins = [plugin()];
     data.cloudAgent = { ...data.cloudAgent, ready: false };
     await render();
-    await click("查看 云端 Agent 配置");
+    await click("查看 小薇 配置");
     const dialog = container.querySelector("dialog")!;
     expect(dialog.textContent).toContain("运营方尚未开启云端服务");
     expect(dialog.querySelector('a[href="/app/billing"]')).toBeNull();
@@ -584,15 +584,15 @@ describe("cloud Agent plugin interactions", () => {
     )!;
     expect(qr.disabled).toBe(false);
     expect(container.textContent).not.toContain("请先在「渠道与模型」中添加渠道");
-    expect(container.textContent).toContain("发送 /use 云");
+    expect(container.textContent).toContain("发送 /use 小薇");
     await act(async () => qr.click());
     expect(request).toHaveBeenCalledWith("/wechat/links/default/bind", { method: "POST" });
   });
 
   it.each([
     ["service", "运营方尚未开启云端服务"],
-    ["membership", "云端 Agent 是 Plus 会员功能"],
-    ["disabled", "启用云端 Agent"],
+    ["membership", "小薇是 Plus 会员功能"],
+    ["disabled", "启用小薇"],
   ])(
     "permits transport binding but warns about cloud eligibility when %s is lost",
     async (change, message) => {
@@ -609,8 +609,7 @@ describe("cloud Agent plugin interactions", () => {
       expect(container.textContent).toContain(message);
       expect(
         [...container.querySelectorAll("a")].some(
-          (a) =>
-            a.textContent?.includes("管理云端 Agent") && a.getAttribute("href") === "/app/plugins",
+          (a) => a.textContent?.includes("管理小薇") && a.getAttribute("href") === "/app/plugins",
         ),
       ).toBe(true);
       expect(request).not.toHaveBeenCalled();

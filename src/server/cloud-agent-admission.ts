@@ -68,15 +68,15 @@ export function admitCloudAgentTask(
       throw new AppError(
         "cloud_plus_required",
         planUntil > 0
-          ? "你的 Plus 已到期，云端 Agent 已暂停。续费后可提交新任务，已有任务记录仍可查看。"
-          : "云端 Agent 是 Plus 会员功能，开通后可提交任务。",
+          ? "你的 Plus 已到期，小薇已暂停。续费后可提交新任务，已有任务记录仍可查看。"
+          : "小薇是 Plus 会员功能，开通后可提交任务。",
         403,
       );
-    if (!plugin) throw new AppError("plugin_missing", "云端 Agent 配置已删除", 404);
+    if (!plugin) throw new AppError("plugin_missing", "小薇配置已删除", 404);
     if (plugin.pluginId !== CLOUD_AGENT_PLUGIN_ID)
-      throw new AppError("plugin_type", "不是云端 Agent 配置", 422);
+      throw new AppError("plugin_type", "不是小薇配置", 422);
     if (!plugin.enabled)
-      throw new AppError("plugin_disabled", "云端 Agent 已停用，请在插件页面重新启用。", 403);
+      throw new AppError("plugin_disabled", "小薇已停用，请在插件页面重新启用。", 403);
     if (!connection.enabled)
       throw new AppError("connection_disabled", "微信链接已停用或删除，请重新连接后再试。", 403);
     if (
@@ -87,12 +87,12 @@ export function admitCloudAgentTask(
       throw new AppError("cloud_session_unavailable", "原会话已不可用，请开始新会话后重试。", 409);
     const config = cloudAgentConfig(env, current.isAdmin);
     if (!config)
-      throw new AppError("cloud_agent_unavailable", "云端 Agent 服务尚未就绪，请稍后再试。", 503);
+      throw new AppError("cloud_agent_unavailable", "小薇服务尚未就绪，请稍后再试。", 503);
     const model = current.model;
     if (!model?.hasKey || !model.encryptedKey)
       throw new AppError(
         "cloud_model_required",
-        "云端 Agent 的执行模型不可用，请检查所用文本模型及渠道的 API Key。",
+        "小薇的执行模型不可用，请检查所用文本模型及渠道的 API Key。",
         422,
       );
     if (new Wallet(storage).balance() <= 0)
@@ -131,7 +131,7 @@ export function admitCloudAgentTask(
       if (!data.length || data.length > 2 * 1024 * 1024)
         throw new AppError(
           "cloud_image_size",
-          "云端 Agent 单张图片最大 2 MB，请压缩后重新发送。本次未创建任务。",
+          "小薇单张图片最大 2 MB，请压缩后重新发送。本次未创建任务。",
           422,
         );
       return { id: `img_${createHash("sha256").update(data).digest("hex")}`, data };
@@ -197,7 +197,7 @@ export function admitCloudAgentTask(
     } catch {
       throw new AppError(
         "cloud_agent_unavailable",
-        "云端 Agent 回调配置尚未就绪，请稍后再试。",
+        "小薇回调配置尚未就绪，请稍后再试。",
         503,
       );
     }

@@ -388,6 +388,7 @@ describe("AGT client protocol", () => {
       model: config.model,
       conversationId: "conversation-one",
       message: "你好",
+      systemPrompt: "保留用户自己的回答风格。",
       callback: { url: "https://wechatai.example/callback", secret: "per-task-secret" },
     });
     expect(body).toMatchObject({
@@ -404,6 +405,9 @@ describe("AGT client protocol", () => {
       },
       callback: { includeResult: false },
     });
+    expect(body.systemPrompt).toContain("保留用户自己的回答风格。");
+    expect(body.systemPrompt).toContain("你对用户使用的名字是「小薇」");
+    expect(body.systemPrompt).toContain("用户在微伴配置的模型");
   });
 });
 

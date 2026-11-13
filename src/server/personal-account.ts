@@ -1,6 +1,7 @@
 import {
   CLOUD_AGENT_PLUGIN_ID,
   CLOUD_AGENT_VERSION,
+  CLOUD_AGENT_SHORTCUT,
   CLOUD_AGENT_STORAGE_BYTES,
   CLOUD_AGENT_WAITING_MESSAGE,
   CLOUD_AGENT_PLUS_MESSAGE,
@@ -1055,15 +1056,15 @@ export class PersonalAccount extends DurableObject<Env> {
     if (this.plan() !== "plus")
       return { code: "cloud_plus_required", message: CLOUD_AGENT_PLUS_MESSAGE };
     if (!plugin.enabled)
-      return { code: "plugin_disabled", message: "云端 Agent 已停用，请在插件页重新启用。" };
+      return { code: "plugin_disabled", message: "小薇已停用，请在插件页重新启用。" };
     if (isCloudAgent(plugin)) {
       const model = this.cloudModel(plugin, connectionId);
       if (!model?.hasKey)
         return {
           code: "cloud_model_required",
           message: plugin.modelId
-            ? "云端 Agent 所选模型不可用，请在插件配置中更换文本模型，或补全该模型渠道的 API Key。"
-            : "云端 Agent 使用当前微信的默认文本模型，请先在「渠道与模型」配置可用的文本模型及 API Key。",
+            ? "小薇所选模型不可用，请在插件配置中更换文本模型，或补全该模型渠道的 API Key。"
+            : "小薇使用当前微信的默认文本模型，请先在「渠道与模型」配置可用的文本模型及 API Key。",
         };
     }
     return null;
@@ -1085,7 +1086,7 @@ export class PersonalAccount extends DurableObject<Env> {
               cloudAgentAdminOnly(this.env) && !admin
                 ? CLOUD_AGENT_ADMIN_ONLY_MESSAGE
                 : cloudAgentAdminOnly(this.env)
-                  ? "云端 Agent 连接配置尚未就绪，请先完成服务配置。"
+                  ? "小薇连接配置尚未就绪，请先完成服务配置。"
                   : CLOUD_AGENT_UNAVAILABLE_MESSAGE,
           }
         : {}),
@@ -1288,7 +1289,7 @@ export class PersonalAccount extends DurableObject<Env> {
     const editableShortcut = pluginShortcutForEdit(previous?.shortcut);
     if ((kind ?? previous?.pluginId) === CLOUD_AGENT_PLUGIN_ID) {
       const input = cloudAgentInputSchema
-        .safeExtend({ shortcut: editableShortcut.default("云") })
+        .safeExtend({ shortcut: editableShortcut.default(CLOUD_AGENT_SHORTCUT) })
         .parse(raw && typeof raw === "object" ? { ...previous, ...raw } : raw);
       if (!previous || input.enabled) {
         const issue = cloudAgentAvailabilityIssue(this.plan(), this.cloudStatus());
@@ -1308,7 +1309,7 @@ export class PersonalAccount extends DurableObject<Env> {
         else if (!this.defaultChatModel())
           throw new AppError(
             "cloud_model_required",
-            "请先在「渠道与模型」配置文本模型，云端 Agent 将默认使用它。",
+            "请先在「渠道与模型」配置文本模型，小薇将默认使用它。",
             422,
           );
       }
@@ -1837,7 +1838,7 @@ export class PersonalAccount extends DurableObject<Env> {
     },
   ) {
     const plugin = this.plugin(pluginId);
-    if (!isCloudAgent(plugin)) throw new AppError("plugin_type", "不是云端 Agent 配置", 422);
+    if (!isCloudAgent(plugin)) throw new AppError("plugin_type", "不是小薇配置", 422);
     const connectionId = session.connectionId ?? DEFAULT_WECHAT_LINK;
     const inputFiles = attachments?.files.map((file) => ({
       ...file,
@@ -1932,7 +1933,7 @@ export class PersonalAccount extends DurableObject<Env> {
   private cloudStopReason(task: CloudTask) {
     if (cloudAgentAdminOnly(this.env) && this.cloudAdminUntil <= Date.now())
       return CLOUD_AGENT_ADMIN_ONLY_MESSAGE;
-    if (this.plan() !== "plus") return "云端 Agent 需要 Plus，开通或续费后可提交新任务。";
+    if (this.plan() !== "plus") return "小薇需要 Plus，开通或续费后可提交新任务。";
     // A possibly accepted task must be recovered even if its submission reply was lost.
     if (!task.submittedAt && !task.unconfirmed && !task.jobId) {
       if (!task.modelConnection)

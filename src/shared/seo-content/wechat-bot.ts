@@ -60,7 +60,7 @@ export const wechatBotPage: SeoPage = {
 - 不需要修改微信客户端，也不需要模拟协议登录。
 - 绑定关系在微信账号这一侧，换手机不影响，换微信号要重新扫码。
 
-微伴走的就是这条路线：先配置自己的模型 API Key 和文本模型，再用微信 ClawBot 扫码绑定；需要使用已开放的 Plus 云端 Agent 时，添加并启用插件，再发送 \`/use 快捷名\` 进入。未单独指定模型时跟随该微信选中的普通模型，进入插件后沿用上一次普通模型；需要固定模型时再在插件中选择。**没有绕过 ClawBot 的绑定方式**，普通「扫一扫」也不能替代插件里的绑定流程。完整步骤见[微信 ClawBot 插件怎么用](/wechat-clawbot)。`,
+微伴走的就是这条路线：先配置自己的模型 API Key 和文本模型，再用微信 ClawBot 扫码绑定；需要使用已开放的 Plus 云端助手小薇时，添加并启用插件，再发送 \`/use 快捷名\` 进入。未单独指定模型时跟随该微信选中的普通模型，进入插件后沿用上一次普通模型；需要固定模型时再在插件中选择。**没有绕过 ClawBot 的绑定方式**，普通「扫一扫」也不能替代插件里的绑定流程。完整步骤见[微信 ClawBot 插件怎么用](/wechat-clawbot)。`,
     },
     {
       id: "scope",
@@ -74,7 +74,7 @@ export const wechatBotPage: SeoPage = {
 
 微伴是把模型和 Agent 接进微信的中转与插件平台。使用自备 API 时，模型费用另付你自己的 API 服务商；文字部分按加权 token 计 credits，免费版每天 100 credits、1 个微信链接、1 个插件，Plus 为 ¥9.9/月或 ¥88/年。
 
-${CLOUD_AGENT_COST_NOTE}配置方式见[云端 Agent 指南](/docs/cloud-agent)。`,
+${CLOUD_AGENT_COST_NOTE}配置方式见[小薇指南](/docs/cloud-agent)。`,
     },
     {
       id: "risk",
@@ -90,7 +90,7 @@ ${CLOUD_AGENT_COST_NOTE}配置方式见[云端 Agent 指南](/docs/cloud-agent)�
     {
       question: "微信机器人有免费的吗？",
       answer:
-        "有。微伴免费版不收费，每天赠送 100 credits，可绑定 1 个微信链接与 1 个插件，微信侧走 ClawBot 插件通道。使用自备模型时，API 调用费用要另付模型服务商，与 credits 是两笔账。云端 Agent 需要 Plus 且服务已开放。",
+        "有。微伴免费版不收费，每天赠送 100 credits，可绑定 1 个微信链接与 1 个插件，微信侧走 ClawBot 插件通道。使用自备模型时，API 调用费用要另付模型服务商，与 credits 是两笔账。小薇需要 Plus 且服务已开放。",
     },
     {
       question: "个人号微信机器人会被封号吗？",

@@ -692,11 +692,9 @@ for (const width of [390, 1280]) {
     await page.goto(origin);
     await page.locator(".hero-how").click();
     await expect(page).toHaveURL(`${origin}/#how`);
-    await page.locator('#how a[href="/#connect"]').click();
-    await expect(page).toHaveURL(`${origin}/#connect`);
-    const guides = page.getByRole("navigation", { name: "Agent 接入指南" });
-    await expect(guides.getByRole("link", { name: "Muse", exact: true })).toBeVisible();
-    await guides.getByRole("link", { name: "Muse", exact: true }).click();
+    await page.locator('#how a[href="/wechat-agent"]').click();
+    await expect(page).toHaveURL(`${origin}/wechat-agent`);
+    await page.locator('.seopage-related a[href="/developers/muse"]').click();
     await expect(page).toHaveURL(`${origin}/developers/muse`);
     await expect(page.locator("h1")).toHaveText("Muse 接入指南");
   });

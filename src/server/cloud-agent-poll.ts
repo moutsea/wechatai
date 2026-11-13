@@ -87,8 +87,8 @@ export async function pollCloudAgentTask(
   if (job.status === "awaiting_approval" && !cloudTaskStopReason(task))
     task = store.patch(task, {
       stopRequested: 1,
-      stopReason: "云端 Agent 暂不支持工具审批。",
-      error: "云端 Agent 暂不支持工具审批，正在请求停止。",
+      stopReason: "小薇暂不支持工具审批。",
+      error: "小薇暂不支持工具审批，正在请求停止。",
       nextAt: Date.now(),
     });
   if (task.stopRequested) {

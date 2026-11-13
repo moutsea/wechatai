@@ -99,6 +99,8 @@ async function trial(grant: "active" | "expired" | "none" = "active", plus = tru
 const save = async (stub: Account, value: Record<string, unknown> = {}) =>
   api(stub, "plugin.save", {
     pluginId: "wechatai/cloud-agent",
+    // Exercise saved configurations that keep their original name and shortcut.
+    ...(value.id ? {} : { name: "云端 Agent", shortcut: "云" }),
     modelId: (await stub.snapshot()).assistants[0]?.id ?? "",
     ...value,
   });
@@ -1584,6 +1586,7 @@ describe("cloud Agent user entry", () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("No network expected"));
     const p = await plugin(stub);
     expect(p).toMatchObject({
+      name: "云端 Agent",
       shortcut: "云",
       hasKey: true,
       access: null,
@@ -1598,6 +1601,23 @@ describe("cloud Agent user entry", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(await tasks(stub)).toEqual([]);
     expect((await stub.snapshot()).ledger.filter((row) => row.kind === "usage")).toEqual([]);
+  });
+
+  it("defaults new configurations to Xiaowei and preserves customized names when editing", async () => {
+    const stub = await setup();
+    const result = await api(stub, "plugin.save", { pluginId: "wechatai/cloud-agent" });
+    expect(result).toMatchObject({ ok: true, data: { name: "小薇", shortcut: "小薇" } });
+    expect(await send(stub, "/use 小薇")).toContain("已进入");
+    const customized = await api(stub, "plugin.save", {
+      id: result.data.id,
+      name: "我的助手",
+      shortcut: "帮手",
+    });
+    expect(customized.ok).toBe(true);
+    expect(await api(stub, "plugin.save", { id: result.data.id, enabled: false })).toMatchObject({
+      ok: true,
+      data: { name: "我的助手", shortcut: "帮手", enabled: false },
+    });
   });
 
   it.each([
@@ -1837,7 +1857,8 @@ describe("cloud Agent user entry", () => {
           expect(body.message).toBe(task.prompt);
           expect(body.conversationId).toBe(task.conversationId);
           expect(body.model).toBe(`channel:mch_${"a".repeat(32)}:user-model`);
-          expect(body.systemPrompt).toBe("使用用户配置的系统提示词。");
+          expect(body.systemPrompt).toContain("使用用户配置的系统提示词。");
+          expect(body.systemPrompt).toContain("小薇");
         }
         return Response.json(
           {

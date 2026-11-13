@@ -119,7 +119,7 @@ export const wechatClawbotModelsPage: SeoPage = {
 - **平台卖 token**：你付钱给平台，平台再向模型服务商付钱。方便，但通常无法逐笔核对上游单价，切换供应商也受平台支持范围限制。
 - **自带 API Key**：你直接付给模型服务商，按官方价目表结算；微伴只收 credits 用于消息中转计量。透明，且随时可以换一家你核对过单价与可用性的服务。
 
-微伴的普通模型聊天与可选的[云端 Agent](/docs/cloud-agent)都使用你配置的模型与 API Key。${CLOUD_AGENT_COST_NOTE}`,
+微伴的普通模型聊天与可选的[小薇](/docs/cloud-agent)都使用你配置的模型与 API Key。${CLOUD_AGENT_COST_NOTE}`,
     },
   ],
   faq: [

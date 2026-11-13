@@ -160,14 +160,14 @@ describe("cloud session creation", () => {
       assistantId: null,
       assistantName: "工作助手",
       channelId: "",
-      channelName: "云端 Agent",
+      channelName: "小薇",
       model: "",
       pluginInstanceId: "cloud-2",
     };
     await render();
     await click("新建会话");
     expect(select().value).toBe("plugin:cloud-2");
-    expect([...select().options].map((option) => option.text)).toContain("云端 Agent · 云端 Agent");
+    expect([...select().options].map((option) => option.text)).toContain("小薇 · 云端助手");
     await choose(`model:${model.id}`);
     await submit();
     expect(payload()).toMatchObject({ assistantId: model.id });
@@ -252,7 +252,7 @@ describe("cloud session creation", () => {
           title: "云端会话",
           assistantId: null,
           pluginInstanceId: "cloud",
-          pluginName: "云端 Agent",
+          pluginName: "小薇",
           connectionId: "default",
           archived: false,
           createdAt: Date.now(),

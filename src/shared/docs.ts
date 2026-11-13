@@ -1,7 +1,7 @@
 export const DOCS_INDEX_UPDATED_AT = "2026-11-11";
 export const DOCS_TITLE = "微信 AI 教程与文档";
 export const DOCS_DESCRIPTION =
-  "微伴 Wechatai 使用文档：配置模型、连接微信、管理会话和 credits。附 DeepSeek、OpenClaw、Hermes 与可选云端 Agent 使用教程，以及联网问答、生图和个人助理说明。";
+  "微伴 Wechatai 使用文档：配置模型、连接微信、管理会话和 credits。附 DeepSeek、OpenClaw、Hermes 与云端助手小薇使用教程，以及联网问答、生图和个人助理说明。";
 
 export const DOC_TUTORIALS = [
   {
@@ -58,7 +58,7 @@ export const DOC_GUIDES = [
     seoTitle: "微信 AI 使用指南：选择 AI 并扫码连接",
     title: "使用指南",
     description:
-      "第一次使用微伴：先确认微信 ClawBot 入口，再配置自己的模型，可按需启用已开放的 Plus 云端 Agent，扫码连接微信，把第一条消息发出去。",
+      "第一次使用微伴：先确认微信 ClawBot 入口，再配置自己的模型，可按需启用已开放的 Plus 云端助手小薇，扫码连接微信，把第一条消息发出去。",
     category: "开始使用",
     group: "start",
     requirement: "需微信 ClawBot 入口",
@@ -148,18 +148,18 @@ export const DOC_GUIDES = [
   },
   {
     slug: "cloud-agent",
-    updatedAt: "2026-11-12",
-    seoTitle: "云端 Agent：使用自己的模型执行微信后台任务",
-    title: "云端 Agent",
+    updatedAt: "2026-11-13",
+    seoTitle: "小薇 · 云端助手：在微信处理文件与任务",
+    title: "小薇 · 云端助手",
     description:
-      "运营方开放后，Plus 会员可在微信提交后台任务，默认跟随当前微信的普通模型，也可单独指定；了解启用、任务查询、停止、credits 计费与远端数据保留边界。",
+      "不用安装，不用折腾。认识运行在微伴云端的小薇，选好模型、启用插件后，在微信交代任务、接收文件；附 Plus 条件、费用与使用范围。",
     category: "插件",
     group: "plugins",
     requirement: "需要 Plus 且云端服务已开放",
     minutes: 4,
     outcome: "在微信提交文字任务，在任务页查看进度和结果。",
-    image: "/images/plugins/cloud-agent.svg",
-    imageAlt: "云端 Agent 插件",
+    image: "/images/plugins/xiaowei.webp",
+    imageAlt: "小薇，微伴云端助手",
   },
   {
     slug: "ds-chat",

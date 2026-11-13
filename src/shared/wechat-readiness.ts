@@ -103,11 +103,11 @@ export function chatSetupIssue(setup: Setup): SetupIssue | null {
       return {
         code: "cloud_model_required",
         message:
-          "云端 Agent 也需要你自己的文本模型，请先配置渠道与模型；未单独指定时使用当前微信的默认文本模型。",
+          "小薇也需要你自己的文本模型，请先配置渠道与模型；未单独指定时使用当前微信的默认文本模型。",
       };
     return {
       code: "plugin_disabled",
-      message: "请在「插件」中启用云端 Agent；也可在「渠道与模型」中配置文本模型，使用普通聊天。",
+      message: "请在「插件」中启用小薇；也可在「渠道与模型」中配置文本模型，使用普通聊天。",
     };
   }
 

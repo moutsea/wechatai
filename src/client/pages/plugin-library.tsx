@@ -1,5 +1,6 @@
 import {
   cloudAgentAvailabilityIssue,
+  CLOUD_AGENT_NAME,
   isCloudAgent,
   resolveCloudAgentModel,
 } from "../../shared/cloud-agent";
@@ -72,9 +73,10 @@ function PluginAlias({
 const library = [
   {
     id: "wechatai/cloud-agent",
-    name: "云端 Agent",
-    description: "使用你配置的文本模型，在云端执行工具与文字任务，结果回复微信，也可在任务页查看。",
-    tags: ["Plus 专属", "自选模型", "后台执行"],
+    name: CLOUD_AGENT_NAME,
+    description:
+      "你的微伴云端助手，不用安装、不用部署。在微信交代任务，小薇帮你处理文件、生成文档，结果直接发回来。",
+    tags: ["Plus 专属", "自备模型 Key", "无需部署"],
   },
   {
     id: "wechatai/notification",

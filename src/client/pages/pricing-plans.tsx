@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
 import { api, json } from "../api";
 import { useAuth } from "../auth";
@@ -29,7 +29,10 @@ const approx = approxYuan;
  */
 export function PricingPlans() {
   const { data: session, isPending } = useAuth();
-  const [interval, setInterval] = useState<"month" | "year">("month");
+  const [params] = useSearchParams();
+  const requestedInterval = params.get("interval") === "year" ? "year" : "month";
+  const [interval, setInterval] = useState<"month" | "year">(requestedInterval);
+  useEffect(() => setInterval(requestedInterval), [requestedInterval]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -146,6 +149,10 @@ export function PricingPlans() {
               <Check size={15} aria-hidden="true" />
               图片与文件输入
             </li>
+            <li>
+              <Check size={15} aria-hidden="true" />
+              <Link to="/docs/cloud-agent">小薇 AI 云端助手</Link>
+            </li>
           </ul>
           {isPending ? null : session ? (
             <button
@@ -181,7 +188,8 @@ export function PricingPlans() {
       </div>
       <p className="plans-fineprint">
         本次付款为所选周期的完整金额，单次购买、不自动续费。支付由 Stripe 处理。credits
-        用完后可以单独购买加油包，价格见下方说明。
+        用完后可以单独购买加油包，价格见下方说明。 小薇 AI
+        使用你配置的模型，执行次数与服务状态以插件页为准。
       </p>
     </section>
   );

@@ -111,7 +111,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                   <div>
                     <h3>选择适合你的 AI 接入方式。</h3>
                     <p>
-                      普通聊天需配置自己的模型 API Key 和服务地址；云端 Agent 在服务开放后供 Plus
+                      普通聊天需配置自己的模型 API Key 和服务地址；小薇在服务开放后供 Plus
                       会员使用，沿用你配置的文本模型。已有 Muse、Hermes、OpenClaw
                       或只收通知时，无需在微伴另配模型。
                     </p>
@@ -131,7 +131,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                     <span>微伴</span>
                     <h4>credits 与会员</h4>
                     <p>
-                      用于微伴的使用额度和功能权益。云端 Agent 按 credits 结算，模型 API
+                      用于微伴的使用额度和功能权益。小薇按 credits 结算，模型 API
                       费用另付你选择的服务商。
                     </p>
                   </div>
@@ -158,10 +158,10 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                     <span>
                       <strong>
                         {cloudReady
-                          ? "云端 Agent 已就绪"
+                          ? "小薇已就绪"
                           : data.plan === "plus"
-                            ? "使用云端 Agent"
-                            : "了解 Plus 云端 Agent"}
+                            ? "使用小薇"
+                            : "了解 Plus 云端助手小薇"}
                       </strong>
                       <small>
                         {cloudReady
@@ -173,7 +173,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                   </button>
                 ) : (
                   <p className="onboarding-note">
-                    云端 Agent 暂未开放，仍可使用普通模型、已有 Agent 或通知。
+                    小薇暂未开放，仍可使用普通模型、已有 Agent 或通知。
                   </p>
                 )}
                 <button
@@ -253,7 +253,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                     {modelFree.some((p) => p.hasKey)
                       ? "已有 Agent 或通知已配置，可以继续连接微信。"
                       : cloudReady
-                        ? "云端 Agent 已就绪，可以继续连接微信。"
+                        ? "小薇已就绪，可以继续连接微信。"
                         : "已配置文本模型，可以继续连接微信。"}
                   </p>
                 )}
@@ -267,7 +267,7 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                     {isRemoteAgent(chatPlugin)
                       ? "Agent 无需使用微伴的模型配置；请确认连接器已经在线。"
                       : chatPlugin
-                        ? "云端 Agent 已就绪，按下面的步骤连接。"
+                        ? "小薇已就绪，按下面的步骤连接。"
                         : notification
                           ? "消息提醒无需模型；连接后请在微信发送 /wx help 建立回复通道。"
                           : "使用自己的模型时，先确认模型服务商有可用余额。"}

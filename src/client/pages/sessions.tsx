@@ -170,7 +170,7 @@ export function Sessions() {
     })),
     ...readyCloudAgents(data).map((plugin) => ({
       value: `plugin:${plugin.id}`,
-      label: `${plugin.name} · 云端 Agent`,
+      label: `${plugin.name} · 云端助手`,
       assistantId: undefined,
       pluginInstanceId: plugin.id,
     })),
@@ -204,7 +204,7 @@ export function Sessions() {
     try {
       if (action === "new" || action === "new-story") {
         if (action === "new" && !selectedTarget) {
-          notify("请选择可用的模型或云端 Agent。", true);
+          notify("请选择可用的模型或小薇。", true);
           return;
         }
         const created = await request<ChatSession>("/sessions", {
@@ -334,7 +334,7 @@ export function Sessions() {
       />
       {!creationTargets.length && (
         <p className="form-note">
-          当前没有可用的文本模型或云端 Agent。请检查
+          当前没有可用的文本模型或小薇。请检查
           <Link className="text-link" to={`${base}/channels`}>
             渠道与模型
           </Link>
@@ -732,9 +732,9 @@ export function Sessions() {
                 </label>
                 {operation === "new" && (
                   <label>
-                    使用哪个模型或云端 Agent
+                    使用哪个模型或小薇
                     <select required value={target} onChange={(e) => setTarget(e.target.value)}>
-                      {!selectedTarget && <option value="">请选择可用的模型或云端 Agent</option>}
+                      {!selectedTarget && <option value="">请选择可用的模型或小薇</option>}
                       {creationTargets.map((item) => (
                         <option key={item.value} value={item.value}>
                           {item.label}

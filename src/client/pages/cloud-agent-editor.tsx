@@ -14,6 +14,8 @@ import { Modal } from "../ui";
 import { json } from "../api";
 import {
   CLOUD_AGENT_PLUGIN_ID,
+  CLOUD_AGENT_NAME,
+  CLOUD_AGENT_SHORTCUT,
   CLOUD_AGENT_STORAGE_BYTES,
   CLOUD_AGENT_FILE_LIMITS_NOTE,
   CLOUD_AGENT_WAITING_MESSAGE,
@@ -43,9 +45,9 @@ export function CloudAgentEditor({
   const [form, setForm] = useState<CloudAgentInput>(() =>
     plugin === "new"
       ? {
-          name: "云端 Agent",
+          name: CLOUD_AGENT_NAME,
           modelId: "",
-          shortcut: "云",
+          shortcut: CLOUD_AGENT_SHORTCUT,
           enabled: true,
           ...waitingMessageDefaults(CLOUD_AGENT_WAITING_MESSAGE),
         }
@@ -79,8 +81,8 @@ export function CloudAgentEditor({
       onSaved?.(saved.id);
       notify(
         form.enabled
-          ? `云端 Agent 已保存，发送 @${form.shortcut} 问题 或 /use ${form.shortcut} 使用`
-          : "云端 Agent 配置已保存，当前已停用",
+          ? `小薇已保存，发送 @${form.shortcut} 问题 或 /use ${form.shortcut} 使用`
+          : "小薇配置已保存，当前已停用",
       );
       onClose();
     } catch (e) {
@@ -91,8 +93,8 @@ export function CloudAgentEditor({
   }
   return (
     <Modal
-      title={plugin === "new" ? "添加云端 Agent" : "编辑云端 Agent"}
-      description="使用你在微伴配置的文本模型，由云端托管工具与任务执行。"
+      title={plugin === "new" ? "添加小薇" : "编辑小薇"}
+      description="小薇是运行在微伴云端的助手。不用安装或部署，选好模型后，就能在微信交代任务。"
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -175,8 +177,9 @@ export function CloudAgentEditor({
             请求停止当前会话的云端任务。
           </p>
           <p className="form-note">
-            每账号提供 {CLOUD_AGENT_STORAGE_BYTES / (1024 * 1024)} MiB 云端空间，同账号的云端 Agent
-            共用。 可在<Link to={`${base}/tasks`}>云端任务页</Link>查看用量。
+            每账号提供 {CLOUD_AGENT_STORAGE_BYTES / (1024 * 1024)} MiB
+            云端空间，同账号的小薇配置共用。 可在<Link to={`${base}/tasks`}>云端任务页</Link>
+            查看用量。
           </p>
           <p className="form-note">{CLOUD_AGENT_FILE_LIMITS_NOTE}</p>
           <p className="form-note">
