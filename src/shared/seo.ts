@@ -18,7 +18,7 @@ import { WECHAT_LINK_LIMITS } from "./wechat-links";
 export const SITE_URL = "https://wechatai.app";
 export const SITE_NAME = "微伴 Wechatai";
 // Update only when the actual homepage content changes, never on every build.
-const HOME_UPDATED_AT = "2026-11-13";
+const HOME_UPDATED_AT = "2026-11-14";
 export const SOCIAL_IMAGE = `${SITE_URL}/og-image.png`;
 export const PUBLIC_PATHS = [
   "/",
@@ -430,7 +430,7 @@ export function getPageSeo(pathname: string): PageSeo {
     const canonical = `${SITE_URL}/`;
     const title = `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
     const description =
-      "微伴 Wechatai 将模型与 Agent 接入微信：一个账号，自带 API Key 使用 DeepSeek、Claude、GPT 等模型，也能连接已有 Muse、Hermes、OpenClaw Agent。每天赠送 credits，模型 API 费用另付服务商。";
+      "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
     return {
       title,
       description,
@@ -469,6 +469,9 @@ export function getPageSeo(pathname: string): PageSeo {
               "在微信中切换大模型并管理聊天会话",
               "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
               "连接已有 Muse、Hermes 和 OpenClaw Agent",
+              "配置图片模型，在微信生成并接收 AI 图片",
+              "通过角色扮演插件自定义人设与剧情",
+              "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
             ],
             offers: softwareApplicationOffers(),
           },

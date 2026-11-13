@@ -186,8 +186,8 @@ export function Landing() {
               把你的 AI，<span>接入微信</span>
             </h1>
             <p>
-              一个账号，连接 DeepSeek、Claude、GPT 等模型，也能接入 Muse、Hermes、OpenClaw 等
-              Agent。
+              微伴将模型与 Agent 接入微信，支持聊天、生图，以及云端助手小薇的文件与任务处理。
+              DeepSeek、Claude、GPT、Muse、Hermes、OpenClaw，一个账号按需连接。
             </p>
             <div className="hero-actions">
               <StartLink
