@@ -32,7 +32,7 @@ describe("search indexing boundaries", () => {
   });
 
   it("uses distinct public titles and stable production canonicals", () => {
-    expect(getPageSeo("/").title).toContain("WeChat AI");
+    expect(getPageSeo("/").title).toContain("微信 AI 接入");
     expect(getPageSeo("/guide").title).not.toBe(getPageSeo("/").title);
     expect(getPageSeo("/?utm_source=wechat").canonical).toBe("https://wechatai.app/");
     expect(getPageSeo("/guide/?utm_source=wechat#commands").canonical).toBe(

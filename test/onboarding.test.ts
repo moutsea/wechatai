@@ -137,6 +137,9 @@ describe("guide links", () => {
     );
     const welcome = welcomeGuide("https://app.example.com");
     expect(welcome).toContain("你好，欢迎使用微伴");
+    expect(welcome).toContain("只收通知");
+    expect(welcome).toContain("/use 快捷名");
+    expect(welcome).not.toContain("现在可以和你配置的 AI 聊天了");
     expect(welcome).toContain("https://app.example.com/docs/commands");
     expect(welcome).not.toContain("/models");
     expect(welcome).not.toContain("/new");

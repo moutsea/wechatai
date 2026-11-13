@@ -5,27 +5,33 @@ export const wechatAgentPage: SeoPage = {
   kind: "product",
   title: "微信接入 Agent：让 AI 主动给你发消息",
   description:
-    "把 Agent 接进微信，和把模型接进微信是两回事。这篇讲清 ClawBot 通道、OpenClaw 与 Hermes 的接法、定时任务与主动推送，以及多 Agent 并存。",
+    "已有 Muse 托管助理、OpenClaw 或 Hermes 都能接入微信，无需在微伴另配模型。这篇介绍 ClawBot 连接、运行环境、后台回复与费用。",
   eyebrow: "Agent × 微信",
   h1: "把 Agent 接进微信，而不只是模型",
   lede: "模型等你提问，Agent 会自己干活。接进微信之后，差别体现在一件事上：任务完成后，它会主动发消息给你。",
   answer:
-    "使用微伴接入 OpenClaw 或 Hermes 时，Agent 在你自己的设备上运行，微伴负责把微信消息转发给它，再把结果送回聊天窗口。微信连接需要通过 ClawBot 插件扫码绑定。普通模型聊天由微伴托管，但本机 Agent 仍需要设备持续在线。",
+    "微伴可连接已有 Muse 托管助理，以及在自己设备上运行的 OpenClaw 或 Hermes。模型、工具和记忆由 Agent 自身管理，无需在微伴另配模型。先通过微信 ClawBot 扫码绑定，再按对应指南配对 Agent；扫码不会自动切换当前聊天入口。",
   primaryKeyword: "微信 接入 agent",
-  secondaryKeywords: ["微信 ai agent", "微信 接入 智能体", "openclaw 微信", "hermes 微信"],
+  secondaryKeywords: [
+    "微信 ai agent",
+    "微信 接入 智能体",
+    "openclaw 微信",
+    "hermes 微信",
+    "muse 微信",
+  ],
   highlights: ["定时任务与主动推送", "支持多个 Agent 并存", "Agent 侧费用与 credits 分开"],
   steps: [
     {
-      title: "在本机跑起 Agent",
-      text: "按 OpenClaw 或 Hermes 的文档安装，先用它自带的命令行验证能跑通一次任务。",
+      title: "确认已有 Agent 环境",
+      text: "Muse 需要已有托管助理及 hook 功能；OpenClaw 或 Hermes 需在自己的电脑或服务器运行。先确认 Agent 自身能正常完成任务。",
     },
     {
       title: "接到微信",
-      text: "先在微伴配置渠道和文本模型，通过微信 ClawBot 扫码连接微信，再到 Agent 插件生成连接命令，在 Agent 所在设备执行。",
+      text: "通过微信 ClawBot 扫码连接微信，再到插件页添加对应 Agent 并生成连接指令。Muse 指令发给 Muse 主聊天；OpenClaw、Hermes 指令在运行设备的终端执行，无需另配本站模型。",
     },
     {
-      title: "验证主动推送",
-      text: "让 Agent 创建一个定时任务，并说明把结果发回当前对话，等它自己发来。",
+      title: "验证第一条任务与回复",
+      text: "连接器在线后，在微信发送 /use 快捷名，确认进入该 Agent，再发送一条简短文字任务。需要定时或后台推送时，按对应指南额外配置。",
     },
   ],
   sections: [
@@ -44,8 +50,10 @@ export const wechatAgentPage: SeoPage = {
     },
     {
       id: "paths",
-      title: "Agent 放在电脑还是服务器上",
-      body: `OpenClaw 和 Hermes 都需要你安装并运行。微伴负责微信消息转发，不提供这两个 Agent 的云端托管。你可以按使用习惯选择运行设备：
+      title: "选择 Muse 托管环境或自己的设备",
+      body: `**已有 Muse 托管助理：** 在微伴插件页添加 Muse，将连接指令发给自己的 Muse 主聊天，由 Muse 在托管环境安装并启用 hook。不要在本机终端执行；无需在微伴填写模型 Key。步骤见 [Muse 接入指南](/developers/muse)。
+
+**OpenClaw 和 Hermes：** 需要你安装并运行。微伴负责微信消息转发，不提供这两个 Agent 的云端托管。你可以按使用习惯选择运行设备：
 
 | | 自己的电脑 | 自己部署的服务器 |
 | --- | --- | --- |
@@ -101,7 +109,7 @@ OpenClaw 与 Hermes 的主动推送需要开启「接收定时任务和后台结
     {
       question: "微信接入 Agent 需要一直开着电脑吗？",
       answer:
-        "需要运行 Agent 的设备持续在线。如果 OpenClaw 或 Hermes 装在你的电脑上，关机或休眠后就无法执行任务；需要电脑关机后仍可用，应把 Agent 部署到持续在线的服务器。微伴提供消息中转，不托管这两个 Agent；仅接入中转服务无法让离线的 Agent 继续工作。",
+        "Muse 使用已有托管环境，无需保持自己的电脑开机；需要 Muse hook 正常运行。OpenClaw 或 Hermes 若装在自己的电脑上，关机或休眠后就无法执行任务；需要电脑关机后仍可用，应部署到持续在线的服务器。微伴不托管 OpenClaw 或 Hermes。",
     },
     {
       question: "普通用户需要接 Agent 吗？",
@@ -125,6 +133,7 @@ OpenClaw 与 Hermes 的主动推送需要开启「接收定时任务和后台结
     },
   ],
   related: [
+    { label: "Muse 托管助理接入指南", href: "/developers/muse" },
     { label: "OpenClaw 接入指南", href: "/developers/openclaw" },
     { label: "Hermes 接入指南", href: "/developers/hermes" },
     { label: "在微信里使用多个 OpenClaw", href: "/docs/multiple-openclaw-in-wechat" },
@@ -132,5 +141,5 @@ OpenClaw 与 Hermes 的主动推送需要开启「接收定时任务和后台结
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },
     { label: "插件协议与开发文档", href: "/developers/plugins" },
   ],
-  updatedAt: "2026-10-24",
+  updatedAt: "2026-11-13",
 };

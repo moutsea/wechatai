@@ -214,7 +214,6 @@ import {
   RECEIVER_PONG,
   type WechatUpdates,
 } from "./wechat-receiver";
-import { wechatSetupIssue } from "../shared/wechat-readiness";
 import { ExecutionStore, type ActivityOutcome } from "./execution-store";
 import {
   ExecutionPending,
@@ -2134,7 +2133,15 @@ export class PersonalAccount extends DurableObject<Env> {
     });
   }
   private publicConnection(id: string): Connection {
-    const { status, botId, lastSeen, error: savedError, qrUrl, qrExpires } = this.connection(id);
+    const {
+      status,
+      botId,
+      contextToken,
+      lastSeen,
+      error: savedError,
+      qrUrl,
+      qrExpires,
+    } = this.connection(id);
     // Recovery guidance describes the current queue, not a connection fault.
     // Validate cached hints too, so every cancellation path and restart agrees.
     let error = savedError === CLOUD_REPLY_WAITING_MESSAGE ? undefined : savedError;
@@ -2149,7 +2156,7 @@ export class PersonalAccount extends DurableObject<Env> {
         .toArray().length
     )
       error = CLOUD_REPLY_WAITING_MESSAGE;
-    return { status, botId, lastSeen, error, qrUrl, qrExpires };
+    return { status, botId, hasReplyContext: !!contextToken, lastSeen, error, qrUrl, qrExpires };
   }
   private createLink(name: unknown) {
     if (typeof name !== "string" || !name.trim() || name.trim().length > 40)
@@ -4660,14 +4667,8 @@ export class PersonalAccount extends DurableObject<Env> {
     this.busy();
     const needsLink = !this.links().length && connectionId === DEFAULT_WECHAT_LINK;
     if (!needsLink) this.requireLink(connectionId, true);
-    const issue = wechatSetupIssue({
-      channels: this.channels().map((c) => ({ ...c, hasKey: Boolean(c.encryptedKey) })),
-      assistants: this.assistants(),
-      plan: this.plan(),
-      plugins: this.plugins(),
-      cloudAgent: this.cloudStatus(),
-    });
-    if (issue) throw new AppError(issue.code, issue.message, 422);
+    // Binding only establishes the transport. Model, plugin and billing checks
+    // happen when a task is submitted; notifications do not require a model.
     if (needsLink) connectionId = this.createLink("我的微信");
     const generation = crypto.randomUUID();
     this.ctx.storage.transactionSync(() => {

@@ -569,7 +569,13 @@ describe("durable AGT reply delivery", () => {
       const { stub, task, inboxId } = await setup("保留结果", "completed", failure === "qr");
       const queued = await inAccount(stub, (_, _store, delivery) => delivery.sync(task.id));
       const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("QR unavailable"));
-      expect(JSON.parse(await stub.api("wechat.bind", { id: task.connectionId })).ok).toBe(false);
+      const result = JSON.parse(
+        await stub.api("wechat.bind", {
+          id: failure === "validation" ? "missing-link" : task.connectionId,
+        }),
+      );
+      expect(result.ok).toBe(false);
+      if (failure === "validation") expect(result.error).toBe("connection_missing");
       expect(fetch).toHaveBeenCalledTimes(failure === "qr" ? 1 : 0);
       await inAccount(stub, (storage, store) => {
         if (failure === "validation") expect(store.get(task.id)).toEqual(queued);

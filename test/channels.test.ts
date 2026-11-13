@@ -114,10 +114,6 @@ describe("channels and their models", () => {
       expect((await stub.snapshot()).currentSession?.assistantId).toBe(text.id);
       expect((await api(stub, "assistant.delete", { id: text.id })).ok).toBe(true);
       expect((await stub.snapshot()).currentSession).toBeNull();
-      expect(await api(stub, "wechat.bind")).toMatchObject({
-        ok: false,
-        error: "wechat_model_required",
-      });
       expect(fetch).not.toHaveBeenCalled();
     },
   );

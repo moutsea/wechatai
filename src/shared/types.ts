@@ -89,6 +89,8 @@ export type LedgerEntry = {
 export type Connection = {
   status: "disconnected" | "waiting" | "scanned" | "connected" | "expired" | "error";
   botId?: string;
+  /** Whether this binding has received the context required for WeChat replies. */
+  hasReplyContext?: boolean;
   lastSeen?: number;
   error?: string;
   qrUrl?: string;

@@ -2,7 +2,11 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { expect, it, vi } from "vitest";
-import { GettingStartedPreview, CostEstimator } from "../src/client/getting-started-preview";
+import {
+  GettingStartedPreview,
+  CostEstimator,
+  WechatPrerequisite,
+} from "../src/client/getting-started-preview";
 
 it("offers a no-key preview and stops unavailable accounts before configuration", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -15,6 +19,7 @@ it("offers a no-key preview and stops unavailable accounts before configuration"
     await act(async () =>
       root.render(
         <MemoryRouter>
+          <WechatPrerequisite />
           <GettingStartedPreview />
           <CostEstimator />
         </MemoryRouter>,
@@ -31,6 +36,8 @@ it("offers a no-key preview and stops unavailable accounts before configuration"
     await click("记下一笔午餐开销");
     expect(node.textContent).toContain("个人助理保存一笔餐饮支出");
     expect(node.querySelector("input[type=password]")).toBeNull();
+    expect(node.querySelector('a[href="/developers/muse"]')?.textContent).toBe("Muse");
+    expect(node.textContent).toContain("Muse 使用已有托管助理");
     expect(node.textContent).toContain("18 credits");
     expect(node.textContent).toContain("填写单价后显示");
     vi.stubGlobal("navigator", { clipboard: undefined });

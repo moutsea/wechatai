@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { ChevronDown, ZoomIn } from "lucide-react";
 import "./landing-real.css";
 
 // 真实使用截图（桌面版微信 / 真实工作台），不是示意图。
@@ -12,8 +13,6 @@ type Shot = {
   tag: string;
   title: string;
   body: string;
-  /** 首张占满整行：桌面版微信截图缩小到半宽后，气泡里的字会看不清。 */
-  wide?: boolean;
 };
 
 const SHOTS: Shot[] = [
@@ -25,7 +24,6 @@ const SHOTS: Shot[] = [
     tag: "在微信里 · 个人助理",
     title: "说一句，到点它自己来找你",
     body: "「@助手 10 分钟之后提醒我去看火」——不用打开别的 App，微信里说一句就行；到点后尝试发送提醒。需保持微信连接有效，且受最近互动后的 24 小时回复窗口限制；过期提醒不保证补发。",
-    wide: true,
   },
   {
     src: "/images/real/channel-add.jpg",
@@ -65,41 +63,65 @@ const SHOTS: Shot[] = [
   },
 ];
 
+function ScreenshotCard({ shot }: { shot: Shot }) {
+  return (
+    <figure className="landing-real-card">
+      <a
+        className="landing-real-image"
+        href={shot.src}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`查看大图：${shot.title}（新窗口打开）`}
+      >
+        <img
+          src={shot.src}
+          width={shot.width}
+          height={shot.height}
+          loading="lazy"
+          decoding="async"
+          alt={shot.alt}
+        />
+        <span>
+          <ZoomIn size={15} aria-hidden="true" />
+          查看大图
+        </span>
+      </a>
+      <figcaption>
+        <span className="landing-real-tag">{shot.tag}</span>
+        <strong>{shot.title}</strong>
+        <p>{shot.body}</p>
+      </figcaption>
+    </figure>
+  );
+}
+
 export function LandingReal() {
   return (
     <section className="landing-real" id="real" aria-labelledby="landing-real-title">
       <div className="landing-real-head">
-        <p className="eyebrow">REAL SCREENSHOTS</p>
         <h2 id="landing-real-title">从配置到聊天，都是真实界面</h2>
-        <p>
-          下面是真实使用截图（桌面版微信与真实工作台），没有摆拍的示意图。模型走你自己的
-          API Key，对话只发生在你绑定的那个微信里。
-        </p>
+        <p>真实微信与工作台截图，点击可查看大图。</p>
       </div>
       <div className="landing-real-grid">
-        {SHOTS.map((shot) => (
-          <figure key={shot.src} className={`landing-real-card${shot.wide ? " is-wide" : ""}`}>
-            <img
-              src={shot.src}
-              width={shot.width}
-              height={shot.height}
-              loading="lazy"
-              decoding="async"
-              alt={shot.alt}
-            />
-            <figcaption>
-              <span className="landing-real-tag">{shot.tag}</span>
-              <strong>{shot.title}</strong>
-              <p>{shot.body}</p>
-            </figcaption>
-          </figure>
+        {SHOTS.slice(0, 2).map((shot) => (
+          <ScreenshotCard key={shot.src} shot={shot} />
         ))}
       </div>
+      <details className="landing-real-more">
+        <summary>
+          查看更多截图（{SHOTS.length - 2} 张）
+          <ChevronDown size={16} aria-hidden="true" />
+        </summary>
+        <div className="landing-real-grid">
+          {SHOTS.slice(2).map((shot) => (
+            <ScreenshotCard key={shot.src} shot={shot} />
+          ))}
+        </div>
+      </details>
       <p className="landing-real-note">
-        完整配置步骤见<Link to="/docs/getting-started">新手入门</Link>；
-        想让微信回得更顺手，可以看
-        <Link to="/docs/commands">微信命令速查</Link>；
-        工作台长什么样，往下看<Link to="/#workspace">工作台预览</Link>。
+        完整配置步骤见<Link to="/docs/getting-started">新手入门</Link>； 想让微信回得更顺手，可以看
+        <Link to="/docs/commands">微信命令速查</Link>； 工作台长什么样，往下看
+        <Link to="/#workspace">工作台预览</Link>。
       </p>
     </section>
   );

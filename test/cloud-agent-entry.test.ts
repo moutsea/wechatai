@@ -17,7 +17,7 @@ import { CloudAgentDelivery } from "../src/server/cloud-agent-delivery";
 import type { WxItem, WxMessage } from "../src/server/wechat";
 import type { CloudAgentPlugin } from "../src/shared/cloud-agent";
 import type { Protocol } from "../src/shared/types";
-import { wechatSetupIssue } from "../src/shared/wechat-readiness";
+import { chatSetupIssue } from "../src/shared/wechat-readiness";
 import { gif } from "./helpers/generated-gif";
 import { pixelPng, pngWithoutPixels } from "./helpers/generated-png";
 import { generatedPdf, pdfWithMissingPage } from "./helpers/generated-pdf";
@@ -1652,7 +1652,7 @@ describe("cloud Agent user entry", () => {
     expect(before.channels).toHaveLength(1);
     expect(before.assistants).toHaveLength(1);
     expect(before.currentSession?.channelName).toBe("用户文本模型");
-    expect(wechatSetupIssue(before)).toBeNull();
+    expect(chatSetupIssue(before)).toBeNull();
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const request = new Request(input, init);
       if (request.url.includes("get_bot_qrcode"))
@@ -1709,7 +1709,7 @@ describe("cloud Agent user entry", () => {
           state.storage.sql.exec("UPDATE settings SET value='1' WHERE key='planUntil'");
         });
       else expect((await save(stub, { id: p.id, enabled: false })).ok).toBe(true);
-      expect(wechatSetupIssue(await stub.snapshot())).toBeNull();
+      expect(chatSetupIssue(await stub.snapshot())).toBeNull();
       expect((await stub.snapshot()).assistants[0].id).toBe(p.modelId);
     },
   );
@@ -1731,7 +1731,7 @@ describe("cloud Agent user entry", () => {
     await runInDurableObject(stub, (instance) => {
       Reflect.get(instance, "env").CLOUD_AGENT_ENABLED = "false";
     });
-    expect(wechatSetupIssue(await stub.snapshot())).toBeNull();
+    expect(chatSetupIssue(await stub.snapshot())).toBeNull();
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       expect(new Request(input, init).url).toContain("get_bot_qrcode");
       return Response.json({

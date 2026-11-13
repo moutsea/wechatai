@@ -8,7 +8,10 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import type { WxMessage } from "../src/server/wechat";
 import { encrypt } from "../src/server/security";
 import { wechatLinkKey } from "../src/shared/wechat-links";
-import { wechatSetupIssue } from "../src/shared/wechat-readiness";
+import { chatSetupIssue, notificationWechatIssue } from "../src/shared/wechat-readiness";
+import { dashboardSetupProgress } from "../src/shared/onboarding";
+import { parseOpenClawPairing, parseOpenClawToken } from "../src/server/openclaw-token";
+import { parseNotificationToken } from "../src/server/notification-token";
 
 const accounts: ReturnType<typeof env.ACCOUNTS.getByName>[] = [];
 function account() {
@@ -555,23 +558,34 @@ describe("WeChat sessions on demand", () => {
   );
 });
 
-describe("WeChat QR configuration preflight", () => {
+describe("WeChat transport binding independent of chat configuration", () => {
   it.each([false, true])(
-    "rejects an empty account before creating a link or requesting a QR (Plus=%s)",
+    "binds an empty account without requiring or charging a model (Plus=%s)",
     async (isPlus) => {
       const stub = account();
       if (isPlus) await plus(stub);
+      const before = await stub.snapshot();
       vi.mocked(fetch).mockClear();
       const result = await api(stub, "wechat.bind");
-      expect(result).toMatchObject({ ok: false, status: 422, error: "wechat_channel_required" });
-      expect(result.message).toContain("渠道与模型");
-      expect(wechatSetupIssue(await stub.snapshot())?.code).toBe(result.error);
-      expect((await stub.snapshot()).connections).toHaveLength(0);
-      expect(fetch).not.toHaveBeenCalled();
+      expect(result.ok).toBe(true);
+      const after = await stub.snapshot();
+      expect(chatSetupIssue(after)?.code).toBe("wechat_channel_required");
+      expect(after.connections).toHaveLength(1);
+      expect(after.connection.status).toBe("waiting");
+      expect(after.connection.qrUrl).toBeTruthy();
+      expect(after.wallet.balance).toBe(before.wallet.balance);
+      expect(after.ledger).toEqual(before.ledger);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(new Request(...vi.mocked(fetch).mock.calls[0]).url).toContain("get_bot_qrcode");
+      const reply = await send(stub, after.selectedConnectionId, "你好");
+      expect(reply).toContain("当前未选择模型或插件");
+      expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
+      expect((await stub.snapshot()).ledger).toEqual(before.ledger);
+      expect(fetch).toHaveBeenCalledTimes(1);
     },
   );
 
-  it("requires a text model, even when an image plugin is configured", async () => {
+  it("keeps image-only chat unready without preventing transport binding", async () => {
     const stub = account();
     await plus(stub);
     const channel = await api(stub, "channel.save", {
@@ -582,7 +596,7 @@ describe("WeChat QR configuration preflight", () => {
     });
     expect(channel.ok).toBe(true);
     const id = await create(stub, "日常");
-    expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_model_required");
+    expect(chatSetupIssue(await stub.snapshot())?.code).toBe("wechat_model_required");
     const image = await api(stub, "model.save", {
       name: "生图模型",
       channelId: channel.data.id,
@@ -599,10 +613,10 @@ describe("WeChat QR configuration preflight", () => {
         })
       ).ok,
     ).toBe(true);
-    expect(wechatSetupIssue(await stub.snapshot())?.code).toBe("wechat_model_required");
-    expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_model_required");
-    expect((await stub.snapshot()).connection.status).toBe("disconnected");
-    expect(fetch).not.toHaveBeenCalled();
+    expect(chatSetupIssue(await stub.snapshot())?.code).toBe("wechat_model_required");
+    expect((await api(stub, "wechat.bind", { id })).ok).toBe(true);
+    expect((await stub.snapshot()).connection.status).toBe("waiting");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it.each(["chat-completions", "responses", "anthropic"])(
@@ -618,7 +632,7 @@ describe("WeChat QR configuration preflight", () => {
       });
       expect(saved.ok).toBe(true);
       const before = await stub.snapshot();
-      expect(wechatSetupIssue(before)).toBeNull();
+      expect(chatSetupIssue(before)).toBeNull();
       vi.mocked(fetch).mockClear();
       expect((await api(stub, "wechat.bind")).ok).toBe(true);
       const after = await stub.snapshot();
@@ -632,25 +646,29 @@ describe("WeChat QR configuration preflight", () => {
     },
   );
 
-  it.each(["baseUrl", "encryptedKey"])("rejects a legacy channel missing %s", async (field) => {
-    const stub = account();
-    await model(stub);
-    await runInDurableObject(stub, (_, state) => {
-      const row = state.storage.sql
-        .exec<{ id: string; data: string }>("SELECT * FROM channels")
-        .one();
-      state.storage.sql.exec(
-        "UPDATE channels SET data=? WHERE id=?",
-        JSON.stringify({ ...JSON.parse(row.data), [field]: "" }),
-        row.id,
-      );
-    });
-    expect((await api(stub, "wechat.bind")).error).toBe("wechat_channel_incomplete");
-    expect((await stub.snapshot()).connections).toHaveLength(0);
-    expect(fetch).not.toHaveBeenCalled();
-  });
+  it.each(["baseUrl", "hasKey"])(
+    "permits binding while reporting a channel missing %s",
+    async (field) => {
+      const stub = account();
+      await model(stub);
+      await runInDurableObject(stub, (_, state) => {
+        const row = state.storage.sql
+          .exec<{ id: string; data: string }>("SELECT * FROM channels")
+          .one();
+        state.storage.sql.exec(
+          "UPDATE channels SET data=? WHERE id=?",
+          JSON.stringify({ ...JSON.parse(row.data), [field]: field === "hasKey" ? false : "" }),
+          row.id,
+        );
+      });
+      expect(chatSetupIssue(await stub.snapshot())?.code).toBe("wechat_channel_incomplete");
+      expect((await api(stub, "wechat.bind")).ok).toBe(true);
+      expect((await stub.snapshot()).connection.status).toBe("waiting");
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
 
-  it("preserves an existing connection and pending messages when rebind validation fails", async () => {
+  it("preserves an existing connection and pending messages when the requested link is missing", async () => {
     const stub = account();
     const modelId = await model(stub);
     const id = await create(stub, "日常");
@@ -666,7 +684,9 @@ describe("WeChat QR configuration preflight", () => {
       );
     });
     vi.mocked(fetch).mockClear();
-    expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_model_required");
+    expect((await api(stub, "wechat.bind", { id: "missing-link" })).error).toBe(
+      "connection_missing",
+    );
     expect((await stub.snapshot()).connection).toEqual(previous.connection);
     expect(fetch).not.toHaveBeenCalled();
     await runInDurableObject(stub, (_, state) => {
@@ -678,8 +698,8 @@ describe("WeChat QR configuration preflight", () => {
     });
   });
 
-  it.each(["openclaw", "hermes", "notification"])(
-    "does not exempt a configured %s plugin from the channel requirement",
+  it.each(["openclaw", "hermes", "muse", "notification"])(
+    "binds with a configured %s plugin and no model channel",
     async (kind) => {
       const stub = account();
       await plus(stub);
@@ -691,16 +711,182 @@ describe("WeChat QR configuration preflight", () => {
         connectionId: id,
       });
       expect(saved.ok).toBe(true);
-      const tokenAction =
-        kind === "notification"
-          ? "notification.token"
-          : `plugin.${kind === "openclaw" ? "claw" : "hermes"}Token`;
-      expect((await api(stub, tokenAction, { id: saved.data.id })).ok).toBe(true);
-      expect((await stub.snapshot()).plugins?.[0].hasKey).toBe(true);
-      expect((await api(stub, "wechat.bind", { id })).error).toBe("wechat_channel_required");
-      expect(fetch).not.toHaveBeenCalled();
+      const before = await stub.snapshot();
+      expect((await api(stub, "wechat.bind", { id })).ok).toBe(true);
+      const after = await stub.snapshot();
+      expect(after.channels).toEqual([]);
+      expect(after.connection.status).toBe("waiting");
+      expect(after.wallet.balance).toBe(before.wallet.balance);
+      expect(after.ledger).toEqual(before.ledger);
+      expect(fetch).toHaveBeenCalledTimes(1);
     },
   );
+
+  it("connects a new free Muse account and returns a task result without a platform model", async () => {
+    const net = network();
+    const stub = account();
+    expect((await api(stub, "wechat.bind")).ok).toBe(true);
+    const link = (await stub.snapshot()).selectedConnectionId;
+    await cycles(stub, 1);
+    net.queues.set("token-1", [msg(1, "/wx help")]);
+    await cycles(stub, 2);
+    const saved = await api(stub, "plugin.save", {
+      pluginId: "wechatai/muse",
+      name: "Muse",
+      shortcut: "muse",
+    });
+    expect(saved.ok).toBe(true);
+    const id = saved.data.id;
+    const pairing = await api(stub, "plugin.musePair", { id });
+    const code = /"code":"([^"]+)"/.exec(pairing.data.command)![1];
+    const auth = parseOpenClawPairing(env, `Bearer ${code}`, "muse")!;
+    const pair = JSON.parse(
+      await stub.openClawRequest(
+        id,
+        auth.secret,
+        "pair",
+        {
+          proof: "b".repeat(43),
+          agents: [{ id: "main", name: "Muse", isDefault: true }],
+        },
+        "muse",
+      ),
+    );
+    expect(pair.ok).toBe(true);
+    const secret = parseOpenClawToken(env, `Bearer ${pair.data.token}`, "muse")!.secret;
+    const runnerId = crypto.randomUUID();
+    const call = async (action: string, body = {}) =>
+      JSON.parse(await stub.openClawRequest(id, secret, action, { runnerId, ...body }, "muse"));
+    expect(await send(stub, link, "/use muse")).toContain("Muse");
+    await send(stub, link, "请整理本周计划");
+    const job = (await call("poll")).data.jobs[0];
+    expect(job.text).toBe("请整理本周计划");
+    expect((await call("claim", { id: job.id })).data.claimed).toBe(true);
+    const balance = (await stub.snapshot()).wallet.balance;
+    const result = await call("event", {
+      eventId: crypto.randomUUID(),
+      routeId: job.routeId,
+      jobId: job.id,
+      text: "计划已整理完成",
+    });
+    expect(result.ok).toBe(true);
+    await cycles(stub, 2);
+    expect(net.sends.some((s) => s.text.includes("计划已整理完成"))).toBe(true);
+    const after = await stub.snapshot();
+    expect(after.channels).toEqual([]);
+    expect(after.wallet.balance).toBeCloseTo(balance - result.data.cost, 3);
+    expect(net.modelInputs).toEqual([]);
+  });
+
+  it("keeps notification setup pending until the first WeChat message, without a model or credits charge", async () => {
+    const net = network();
+    let stub = account();
+    const before = await stub.snapshot();
+    expect((await api(stub, "wechat.bind")).ok).toBe(true);
+    await cycles(stub, 1);
+    const saved = await api(stub, "plugin.save", {
+      pluginId: "wechatai/notification",
+      name: "服务通知",
+      connectionId: (await stub.snapshot()).selectedConnectionId,
+    });
+    expect(saved.ok).toBe(true);
+    const token = (await api(stub, "notification.token", { id: saved.data.id })).data.token;
+    const auth = parseNotificationToken(env, `Bearer ${token}`)!;
+    const push = async (key = "build-1") =>
+      JSON.parse(
+        await stub.notificationRequest(
+          saved.data.id,
+          auth.credential,
+          "send",
+          { text: "构建成功" },
+          key,
+        ),
+      );
+    const pending = await stub.snapshot();
+    expect(pending.connection.status).toBe("connected");
+    expect(pending.connection.lastSeen).toBeGreaterThan(0);
+    expect(pending.connection.hasReplyContext).toBe(false);
+    expect(dashboardSetupProgress(pending)).toEqual({
+      service: true,
+      wechat: true,
+      message: false,
+    });
+    expect(await push()).toMatchObject({
+      ok: false,
+      status: 409,
+      error: "wechat_context_required",
+    });
+
+    net.queues.set("token-1", [msg(1, "/wx help")]);
+    await cycles(stub, 2);
+    const ready = await stub.snapshot();
+    expect(ready.stats.messages).toBe(0);
+    expect(ready.connection.hasReplyContext).toBe(true);
+    expect(ready.connections[0].hasReplyContext).toBe(true);
+    expect(ready.connection).not.toHaveProperty("contextToken");
+    expect(ready.connection).not.toHaveProperty("encryptedCredentials");
+    expect(dashboardSetupProgress(ready)).toEqual({ service: true, wechat: true, message: true });
+    const accepted = await push();
+    expect(accepted.ok).toBe(true);
+    await stub.dispatchNotifications();
+    expect(net.sends.some((s) => s.text.includes("构建成功"))).toBe(true);
+
+    const oldInteraction = Date.now() - 2 * 86400000;
+    await runInDurableObject(stub, (_, state) => {
+      state.storage.sql.exec(
+        "UPDATE settings SET value=json_set(value,'$.lastSeen',?) WHERE key='connection'",
+        oldInteraction,
+      );
+    });
+    await cycles(stub, 1);
+    const stale = await stub.snapshot();
+    expect(stale.connection.lastSeen).toBe(oldInteraction);
+    expect(notificationWechatIssue(stale.connections[0])?.code).toBe("wechat_reply_window_expired");
+    expect(dashboardSetupProgress(stale).message).toBe(true);
+    net.control.failedSends = 1;
+    expect((await push("build-2")).ok).toBe(true);
+    await stub.dispatchNotifications();
+    const deliveries = (await api(stub, "notification.status", { id: saved.data.id })).data
+      .deliveries;
+    expect(deliveries.find((d: { state: string }) => d.state === "pending")).toBeDefined();
+
+    net.queues.set("token-1", [{ ...msg(1, "/wx help", 2), context_token: "context-refreshed" }]);
+    await cycles(stub, 2);
+    const refreshed = await stub.snapshot();
+    expect(refreshed.connection.lastSeen).toBeGreaterThan(oldInteraction);
+    expect(notificationWechatIssue(refreshed.connections[0])).toBeNull();
+    await runInDurableObject(stub, (_, state) => {
+      state.storage.sql.exec("UPDATE notification_jobs SET nextAt=0 WHERE state='pending'");
+    });
+    await stub.dispatchNotifications();
+    expect(
+      net.sends.some((s) => s.text.includes("构建成功") && s.context === "context-refreshed"),
+    ).toBe(true);
+    expect(
+      (await api(stub, "notification.status", { id: saved.data.id })).data.deliveries.every(
+        (d: { state: string }) => d.state === "sent",
+      ),
+    ).toBe(true);
+    const after = await stub.snapshot();
+    expect(after.channels).toEqual([]);
+    expect(after.wallet.balance).toBe(before.wallet.balance);
+    expect(after.ledger).toEqual(before.ledger);
+    expect(net.modelInputs).toEqual([]);
+    await runInDurableObject(env.REMINDERS.getByName(`${stub.id}:notifications`), (_, state) =>
+      state.storage.deleteAlarm(),
+    );
+    await abortAllDurableObjects();
+    const fresh = env.ACCOUNTS.get(stub.id);
+    accounts[accounts.indexOf(stub)] = fresh;
+    stub = fresh;
+    expect((await stub.snapshot()).connection.hasReplyContext).toBe(true);
+    expect((await api(stub, "wechat.bind")).ok).toBe(true);
+    await cycles(stub, 1);
+    const rebound = await stub.snapshot();
+    expect(rebound.connection.status).toBe("connected");
+    expect(rebound.connection.hasReplyContext).toBe(false);
+    expect(dashboardSetupProgress(rebound).message).toBe(false);
+  });
 
   it("does not combine a model from one channel with another channel's key", () => {
     const setup = {
@@ -720,9 +906,9 @@ describe("WeChat QR configuration preflight", () => {
       ],
       assistants: [{ channelId: "with-model", model: "chat-model" }],
     };
-    expect(wechatSetupIssue(setup)).not.toBeNull();
+    expect(chatSetupIssue(setup)).not.toBeNull();
     setup.assistants.push({ channelId: "with-key", model: "chat-model" });
-    expect(wechatSetupIssue(setup)).toBeNull();
+    expect(chatSetupIssue(setup)).toBeNull();
   });
 });
 

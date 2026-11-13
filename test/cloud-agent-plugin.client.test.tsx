@@ -9,6 +9,9 @@ import { useApp } from "../src/client/context";
 import { createFakeApi } from "./support/fake-api";
 import { cloudAgentInputSchema, type CloudAgentPlugin } from "../src/shared/cloud-agent";
 import type { Snapshot } from "../src/shared/types";
+import { museInputSchema } from "../src/shared/muse";
+import { notificationInputSchema } from "../src/shared/notification";
+import { NotificationAccess, NotificationEditor } from "../src/client/pages/notification-editor";
 
 vi.mock("../src/client/context", () => ({ useApp: vi.fn() }));
 vi.mock("../src/client/analytics-client", () => ({ trackFunnel: vi.fn() }));
@@ -65,7 +68,7 @@ describe("cloud Agent onboarding", () => {
       expect(container.textContent).toContain("云端 Agent 暂未开放");
       expect(container.textContent).not.toContain("云端 Agent 已就绪");
       expect(container.textContent).not.toContain("了解 Plus 云端 Agent");
-      expect(container.querySelectorAll(".onboarding-own-key")).toHaveLength(1);
+      expect(container.textContent).toContain("接入已有 Agent 或接收通知");
     },
   );
 
@@ -107,7 +110,19 @@ describe("cloud Agent onboarding", () => {
       const baseline = await createFakeApi()<Snapshot>("/dashboard");
       const selected = { ...plugin(), id: "work-cloud", shortcut: "计划" };
       data.cloudAgent = selected.status!;
-      data.plugins = [plugin(false), { ...plugin(), id: "other", shortcut: "其他" }, selected];
+      data.plugins = [
+        {
+          ...museInputSchema.parse({ name: "Muse", shortcut: "muse" }),
+          id: "remote",
+          pluginId: "wechatai/muse",
+          version: "1.0.0",
+          createdAt: 1,
+          hasKey: true,
+        },
+        plugin(false),
+        { ...plugin(), id: "other", shortcut: "其他" },
+        selected,
+      ];
       data.currentSession = { ...baseline.currentSession!, pluginInstanceId: selected.id };
       if (withModels) {
         data.channels = baseline.channels;
@@ -123,6 +138,9 @@ describe("cloud Agent onboarding", () => {
       expect(commands).toContain("/use 计划");
       expect(commands).not.toContain("/use 云");
       expect(commands).not.toContain("/use 其他");
+      expect(commands).not.toContain("/use muse");
+      expect(container.textContent).toContain("云端 Agent 已就绪，按下面的步骤连接。");
+      expect(container.textContent).not.toContain("Agent 无需使用微伴的模型配置");
       expect(request).not.toHaveBeenCalled();
       await click("去连接微信");
       await render(<Wechat />);
@@ -131,15 +149,56 @@ describe("cloud Agent onboarding", () => {
     },
   );
 
-  it("returns incomplete setup to AI selection without dismissing the guide", async () => {
+  it.each([
+    ["muse", false],
+    ["muse", true],
+    ["hermes", false],
+    ["hermes", true],
+    ["openclaw", false],
+    ["openclaw", true],
+  ] as const)(
+    "keeps the selected %s in the guide and WeChat page, with models: %s",
+    async (kind, withModels) => {
+      const agents = ["first", "selected"].map((id) => ({
+        ...museInputSchema.parse({ name: id, shortcut: id }),
+        id,
+        pluginId: `wechatai/${kind}` as const,
+        version: "1.0.0" as const,
+        createdAt: 1,
+        hasKey: true,
+      }));
+      data.plugins = [
+        { ...agents[0], id: "disabled", shortcut: "disabled", enabled: false },
+        ...agents,
+      ];
+      data.currentSession = { ...data.currentSession!, pluginInstanceId: "selected" };
+      await onboarding(withModels);
+      if (withModels) await click("新手引导");
+      await click("我了解了，下一步");
+      await click("下一步");
+      const commands = [...container.querySelectorAll(".onboarding-wechat-steps code")].map(
+        (c) => c.textContent,
+      );
+      expect(commands).toContain("/use selected");
+      expect(commands).not.toContain("/use first");
+      expect(commands).not.toContain("/use disabled");
+      await click("去连接微信");
+      await render(<Wechat />);
+      expect(container.textContent).toContain("发送 /use selected");
+      expect(container.textContent).not.toContain("发送 /use first");
+    },
+  );
+
+  it("allows transport binding before choosing an AI service", async () => {
     data.cloudAgent = plugin().status!;
     await onboarding();
     await click("我了解了，下一步");
     await click("下一步");
-    await click("先选择 AI");
-    expect(container.textContent).toContain("选择你的 AI 服务");
-    expect(container.querySelector("dialog")).not.toBeNull();
-    expect(request).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("可以先绑定微信");
+    await click("去连接微信");
+    expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/wechat");
+    expect(container.querySelector("dialog")).toBeNull();
+    expect(request).toHaveBeenCalledExactlyOnceWith("/onboarding/dismiss", { method: "POST" });
   });
 });
 async function render(view = <Plugins />) {
@@ -190,6 +249,129 @@ afterEach(async () => {
 });
 
 describe("cloud Agent plugin interactions", () => {
+  it("keeps notification initialization visible after creating a Token, following the receiving link", async () => {
+    const notification = {
+      ...notificationInputSchema.parse({ connectionId: "receiving" }),
+      id: "notice",
+      pluginId: "wechatai/notification" as const,
+      version: "1.0.0" as const,
+      createdAt: 1,
+      shortcut: "notice",
+      hasKey: true,
+    };
+    data.plugins = [notification];
+    data.connection = { status: "connected", hasReplyContext: true };
+    const receiving = {
+      ...data.connections[0],
+      id: "receiving",
+      name: "通知微信",
+      status: "connected" as const,
+      hasReplyContext: false,
+    };
+    data.connections.push(receiving);
+    request.mockResolvedValue({ hasToken: true, endpoint: "/api/notify", deliveries: [] });
+    await render(<NotificationAccess plugin={notification} />);
+    expect(container.textContent).toContain("已生成");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("通知微信」尚未就绪");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("/wx help");
+    expect(container.querySelector('[role="status"] a')?.getAttribute("href")).toBe("/app/wechat");
+
+    receiving.hasReplyContext = true;
+    await render(<NotificationAccess plugin={notification} />);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "通知微信」已完成初始化",
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("24 小时回复窗口");
+    expect(container.querySelector('[role="status"]')?.textContent).not.toContain("/wx help");
+
+    receiving.lastSeen = Date.now() - 2 * 86400000;
+    await render(<NotificationAccess plugin={notification} />);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("需要更新回复窗口");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("/wx help");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("无需重新扫码");
+    await render(
+      <NotificationEditor plugin={notification} onClose={() => {}} onSaved={() => {}} />,
+    );
+    expect(container.querySelector("dialog")?.textContent).toContain("回复窗口可能已过期");
+    data.assistants = [];
+    data.channels = [];
+    data.currentSession = null;
+    data.selectedConnectionId = receiving.id;
+    data.connection = { ...receiving };
+    await render(<Wechat />);
+    expect(container.querySelector(".binding-card > p")?.textContent).toContain(
+      "回复窗口可能已过期",
+    );
+    receiving.lastSeen = Date.now();
+    data.connection = { ...receiving };
+    await render(<Wechat />);
+    expect(container.querySelector(".binding-card > p")?.textContent).toContain("已完成首次通信");
+    await render(<NotificationAccess plugin={notification} />);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("已完成初始化");
+    receiving.paused = true;
+    await render(<NotificationAccess plugin={notification} />);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("接收微信已暂停");
+    receiving.paused = false;
+    receiving.hasReplyContext = false;
+    await render(<NotificationAccess plugin={notification} />);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("/wx help");
+    await render(
+      <NotificationEditor plugin={notification} onClose={() => {}} onSaved={() => {}} />,
+    );
+    expect(container.querySelector("dialog")?.textContent).toContain("/wx help");
+    expect(container.querySelector("dialog")?.textContent).toContain("无需配置模型");
+  });
+
+  it.each(["empty", "muse", "notification"])(
+    "keeps QR binding and regeneration usable for %s accounts without models",
+    async (kind) => {
+      data.channels = [];
+      data.assistants = [];
+      data.currentSession = null;
+      data.plugins =
+        kind === "muse"
+          ? [
+              {
+                ...museInputSchema.parse({ name: "Muse", shortcut: "muse" }),
+                id: "muse",
+                pluginId: "wechatai/muse",
+                version: "1.0.0",
+                createdAt: 1,
+                hasKey: true,
+              },
+            ]
+          : kind === "notification"
+            ? [
+                {
+                  ...notificationInputSchema.parse({ connectionId: "default" }),
+                  id: "notice",
+                  pluginId: "wechatai/notification",
+                  version: "1.0.0",
+                  createdAt: 1,
+                  shortcut: "notice",
+                  hasKey: true,
+                },
+              ]
+            : [];
+      data.connection = { status: "disconnected" };
+      await render(<Wechat />);
+      await click("获取二维码");
+      expect(request).toHaveBeenCalledWith("/wechat/links/default/bind", { method: "POST" });
+      data.connection = { status: "waiting", qrUrl: "https://example.test/qr" };
+      await render(<Wechat />);
+      expect(container.querySelector(".qr-area svg")).not.toBeNull();
+      await click("重新生成二维码");
+      expect(request).toHaveBeenCalledTimes(2);
+      if (kind !== "empty") {
+        expect(container.textContent).not.toContain("请先添加渠道");
+        expect(container.textContent).not.toContain("普通模型聊天尚未就绪");
+        expect(container.textContent).toContain(
+          kind === "muse" ? "发送 /use muse" : "配置消息提醒",
+        );
+      }
+    },
+  );
+
   it("offers the server-authorized administrator preview with its billing rules", async () => {
     data.cloudAgent = { ...plugin().status!, adminPreview: true };
     await render();
@@ -412,7 +594,7 @@ describe("cloud Agent plugin interactions", () => {
     ["membership", "云端 Agent 是 Plus 会员功能"],
     ["disabled", "启用云端 Agent"],
   ])(
-    "blocks cloud-only binding and offers a relevant action when %s eligibility is lost",
+    "permits transport binding but warns about cloud eligibility when %s is lost",
     async (change, message) => {
       data.channels = [];
       data.plugins = [plugin(change !== "disabled")];
@@ -423,7 +605,7 @@ describe("cloud Agent plugin interactions", () => {
       const qr = [...container.querySelectorAll("button")].find((b) =>
         b.textContent?.includes("获取二维码"),
       )!;
-      expect(qr.disabled).toBe(true);
+      expect(qr.disabled).toBe(false);
       expect(container.textContent).toContain(message);
       expect(
         [...container.querySelectorAll("a")].some(
@@ -432,6 +614,8 @@ describe("cloud Agent plugin interactions", () => {
         ),
       ).toBe(true);
       expect(request).not.toHaveBeenCalled();
+      await act(async () => qr.click());
+      expect(request).toHaveBeenCalledWith("/wechat/links/default/bind", { method: "POST" });
     },
   );
 });

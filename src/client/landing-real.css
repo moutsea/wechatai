@@ -37,9 +37,19 @@
   box-shadow: var(--shadow);
   overflow: hidden;
 }
-/* 主图占满整行：桌面版微信截图里的字，卡片宽度不够时会被缩到看不清。 */
-.landing-real-card.is-wide {
-  grid-column: 1 / -1;
+.landing-real-image {
+  display: block;
+  cursor: zoom-in;
+}
+.landing-real-image > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--green);
 }
 .landing-real-card img {
   display: block;
@@ -83,6 +93,29 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+.landing-real-more {
+  margin-top: 20px;
+}
+.landing-real-more > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--green);
+  cursor: pointer;
+  list-style: none;
+}
+.landing-real-more > summary::-webkit-details-marker {
+  display: none;
+}
+.landing-real-more[open] > summary svg {
+  transform: rotate(180deg);
+}
 /* 平板宽度下两列会把界面截图压到 400px 出头，弹窗里的字就看不清了；
    宁可早点变成单列，让截图保持可读。 */
 @media (max-width: 980px) {
@@ -100,5 +133,8 @@
   }
   .landing-real-card figcaption {
     padding: 16px 18px 18px;
+  }
+  .landing-real-card figcaption p {
+    font-size: 14px;
   }
 }

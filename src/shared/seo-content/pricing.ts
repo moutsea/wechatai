@@ -9,7 +9,7 @@ export const pricingPage: SeoPage = {
     "自备 API 费用另付服务商；运营方开放的 Plus 云端 Agent 也使用自备模型，API 费用另付服务商，仍消耗 credits 并限制次数。免费版每天 100 credits，Plus ¥9.9/月或 ¥88/年。",
   eyebrow: "价格",
   h1: "价格：我们不卖 token",
-  lede: `${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
+  lede: "先用免费版，按需升级 Plus。会员与 credits 用于平台服务，模型 API 费用另付服务商。",
   answer: `${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}微伴文字部分按加权 token 收取 credits，AI 生图每张 5 credits，描述文字另计。免费版每天赠送 100 credits、可绑定 1 个微信链接与 1 个插件；Plus 为 ¥9.9/月或 ¥88/年，每天 1000 credits、插件不限、可绑定 10 个微信链接，并解锁附件功能。`,
   primaryKeyword: "微信 AI 价格",
   secondaryKeywords: ["微伴 价格", "微信 ai 收费", "微信 ai 免费额度", "clawbot 收费吗"],

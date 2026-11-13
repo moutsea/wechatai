@@ -36,15 +36,15 @@ export function WechatPrerequisite() {
       <div aria-live="polite">
         {available === "yes" && (
           <p>
-            接下来选择下方的使用方式。聊模型需自备有效 API Key 和服务商余额；已有 Agent
-            或只收通知无需添加本站模型渠道。<Link to="/register">免费创建账户 →</Link>
+            有入口就可以继续配置。聊模型需自备有效 API Key 和服务商余额；已有 Agent
+            或只收通知无需添加本站模型渠道。<Link to="/#connect">选择接入方式 →</Link>
           </p>
         )}
         {available === "no" && (
           <p>
             先暂停 Key 配置与付费。微伴无法替账号开通微信入口；可先查看
             <Link to="/wechat-clawbot">入口截图与排查说明</Link>
-            ，等待微信开放后再绑定。下面的模拟预览无需注册。
+            ，等待微信开放后再绑定。也可先看<Link to="/#try">无需注册的模拟预览</Link>。
           </p>
         )}
       </div>
@@ -68,11 +68,16 @@ const paths = [
   {
     icon: Bot,
     title: "连接已有 Agent",
-    note: "自备在线设备",
-    body: "OpenClaw / Hermes 在你自己的电脑或服务器运行。设备和 Agent 需保持在线。",
+    note: "Muse 托管 / 自备设备",
+    body: "Muse 使用已有托管助理；OpenClaw / Hermes 在自己的电脑或服务器运行。无需在微伴另配模型。",
     cost: "平台 credits + Agent 自身费用",
     href: "/wechat-agent",
     action: "选择 Agent 接入方式",
+    guides: [
+      { name: "Muse", href: "/developers/muse" },
+      { name: "Hermes", href: "/developers/hermes" },
+      { name: "OpenClaw", href: "/developers/openclaw" },
+    ],
   },
   {
     icon: Bell,
@@ -113,13 +118,12 @@ export function GettingStartedPreview() {
   const [copied, setCopied] = useState("");
   const task = tasks[selected];
   return (
-    <section className="start-explore" id="start" aria-labelledby="start-explore-title">
+    <section className="start-explore" id="connect" aria-labelledby="start-explore-title">
       <header>
         <p className="eyebrow">从你想做的事开始</p>
         <h2 id="start-explore-title">一个微信，三种接入方式</h2>
-        <p>先确认入口，再选适合自己的路径。免费版可配置 1 个插件、绑定 1 个微信链接。</p>
+        <p>除了直接聊模型，也可以连接已有 Agent 或接收服务通知。</p>
       </header>
-      <WechatPrerequisite />
       <div className="start-paths">
         {paths.map(({ icon: Icon, ...path }) => (
           <article key={path.title}>
@@ -132,6 +136,15 @@ export function GettingStartedPreview() {
               {path.action}
               <ArrowRight size={16} aria-hidden="true" />
             </Link>
+            {path.guides && (
+              <nav className="start-path-guides" aria-label="Agent 接入指南">
+                {path.guides.map((guide) => (
+                  <Link key={guide.href} to={guide.href}>
+                    {guide.name}
+                  </Link>
+                ))}
+              </nav>
+            )}
           </article>
         ))}
       </div>
@@ -221,7 +234,8 @@ export function CostEstimator() {
         <h2 id="cost-estimator-title">先估算自己的文字用量</h2>
         <p>
           只在浏览器内计算，无需登录。服务商单价用于估算模型 API 费用；云端 Agent
-          同样使用自备模型，可能多次调用模型，实际 API 费用以服务商账单为准。云端仍需 Plus 且服务已开放，执行次数另有限制。
+          同样使用自备模型，可能多次调用模型，实际 API 费用以服务商账单为准。云端仍需 Plus
+          且服务已开放，执行次数另有限制。
         </p>
       </header>
       <div className="cost-fields">

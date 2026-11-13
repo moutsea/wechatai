@@ -1644,6 +1644,13 @@ code {
   color: var(--muted);
   margin-top: 10px;
 }
+.binding-card > p.wechat-mobile-scan-note {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--sage);
+  color: var(--green);
+  font-size: 14px;
+}
 .qr-area {
   display: flex;
   align-items: center;
@@ -2544,307 +2551,104 @@ code {
 .landing-hero {
   width: var(--container-w);
   margin-inline: auto;
-  padding: 48px 0 100px;
+  padding: 64px 0 48px;
   display: grid;
   grid-template-columns: 1.15fr 1fr;
   gap: 60px;
   align-items: center;
 }
 .landing-copy h1 {
+  margin: 0 0 18px;
   font-size: clamp(36px, 3.9vw, 48px);
-  line-height: 1.38;
-  letter-spacing: -0.5px;
-  font-weight: 550;
-  margin: 23px 0;
-  /* 中文标题按字数折行容易把最后两三个字挤到下一行，balance 让两行长度接近。 */
-  text-wrap: balance;
+  line-height: 1.4;
+  font-weight: 600;
 }
 .landing-copy h1 span {
+  display: block;
   color: var(--green);
-  /* balance 会在任意两字之间断行，把动词「用上」切成「用 / 上」；绿色短语整体不可断。 */
-  white-space: nowrap;
 }
 .landing-copy > p {
-  font-size: 14px;
-  line-height: 2.15;
+  font-size: 16px;
+  line-height: 1.85;
   color: var(--muted);
-  margin-bottom: 33px;
+  max-width: 440px;
 }
 .hero-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 12px 24px;
+  margin-top: 26px;
 }
 .hero-actions .button {
-  padding: 15px 22px;
-  /* 主次按钮同尺寸：零门槛入口不该被做成一行小字，主按钮也不该比它轻。 */
+  padding: 15px 24px;
   font-size: var(--text-base);
   min-height: 52px;
 }
-/* 选择器要和 `.landing-copy > p`（0,1,1）同权或更高，否则字号/行高/外边距全被它覆盖。 */
-.landing-copy > p.hero-note {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 8px;
-  margin: 14px 0 0;
-  font-size: var(--text-sm);
-  line-height: 1.7;
-  color: var(--muted);
-}
-/* 三句各自成块：窄屏换行时按句折，不会把「不绑卡」或「删除」拆开。 */
-.hero-note > span {
-  white-space: nowrap;
+.hero-how {
   display: inline-flex;
-  align-items: center;
-}
-/* 分隔符是句子里的真实节点（见 public-pages.tsx），不是伪元素——
-   伪元素的 content 会进可访问性树，读屏会念出「·」。颜色也别用 --line（1.29:1 看不见）。 */
-.hero-note-dot {
-  margin-left: 8px;
-  color: var(--muted);
-  opacity: 0.7;
-}
-.hero-trust {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  margin-top: 27px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.hero-trust > span {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.conversation-illustration {
-  position: relative;
-  padding: 35px 10px 84px;
-  isolation: isolate;
-}
-.orbit {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  transform: rotate(-30deg) scale(1.1, 0.9);
-  background: #eafff1;
-  border-color: #c3efd3;
-}
-.orbit-two {
-  transform: rotate(-30deg) scale(1.25, 1.05);
-  background: transparent;
-  border-style: dashed;
-  opacity: 0.7;
-}
-.illustration-window {
-  background: #ededed;
-  border: 1px solid #d8ddd9;
-  box-shadow: 0 25px 55px #0e17121c;
-  border-radius: 18px;
-  overflow: hidden;
-  transform: rotate(1deg);
-  position: relative;
-  max-width: 450px;
-  margin: auto;
-  color: #191919;
-}
-.illustration-window-top {
-  display: grid;
-  grid-template-columns: 24px 1fr 24px;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 17px;
-  background: #f7f7f7;
-  border-bottom: 1px solid #dedede;
-}
-.illustration-window-top strong {
-  text-align: center;
-  font-size: 16px;
-  font-weight: 600;
-}
-.illustration-messages {
-  padding: 0 18px 30px;
-}
-.illustration-date {
-  text-align: center;
-  font-size: 12px;
-  color: #818181;
-  margin: 21px 0 25px;
-}
-.illustration-message {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-}
-.illustration-message + .illustration-message {
-  margin-top: 25px;
-}
-.illustration-message.outgoing {
-  justify-content: flex-end;
-}
-.illustration-avatar {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 5px;
-  flex-shrink: 0;
-}
-.illustration-avatar.person {
-  background: #eadfcf;
-  color: #785e43;
-}
-.illustration-avatar.assistant {
-  background: var(--dark-surface);
-  color: var(--lime);
-}
-.illustration-bubble {
-  position: relative;
-  width: fit-content;
-  padding: 11px 13px;
-  border-radius: 5px;
-  background: #fff;
-  color: #191919;
-  font-size: 13px;
-  line-height: 1.8;
-  max-width: 270px;
-}
-.illustration-bubble::before {
-  content: "";
-  position: absolute;
-  top: 14px;
-  width: 8px;
-  height: 8px;
-  background: inherit;
-  transform: rotate(45deg);
-}
-.outgoing > .illustration-bubble {
-  background: #95ec69;
-  max-width: calc(100% - 47px);
-}
-.outgoing > .illustration-bubble::before {
-  right: -4px;
-}
-.illustration-reply {
-  min-width: 0;
-  padding-top: 1px;
-}
-.illustration-reply > .illustration-bubble::before {
-  left: -4px;
-}
-.illustration-model-name {
-  display: block;
-  margin-bottom: 6px;
-  color: #737373;
-  font-size: 12px;
-}
-.illustration-input {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid #d8d8d8;
-  background: #f7f7f7;
-  padding: 12px 14px;
-  color: #333;
-}
-.illustration-input svg {
-  stroke-width: 1.6;
-}
-.illustration-voice {
-  display: grid;
-  place-items: center;
-  width: 25px;
-  height: 25px;
-  border: 1.6px solid currentColor;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.illustration-input-field {
-  min-width: 0;
-  flex: 1;
-  height: 35px;
-  padding: 8px 11px;
-  border-radius: 5px;
-  background: #fff;
-  color: #9a9a9a;
-  font-size: 12px;
-}
-.floating-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  position: absolute;
-  z-index: 1;
-  right: -10px;
-  top: 6px;
-  padding: 10px 15px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: var(--lime);
-  color: var(--on-lime);
-  font-size: 12px;
-  transform: rotate(6deg);
-  border-color: var(--lime);
-}
-.floating-models {
-  position: absolute;
-  bottom: -6px;
-  left: -16px;
-  padding: 15px 23px;
-  border-radius: 12px;
-  background: #fff;
-  border: 1px solid var(--line);
-  box-shadow: 0 7px 20px #8b9e5709;
-  transform: rotate(-5deg);
-  border-color: var(--line-strong);
-}
-.floating-models span {
-  font-size: 12px;
-  color: var(--muted);
-  display: block;
-  margin-bottom: 8px;
-}
-.floating-models strong {
-  font-size: 12px;
-  color: var(--ink);
-  font-weight: 500;
-}
-.floating-models i {
-  font-style: normal;
-  padding: 0 8px;
-  color: var(--muted);
-}
-.landing-strip {
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  padding: 28px 40px;
-  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 62px;
-  background: var(--dark-surface);
-  color: var(--on-green);
-  border-color: var(--dark-line);
+  gap: 6px;
+  min-height: 44px;
+  color: var(--green);
+  font-size: 14px;
 }
-.landing-strip > span {
+.hero-how:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.landing-copy > p.hero-note {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.hero-demo {
+  margin: 0;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface-soft);
+}
+.hero-demo figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  color: var(--muted);
   font-size: 12px;
-  color: var(--on-green-muted);
 }
-.landing-strip strong {
+.hero-demo figcaption > span:first-child {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.5px;
-  white-space: nowrap;
+  gap: 7px;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 600;
 }
-.landing-strip strong svg {
-  color: var(--lime);
-  stroke-width: 1.7;
+.hero-demo > p {
+  width: fit-content;
+  max-width: 88%;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.8;
+}
+.hero-demo-question {
+  margin-left: auto;
+  margin-bottom: 18px;
+  background: #d9fce6;
+  border-radius: 12px 12px 2px 12px;
+}
+.hero-demo-answer {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px 12px 12px 2px;
+}
+.landing-start {
+  width: var(--container-w);
+  max-width: 880px;
+  margin: 0 auto;
 }
 .landing-cta {
   width: var(--container-w);
@@ -3247,9 +3051,6 @@ code {
   .landing-copy h1 {
     font-size: 44px;
   }
-  .landing-strip {
-    gap: 33px;
-  }
   .history-locked {
     flex-wrap: wrap;
   }
@@ -3383,16 +3184,8 @@ code {
     width: 100%;
     justify-content: center;
   }
-  .hero-trust {
-    gap: 12px;
-    flex-wrap: wrap;
-  }
   .landing-hero {
     gap: 30px;
-  }
-  .landing-strip {
-    flex-wrap: wrap;
-    gap: 20px 35px;
   }
   .landing-footer {
     /* 横向 gutter 由子级 .landing-footer-main 的 --container-w 负责，父级不能再加。 */
@@ -3771,70 +3564,39 @@ code {
     font-size: 12px;
   }
   .landing-hero {
-    grid-template-columns: 1fr;
-    /* 横向内边距交给 --container-w；这里再补 27px 会让 hero 内容比同页其它区块更靠里。 */
-    padding: 48px 0 70px;
-    gap: 50px;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 36px 0 32px;
+    gap: 28px;
   }
   .landing-copy {
     text-align: center;
   }
-  .landing-copy .eyebrow {
-    justify-content: center;
-    font-size: 12px;
-    letter-spacing: 1.1px;
-  }
   .landing-copy h1 {
-    font-size: clamp(28px, 7.6vw, 44px);
-    margin-top: 20px;
+    font-size: clamp(30px, 8vw, 38px);
+    margin-bottom: 16px;
   }
   .landing-copy > p {
-    font-size: 12px;
+    margin-inline: auto;
+    font-size: 15px;
   }
   .landing .hero-actions {
     align-items: stretch;
     flex-direction: column;
-    gap: 10px;
+    gap: 2px;
+    margin-top: 22px;
   }
-  .landing .hero-actions .button {
-    justify-content: center;
-  }
-  /* 选择器要带上 .landing-copy 前缀，否则被上面那条 0,2,1 的规则压住，窄屏会整块左对齐。 */
   .landing-copy > p.hero-note {
-    justify-content: center;
+    margin-top: 6px;
   }
-  .hero-trust {
-    justify-content: center;
-    font-size: 12px;
-    gap: 18px;
+  .hero-demo {
+    padding: 20px;
   }
-  .conversation-illustration {
-    width: 100%;
-    max-width: 425px;
-    margin: auto;
-    padding-top: 20px;
+  .hero-demo figcaption {
+    margin-bottom: 18px;
   }
-  .illustration-window {
-    max-width: 350px;
-  }
-  .floating-label {
-    right: 0;
-    top: -6px;
-  }
-  .floating-models {
-    left: 0;
-  }
-  .landing-strip {
-    padding: 25px;
-    gap: 18px 22px;
-  }
-  .landing-strip > span {
-    width: 100%;
-    text-align: center;
-    font-size: 12px;
-  }
-  .landing-strip > strong {
-    font-size: 12px;
+  .hero-demo > p {
+    padding: 10px 13px;
+    font-size: 14px;
   }
   .landing-cta {
     padding: 30px 25px 60px;
@@ -4116,16 +3878,6 @@ code {
   .history-locked > div {
     width: 100%;
   }
-  .landing-copy h1 {
-    font-size: clamp(28px, 7.6vw, 44px);
-  }
-  .floating-models {
-    left: -8px;
-  }
-  .floating-label {
-    right: -5px;
-    font-size: 12px;
-  }
   .ledger-head,
   .ledger-row {
     grid-template-columns: 1.7fr 0.8fr 0.8fr;
@@ -4319,15 +4071,6 @@ code {
 .landing-copy > p {
   color: var(--muted);
 }
-.landing-strip {
-  color: var(--on-green);
-  background: var(--dark-surface);
-  border-color: var(--dark-line);
-}
-.hero-trust {
-  font-size: 12px;
-  color: var(--muted);
-}
 .workspace-footer {
   font-size: 12px;
 }
@@ -4392,12 +4135,6 @@ code {
     font-size: 12px;
   }
   .ledger-description {
-    font-size: 12px;
-  }
-  .hero-trust {
-    font-size: 12px;
-  }
-  .illustration-bubble {
     font-size: 12px;
   }
   .assistant-card-top .tag {

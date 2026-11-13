@@ -92,8 +92,8 @@ export function Dashboard() {
           </h2>
           <p>
             {connected
-              ? "微信已就绪。拿起手机，向你选择的模型提问吧。"
-              : "添加渠道和模型，扫码连接微信，就可以开始自然地聊天。"}
+              ? "微信已连接。选择模型、接入已有 Agent，或配置服务通知。"
+              : "扫码连接微信，再按需配置模型、Agent 或服务通知。"}
           </p>
           <Link to={`${base}/wechat`}>
             {connected ? "查看我的微信连接" : "连接我的微信"}
@@ -196,12 +196,20 @@ export function Dashboard() {
           </p>
         </article>
       </div>
-      {(!setup.model || !setup.wechat || !setup.message) && (
+      {(!setup.service || !setup.wechat || !setup.message) && (
         <div className="onboarding-strip">
           {[
-            [setup.model, "添加渠道和模型", data.channels.length ? "/channels" : "/channels?new=1"],
+            [
+              setup.service,
+              "配置模型或插件",
+              data.plugins?.length
+                ? "/plugins"
+                : data.channels.length
+                  ? "/channels"
+                  : "/channels?new=1",
+            ],
             [setup.wechat, "扫码连接微信", "/wechat"],
-            [setup.message, "发送第一条消息", "/wechat"],
+            [setup.message, "在微信发送消息", "/wechat"],
           ].map(([done, label, path], i) => (
             <Link key={String(label)} to={base + path}>
               <span className={done ? "step-done" : ""}>

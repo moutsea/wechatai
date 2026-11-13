@@ -20,9 +20,15 @@ import { Modal, PageHead, relativeTime } from "../ui";
 import { json, limitErrorCode } from "../api";
 import { LimitHint } from "../limit-hint";
 import { COMMANDS_GUIDE_PATH } from "../../shared/guide";
-import { wechatSetupIssue } from "../../shared/wechat-readiness";
+import {
+  chatSetupIssue,
+  modelFreeWechatPlugins,
+  notificationWechatIssue,
+  preferredRemoteAgent,
+} from "../../shared/wechat-readiness";
 import { isCloudAgent } from "../../shared/cloud-agent";
 import { isChatModel } from "../../shared/model-compatibility";
+import { remoteAgentName } from "../../shared/remote-agent";
 export function Wechat() {
   const { data, base, request, refresh, notify } = useApp();
   const [busy, setBusy] = useState(false);
@@ -41,7 +47,23 @@ export function Wechat() {
     data.plan === "free" ? (limitCode ?? (atLimit ? "connection_limit" : undefined)) : undefined;
   const connected = connection.status === "connected" && !paused;
   const waiting = ["waiting", "scanned"].includes(connection.status) && !paused;
-  const setupIssue = wechatSetupIssue(data);
+  const modelFreePlugins = modelFreeWechatPlugins(data).filter(
+    (p) => p.pluginId !== "wechatai/notification" || p.connectionId === data.selectedConnectionId,
+  );
+  const activePluginId = data.currentSession?.pluginInstanceId;
+  const remote = preferredRemoteAgent(modelFreePlugins, activePluginId);
+  const remoteMode =
+    !!remote &&
+    (activePluginId ? activePluginId === remote.id : !data.assistants.some(isChatModel));
+  const notificationMode =
+    !remoteMode &&
+    !activePluginId &&
+    !data.assistants.some(isChatModel) &&
+    modelFreePlugins.some((p) => p.pluginId === "wechatai/notification");
+  const setupIssue = remoteMode || notificationMode ? null : chatSetupIssue(data);
+  const notificationIssue = notificationMode
+    ? notificationWechatIssue({ ...connection, paused })
+    : null;
   const cloud =
     data.plugins?.find(
       (p) => isCloudAgent(p) && p.enabled && p.id === data.currentSession?.pluginInstanceId,
@@ -49,8 +71,11 @@ export function Wechat() {
     data.plugins?.find((p) => isCloudAgent(p) && p.enabled) ??
     data.plugins?.find(isCloudAgent);
   const cloudMode =
+    !remoteMode &&
+    !notificationMode &&
     !!cloud &&
     (!data.assistants.some(isChatModel) || data.currentSession?.pluginInstanceId === cloud.id);
+  const pluginMode = cloudMode || remoteMode || notificationMode;
   const cloudSetupIssue =
     setupIssue &&
     ["cloud_plus_required", "cloud_agent_unavailable", "plugin_disabled"].includes(setupIssue.code);
@@ -58,10 +83,6 @@ export function Wechat() {
     type: "bind" | "disconnect" | "select" | "create" | "rename" | "delete",
     id = data.selectedConnectionId,
   ) => {
-    if (type === "bind" && setupIssue) {
-      notify(setupIssue.message, true);
-      return;
-    }
     setBusy(true);
     try {
       if (type === "create") await request("/wechat/links", json({ name }));
@@ -180,8 +201,9 @@ export function Wechat() {
         <div className="gentle-tip wechat-link-note" role="status">
           <ShieldCheck size={20} />
           <div>
-            <h3>{connected ? "请检查聊天配置" : "连接微信前，先完成配置"}</h3>
+            <h3>{cloudMode ? "请检查云端 Agent 配置" : "普通模型聊天尚未就绪"}</h3>
             <p>{setupIssue.message}</p>
+            <p>可以先扫码连接微信；接入已有 Agent 或只收通知，可在「插件」中配置，无需另配模型。</p>
             <Link className="text-link" to={`${base}${cloudSetupIssue ? "/plugins" : "/channels"}`}>
               {cloudSetupIssue ? "管理云端 Agent" : "配置渠道与模型"}
               <ArrowUpRight size={14} />
@@ -213,13 +235,26 @@ export function Wechat() {
             {paused
               ? "续费后可继续使用此链接；若微信凭据过期，需要重新扫码。"
               : connected
-                ? "现在就可以在微信里与你选择的模型对话。"
+                ? remoteMode
+                  ? `发送 /use ${remote!.shortcut} 选择 Agent；确认连接器在线后，再发送任务。`
+                  : notificationMode
+                    ? (notificationIssue?.message ??
+                      "已完成首次通信。到插件页配置 Token 并测试推送；通知受最近互动后的 24 小时回复窗口限制。")
+                    : setupIssue
+                      ? "微信已连接。配置模型或插件后即可使用；只收通知也可以继续配置。"
+                      : "现在就可以在微信里与你选择的模型对话。"
                 : "使用你自己的微信扫码，在手机上完成连接确认。"}
           </p>
           <ConnectionPrivacy wechat />
           {!connected && !paused && (
+            <p className="wechat-mobile-scan-note">
+              正在用手机浏览？请在电脑或另一台设备登录本站，打开「微信连接」展示二维码，再用这部手机的微信
+              ClawBot 扫码。
+            </p>
+          )}
+          {!connected && !paused && (
             <div className="qr-area">
-              {waiting && connection.qrUrl && !setupIssue ? (
+              {waiting && connection.qrUrl ? (
                 <>
                   <QRCodeSVG value={connection.qrUrl} size={192} marginSize={3} fgColor="#294c3d" />
                   <span>
@@ -232,17 +267,11 @@ export function Wechat() {
                 <>
                   <QrCode size={110} strokeWidth={0.8} />
                   <p>
-                    {setupIssue
-                      ? "完成配置后即可获取二维码"
-                      : connection.status === "expired"
-                        ? "二维码已过期，请重新获取"
-                        : "生成你的专属连接二维码"}
+                    {connection.status === "expired"
+                      ? "二维码已过期，请重新获取"
+                      : "生成你的专属连接二维码"}
                   </p>
-                  <button
-                    className="button"
-                    disabled={busy || Boolean(setupIssue)}
-                    onClick={() => void action("bind")}
-                  >
+                  <button className="button" disabled={busy} onClick={() => void action("bind")}>
                     {busy ? "正在获取…" : "获取二维码"}
                     <ArrowUpRight size={16} />
                   </button>
@@ -275,22 +304,36 @@ export function Wechat() {
           <div className="binding-details">
             <div>
               <span>
-                {cloudMode || (data.currentSession && !data.currentSession.assistantId)
+                {pluginMode || (data.currentSession && !data.currentSession.assistantId)
                   ? "当前入口"
                   : "当前渠道"}
               </span>
               <strong>
-                {data.currentSession?.channelName || (cloudMode ? "微伴托管" : "请先添加渠道")}
+                {data.currentSession?.channelName ||
+                  (cloudMode
+                    ? "微伴托管"
+                    : remoteMode
+                      ? "外部 Agent"
+                      : notificationMode
+                        ? "HTTP 推送"
+                        : "尚未选择")}
               </strong>
             </div>
             <div>
               <span>
-                {cloudMode || (data.currentSession && !data.currentSession.assistantId)
-                  ? "当前 Agent"
+                {pluginMode || (data.currentSession && !data.currentSession.assistantId)
+                  ? "当前服务"
                   : "当前模型"}
               </span>
               <strong>
-                {data.currentSession?.assistantName || (cloudMode ? cloud?.name : "请先添加模型")}
+                {data.currentSession?.assistantName ||
+                  (cloudMode
+                    ? cloud?.name
+                    : remoteMode
+                      ? remote?.name
+                      : notificationMode
+                        ? "消息提醒"
+                        : "尚未选择")}
               </strong>
             </div>
             <div>
@@ -313,9 +356,9 @@ export function Wechat() {
               <>
                 <Link
                   className="button secondary"
-                  to={`${base}${cloudMode ? "/plugins" : "/channels"}`}
+                  to={`${base}${pluginMode || setupIssue ? "/plugins" : "/channels"}`}
                 >
-                  {cloudMode ? "管理云端 Agent" : "切换渠道与模型"}
+                  {pluginMode || setupIssue ? "管理插件与接入方式" : "切换渠道与模型"}
                   <ArrowUpRight size={15} />
                 </Link>
                 <button className="text-button muted" onClick={() => setDisconnect(true)}>
@@ -326,15 +369,15 @@ export function Wechat() {
             ) : waiting ? (
               <button
                 className="button secondary"
-                disabled={busy || Boolean(setupIssue)}
+                disabled={busy}
                 onClick={() => void action("bind")}
               >
                 <RefreshCw size={15} />
                 重新生成二维码
               </button>
             ) : (
-              <Link className="text-link" to={`${base}${cloudMode ? "/plugins" : "/channels"}`}>
-                {cloudMode ? "查看云端 Agent 配置" : "先配置渠道与模型"}
+              <Link className="text-link" to={`${base}/plugins`}>
+                接入已有 Agent 或配置通知
                 <ArrowUpRight size={15} />
               </Link>
             )}
@@ -345,25 +388,57 @@ export function Wechat() {
             <span className="eyebrow">READY IN A MOMENT</span>
             <h2>接下来，很简单。</h2>
             {[
-              cloudMode
+              remoteMode
                 ? [
                     "01",
-                    "确认云端 Agent 配置",
-                    "默认使用当前微信的默认文本模型，也可在插件中单独指定；Plus 有效且云端服务已开放时可使用。",
+                    `连接 ${remoteAgentName(remote!.pluginId)}`,
+                    "在插件页完成 Agent 配对，无需在微伴另配模型。Muse 使用托管环境；OpenClaw 和 Hermes 需保持运行设备在线。",
                   ]
-                : ["01", "配置渠道与模型", "为渠道填写协议、API Key 和地址，再添加它支持的模型。"],
+                : notificationMode
+                  ? [
+                      "01",
+                      "配置消息提醒",
+                      "在插件页选择接收微信并生成专属 Token，无需模型 API Key。",
+                    ]
+                  : cloudMode
+                    ? [
+                        "01",
+                        "确认云端 Agent 配置",
+                        "默认使用当前微信的默认文本模型，也可在插件中单独指定；Plus 有效且云端服务已开放时可使用。",
+                      ]
+                    : [
+                        "01",
+                        "选择使用方式",
+                        "聊模型时配置渠道与文本模型；已有 Agent 或只收通知，可直接在插件页配置。扫码本身无需模型。",
+                      ],
               [
                 "02",
                 "扫码并确认连接",
                 "打开微信「设置」，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫描二维码并确认连接。",
               ],
-              cloudMode
+              remoteMode
                 ? [
                     "03",
-                    `发送 /use ${cloud?.shortcut}`,
-                    "进入云端 Agent 后直接发送文字任务；/wx stop 请求停止，结果也可在云端任务页查看。",
+                    `发送 /use ${remote!.shortcut}`,
+                    "收到进入插件的确认、连接器在线后，再发送文字任务；扫码不会自动选择 Agent。",
                   ]
-                : ["03", "发送 /wx help，收到使用教程", "免费了解常用命令，再开始你的第一段对话。"],
+                : notificationMode
+                  ? [
+                      "03",
+                      "发送 /wx help，再测试推送",
+                      "先在微信建立回复通道，再用专属 Token 从你的服务发送一条通知。",
+                    ]
+                  : cloudMode
+                    ? [
+                        "03",
+                        `发送 /use ${cloud?.shortcut}`,
+                        "进入云端 Agent 后直接发送文字任务；/wx stop 请求停止，结果也可在云端任务页查看。",
+                      ]
+                    : [
+                        "03",
+                        "发送 /wx help，收到使用教程",
+                        "免费了解常用命令，再开始你的第一段对话。",
+                      ],
             ].map(([n, title, desc]) => (
               <div className="guide-step" key={n}>
                 <span>{n}</span>

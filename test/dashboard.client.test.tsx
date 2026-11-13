@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Dashboard } from "../src/client/pages/dashboard";
 import { createFakeApi } from "./support/fake-api";
 import type { ChatSession, Snapshot } from "../src/shared/types";
+import { notificationInputSchema } from "../src/shared/notification";
 
 const state = vi.hoisted(() => ({
   data: null as Snapshot | null,
@@ -51,6 +52,33 @@ async function render() {
   );
 }
 const panel = () => container.querySelector(".recent-panel")!;
+
+it("keeps the final setup step until the notification's WeChat reply context is available", async () => {
+  const data = state.data!;
+  data.channels = [];
+  data.assistants = [];
+  data.stats.messages = 0;
+  data.plugins = [
+    {
+      ...notificationInputSchema.parse({ connectionId: data.connections[0].id }),
+      id: "notice",
+      pluginId: "wechatai/notification",
+      version: "1.0.0",
+      createdAt: 1,
+      shortcut: "notice",
+      hasKey: true,
+    },
+  ];
+  data.connections[0] = { ...data.connections[0], status: "connected", hasReplyContext: false };
+  state.request.mockResolvedValue([]);
+  await render();
+  const strip = container.querySelector(".onboarding-strip")!;
+  expect(strip.textContent).toContain("在微信发送消息");
+  expect(strip.querySelectorAll(".step-done")).toHaveLength(2);
+  data.connections[0].hasReplyContext = true;
+  await render();
+  expect(container.querySelector(".onboarding-strip")).toBeNull();
+});
 
 it("shows loading, distinguishes failure, and retries successfully", async () => {
   let fail!: (error: Error) => void;

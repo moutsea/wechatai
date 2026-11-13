@@ -1,10 +1,11 @@
 import { pluginAvailable } from "../../shared/plugin-access";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Copy, RefreshCw, KeyRound } from "lucide-react";
+import { Copy, RefreshCw, KeyRound, MessageCircle } from "lucide-react";
 import { useApp } from "../context";
 import { Modal } from "../ui";
 import { json } from "../api";
+import { notificationWechatIssue } from "../../shared/wechat-readiness";
 import type {
   NotificationInput,
   NotificationPlugin,
@@ -29,6 +30,9 @@ export function NotificationEditor({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   if (!data) return null;
+  const wechatIssue = notificationWechatIssue(
+    data.connections.find((c) => c.id === form.connectionId),
+  );
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -39,7 +43,7 @@ export function NotificationEditor({
         json({ ...form, pluginId: "wechatai/notification" }, plugin === "new" ? "POST" : "PATCH"),
       );
       await refresh();
-      notify("配置已保存，生成专属 Token 后即可接收推送");
+      notify("消息提醒配置已保存");
       onSaved(saved.id);
     } catch (e) {
       setError((e as Error).message);
@@ -85,7 +89,10 @@ export function NotificationEditor({
               ))}
             </select>
             <small>
-              先在<Link to={`${base}/wechat`}>微信连接</Link>中扫码，再向对应微信对话发送一条消息。
+              {wechatIssue?.message ??
+                "接收微信已完成初始化。推送受最近互动后的 24 小时回复窗口限制。"}{" "}
+              无需配置模型。
+              <Link to={`${base}/wechat`}>管理微信连接</Link>
             </small>
           </label>
           <label className="check-label">
@@ -135,7 +142,7 @@ const stateLabels = {
   cancelled: "已取消",
 };
 export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
-  const { request, refresh, notify, data } = useApp();
+  const { request, refresh, notify, data, base } = useApp();
   const [status, setStatus] = useState<NotificationStatus | null>(null);
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false),
@@ -185,6 +192,8 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
     }
   };
   const hasToken = Boolean(token || status?.hasToken);
+  const connection = data?.connections.find((c) => c.id === plugin.connectionId);
+  const wechatIssue = notificationWechatIssue(connection);
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -196,6 +205,26 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
   const sample = `curl '${status?.endpoint ?? "https://wechatai.app/api/notify"}' \\\n  -H 'Authorization: Bearer ${token || "YOUR_TOKEN"}' \\\n  -H 'Content-Type: application/json' \\\n  -H 'Idempotency-Key: order-20261010-001' \\\n  -d '{"title":"收款成功","text":"订单已支付，金额 ¥9.90"}'`;
   return (
     <section className="notification-access">
+      {data && (
+        <div className="notification-setup-hint" role="status">
+          <MessageCircle size={18} aria-hidden="true" />
+          <div>
+            <strong>
+              接收微信{connection ? `「${connection.name}」` : ""}
+              {wechatIssue?.code === "wechat_reply_window_expired"
+                ? "需要更新回复窗口"
+                : wechatIssue
+                  ? "尚未就绪"
+                  : "已完成初始化"}
+            </strong>
+            <p>
+              {wechatIssue?.message ??
+                "已连接并完成首次通信。推送受最近互动后的 24 小时回复窗口限制，是否送达请查看投递结果。"}
+            </p>
+            {wechatIssue && <Link to={`${base}/wechat`}>前往微信连接</Link>}
+          </div>
+        </div>
+      )}
       <section className="notification-token-panel" aria-label="专属 Token">
         <div className="notification-token-heading">
           <h3>
@@ -211,7 +240,7 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
             ? "请立即复制保存。完整 Token 仅在这次生成后显示，关闭弹窗后不再展示。"
             : hasToken
               ? "已设置推送凭证。完整 Token 仅在生成时显示；如果没有保存，请重置后更新调用方。"
-              : "点击下方按钮，由微伴为这组配置生成专属 Token。将它填入你的服务端，即可向所选微信推送消息。"}
+              : "点击下方按钮，由微伴为这组配置生成专属 Token，用于授权你的服务调用推送接口。接收微信就绪后才能推送。"}
         </p>
         {token && (
           <div className="notification-token">
@@ -226,10 +255,7 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
           <button
             className={`button small ${hasToken ? "secondary" : ""}`}
             disabled={
-              busy ||
-              !data ||
-              !pluginAvailable(data.plan, data.plugins ?? [], plugin.id) ||
-              !status
+              busy || !data || !pluginAvailable(data.plan, data.plugins ?? [], plugin.id) || !status
             }
             onClick={() => (hasToken ? setConfirm("rotate") : void changeToken("rotate"))}
           >

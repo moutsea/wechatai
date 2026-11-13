@@ -72,7 +72,7 @@ export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocConte
   },
   "getting-started": {
     intro:
-      "微伴通过微信自带的 ClawBot 插件通道收发消息，所以先确认手机微信有这个入口，再准备模型。第一次使用，按下面的步骤连接一个模型即可；其他功能可以等用到时再配置。",
+      "先确认手机微信有 ClawBot 入口，再选择模型、已有 Agent 或服务通知。扫码绑定本身无需模型；普通聊天与云端 Agent 执行任务前需要配置文本模型。",
     sections: [
       {
         id: "clawbot-entry",
@@ -90,7 +90,11 @@ export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocConte
       {
         id: "prepare",
         title: "准备账号和模型服务",
-        body: `先[注册微伴账号](/register)并[登录](/login)，配置自己的模型服务，也可用该模型运行已开放的 [Plus 云端 Agent](/docs/cloud-agent)。
+        body: `先[注册微伴账号](/register)并[登录](/login)，按需要选择接入方式：
+
+- **聊模型或使用云端 Agent：** 配置自己的模型服务，也可用该模型运行已开放的 [Plus 云端 Agent](/docs/cloud-agent)。
+- **已有 Agent：** 直接按 [Muse 托管助理](/developers/muse)、[Hermes](/developers/hermes) 或 [OpenClaw](/developers/openclaw) 指南在插件页配对，无需在微伴另配模型。Muse 连接指令发到自己的 Muse 主聊天，其他两种在运行 Agent 的设备执行。
+- **只收服务通知：** 先扫码绑定微信并发送 /wx help，再配置[消息提醒](/docs/notifications)，无需模型 API Key。
 
 使用自己的模型时，准备好服务商提供的 API Key 和服务地址，可以使用官方 API 或第三方服务。云端 Agent 沿用你配置的文本模型，还需服务已开放并添加、启用插件；购买 Plus 不代表云端一定可用，以插件页为准。
 
@@ -209,15 +213,17 @@ Plus 会员还可以给模型设置快捷名称，发送 \`@快捷名 问题\` �
             height: 569,
           },
         ],
-        body: `先配置可用的文本模型及渠道 API Key，再按需启用运营方已开放的 [Plus 云端 Agent](/docs/cloud-agent)。云端插件默认跟随该微信选中的普通模型，进入插件后沿用上一次普通模型；只有需要固定模型时，才在插件中单独指定。
+        body: `扫码只建立微信消息通道，无需先配置模型。普通聊天和 [Plus 云端 Agent](/docs/cloud-agent) 在执行任务前仍需可用的文本模型及 API Key；已有 Muse、Hermes、OpenClaw 或只收通知时，无需在微伴另配模型。
 
 1. 在微伴的[微信连接](/app/wechat)页面创建链接，拿到连接二维码。
 2. 打开手机微信，点右下角「我」→「设置」。
 3. 在「设置」里向下找到「功能」分组，点最后一项「插件」。
 4. 在「插件」页找到「微信ClawBot」卡片（副标题是「连接 OpenClaw 与微信」），点右侧的「详情」。
 5. 在 ClawBot 详情页点「连接新的 OpenClaw」，按提示扫描微伴页面上的二维码并确认（部分版本这里显示为「扫一扫」）。
-6. 回到微伴页面，确认状态显示「已连接」，核对当前渠道与模型；需要更换时点「切换渠道与模型」。
-7. 打开连接对应的那个微信对话，发送第一条消息。
+6. 回到微伴页面，确认状态显示「已连接」。模型配置在「渠道与模型」中管理，已有 Agent 和通知在「插件」中配置。
+7. 打开对应微信对话，发送 /wx help 查看帮助。使用 Agent 时再发送 /use 快捷名，确认进入插件后提交文字任务；只收通知则继续配置消息提醒 Token。
+
+如果正在用同一部手机浏览本站，可在电脑或另一台设备登录本站，打开同一个微信链接展示二维码，再用手机微信的 ClawBot 扫码。
 
 **完整路径：微信 → 我 → 设置 →（「功能」分组）插件 → 微信ClawBot → 详情 → 连接新的 OpenClaw。**
 

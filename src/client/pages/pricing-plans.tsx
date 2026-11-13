@@ -5,7 +5,7 @@ import { api, json } from "../api";
 import { useAuth } from "../auth";
 import { trackFunnel } from "../analytics-client";
 import { BILLING_OFFERS } from "../../shared/billing-offers";
-import { approxYuan, OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
+import { approxYuan } from "../../shared/pricing-copy";
 import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../../shared/wechat-links";
@@ -56,10 +56,7 @@ export function PricingPlans() {
     <section className="plans" aria-labelledby="plans-title">
       <div className="plans-head">
         <h2 id="plans-title">两个档位，随时切换</h2>
-        <p>
-          {OWN_API_COST_NOTE}
-          {CLOUD_AGENT_COST_NOTE}
-        </p>
+        <p>每天赠送额度，按需选择。会员单次购买，不自动续费。</p>
       </div>
       <div className="plans-grid">
         <article className="plan plan-free">
@@ -72,7 +69,8 @@ export function PricingPlans() {
           </header>
           <ul>
             <li>
-              <Check size={15} aria-hidden="true" />每天 {DAILY_CREDIT_DEFAULTS.free} credits
+              <Check size={15} aria-hidden="true" />
+              每天 {DAILY_CREDIT_DEFAULTS.free} credits
             </li>
             <li>
               <Check size={15} aria-hidden="true" />
@@ -133,7 +131,8 @@ export function PricingPlans() {
           </header>
           <ul>
             <li>
-              <Check size={15} aria-hidden="true" />每天 {DAILY_CREDIT_DEFAULTS.plus} credits
+              <Check size={15} aria-hidden="true" />
+              每天 {DAILY_CREDIT_DEFAULTS.plus} credits
             </li>
             <li>
               <Check size={15} aria-hidden="true" />
@@ -149,7 +148,12 @@ export function PricingPlans() {
             </li>
           </ul>
           {isPending ? null : session ? (
-            <button type="button" className="button plan-cta" disabled={busy} onClick={startCheckout}>
+            <button
+              type="button"
+              className="button plan-cta"
+              disabled={busy}
+              onClick={startCheckout}
+            >
               {busy ? (
                 <>
                   <Loader2 size={17} className="spin" aria-hidden="true" />
@@ -176,7 +180,8 @@ export function PricingPlans() {
         </article>
       </div>
       <p className="plans-fineprint">
-        本次付款为所选周期的完整金额，单次购买、不自动续费。支付由 Stripe 处理。credits 用完后可以单独购买加油包，价格见下方说明。
+        本次付款为所选周期的完整金额，单次购买、不自动续费。支付由 Stripe 处理。credits
+        用完后可以单独购买加油包，价格见下方说明。
       </p>
     </section>
   );

@@ -1,8 +1,12 @@
+.landing-start,
+.start-explore,
+.cost-estimator {
+  color: #243d35;
+}
 .start-explore,
 .cost-estimator {
   width: min(1120px, calc(100% - 40px));
   margin: 72px auto;
-  color: #243d35;
 }
 .start-explore > header,
 .cost-estimator > header {
@@ -16,12 +20,14 @@
   letter-spacing: -0.025em;
   margin: 12px 0;
 }
+.landing-start p,
 .start-explore p,
 .cost-estimator p {
   font-size: 15px;
   line-height: 1.8;
   color: #496158;
 }
+.landing-start a,
 .start-explore a,
 .cost-estimator a {
   color: #176449;
@@ -43,6 +49,17 @@
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
+  margin-top: 16px;
+}
+.start-check .start-note,
+.start-check [aria-live] p {
+  margin-top: 16px;
+}
+.start-check > .start-note {
+  font-size: 13px !important;
+}
+.start-check .start-check-actions .button {
+  min-height: 44px;
 }
 .start-check button[aria-pressed="true"] {
   background: #185b42;
@@ -53,6 +70,17 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
+}
+.start-path-guides {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 12px;
+}
+.start-path-guides a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 .start-paths article {
   padding: 26px;
@@ -89,6 +117,10 @@
   gap: 8px;
   margin-top: 20px;
   font-weight: 600;
+}
+.start-paths .start-path-guides a {
+  margin-top: 0;
+  font-weight: 500;
 }
 .task-preview {
   margin-top: 48px;
@@ -193,6 +225,7 @@
   font-size: clamp(22px, 3vw, 30px);
   overflow-wrap: anywhere;
 }
+.landing-start :focus-visible,
 .start-explore :focus-visible,
 .cost-estimator :focus-visible {
   outline: 3px solid #358460;
@@ -233,6 +266,7 @@
 }
 
 #start,
+#connect,
 #try,
 #estimate {
   scroll-margin-top: 100px;

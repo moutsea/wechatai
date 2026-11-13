@@ -1,46 +1,21 @@
-import {
-  ArrowRight,
-  AudioLines,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  CirclePlus,
-  Ellipsis,
-  KeyRound,
-  MessageSquareText,
-  MessagesSquare,
-  Smile,
-  Sparkles,
-  Sprout,
-  UserRound,
-} from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Sprout } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { LANDING_FAQ } from "../shared/landing-faq";
 import { PLUGIN_LIMITS } from "../shared/plugin-access";
-import {
-  PLUS_MONTHLY_YUAN,
-  OWN_API_COST_NOTE,
-  CLOUD_AGENT_COST_NOTE,
-} from "../shared/pricing-copy";
+import { PLUS_MONTHLY_YUAN, OWN_API_COST_NOTE } from "../shared/pricing-copy";
 import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
 import { authReturnPath } from "../shared/auth";
 import { trackFunnel } from "./analytics-client";
 import { useAuth } from "./auth";
-import { GettingStartedPreview } from "./getting-started-preview";
+import { GettingStartedPreview, WechatPrerequisite } from "./getting-started-preview";
 import { LandingReal } from "./landing-real";
 import { LandingSteps } from "./landing-steps";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
 // 首页价格锚只显示月付价；与 BILLING_OFFERS 的一致性由 test/seo.test.ts 断言保证。
 const plusMonthlyYuan = String(PLUS_MONTHLY_YUAN);
-/** 首屏三句 microcopy：拆成数组是为了让分隔符能按「非末项」渲染。 */
-const HOMEPAGE_HERO_NOTES = [
-  `每天 ${DAILY_CREDIT_DEFAULTS.free} credits 免费`,
-  "不绑卡",
-  "聊天记录可随时删除",
-];
 function StartLink({
   className,
   children,
@@ -72,148 +47,54 @@ export function Landing() {
       <main>
         <section className="landing-hero">
           <div className="landing-copy">
-            <span className="eyebrow">
-              <span className="tiny-dot" /> WECHAT AI · YOUR MODELS, IN WECHAT
-            </span>
             <h1>
-              在微信里，<span>用上你的大模型</span>
+              把你的 AI，<span>接入微信</span>
             </h1>
             <p>
-              把自选模型接入微信，让日常问答、写作和整理更顺手。
-              <br />
-              之后就在微信里说话，DeepSeek / Claude / GPT 随时切换。
+              一个账号，连接 DeepSeek、Claude、GPT 等模型，也能接入 Muse、Hermes、OpenClaw 等
+              Agent。
             </p>
             <div className="hero-actions">
               <StartLink
                 className="button"
-                authenticatedTo="/app/channels"
+                authenticatedTo="/app"
                 onClick={() =>
                   trackFunnel("hero_cta_click", { cta: "primary", auth: session ? "in" : "out" })
                 }
               >
-                {session ? "配置我的模型" : "免费开始配置"}
-                <ArrowRight size={18} />
+                {session ? "进入工作台" : "开始配置"}
+                <ArrowRight size={18} aria-hidden="true" />
               </StartLink>
-              {/* 次按钮不离开首页：直接滚到下面三步，用户看完就知道要做什么，
-                  比跳到一个陌生页面再让用户自己找更清楚。 */}
               <Link
-                className="button secondary hero-secondary"
+                className="hero-how"
                 to="/#how"
                 onClick={() =>
-                  trackFunnel("hero_cta_click", {
-                    cta: "how",
-                    auth: session ? "in" : "out",
-                  })
+                  trackFunnel("hero_cta_click", { cta: "how", auth: session ? "in" : "out" })
                 }
               >
-                看看三步怎么配
-                <ChevronDown size={16} />
+                查看三步教程
+                <ChevronDown size={16} aria-hidden="true" />
               </Link>
             </div>
-            {/* 分隔符用真实节点 + aria-hidden：伪元素的 content 会进可访问性树，读屏会念出「·」。 */}
             <p className="hero-note">
-              {HOMEPAGE_HERO_NOTES.map((line, index) => (
-                <span key={line}>
-                  {line}
-                  {index < HOMEPAGE_HERO_NOTES.length - 1 && (
-                    <span className="hero-note-dot" aria-hidden="true">
-                      ·
-                    </span>
-                  )}
-                </span>
-              ))}
+              每天赠送 {DAILY_CREDIT_DEFAULTS.free} credits；模型需自备 API Key，费用另付。
             </p>
-            <p className="hero-prerequisite">
-              先<Link to="/#start">检查微信 ClawBot 入口</Link>。免费 credits
-              用于平台服务，自备模型费用另付；也可<Link to="/#try">免 Key 预览示例任务</Link>。
-            </p>
-            <div className="hero-trust">
-              <span>
-                <Check size={14} />
-                自带 API Key，我们不卖 token
-              </span>
-              <span>
-                <Check size={14} />
-                支持三种常见协议
-              </span>
-              <span>
-                <Check size={14} />
-                开源仓库可查
-              </span>
-            </div>
           </div>
-          <div
-            className="conversation-illustration"
-            role="img"
-            aria-label="微信对话示意：使用自己的 API Key 连接大模型，在 DeepSeek、Claude、GPT 等模型之间按需切换。"
-          >
-            <div className="orbit orbit-one" />
-            <div className="orbit orbit-two" />
-            <span className="floating-label">
-              <KeyRound size={17} />
-              使用自己的 API Key
-            </span>
-            <div className="illustration-window">
-              <div className="illustration-window-top">
-                <ChevronLeft size={23} />
-                <strong>微伴</strong>
-                <Ellipsis size={23} />
-              </div>
-              <div className="illustration-messages">
-                <div className="illustration-date">微信对话示意 · 14:28</div>
-                <div className="illustration-message outgoing">
-                  <div className="illustration-bubble">帮我把会议记录整理成待办清单。</div>
-                  <span className="illustration-avatar person">
-                    <UserRound size={23} />
-                  </span>
-                </div>
-                <div className="illustration-message incoming">
-                  <span className="illustration-avatar assistant">
-                    <Sprout size={23} />
-                  </span>
-                  <div className="illustration-reply">
-                    <span className="illustration-model-name">微伴 · DeepSeek</span>
-                    <div className="illustration-bubble">
-                      可以，把会议记录发给我。
-                      <br />
-                      <br />
-                      我会按任务、负责人和截止时间整理，方便你逐项跟进。
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="illustration-input">
-                <span className="illustration-voice">
-                  <AudioLines size={17} />
-                </span>
-                <span className="illustration-input-field">发消息…</span>
-                <Smile size={24} />
-                <CirclePlus size={24} />
-              </div>
-            </div>
-            <div className="floating-models">
-              <span>同一微信，按需切换模型</span>
-              <strong>
-                DeepSeek <i>·</i> Claude <i>·</i> GPT
-              </strong>
-            </div>
-          </div>
+          <figure className="hero-demo" aria-label="微信对话示意">
+            <figcaption>
+              <span>
+                <Sprout size={20} aria-hidden="true" /> 微伴 · DeepSeek
+              </span>
+              <span>对话示意</span>
+            </figcaption>
+            <p className="hero-demo-question">帮我润色这句话：明天把方案给我。</p>
+            <p className="hero-demo-answer">方便的话，请在明天前把方案发给我，谢谢。</p>
+          </figure>
         </section>
-        <section className="landing-strip">
-          <span>支持常见 LLM 协议</span>
-          <strong>
-            <MessagesSquare size={20} aria-hidden="true" />
-            OpenAI Chat Completions
-          </strong>
-          <strong>
-            <Sparkles size={20} aria-hidden="true" />
-            OpenAI Responses
-          </strong>
-          <strong>
-            <MessageSquareText size={20} aria-hidden="true" />
-            Anthropic Messages
-          </strong>
-        </section>
+        <div className="landing-start" id="start">
+          <WechatPrerequisite />
+        </div>
+        <LandingSteps />
         <GettingStartedPreview />
         <section className="deepseek-entry" aria-labelledby="deepseek-entry-title">
           <img src="/images/channels/deepseek.png" alt="" width={52} height={52} loading="lazy" />
@@ -232,7 +113,6 @@ export function Landing() {
             <Link to="/docs/deepseek-in-wechat">已有 Key？直接看截图教程 →</Link>
           </div>
         </section>
-        <LandingSteps />
         <LandingReal />
         <section className="landing-preview" id="workspace" aria-labelledby="landing-preview-title">
           <div className="landing-preview-copy">
@@ -314,10 +194,7 @@ export function Landing() {
         <section className="landing-pricing" aria-labelledby="landing-pricing-title">
           <div className="landing-pricing-head">
             <h2 id="landing-pricing-title">免费能用到什么程度</h2>
-            <p>
-              {OWN_API_COST_NOTE}
-              {CLOUD_AGENT_COST_NOTE}
-            </p>
+            <p>{OWN_API_COST_NOTE}</p>
           </div>
           <div className="landing-pricing-grid">
             <div className="landing-plan">

@@ -332,15 +332,9 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-@media (max-width: 1200px) {
-  .landing-steps {
-    margin-left: 40px;
-    margin-right: 40px;
-  }
-}
 @media (max-width: 760px) {
   .landing-steps {
-    margin: 50px 24px 24px;
+    margin: 36px auto 24px;
   }
   .steps-heading h2 {
     font-size: 25px;
@@ -350,35 +344,30 @@
     gap: 7px;
   }
   .steps-tabs button {
-    flex-direction: column;
-    gap: 9px;
+    gap: 6px;
     padding: 12px 5px;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1.6;
+  }
+  .steps-tabs button > span {
+    display: none;
   }
   .steps-slide {
     grid-template-columns: 1fr;
   }
   .steps-copy {
     padding: 27px 23px;
-    min-height: 330px;
   }
   .steps-copy h3 {
     font-size: 24px;
   }
   .steps-copy > p {
-    font-size: 13px;
+    font-size: 15px;
   }
   .steps-copy li {
-    font-size: 12px;
+    font-size: 14px;
   }
   .steps-preview {
-    border-left: none;
-    border-top: 1px solid var(--line);
-    padding: 25px 20px;
-    min-height: 350px;
-  }
-  .steps-config {
-    padding: 19px;
+    display: none;
   }
 }

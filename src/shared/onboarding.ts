@@ -1,11 +1,22 @@
 import type { Snapshot } from "./types";
-import { wechatSetupIssue } from "./wechat-readiness";
+import {
+  chatSetupIssue,
+  modelFreeWechatPlugins,
+  notificationWechatSetupIssue,
+} from "./wechat-readiness";
 
 export function dashboardSetupProgress(data: Snapshot) {
+  const plugins = modelFreeWechatPlugins(data);
+  const notificationReady = plugins.some(
+    (p) =>
+      p.pluginId === "wechatai/notification" &&
+      p.hasKey &&
+      !notificationWechatSetupIssue(data.connections.find((c) => c.id === p.connectionId)),
+  );
   return {
-    model: wechatSetupIssue(data) === null,
+    service: chatSetupIssue(data) === null || plugins.some((p) => p.hasKey),
     wechat: data.connections.some((c) => c.status === "connected" && !c.paused),
-    message: data.stats.messages > 0,
+    message: data.stats.messages > 0 || notificationReady,
   };
 }
 

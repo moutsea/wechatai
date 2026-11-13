@@ -206,7 +206,7 @@ test("keeps static content and links when the initial chunk fails, and reload re
   await page.goto(`${origin}/docs/getting-started`);
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("你仍可阅读正文和打开链接");
-  await expect(page.locator("h1")).toContainText("三步连接自己的模型");
+  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：选择 AI 并扫码连接");
   await expect(page.locator('.site-header-nav a[href="/pricing"]')).toBeVisible();
   await expect(page.locator(".full-state")).toHaveCount(0);
   fail = false;
@@ -214,7 +214,7 @@ test("keeps static content and links when the initial chunk fails, and reload re
   await alert.getByRole("button", { name: "重新加载页面" }).click();
   await mounted;
   await expect(alert).toHaveCount(0);
-  await expect(page.locator("h1")).toContainText("三步连接自己的模型");
+  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：选择 AI 并扫码连接");
 });
 
 for (const { path, asset } of [
@@ -650,7 +650,7 @@ test("positions article anchors after navigating between lazy routes", async ({ 
   await page.locator('a[href="/docs/getting-started"]').first().click();
   await expect.poll(() => Boolean(chunk)).toBe(true);
   await chunk!.fallback();
-  await expect(page.locator("h1")).toContainText("三步连接自己的模型");
+  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：选择 AI 并扫码连接");
   await page.locator('a[href="/docs/wechat-connection#connect"]').first().click();
   await expect(page.locator("#connect h2")).toBeInViewport();
 });
@@ -686,8 +686,24 @@ test.describe("static public pages", () => {
   });
 });
 
+for (const width of [390, 1280]) {
+  test(`links the model tutorial to Muse hosted setup at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(origin);
+    await page.locator(".hero-how").click();
+    await expect(page).toHaveURL(`${origin}/#how`);
+    await page.locator('#how a[href="/#connect"]').click();
+    await expect(page).toHaveURL(`${origin}/#connect`);
+    const guides = page.getByRole("navigation", { name: "Agent 接入指南" });
+    await expect(guides.getByRole("link", { name: "Muse", exact: true })).toBeVisible();
+    await guides.getByRole("link", { name: "Muse", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/developers/muse`);
+    await expect(page.locator("h1")).toHaveText("Muse 接入指南");
+  });
+}
+
 for (const authenticated of [true, false]) {
-  test(`preserves the model configuration destination while session is pending (${authenticated})`, async ({
+  test(`preserves the setup destination while session is pending (${authenticated})`, async ({
     page,
   }) => {
     let sessionRequest: Route | undefined;
@@ -697,7 +713,7 @@ for (const authenticated of [true, false]) {
     await page.goto(origin, { waitUntil: "domcontentloaded" });
     await expect.poll(() => Boolean(sessionRequest)).toBe(true);
     await page.locator(".hero-actions a").first().click();
-    await expect(page).toHaveURL(`${origin}/register?returnTo=%2Fapp%2Fchannels`);
+    await expect(page).toHaveURL(`${origin}/register?returnTo=%2Fapp`);
     const user = {
       id: "public-test",
       name: "Test user",
@@ -718,14 +734,11 @@ for (const authenticated of [true, false]) {
         : null,
     });
     if (authenticated) {
-      await expect(page).toHaveURL(`${origin}/app/channels`);
-      await expect(page.locator("h1")).toHaveText("渠道与模型");
+      await expect(page).toHaveURL(`${origin}/app`);
+      await expect(page.locator("h1")).toContainText("你好");
     } else {
       await expect(page.locator("form")).toBeVisible();
-      await expect(page.getByRole("link", { name: "去登录" })).toHaveAttribute(
-        "href",
-        "/login?returnTo=%2Fapp%2Fchannels",
-      );
+      await expect(page.getByRole("link", { name: "去登录" })).toHaveAttribute("href", "/login");
     }
   });
 }

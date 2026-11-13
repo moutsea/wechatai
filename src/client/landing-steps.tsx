@@ -22,15 +22,17 @@ const steps = [
     tab: "连接微信",
     description:
       "在工作台获取二维码。打开微信设置，在「功能」分组进入「插件 → 微信 ClawBot → 扫一扫」，扫码并确认连接。",
-    details: ["个人专属连接，只回应你绑定的微信", "连接后发出第一条消息，收到欢迎和教程入口"],
+    details: [
+      "手机浏览时，可用电脑或另一台设备展示二维码",
+      "连接后发出第一条消息，收到欢迎和教程入口",
+    ],
     guide: "/docs/wechat-connection#connect",
     guideLabel: "查看微信连接教程",
   },
   {
     title: "像平常一样聊天",
     tab: "开始聊天",
-    description:
-      "打开微信里的对话，直接向模型提问。想换一个模型或开启新话题，发送命令就能完成。",
+    description: "打开微信里的对话，直接向模型提问。想换一个模型或开启新话题，发送命令就能完成。",
     details: ["发送 /models 查看模型，按需切换", "发送 /new 开始新话题，保留旧记录"],
     guide: "/docs/commands",
     guideLabel: "查看微信命令速查",
@@ -141,7 +143,10 @@ export function LandingSteps() {
     >
       <div className="steps-heading">
         <div className="eyebrow">THREE SMALL STEPS</div>
-        <h2 id="how-title">三步，开启你的日常 AI。</h2>
+        <h2 id="how-title">聊模型，三步开始。</h2>
+        <p>
+          已有 Agent 或只收通知？<Link to="/#connect">选择其他接入方式</Link>。
+        </p>
       </div>
       <div className="steps-tabs" role="tablist" aria-label="使用步骤">
         {steps.map((step, index) => (
