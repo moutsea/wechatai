@@ -152,6 +152,10 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
             <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
+        <p className="steps-requirements">
+          请先确认微信已有<Link to="/docs/getting-started#clawbot-entry">ClawBot 入口</Link>；
+          普通聊天需自备模型 API Key。手机扫码请用电脑或另一台设备展示二维码。
+        </p>
       </div>
       <div className="steps-tabs" role="tablist" aria-label="使用步骤">
         {steps.map((step, index) => (
