@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Cloud, RefreshCw, Square, Check, Loader2, TriangleAlert } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  Clock3,
+  Cloud,
+  Coins,
+  Download,
+  FileText,
+  HardDrive,
+  Loader2,
+  MessageCircle,
+  RefreshCw,
+  Square,
+  TriangleAlert,
+} from "lucide-react";
 import { useApp } from "../context";
 import { Empty, PageHead, relativeTime } from "../ui";
 import { ApiError, json } from "../api";
@@ -70,6 +86,28 @@ function TaskResult({ id, content }: { id: string; content: string }) {
   );
 }
 
+function TaskStatus({ task }: { task: CloudAgentTask }) {
+  return (
+    <span className={`cloud-task-status ${task.status}`}>
+      {task.status === "completed" ? (
+        <Check size={14} />
+      ) : active(task.status) ? (
+        <Loader2 size={14} className="cloud-task-spinner" />
+      ) : task.status === "failed" ? (
+        <TriangleAlert size={14} />
+      ) : (
+        <Square size={14} />
+      )}
+      {labels[task.status]}
+      {task.stopping
+        ? task.status === "finalizing"
+          ? " · 正在取消文件接收"
+          : " · 停止确认中"
+        : ""}
+    </span>
+  );
+}
+
 function storageSize(bytes: number) {
   if (bytes > 0 && bytes < 1024 * 1024) return "不足 1 MiB";
   return `${(bytes / (1024 * 1024)).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} MiB`;
@@ -117,44 +155,66 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
   }, [request, revision]);
   return (
     <section className="panel cloud-storage" aria-label="云端空间">
+      <div className="cloud-storage-heading">
+        <span className="cloud-storage-icon">
+          <HardDrive size={19} />
+        </span>
+        <div>
+          <h2>云端空间</h2>
+          <span>同账号的 Agent 共享</span>
+        </div>
+      </div>
       <div className="cloud-storage-summary">
-        <strong>云端空间</strong>
-        <span>
+        <p className="cloud-storage-capacity">
+          <strong>
+            {((usage?.maxTotalBytes ?? CLOUD_AGENT_STORAGE_BYTES) / (1024 * 1024)).toLocaleString(
+              "zh-CN",
+            )}
+          </strong>
+          <span>MiB 总容量</span>
+        </p>
+        <p className="cloud-storage-used">
           {usage
             ? `已用 ${storageSize(usage.usedBytes)} / ${storageSize(usage.maxTotalBytes)}`
             : `每账号 ${storageSize(CLOUD_AGENT_STORAGE_BYTES)}`}
-        </span>
-        <button
-          className="text-link"
-          disabled={loading}
-          onClick={() => setRevision((value) => value + 1)}
-        >
-          {loading ? "正在读取用量…" : "刷新用量"}
-        </button>
+        </p>
+        {usage && (
+          <>
+            <progress
+              aria-label="云端空间占用"
+              max={usage.maxTotalBytes}
+              value={Math.min(usage.maxTotalBytes, usage.usedBytes + usage.reservedBytes)}
+            />
+            <p className="cloud-storage-available">
+              可用 {storageSize(usage.availableBytes)}
+              {usage.reservedBytes > 0 && `，任务写入预留 ${storageSize(usage.reservedBytes)}`}。
+            </p>
+          </>
+        )}
       </div>
-      {usage && (
-        <>
-          <progress
-            aria-label="云端空间占用"
-            max={usage.maxTotalBytes}
-            value={Math.min(usage.maxTotalBytes, usage.usedBytes + usage.reservedBytes)}
-          />
-          <p className="form-note">
-            可用 {storageSize(usage.availableBytes)}
-            {usage.reservedBytes > 0 && `，任务写入预留 ${storageSize(usage.reservedBytes)}`}。
-          </p>
-        </>
-      )}
+      <button
+        className="text-link cloud-storage-refresh"
+        disabled={loading}
+        onClick={() => setRevision((value) => value + 1)}
+      >
+        <RefreshCw size={13} className={loading ? "cloud-task-spinner" : undefined} />
+        {loading ? "正在读取用量…" : "刷新用量"}
+      </button>
       {error && (
         <p className="form-error" role="status">
           用量暂时无法读取，请刷新重试。{usage && "当前显示上次读取的用量。"}
         </p>
       )}
-      <p className="form-note">
-        同账号的云端 Agent
-        共用此空间，用于工作文件、附件及任务运行数据。空间不足时无法继续写入。删除任务记录不会释放云端空间。
-      </p>
-      <p className="form-note">{CLOUD_AGENT_FILE_LIMITS_NOTE}</p>
+      <details className="cloud-storage-notes">
+        <summary>
+          空间与文件说明 <ChevronDown size={14} />
+        </summary>
+        <p className="form-note">
+          同账号的云端 Agent
+          共用此空间，用于工作文件、附件及任务运行数据。空间不足时无法继续写入。删除任务记录不会释放云端空间。
+        </p>
+        <p className="form-note">{CLOUD_AGENT_FILE_LIMITS_NOTE}</p>
+      </details>
     </section>
   );
 }
@@ -294,186 +354,283 @@ export function CloudTasks() {
   latestQuery.delete("cursor");
   const latestSearch = latestQuery.size ? `?${latestQuery}` : "";
   if (!data) return null;
+  const running = tasks.filter((task) => active(task.status)).length;
   return (
-    <div className="page-enter cloud-tasks">
+    <div className={`page-enter cloud-tasks${id ? " cloud-task-detail" : ""}`}>
       <PageHead
         eyebrow="CLOUD AGENT"
-        title="云端任务"
-        description="查看执行状态、已结算费用和历史结果，微信未送达的结果也可在这里查看。清空或删除会话会清除对应任务内容，并请求停止未结束的任务。"
+        title={id ? "任务详情" : "云端任务"}
+        description="从微信发起，在后台执行。进度、处理结果和生成文件都在这里。"
         action={
-          <button
-            className="button secondary"
-            disabled={loading || Boolean(busy)}
-            onClick={refresh}
-          >
-            <RefreshCw size={15} /> 刷新
-          </button>
+          <div className="cloud-tasks-actions">
+            <Link className="button secondary" to={`${base}/plugins`}>
+              配置 Agent <ArrowUpRight size={15} />
+            </Link>
+            <button
+              className="button secondary"
+              disabled={loading || Boolean(busy)}
+              onClick={refresh}
+            >
+              <RefreshCw size={15} className={loading ? "cloud-task-spinner" : undefined} /> 刷新
+            </button>
+          </div>
         }
       />
-      <CloudStorage tasks={tasks} />
-      {id && (
-        <p>
-          <Link className="text-link" to={`${base}/tasks${search}`}>
-            返回任务列表
-          </Link>
-        </p>
-      )}
-      {!id && cursor && (
-        <p>
-          <Link className="text-link" to={`${base}/tasks${latestSearch}`}>
-            返回最新任务
-          </Link>
-        </p>
-      )}
-      {!id && plugin && (
-        <p className="cloud-task-filter">
-          仅显示该插件的任务。
-          <button className="text-link" onClick={() => setParams({}, { replace: true })}>
-            查看全部
-          </button>
-        </p>
-      )}
-      {error && (
-        <p className="form-error" role="alert">
-          {currentPage && "刷新失败，当前显示上次加载的任务。"}
-          {error}
-        </p>
-      )}
-      {tasks.some(canStop) && (
-        <p className="form-note">
-          执行中的任务停止需等待云端确认，费用以最终结算为准；文件接收可取消，取消后本次不扣
-          credits。已发生的模型 API 费用以服务商账单为准。
-        </p>
-      )}
-      {loading && !currentPage ? (
-        <p className="form-note" role="status">
-          正在加载云端任务…
-        </p>
-      ) : tasks.length ? (
-        <div className="cloud-task-list">
-          {tasks.map((task) => (
-            <article key={task.id} className="panel cloud-task">
-              <div className="cloud-task-description">
-                {id ? (
-                  <section aria-label="任务要求">
-                    <h2 className="cloud-task-heading">任务要求</h2>
-                    <pre className="cloud-task-content">{task.prompt || "（内容已删除）"}</pre>
-                  </section>
-                ) : (
-                  <Link
-                    className="cloud-task-title"
-                    to={`${base}/tasks/${encodeURIComponent(task.id)}${search}`}
-                  >
-                    {task.prompt.slice(0, 120) || "（内容已删除）"}
-                  </Link>
-                )}
-                <small>
-                  {task.pluginName} · {task.sessionTitle}
-                  {task.stale && " · 原会话已变更"}
-                  {task.unconfirmed && " · 正在确认云端是否已接收任务"}
-                </small>
-                {task.result &&
-                  (id ? (
-                    <section aria-label="任务结果">
-                      <h2 className="cloud-task-heading">任务结果</h2>
-                      <TaskResult id={task.id} content={task.result} />
-                    </section>
-                  ) : (
-                    <details>
-                      <summary>查看结果</summary>
-                      <TaskResult id={task.id} content={task.result} />
-                    </details>
-                  ))}
-                {task.files?.length ? (
-                  <section aria-label="生成文件">
-                    {task.files.map((file) => (
-                      <p key={file.id}>
-                        <a href={`/api/assets/${encodeURIComponent(file.id)}`} download={file.name}>
-                          {file.name}
-                        </a>{" "}
-                        · {(file.bytes / 1024).toFixed(1)} KB
-                      </p>
-                    ))}
-                    <small>文件保留 30 天；清空或删除所属会话后不可下载。</small>
-                  </section>
-                ) : null}
-                {task.error && <small className="form-error">{task.error}</small>}
-              </div>
-              <span className={`tag ${task.status}`}>
-                {task.status === "completed" ? (
-                  <Check size={13} />
-                ) : active(task.status) ? (
-                  <Loader2 size={13} />
-                ) : task.status === "failed" ? (
-                  <TriangleAlert size={13} />
-                ) : (
-                  <Square size={13} />
-                )}
-                {labels[task.status]}
-                {task.stopping
-                  ? task.status === "finalizing"
-                    ? " · 正在取消文件接收"
-                    : " · 停止确认中"
-                  : ""}
-              </span>
-              <div className="cloud-task-meta">
-                <time
-                  dateTime={new Date(task.createdAt).toISOString()}
-                  title={new Date(task.createdAt).toLocaleString("zh-CN")}
-                >
-                  {relativeTime(task.createdAt)}
-                </time>
-                <span>
-                  {task.credits !== undefined
-                    ? `已结算 · ${task.credits.toFixed(3)} credits`
-                    : active(task.status)
-                      ? "费用待结算"
-                      : "暂无扣费记录"}
-                </span>
-                <span>
-                  {task.delivery === "sent"
-                    ? "已送达微信"
-                    : task.delivery === "stale" || task.stale
-                      ? "结果仅保留在任务页，不再发送微信"
-                      : task.delivery === "failed"
-                        ? "微信未送达"
-                        : active(task.status)
-                          ? ""
-                          : "等待发送微信"}
-                </span>
-              </div>
-              {canStop(task) && (
-                <button
-                  className="text-link"
-                  disabled={Boolean(busy) || task.stopping}
-                  onClick={() => void cancel(task)}
-                >
-                  {task.canCancelFiles
-                    ? busy === task.id
-                      ? "正在取消…"
-                      : "取消文件接收"
-                    : busy === task.id
-                      ? "正在请求停止…"
-                      : "停止"}
-                </button>
+      <div className="cloud-tasks-layout">
+        <div className="cloud-tasks-main">
+          <div className="cloud-tasks-toolbar">
+            <div>
+              {id ? (
+                <Link className="text-link" to={`${base}/tasks${search}`}>
+                  <ArrowLeft size={15} />
+                  返回任务列表
+                </Link>
+              ) : (
+                <>
+                  <h2>{cursor ? "更早的任务" : "任务记录"}</h2>
+                  {currentPage && (
+                    <span>
+                      本页 {tasks.length} 个任务{running > 0 && ` · ${running} 个进行中`}
+                    </span>
+                  )}
+                </>
               )}
-            </article>
-          ))}
+            </div>
+            {running > 0 && (
+              <span className="cloud-tasks-live">
+                <span />
+                自动更新中
+              </span>
+            )}
+            {!id && cursor && (
+              <Link className="text-link" to={`${base}/tasks${latestSearch}`}>
+                返回最新任务
+              </Link>
+            )}
+          </div>
+          {!id && plugin && (
+            <p className="cloud-task-filter">
+              仅显示该插件的任务。
+              <button className="text-link" onClick={() => setParams({}, { replace: true })}>
+                查看全部
+              </button>
+            </p>
+          )}
+          {error && (
+            <p className="form-error cloud-task-notice" role="alert">
+              {currentPage && "刷新失败，当前显示上次加载的任务。"}
+              {error}
+            </p>
+          )}
+          {loading && !currentPage ? (
+            <div className="panel cloud-tasks-loading" role="status">
+              <Loader2 size={22} className="cloud-task-spinner" />
+              正在加载云端任务…
+            </div>
+          ) : tasks.length ? (
+            <div className="cloud-task-list">
+              {tasks.map((task) => (
+                <article key={task.id} className={`panel cloud-task ${task.status}`}>
+                  <div className="cloud-task-header">
+                    <span className="cloud-task-icon">
+                      <FileText size={20} />
+                    </span>
+                    <div className="cloud-task-description">
+                      <h2 className="cloud-task-heading">
+                        {id ? (
+                          task.pluginName
+                        ) : (
+                          <Link
+                            className="cloud-task-title"
+                            to={`${base}/tasks/${encodeURIComponent(task.id)}${search}`}
+                          >
+                            {task.prompt.slice(0, 120) || "（内容已删除）"}
+                          </Link>
+                        )}
+                      </h2>
+                      <p className="cloud-task-source">
+                        {id ? task.sessionTitle : `${task.pluginName} · ${task.sessionTitle}`}
+                      </p>
+                    </div>
+                    <TaskStatus task={task} />
+                  </div>
+                  {task.unconfirmed && (
+                    <p className="cloud-task-notice">正在确认云端是否已接收任务</p>
+                  )}
+                  {id && (
+                    <section aria-label="任务要求" className="cloud-task-request">
+                      <h3>任务要求</h3>
+                      <pre className="cloud-task-content">{task.prompt || "（内容已删除）"}</pre>
+                    </section>
+                  )}
+                  {task.result &&
+                    (id ? (
+                      <section aria-label="任务结果" className="cloud-task-output">
+                        <h3>任务结果</h3>
+                        <TaskResult id={task.id} content={task.result} />
+                      </section>
+                    ) : (
+                      <details className="cloud-task-preview">
+                        <summary>
+                          查看结果 <ChevronDown size={15} />
+                        </summary>
+                        <TaskResult id={task.id} content={task.result} />
+                      </details>
+                    ))}
+                  {task.files?.length ? (
+                    <section aria-label="生成文件" className="cloud-task-files">
+                      <h3>
+                        生成文件 <span>{task.files.length}</span>
+                      </h3>
+                      <div className="cloud-task-file-list">
+                        {task.files.map((file) => (
+                          <a
+                            key={file.id}
+                            className="cloud-task-file"
+                            href={`/api/assets/${encodeURIComponent(file.id)}`}
+                            download={file.name}
+                          >
+                            <FileText size={20} />
+                            <span>
+                              <strong>{file.name}</strong>
+                              <small>{(file.bytes / 1024).toFixed(1)} KiB</small>
+                            </span>
+                            <Download size={16} />
+                          </a>
+                        ))}
+                      </div>
+                      <p className="form-note">文件保留 30 天；清空或删除所属会话后不可下载。</p>
+                    </section>
+                  ) : null}
+                  {task.error && (
+                    <p className="form-error cloud-task-error">
+                      <TriangleAlert size={16} />
+                      {task.error}
+                    </p>
+                  )}
+                  <div className="cloud-task-footer">
+                    <div className="cloud-task-meta">
+                      <time
+                        dateTime={new Date(task.createdAt).toISOString()}
+                        title={new Date(task.createdAt).toLocaleString("zh-CN")}
+                      >
+                        <Clock3 size={13} />
+                        {relativeTime(task.createdAt)}
+                      </time>
+                      <span>
+                        <Coins size={13} />
+                        {task.credits !== undefined
+                          ? `已结算 · ${task.credits.toFixed(3)} credits`
+                          : active(task.status)
+                            ? "费用待结算"
+                            : "暂无扣费记录"}
+                      </span>
+                      {(task.delivery !== "pending" || !active(task.status) || task.stale) && (
+                        <span
+                          className={
+                            task.delivery === "failed" ? "cloud-task-delivery-failed" : undefined
+                          }
+                        >
+                          <MessageCircle size={13} />
+                          {task.delivery === "sent"
+                            ? "已送达微信"
+                            : task.delivery === "stale" || task.stale
+                              ? "结果仅保留在任务页，不再发送微信"
+                              : task.delivery === "failed"
+                                ? "微信未送达"
+                                : "等待发送微信"}
+                        </span>
+                      )}
+                    </div>
+                    {canStop(task) && (
+                      <button
+                        className="text-link cloud-task-stop"
+                        disabled={Boolean(busy) || task.stopping}
+                        onClick={() => void cancel(task)}
+                      >
+                        <Square size={12} />
+                        {task.canCancelFiles
+                          ? busy === task.id
+                            ? "正在取消…"
+                            : "取消文件接收"
+                          : busy === task.id
+                            ? "正在请求停止…"
+                            : "停止"}
+                      </button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : error ? null : (
+            <div className="panel cloud-tasks-empty">
+              <Empty
+                icon={<Cloud size={26} />}
+                title={
+                  plugin ? "该插件暂无云端任务" : cursor ? "没有更早的云端任务" : "还没有云端任务"
+                }
+                description={
+                  plugin || cursor
+                    ? "已接收的云端任务会显示在这里，可返回全部任务查看其他记录。"
+                    : !data.cloudAgent.ready
+                      ? "云端 Agent 暂时不可用，已有任务记录仍可查看。"
+                      : data.plan === "plus"
+                        ? "在插件页配置云端 Agent 后，从微信发送文字或附件处理要求，即可在这里查看进度与结果。"
+                        : "云端 Agent 已向 Plus 会员开放。开通后可配置自己的模型，从微信提交任务。"
+                }
+                action={
+                  !plugin && !cursor ? (
+                    <Link
+                      className="button"
+                      to={
+                        data.cloudAgent.ready
+                          ? `${base}/${data.plan === "plus" ? "plugins" : "billing"}`
+                          : "/docs/cloud-agent"
+                      }
+                    >
+                      {!data.cloudAgent.ready
+                        ? "查看使用指南"
+                        : data.plan === "plus"
+                          ? "配置云端 Agent"
+                          : "了解 Plus"}
+                      <ArrowUpRight size={15} />
+                    </Link>
+                  ) : undefined
+                }
+              />
+            </div>
+          )}
+          {!id && currentPage?.nextCursor && (
+            <nav className="cloud-task-pagination" aria-label="任务分页">
+              <Link className="button secondary" to={`${base}/tasks?${olderQuery}`}>
+                查看更早任务
+              </Link>
+            </nav>
+          )}
+          {tasks.some(canStop) && (
+            <p className="form-note cloud-task-stop-note">
+              执行中的任务停止需等待云端确认，费用以最终结算为准；文件接收可取消，取消后本次不扣
+              credits。已发生的模型 API 费用以服务商账单为准。
+            </p>
+          )}
         </div>
-      ) : error ? null : (
-        <Empty
-          icon={<Cloud size={22} />}
-          title={plugin ? "该插件暂无云端任务" : cursor ? "没有更早的云端任务" : "还没有云端任务"}
-          description="已接收的云端任务会显示在这里。服务开放后，Plus 会员可在插件页配置云端 Agent，再从微信提交文字任务。"
-        />
-      )}
-      {!id && currentPage?.nextCursor && (
-        <nav className="cloud-task-pagination" aria-label="任务分页">
-          <Link className="button secondary" to={`${base}/tasks?${olderQuery}`}>
-            查看更早任务
-          </Link>
-        </nav>
-      )}
+        <aside className="cloud-tasks-aside">
+          <CloudStorage tasks={tasks} />
+          <section className="cloud-tasks-help">
+            <h2>
+              <MessageCircle size={17} />
+              在微信里继续
+            </h2>
+            <p>先发附件，再发送完整处理要求。任务在后台执行，完成后会尝试回复原微信会话。</p>
+            <Link className="text-link" to="/docs/cloud-agent">
+              查看使用指南 <ArrowUpRight size={14} />
+            </Link>
+            <p className="cloud-tasks-retention">
+              清空或删除会话会清除对应任务内容，并请求停止未结束的任务。
+            </p>
+          </section>
+        </aside>
+      </div>
     </div>
   );
 }

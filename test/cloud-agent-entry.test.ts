@@ -1267,6 +1267,32 @@ describe("cloud Agent user entry", () => {
     expect(await tasks(stub)).toEqual([]);
     expect((await stub.snapshot()).wallet.balance).toBe(before.wallet.balance);
   });
+  it.each([false, true])(
+    "opens public mode to Plus accounts without admin access (Plus=%s)",
+    async (plus) => {
+      const ownerId = crypto.randomUUID();
+      const stub = await setup(plus, true, ownerId);
+      const snapshot = (await api(stub, "snapshot")).data;
+      expect(snapshot.cloudAgent.ready).toBe(true);
+      expect(snapshot.cloudAgent.adminPreview).toBeUndefined();
+      expect(
+        await env.DB.prepare("SELECT user_id FROM admin_user WHERE user_id=?")
+          .bind(ownerId)
+          .first(),
+      ).toBeNull();
+      const result = await save(stub);
+      if (plus) {
+        expect(result.ok).toBe(true);
+        expect(await send(stub, "@云 整理计划")).toContain("任务已接收");
+        expect(await tasks(stub)).toHaveLength(1);
+      } else {
+        expect(result).toMatchObject({ ok: false, error: "cloud_plus_required" });
+        expect(await send(stub, "@云 整理计划")).not.toContain("任务已接收");
+        expect(await tasks(stub)).toHaveLength(0);
+      }
+    },
+  );
+
   it.each(["none", "expired"] as const)(
     "blocks %s admin access in both configuration and WeChat",
     async (grant) => {

@@ -1,76 +1,172 @@
-.cloud-storage {
-  padding: 20px 24px;
-  margin-bottom: 24px;
+.cloud-tasks .page-head {
+  align-items: flex-end;
 }
-.cloud-storage-summary {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-}
-.cloud-storage-summary .text-link {
-  margin-left: auto;
-}
-.cloud-storage progress {
-  display: block;
-  width: 100%;
-  height: 8px;
-  margin-top: 12px;
-  accent-color: var(--accent);
-}
-.cloud-storage .form-note {
+.cloud-tasks .page-head p {
+  line-height: 1.8;
   margin-bottom: 0;
+}
+.cloud-tasks-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.cloud-tasks-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 28px;
+  align-items: start;
+}
+.cloud-tasks-main,
+.cloud-tasks-aside {
+  min-width: 0;
+}
+.cloud-tasks-toolbar,
+.cloud-tasks-toolbar > div {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.cloud-tasks-toolbar {
+  justify-content: space-between;
+  margin: 0 0 18px;
+  min-height: 24px;
+}
+.cloud-tasks-toolbar h2,
+.cloud-storage h2,
+.cloud-tasks-help h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+.cloud-tasks-toolbar > div > span,
+.cloud-tasks-live {
+  font-size: 12px;
+  color: var(--muted);
+}
+.cloud-tasks-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.cloud-tasks-live > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
 }
 .cloud-task-list {
   display: grid;
   gap: 16px;
 }
-.cloud-task-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.cloud-task-pagination {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
 .cloud-task {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
   padding: 24px;
-  align-items: start;
+  box-shadow: 0 2px 8px #101a1204;
+  min-width: 0;
+}
+.cloud-task-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+}
+.cloud-task-icon,
+.cloud-storage-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  color: var(--green);
+  background: var(--sage);
+  border: 1px solid #d9eadf;
+  border-radius: 11px;
+}
+.cloud-task-description {
+  flex: 1;
+  min-width: 0;
+}
+.cloud-task-heading {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.65;
+  margin: 0;
 }
 .cloud-task-title {
-  color: inherit;
-  font-weight: 600;
-  text-decoration: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 .cloud-task-title:hover {
-  text-decoration: underline;
+  color: var(--green);
 }
-.cloud-task-description {
-  min-width: 0;
+.cloud-task-source {
+  margin: 5px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
 }
-.cloud-task-description small {
-  display: block;
-  margin-top: 8px;
+.cloud-task-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 9px;
+  margin-top: 1px;
+  border-radius: 7px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  flex-shrink: 0;
+  max-width: 190px;
 }
-.cloud-task details {
-  margin-top: 16px;
+.cloud-task-status svg {
+  flex-shrink: 0;
 }
-.cloud-task summary {
-  cursor: pointer;
+.cloud-task-status.completed {
+  color: #06743a;
+  background: #eafaef;
 }
-.cloud-task-heading {
-  margin: 0;
-  font-size: 16px;
+.cloud-task-status.running,
+.cloud-task-status.submitting,
+.cloud-task-status.queued,
+.cloud-task-status.finalizing {
+  color: #245bc1;
+  background: #eff5ff;
 }
-.cloud-task section + section,
-.cloud-task small + section {
+.cloud-task-status.failed {
+  color: #b63e32;
+  background: #fff0ed;
+}
+.cloud-task-status.awaiting_approval {
+  color: #8c5b13;
+  background: #fff6e5;
+}
+.cloud-task-preview {
   margin-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.cloud-task-preview > summary,
+.cloud-storage-notes > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 14px 0 0;
+}
+.cloud-task-preview > summary::-webkit-details-marker,
+.cloud-storage-notes > summary::-webkit-details-marker {
+  display: none;
+}
+.cloud-task-preview[open] > summary > svg,
+.cloud-storage-notes[open] > summary > svg {
+  transform: rotate(180deg);
 }
 .cloud-task-content {
   max-height: 36rem;
@@ -78,32 +174,351 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: inherit;
-  line-height: 1.7;
-  padding: 16px;
+  line-height: 1.85;
+  padding: 18px 20px;
   background: var(--surface-soft);
-  border-radius: 8px;
+  border: 1px solid #edf0ed;
+  border-radius: 10px;
+}
+.cloud-task-result {
+  margin: 14px 0 8px;
+  white-space: normal;
+}
+.cloud-task-detail .cloud-task-result {
+  background: transparent;
+  padding: 0;
+  border: 0;
+}
+.cloud-task-request,
+.cloud-task-output,
+.cloud-task-files {
+  margin-top: 24px;
+}
+.cloud-task-request > h3,
+.cloud-task-output > h3,
+.cloud-task-files > h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.cloud-task-files h3 span {
+  margin-left: 5px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.cloud-task-file-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+}
+.cloud-task-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  transition:
+    border-color 150ms,
+    background 150ms;
+}
+.cloud-task-file:hover {
+  background: var(--sage);
+  border-color: var(--line-strong);
+}
+.cloud-task-file > svg {
+  color: var(--green);
+  flex-shrink: 0;
+}
+.cloud-task-file > span {
+  flex: 1;
+  min-width: 0;
+}
+.cloud-task-file strong,
+.cloud-task-file small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.cloud-task-file strong {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+.cloud-task-file small {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.cloud-task-files .form-note {
+  font-size: 12px;
+  margin: 10px 0 0;
+}
+.cloud-task-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 .cloud-task-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
-  font-size: 13px;
+  gap: 9px 18px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.cloud-task-meta > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.cloud-task-meta svg {
+  flex-shrink: 0;
+}
+.cloud-task-delivery-failed {
+  color: #b63e32;
+}
+.cloud-tasks button.text-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+}
+.cloud-tasks .cloud-task-stop {
   color: var(--muted);
 }
-.cloud-task-result {
-  margin: 12px 0 8px;
-  white-space: normal;
+.cloud-tasks .cloud-task-stop:hover {
+  color: #b63e32;
 }
-.cloud-task > .text-link {
-  justify-self: end;
+.cloud-task-error,
+.cloud-task-notice {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
 }
-@media (max-width: 600px) {
-  .cloud-task {
-    padding: 18px;
+.cloud-task-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: #fff5f2;
+}
+.cloud-task-error svg {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+.cloud-task-notice {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+.cloud-task-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+.cloud-task-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.cloud-tasks-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 64px 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.cloud-tasks-empty .empty {
+  padding: 64px 24px;
+}
+.cloud-tasks-empty .empty p {
+  max-width: 340px;
+  margin: 0 auto 24px;
+  line-height: 1.9;
+  font-size: 14px;
+}
+.cloud-storage {
+  padding: 22px;
+  box-shadow: none;
+}
+.cloud-storage-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.cloud-storage-heading > div > span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.cloud-storage-capacity {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 26px 0 8px;
+}
+.cloud-storage-capacity strong {
+  font-size: 34px;
+  font-weight: 550;
+  letter-spacing: -1.5px;
+  font-variant-numeric: tabular-nums;
+}
+.cloud-storage-capacity span,
+.cloud-storage-used,
+.cloud-storage-available {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.cloud-storage-used {
+  margin: 0;
+}
+.cloud-storage progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-top: 14px;
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--line);
+  accent-color: var(--green);
+}
+.cloud-storage progress::-webkit-progress-bar {
+  background: var(--line);
+}
+.cloud-storage progress::-webkit-progress-value {
+  background: var(--green);
+  border-radius: 8px;
+}
+.cloud-storage progress::-moz-progress-bar {
+  background: var(--green);
+}
+.cloud-storage-available {
+  margin: 9px 0 0;
+}
+.cloud-storage-refresh {
+  margin-top: 14px;
+}
+.cloud-storage-notes {
+  border-top: 1px solid var(--line);
+  margin-top: 20px;
+}
+.cloud-storage-notes .form-note {
+  font-size: 12px;
+  line-height: 1.9;
+  margin: 12px 0 0;
+}
+.cloud-storage .form-error {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.cloud-tasks-help {
+  padding: 24px 8px;
+}
+.cloud-tasks-help h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cloud-tasks-help p,
+.cloud-task-stop-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.9;
+}
+.cloud-tasks-help .cloud-tasks-retention {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  margin-top: 20px;
+}
+.cloud-task-spinner {
+  animation: cloud-task-spin 1.4s linear infinite;
+}
+@keyframes cloud-task-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cloud-task-spinner {
+    animation: none;
+  }
+}
+@media (max-width: 1100px) {
+  .cloud-tasks-layout {
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 20px;
+  }
+}
+@media (max-width: 900px) {
+  .cloud-tasks-layout {
     grid-template-columns: minmax(0, 1fr);
   }
-  .cloud-task > .tag {
-    justify-self: start;
-    grid-row: 1;
+  .cloud-tasks-aside {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+}
+@media (max-width: 600px) {
+  .cloud-tasks .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .cloud-tasks-actions {
+    width: 100%;
+  }
+  .cloud-tasks-actions .button {
+    flex: 1;
+    font-size: 13px;
+  }
+  .cloud-task {
+    padding: 18px;
+  }
+  .cloud-task-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .cloud-task-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+  .cloud-task-description {
+    flex-basis: calc(100% - 44px);
+  }
+  .cloud-task-status {
+    margin-left: 44px;
+    max-width: 100%;
+  }
+  .cloud-task-content {
+    padding: 14px;
+  }
+  .cloud-tasks-aside {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .cloud-storage {
+    padding: 20px;
+  }
+  .cloud-storage-capacity {
+    margin-top: 18px;
+  }
+  .cloud-tasks-toolbar > div {
+    gap: 6px;
+    flex-direction: column;
   }
 }

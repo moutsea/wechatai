@@ -336,7 +336,7 @@ describe("cloud task history navigation", () => {
     expect(container.querySelector('[aria-label="任务结果"] .chat-markdown')?.textContent).toBe(
       result,
     );
-    expect(container.querySelector("details")).toBeNull();
+    expect(container.querySelector(".cloud-task details")).toBeNull();
     expect(container.querySelector('a[href*="/tasks/long"]')).toBeNull();
     await click("返回任务列表");
     expect(control(prompt.slice(0, 120)).getAttribute("href")).toContain("cursor=page2");
@@ -751,13 +751,23 @@ describe("cloud task status, cost and delivery", () => {
     expect(rows[2]).toContain("正在确认云端是否已接收任务");
   });
 
-  it("explains configuration and WeChat entry with the service availability condition", async () => {
-    handle = () => page([]);
-    await mount();
-    expect(container.textContent).toContain("还没有云端任务");
-    expect(container.textContent).toContain("服务开放后，Plus 会员可在插件页配置云端 Agent");
-    expect(container.textContent).not.toContain("在微信里向云端 Agent 发送");
-  });
+  it.each([
+    ["plus", true, "配置云端 Agent", "/app/plugins"],
+    ["free", true, "了解 Plus", "/app/billing"],
+    ["plus", false, "查看使用指南", "/docs/cloud-agent"],
+  ] as const)(
+    "offers a useful empty-state action for %s users with ready=%s",
+    async (plan, ready, label, href) => {
+      const data = useApp().data!;
+      data.plan = plan;
+      data.cloudAgent = { ...data.cloudAgent, ready };
+      handle = () => page([]);
+      await mount();
+      expect(container.textContent).toContain("还没有云端任务");
+      expect(control(label).getAttribute("href")).toBe(href);
+      expect(container.textContent).not.toContain("服务开放后");
+    },
+  );
 
   it("removes a cached task when refresh confirms it was deleted", async () => {
     let removed = false;
