@@ -1,5 +1,5 @@
 import { ArrowRight, Check, ChevronDown, Minus } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { LANDING_FAQ } from "../shared/landing-faq";
@@ -126,7 +126,55 @@ function StartLink({
     </Link>
   );
 }
+function LandingPlanCard({
+  plan,
+  id = plan.id,
+  className = "",
+  children,
+}: {
+  plan: (typeof landingPlans)[number];
+  id?: string;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const { data: session } = useAuth();
+  return (
+    <article
+      className={`landing-plan landing-plan-${plan.id}${plan.id === "free" ? "" : " landing-plan-plus"} ${className}`}
+      aria-labelledby={`landing-plan-${id}-title`}
+    >
+      {children}
+      <header>
+        <span className="landing-plan-badge">{plan.badge}</span>
+        <h3 id={`landing-plan-${id}-title`}>{plan.name}</h3>
+        <p className="landing-plan-description">{plan.description}</p>
+        <p className="landing-plan-price">
+          <strong>¥{plan.price}</strong>
+          <span>{plan.unit}</span>
+        </p>
+        <p className="landing-plan-note">{plan.note}</p>
+      </header>
+      <LandingPlanFeatures plus={plan.id !== "free"} />
+      {plan.id === "free" ? (
+        <StartLink className="button secondary landing-plan-action">
+          {session ? "进入工作台" : plan.action}
+          <ArrowRight size={17} aria-hidden="true" />
+        </StartLink>
+      ) : (
+        <Link
+          className="button landing-plan-action"
+          to={`/pricing?interval=${plan.id}#plans-title`}
+        >
+          {plan.action}
+          <ArrowRight size={17} aria-hidden="true" />
+        </Link>
+      )}
+    </article>
+  );
+}
+
 export function Landing() {
+  const [mobileInterval, setMobileInterval] = useState<"month" | "year">("year");
   const { data: session } = useAuth();
   return (
     <div className="landing">
@@ -195,38 +243,26 @@ export function Landing() {
           </div>
           <div className="landing-pricing-grid">
             {landingPlans.map((plan) => (
-              <article
-                className={`landing-plan landing-plan-${plan.id}${plan.id === "free" ? "" : " landing-plan-plus"}`}
-                aria-labelledby={`landing-plan-${plan.id}-title`}
-                key={plan.id}
-              >
-                <header>
-                  <span className="landing-plan-badge">{plan.badge}</span>
-                  <h3 id={`landing-plan-${plan.id}-title`}>{plan.name}</h3>
-                  <p className="landing-plan-description">{plan.description}</p>
-                  <p className="landing-plan-price">
-                    <strong>¥{plan.price}</strong>
-                    <span>{plan.unit}</span>
-                  </p>
-                  <p className="landing-plan-note">{plan.note}</p>
-                </header>
-                <LandingPlanFeatures plus={plan.id !== "free"} />
-                {plan.id === "free" ? (
-                  <StartLink className="button secondary landing-plan-action">
-                    {session ? "进入工作台" : plan.action}
-                    <ArrowRight size={17} aria-hidden="true" />
-                  </StartLink>
-                ) : (
-                  <Link
-                    className="button landing-plan-action"
-                    to={`/pricing?interval=${plan.id}#plans-title`}
-                  >
-                    {plan.action}
-                    <ArrowRight size={17} aria-hidden="true" />
-                  </Link>
-                )}
-              </article>
+              <LandingPlanCard key={plan.id} plan={plan} />
             ))}
+            <LandingPlanCard
+              plan={mobileInterval === "year" ? landingPlans[2] : landingPlans[1]}
+              id="mobile-plus"
+              className="landing-plan-mobile-plus"
+            >
+              <div className="landing-plan-switch" role="group" aria-label="Plus 购买周期">
+                {(["month", "year"] as const).map((interval) => (
+                  <button
+                    key={interval}
+                    type="button"
+                    aria-pressed={mobileInterval === interval}
+                    onClick={() => setMobileInterval(interval)}
+                  >
+                    {interval === "month" ? "月付" : "年付 · 更划算"}
+                  </button>
+                ))}
+              </div>
+            </LandingPlanCard>
           </div>
           <p className="landing-pricing-note">
             会员单次购买，不自动续费；每日赠送 credits 不累积。模型 API 费用另付服务商。
@@ -240,7 +276,7 @@ export function Landing() {
             </Link>
           </p>
         </section>
-        <section className="landing-faq" aria-labelledby="landing-faq-title">
+        <section className="landing-faq" id="faq" aria-labelledby="landing-faq-title">
           <div className="landing-faq-head">
             <h2 id="landing-faq-title">常见问题</h2>
             <p className="landing-faq-intro">关于费用、配置和使用，你可能还想了解这些。</p>

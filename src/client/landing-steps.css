@@ -357,7 +357,7 @@
     grid-template-columns: 1fr;
   }
   .steps-copy {
-    padding: 27px 23px;
+    padding: 22px 20px;
   }
   .steps-copy h3 {
     font-size: 24px;
@@ -366,14 +366,20 @@
     font-size: 15px;
   }
   .steps-preview {
-    padding: 22px;
+    padding: 18px;
     border-left: 0;
     border-top: 1px solid var(--line);
   }
 }
 @media (max-width: 480px) {
   .steps-provider-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .steps-provider-grid > li {
+    min-height: 68px;
+    padding: 8px 3px;
+    gap: 5px;
+    font-size: 11px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

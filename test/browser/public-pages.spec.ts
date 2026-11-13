@@ -740,3 +740,39 @@ for (const authenticated of [true, false]) {
     }
   });
 }
+
+test("keeps one mobile Plus card with the selected price and purchase link", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${origin}/`);
+  const visiblePlans = page.locator(".landing-plan:visible");
+  await expect(visiblePlans).toHaveCount(2);
+  const plus = page.locator(".landing-plan-mobile-plus");
+  await expect(plus.locator("h3")).toHaveText("Plus 年付");
+  await expect(plus.locator(".landing-plan-price")).toHaveText("¥88/ 年");
+  await expect(plus.locator(".landing-plan-action")).toHaveAttribute(
+    "href",
+    "/pricing?interval=year#plans-title",
+  );
+  const monthly = plus.getByRole("button", { name: "月付", exact: true });
+  await monthly.focus();
+  await page.keyboard.press("Enter");
+  await expect(monthly).toHaveAttribute("aria-pressed", "true");
+  await expect(plus.locator("h3")).toHaveText("Plus 月付");
+  await expect(plus.locator(".landing-plan-price")).toHaveText("¥9.9/ 月");
+  await expect(plus.locator(".landing-plan-action")).toHaveAttribute(
+    "href",
+    "/pricing?interval=month#plans-title",
+  );
+  await plus.getByRole("button", { name: "年付 · 更划算" }).click();
+  await plus.locator(".landing-plan-action").click();
+  await expect(page.locator(".plan-price-unit")).toHaveText("/ 年");
+  await expect(page.locator(".plan-plus .plan-cta")).toHaveAttribute(
+    "href",
+    `/register?returnTo=${encodeURIComponent("/pricing?interval=year")}`,
+  );
+  await page.goto(`${origin}/`);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(visiblePlans).toHaveCount(3);
+  await expect(page.locator(".landing-plan-month").first()).toBeVisible();
+  await expect(page.locator(".landing-plan-year").first()).toBeVisible();
+});

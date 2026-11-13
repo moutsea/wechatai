@@ -443,7 +443,7 @@ a.use-case-action:focus-visible,
   }
   .use-case-card {
     grid-column: auto;
-    padding: 26px 22px 18px;
+    padding: 22px 20px 16px;
     border-radius: 20px;
   }
   .use-case-copy h3 {
@@ -451,14 +451,14 @@ a.use-case-action:focus-visible,
   }
   .use-case-scene {
     min-height: 0;
-    padding: 25px 0;
+    padding: 18px 0;
   }
   .scene-image-chat,
   .scene-task {
     padding: 16px;
   }
   .scene-agent-names > a {
-    padding: 18px 4px;
+    padding: 14px 4px;
     font-size: 12px;
   }
   .scene-agent-names img {
@@ -466,7 +466,26 @@ a.use-case-action:focus-visible,
     height: 44px;
   }
   .scene-wechat {
-    padding: 14px 16px;
+    padding: 12px 14px;
+  }
+  .scene-bridge-lines {
+    height: 40px;
+  }
+  .scene-xiaowei-intro {
+    margin-bottom: 14px;
+  }
+  .scene-xiaowei-intro > img {
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+  }
+  .use-case-copy > p {
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 1.75;
+  }
+  .use-case-action {
+    padding-top: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

@@ -4945,6 +4945,32 @@ code {
 .landing-pricing-more a:hover {
   text-decoration: underline;
 }
+.landing-plan-mobile-plus {
+  display: none;
+}
+.landing-plan-switch {
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  margin-bottom: 16px;
+  border: 1px solid #759e83;
+  border-radius: 10px;
+}
+.landing-plan-switch button {
+  flex: 1;
+  min-height: 44px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+}
+.landing-plan-switch button[aria-pressed="true"] {
+  color: var(--on-lime);
+  background: var(--lime);
+  font-weight: 600;
+}
 /* 首页常见问题：原生折叠卡片，正文与 FAQPage 结构化数据同源（src/shared/landing-faq.ts）。 */
 .landing-faq {
   display: grid;
@@ -5060,7 +5086,25 @@ code {
     gap: 16px;
   }
   .landing-plan {
-    padding: 26px 24px;
+    padding: 22px;
+  }
+  .landing-plan-month:not(.landing-plan-mobile-plus),
+  .landing-plan-year:not(.landing-plan-mobile-plus) {
+    display: none;
+  }
+  .landing-plan-mobile-plus {
+    display: flex;
+  }
+  .landing-plan h3 {
+    margin-top: 12px;
+  }
+  .landing-plan-price {
+    margin-top: 16px;
+  }
+  .landing-plan ul {
+    gap: 8px;
+    margin: 18px 0 22px;
+    padding-top: 18px;
   }
   .landing-faq {
     grid-template-columns: 1fr;
