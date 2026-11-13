@@ -296,7 +296,13 @@ export function Landing() {
                     <ChevronDown size={18} />
                   </span>
                 </summary>
-                <p>{item.answer}</p>
+                <p>
+                  {item.answer}
+                  <Link className="landing-faq-guide" to={item.guide.href}>
+                    {item.guide.label}
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </Link>
+                </p>
               </details>
             ))}
           </div>

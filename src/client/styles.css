@@ -5064,6 +5064,21 @@ code {
   line-height: 1.9;
   color: var(--muted);
 }
+.landing-faq-guide {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 44px;
+  margin-top: 10px;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 500;
+}
+.landing-faq-guide:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .landing-faq-more {
   margin: 22px 0 0;
   font-size: 14px;
