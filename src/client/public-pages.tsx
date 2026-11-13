@@ -265,11 +265,17 @@ export function Landing() {
             </LandingPlanCard>
           </div>
           <p className="landing-pricing-note">
-            会员单次购买，不自动续费；每日赠送 credits 不累积。模型 API 费用另付服务商。
+            credits
+            是微伴的平台用量额度，按使用量扣除。会员单次购买，不自动续费；每日赠额不累积。模型 API
+            费用另付服务商。
             <br />
             小薇 AI 使用你配置的模型，执行次数与服务状态以插件页为准。月付与年付享有相同权益。
           </p>
           <p className="landing-pricing-more">
+            <Link to="/pricing#estimate">
+              额度怎么用？估算每日用量
+              <ArrowRight size={15} aria-hidden="true" />
+            </Link>
             <Link to="/pricing">
               看完整价格与额度明细
               <ArrowRight size={15} aria-hidden="true" />

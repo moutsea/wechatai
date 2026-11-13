@@ -163,10 +163,10 @@ const useCases = [
   },
   {
     kind: "creative",
-    lead: "AI 生图、角色扮演",
-    title: "更多功能丰富拓展",
+    lead: "一句描述",
+    title: "在微信里生成图片",
     description:
-      "发一句描述，让 AI 把灵感画出来；也能设定角色人设、展开剧情，用插件拓展微信里的玩法。",
+      "描述想要的画面，生成图片直接发回微信。也能自定义角色人设、展开剧情，让聊天更有趣。",
     note: "生图需配置图片模型，API 费用另付服务商",
     href: "/wechat-ai-image",
     action: "探索 AI 生图",
@@ -185,9 +185,9 @@ const useCases = [
   {
     kind: "cloud",
     lead: "小薇，你的云端助手",
-    title: "不用安装，不用折腾",
+    title: "处理文件，生成文档",
     description:
-      "像用云端 OpenClaw、WorkBuddy 一样，在微信交代任务，让小薇帮你处理文件、生成文档。选好模型，启用即用。",
+      "在微信交代任务、接收文件，无需自己安装或部署。像使用云端 OpenClaw、WorkBuddy 一样，配置模型后即可启用。",
     note: "仅对 Plus 会员开放",
     href: "/docs/cloud-agent",
     action: "认识小薇，开始使用",
