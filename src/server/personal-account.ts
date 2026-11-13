@@ -1,6 +1,7 @@
 import {
   CLOUD_AGENT_PLUGIN_ID,
   CLOUD_AGENT_VERSION,
+  CLOUD_AGENT_STORAGE_BYTES,
   CLOUD_AGENT_WAITING_MESSAGE,
   CLOUD_AGENT_PLUS_MESSAGE,
   resolveCloudAgentModel,
@@ -100,6 +101,7 @@ import type {
 import {
   AppError,
   cloudAgentConfig,
+  cloudAgentConnectionConfig,
   cloudAgentAdminOnly,
   MODEL_RUN_LOCK_MS,
   MODEL_TURN_TIMEOUT_MS,
@@ -159,7 +161,12 @@ import {
   cloudTaskFilesPending,
   type CloudTask,
 } from "./cloud-agent-store";
-import type { CloudAgentTask, CloudAgentTaskPage } from "../shared/cloud-agent";
+import type {
+  CloudAgentStorageUsage,
+  CloudAgentTask,
+  CloudAgentTaskPage,
+} from "../shared/cloud-agent";
+import { cloudAgentScope } from "./cloud-agent-provision";
 import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
 import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
@@ -194,7 +201,7 @@ import {
 import { AttachmentQueue, attachmentRetryError } from "./attachments";
 import { createHash } from "node:crypto";
 import { prepareCloudAgentFiles } from "./cloud-agent-files";
-import { cloudImagePath } from "./cloud-agent-client";
+import { CloudAgentClient, cloudImagePath } from "./cloud-agent-client";
 import { parseAttachmentBatch } from "./executor/attachments";
 
 import { DEFAULT_WECHAT_LINK, WECHAT_LINK_LIMITS, wechatLinkKey } from "../shared/wechat-links";
@@ -1987,6 +1994,24 @@ export class PersonalAccount extends DurableObject<Env> {
       ...(task.unconfirmed ? { unconfirmed: true } : {}),
     };
   }
+  private async cloudStorage(): Promise<CloudAgentStorageUsage> {
+    const provision = this.cloud.provision();
+    // Viewing the allowance must not provision a workspace or submit a task.
+    if (!provision?.workspaceId)
+      return {
+        usedBytes: 0,
+        reservedBytes: 0,
+        maxTotalBytes: CLOUD_AGENT_STORAGE_BYTES,
+        availableBytes: CLOUD_AGENT_STORAGE_BYTES,
+      };
+    // Like task history, storage remains readable after Plus or admin preview expires.
+    const connection = cloudAgentConnectionConfig(this.env);
+    if (!connection) throw new AppError("cloud_agent_unavailable", "云端空间用量暂时无法读取", 503);
+    if (provision.scope !== cloudAgentScope(connection))
+      throw new AppError("cloud_scope_changed", "账号云端空间与当前服务不一致", 503);
+    const config = { ...connection, agentId: provision.profiles.at(-1) ?? "" };
+    return new CloudAgentClient(config).storageUsage(provision.workspaceId, provision.externalId);
+  }
   private cloudTasks(pluginId?: string, cursor?: string): CloudAgentTaskPage {
     const page = this.cloud.page(pluginId, cursor);
     return { ...page, tasks: page.tasks.map((task) => this.cloudTaskView(task)) };
@@ -2963,6 +2988,7 @@ export class PersonalAccount extends DurableObject<Env> {
         this.setSetting("dashboardOnboardingDismissedAt", dismissedAt);
         data = { dismissedAt };
       } else if (action === "plugin.list") data = this.plugins().map((p) => this.publicPlugin(p));
+      else if (action === "cloud.storage") data = await this.cloudStorage();
       else if (action === "cloud.tasks")
         data = this.cloudTasks(
           typeof p.pluginInstanceId === "string" ? p.pluginInstanceId : undefined,

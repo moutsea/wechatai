@@ -45,6 +45,53 @@ function network(reply: (request: Request) => Response | Promise<Response>) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("AGT client protocol", () => {
+  it("reads workspace storage with the mapped app user and exposes only public usage fields", async () => {
+    const requests = network(() =>
+      Response.json({
+        physicalBytes: 100,
+        reservedBytes: 20,
+        maxTotalBytes: 500 * 1024 * 1024,
+        availableBytes: 500 * 1024 * 1024 - 120,
+        tenantId: "private",
+        objectKeys: ["private"],
+      }),
+    );
+    expect(
+      await new CloudAgentClient(config).storageUsage(workspace.id, appUser.externalId),
+    ).toEqual({
+      usedBytes: 100,
+      reservedBytes: 20,
+      maxTotalBytes: 500 * 1024 * 1024,
+      availableBytes: 500 * 1024 * 1024 - 120,
+    });
+    expect(new URL(requests[0].url).pathname).toBe("/api/workspaces/workspace-one/storage/usage");
+    expect(requests[0].headers.get("x-app-user")).toBe(appUser.externalId);
+  });
+
+  it.each([
+    { physicalBytes: null },
+    { physicalBytes: -1 },
+    { reservedBytes: "20" },
+    { maxTotalBytes: 0 },
+    { availableBytes: null },
+  ])(
+    "rejects invalid storage usage instead of reporting an empty workspace (%j)",
+    async (patch) => {
+      network(() =>
+        Response.json({
+          physicalBytes: 10,
+          reservedBytes: 20,
+          maxTotalBytes: 500 * 1024 * 1024,
+          availableBytes: 500 * 1024 * 1024 - 30,
+          ...patch,
+        }),
+      );
+      await expect(
+        new CloudAgentClient(config).storageUsage(workspace.id, appUser.externalId),
+      ).rejects.toMatchObject({ code: "cloud_agent_response" });
+    },
+  );
+
   it.each([
     [404, "cloud_file_missing"],
     [410, "cloud_file_missing"],

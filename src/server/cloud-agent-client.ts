@@ -2,6 +2,7 @@ import { AppError } from "./config";
 import { readJson } from "./security";
 import { cloudAgentFailureCode, type CloudAgentFailureCode } from "./cloud-agent-failure";
 import { createHash } from "node:crypto";
+import type { CloudAgentStorageUsage } from "../shared/cloud-agent";
 
 export type CloudAgentClientConfig = {
   origin: string;
@@ -168,6 +169,31 @@ export class CloudAgentClient {
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       throw new AppError("cloud_agent_response", "云端 Agent 返回格式无效", 502);
     return payload as Record<string, unknown>;
+  }
+
+  async storageUsage(workspaceId: string, externalId: string): Promise<CloudAgentStorageUsage> {
+    const body = this.json(
+      await this.call("GET", `/api/workspaces/${encodeURIComponent(workspaceId)}/storage/usage`, {
+        externalId,
+      }),
+    );
+    const fields = [
+      body.physicalBytes,
+      body.reservedBytes,
+      body.maxTotalBytes,
+      body.availableBytes,
+    ];
+    if (
+      !fields.every((value) => Number.isSafeInteger(value) && (value as number) >= 0) ||
+      (body.maxTotalBytes as number) === 0
+    )
+      throw new AppError("cloud_agent_response", "云端空间用量返回格式无效", 502);
+    return {
+      usedBytes: body.physicalBytes as number,
+      reservedBytes: body.reservedBytes as number,
+      maxTotalBytes: body.maxTotalBytes as number,
+      availableBytes: body.availableBytes as number,
+    };
   }
 
   async modelChannels(): Promise<{ id: string; name: string }[]> {

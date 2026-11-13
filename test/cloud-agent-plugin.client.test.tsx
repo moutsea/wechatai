@@ -199,6 +199,10 @@ describe("cloud Agent plugin interactions", () => {
     const dialog = container.querySelector("dialog")!;
     expect(dialog.textContent).toContain("当前仅对管理员开放内测");
     expect(dialog.textContent).toContain("模型 API 费用另付服务商");
+    expect(dialog.textContent).toContain("每账号提供 500 MiB 云端空间");
+    expect(dialog.textContent).toContain("累计存储额度不代表单次处理上限");
+    expect(dialog.textContent).toContain("工作区单文件最大 25 MiB");
+    expect(dialog.textContent).toContain("每个最大 2 MiB，输入、输出各合计最大 8 MiB");
     expect(request).not.toHaveBeenCalled();
   });
 

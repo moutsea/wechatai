@@ -14,6 +14,8 @@ import { Modal } from "../ui";
 import { json } from "../api";
 import {
   CLOUD_AGENT_PLUGIN_ID,
+  CLOUD_AGENT_STORAGE_BYTES,
+  CLOUD_AGENT_FILE_LIMITS_NOTE,
   CLOUD_AGENT_WAITING_MESSAGE,
   cloudAgentAvailabilityIssue,
   cloudAgentInputSchema,
@@ -172,6 +174,11 @@ export function CloudAgentEditor({
             2 MB。 结果会回复微信；切换会话后，请在任务页查看原任务结果。 /wx stop
             请求停止当前会话的云端任务。
           </p>
+          <p className="form-note">
+            每账号提供 {CLOUD_AGENT_STORAGE_BYTES / (1024 * 1024)} MiB 云端空间，同账号的云端 Agent
+            共用。 可在<Link to={`${base}/tasks`}>云端任务页</Link>查看用量。
+          </p>
+          <p className="form-note">{CLOUD_AGENT_FILE_LIMITS_NOTE}</p>
           <p className="form-note">
             {data.cloudAgent.adminPreview && "当前仅对管理员开放内测。"}
             {CLOUD_AGENT_COST_NOTE}内部模型和工具消耗不额外扣 credits。 失败或确认取消不扣

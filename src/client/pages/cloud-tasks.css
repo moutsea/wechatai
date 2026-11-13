@@ -1,3 +1,26 @@
+.cloud-storage {
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+.cloud-storage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.cloud-storage-summary .text-link {
+  margin-left: auto;
+}
+.cloud-storage progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin-top: 12px;
+  accent-color: var(--accent);
+}
+.cloud-storage .form-note {
+  margin-bottom: 0;
+}
 .cloud-task-list {
   display: grid;
   gap: 16px;

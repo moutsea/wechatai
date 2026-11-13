@@ -8,7 +8,11 @@ import { useApp } from "../src/client/context";
 import { Workspace } from "../src/client/workspace";
 import { ApiError } from "../src/client/api";
 import { createFakeApi } from "./support/fake-api";
-import type { CloudAgentTask, CloudAgentTaskPage } from "../src/shared/cloud-agent";
+import type {
+  CloudAgentStorageUsage,
+  CloudAgentTask,
+  CloudAgentTaskPage,
+} from "../src/shared/cloud-agent";
 import type { ChatMessage, ChatSession, Snapshot } from "../src/shared/types";
 
 vi.mock("../src/client/context", () => ({
@@ -25,8 +29,9 @@ let root: Root;
 let container: HTMLDivElement;
 let handle: (path: string, options?: RequestInit) => unknown | Promise<unknown>;
 const request = vi.fn(async (path: string, options?: RequestInit) => handle(path, options));
+const storageRequest = vi.fn<(options?: RequestInit) => Promise<CloudAgentStorageUsage>>();
 const requestApi = async <T,>(path: string, options?: RequestInit): Promise<T> =>
-  (await request(path, options)) as T;
+  (await (path === "/cloud/storage" ? storageRequest(options) : request(path, options))) as T;
 const notify = vi.fn();
 const task = (id: string, patch: Partial<CloudAgentTask> = {}): CloudAgentTask => ({
   id,
@@ -51,6 +56,12 @@ beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
   request.mockClear();
+  storageRequest.mockReset().mockResolvedValue({
+    usedBytes: 0,
+    reservedBytes: 0,
+    maxTotalBytes: 500 * 1024 * 1024,
+    availableBytes: 500 * 1024 * 1024,
+  });
   notify.mockClear();
   handle = (path) => {
     throw new Error(`Unexpected API: ${path}`);
@@ -125,6 +136,154 @@ async function click(label: string) {
 }
 
 describe("cloud task history navigation", () => {
+  it.each([
+    ["completed", "/app/tasks"],
+    ["failed", "/app/tasks"],
+    ["cancelled", "/app/tasks"],
+    ["completed", "/app/tasks/live"],
+    ["failed", "/app/tasks/live"],
+    ["cancelled", "/app/tasks/live"],
+  ] as const)("refreshes storage once when a task becomes %s on %s", async (status, path) => {
+    let current = task("live", { status: "running", delivery: "pending" });
+    handle = (path) => (path === "/cloud/tasks/live" ? current : page([current]));
+    await mount(path);
+    expect(storageRequest).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[aria-label="云端空间"]')?.textContent).toContain("已用 0 MiB");
+    current = { ...current, status: "finalizing" };
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(storageRequest).toHaveBeenCalledTimes(1);
+    storageRequest.mockResolvedValue({
+      usedBytes: 3 * 1024 * 1024,
+      reservedBytes: 0,
+      maxTotalBytes: 500 * 1024 * 1024,
+      availableBytes: 497 * 1024 * 1024,
+    });
+    current = { ...current, status };
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[aria-label="云端空间"]')?.textContent).toContain("已用 3 MiB");
+    // Delivery retries keep task polling active, but must not repeat the usage query.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("recognizes a completion after navigating from the list to its detail", async () => {
+    let finished = false;
+    handle = (path) => {
+      if (path === "/cloud/tasks/live") {
+        finished = true;
+        return task("live");
+      }
+      if (path.includes("plugin=other")) return page([task("history")]);
+      return page([task("live", { status: finished ? "completed" : "running" })]);
+    };
+    await mount();
+    await click("任务 live");
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+    await click("返回任务列表");
+    await click("切换测试插件");
+    // Other terminal tasks and a task disappearing from the filter do not signal a completion.
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("updates storage when the stop response is already terminal", async () => {
+    let stopped = false;
+    handle = (path) => {
+      if (path.endsWith("/cancel")) {
+        stopped = true;
+        return task("live", { status: "cancelled" });
+      }
+      return page([task("live", { status: stopped ? "cancelled" : "running" })]);
+    };
+    await mount();
+    await click("停止");
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+    await click("刷新");
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores an older usage response after a task finishes", async () => {
+    let complete!: (usage: CloudAgentStorageUsage) => void;
+    storageRequest.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    let current = task("live", { status: "running" });
+    handle = () => page([current]);
+    await mount();
+    const initialSignal = storageRequest.mock.calls[0][0]?.signal;
+    storageRequest.mockResolvedValue({
+      usedBytes: 3 * 1024 * 1024,
+      reservedBytes: 0,
+      maxTotalBytes: 500 * 1024 * 1024,
+      availableBytes: 497 * 1024 * 1024,
+    });
+    current = task("live");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(initialSignal?.aborted).toBe(true);
+    await act(async () =>
+      complete({
+        usedBytes: 0,
+        reservedBytes: 0,
+        maxTotalBytes: 500 * 1024 * 1024,
+        availableBytes: 500 * 1024 * 1024,
+      }),
+    );
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[aria-label="云端空间"]')?.textContent).toContain("已用 3 MiB");
+  });
+
+  it("shows the actual allowance, usage and reservations without polling storage", async () => {
+    handle = () => page([task("live", { status: "running" })]);
+    storageRequest.mockResolvedValue({
+      usedBytes: 100 * 1024 * 1024,
+      reservedBytes: 20 * 1024 * 1024,
+      maxTotalBytes: 500 * 1024 * 1024,
+      availableBytes: 380 * 1024 * 1024,
+    });
+    await mount();
+    const storage = container.querySelector('[aria-label="云端空间"]')!;
+    expect(storage.textContent).toContain("已用 100 MiB / 500 MiB");
+    expect(storage.textContent).toContain("可用 380 MiB，任务写入预留 20 MiB");
+    expect(storage.textContent).toContain("累计存储额度不代表单次处理上限");
+    expect(storage.textContent).toContain("工作区单文件最大 25 MiB");
+    expect(storage.textContent).toContain("每个最大 2 MiB，输入、输出各合计最大 8 MiB");
+    expect(storage.querySelector("progress")?.value).toBe(120 * 1024 * 1024);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15000);
+    });
+    expect(storageRequest).toHaveBeenCalledTimes(1);
+    await click("刷新用量");
+    expect(storageRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps storage failures distinct from zero usage and lets the user retry", async () => {
+    handle = () => page([task("done")]);
+    storageRequest.mockRejectedValueOnce(new Error("unreachable"));
+    await mount();
+    const storage = container.querySelector('[aria-label="云端空间"]')!;
+    expect(storage.textContent).toContain("每账号 500 MiB");
+    expect(storage.textContent).toContain("用量暂时无法读取");
+    expect(storage.textContent).not.toContain("已用 0");
+    expect(container.textContent).toContain("任务 done");
+    await click("刷新用量");
+    expect(storage.textContent).toContain("已用 0 MiB / 500 MiB");
+    expect(storage.textContent).not.toContain("用量暂时无法读取");
+    storageRequest.mockRejectedValueOnce(new Error("unreachable"));
+    await click("刷新用量");
+    expect(storage.textContent).toContain("当前显示上次读取的用量");
+  });
+
   it("lets the user cancel file transfer and explains that this local cancellation needs no cloud confirmation", async () => {
     let cancelling = false;
     handle = (path) => {

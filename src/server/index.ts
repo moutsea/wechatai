@@ -822,6 +822,7 @@ app.post(
   invoke("assistant.test", (c) => ({ id: c.req.param("id") })),
 );
 app.post("/api/assistants/:id/activate", invoke("assistant.activate", activationPayload));
+app.get("/api/cloud/storage", invoke("cloud.storage"));
 app.get(
   "/api/cloud/tasks",
   invoke("cloud.tasks", (c) => ({

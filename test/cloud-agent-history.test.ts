@@ -5,6 +5,7 @@ import referralMigration from "../migrations/0003_referrals.sql?raw";
 import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import worker from "../src/server/index";
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
+import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { Wallet } from "../src/server/wallet";
 import type { CloudAgentTask, CloudAgentTaskPage } from "../src/shared/cloud-agent";
 import { useManualAlarms } from "./helpers/wechat-delivery";
@@ -52,6 +53,7 @@ beforeEach(async () => {
       await useManualAlarms(state);
       state.storage.sql.exec("DELETE FROM cloud_tasks");
       state.storage.sql.exec("DELETE FROM sessions");
+      state.storage.sql.exec("DELETE FROM cloud_provision");
     });
   vi.spyOn(globalThis, "fetch").mockRejectedValue(
     new Error("Task API requests must not call upstream services"),
@@ -124,6 +126,96 @@ async function save(values: CloudTask[], stub = owner.stub) {
 }
 const detail = async (value: CloudTask) => (await request(`/${value.id}`)).json<CloudAgentTask>();
 const list = async (query = "") => (await request(query)).json<CloudAgentTaskPage>();
+
+describe("account cloud storage", () => {
+  const storage = (cookie = owner.cookie) =>
+    worker.fetch(
+      new Request(`${env.APP_URL}/api/cloud/storage?workspaceId=untrusted-workspace`, {
+        headers: { cookie },
+      }),
+      env,
+      createExecutionContext(),
+    );
+  const provision = async () =>
+    runInDurableObject(owner.stub, (instance, state) => {
+      const config = {
+        origin: "https://agt.example.com",
+        appId: "app-one",
+        tenantId: "tenant-one",
+      };
+      Object.assign(Reflect.get(instance, "env"), {
+        CLOUD_AGENT_ENABLED: "false",
+        AGT_ORIGIN: config.origin,
+        AGT_APP_ID: config.appId,
+        AGT_TENANT_ID: config.tenantId,
+        AGT_APP_KEY: "test-only-app-key",
+      });
+      new CloudAgentStore(state.storage).saveProvision({
+        scope: cloudAgentScope(config),
+        profiles: ["wechatai-v3"],
+        externalId: `wechatai:${state.id}`,
+        appUserId: "user-one",
+        workspaceId: "owner-workspace",
+        configured: 1,
+        updatedAt: Date.now(),
+      });
+    });
+
+  it("reports the unused allowance without provisioning anything and requires authentication", async () => {
+    expect((await storage("")).status).toBe(401);
+    const response = await storage();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      usedBytes: 0,
+      reservedBytes: 0,
+      maxTotalBytes: 500 * 1024 * 1024,
+      availableBytes: 500 * 1024 * 1024,
+    });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("reads only the account's saved workspace even after cloud access is disabled", async () => {
+    await provision();
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, options) => {
+      const request = new Request(input, options);
+      expect(request.url).toBe(
+        "https://agt.example.com/api/workspaces/owner-workspace/storage/usage",
+      );
+      expect(request.headers.get("x-app-user")).toBe(`wechatai:${owner.stub.id}`);
+      return Response.json({
+        physicalBytes: 100,
+        reservedBytes: 20,
+        maxTotalBytes: 500 * 1024 * 1024,
+        availableBytes: 500 * 1024 * 1024 - 120,
+      });
+    });
+    const response = await storage();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      usedBytes: 100,
+      reservedBytes: 20,
+      maxTotalBytes: 500 * 1024 * 1024,
+      availableBytes: 500 * 1024 * 1024 - 120,
+    });
+    expect(await (await storage(other.cookie)).json()).toMatchObject({ usedBytes: 0 });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report zero usage when the upstream fails or the workspace scope changes", async () => {
+    await provision();
+    vi.mocked(globalThis.fetch).mockImplementation(
+      async () => new Response("private upstream error", { status: 503 }),
+    );
+    const failed = await storage();
+    expect(failed.status).toBe(502);
+    expect(await failed.text()).not.toContain("private upstream error");
+    await runInDurableObject(owner.stub, (instance) => {
+      Object.assign(Reflect.get(instance, "env"), { AGT_TENANT_ID: "changed-tenant" });
+    });
+    expect((await storage()).status).toBe(503);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("account cloud task history", () => {
   it("exposes the readable request in list and detail while keeping execution instructions private", async () => {

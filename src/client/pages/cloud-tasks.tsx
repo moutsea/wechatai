@@ -6,10 +6,13 @@ import { Empty, PageHead, relativeTime } from "../ui";
 import { ApiError, json } from "../api";
 import { ChatMarkdown, CopyMessage } from "../chat-markdown";
 import "./cloud-tasks.css";
-import type {
-  CloudAgentTask,
-  CloudAgentTaskPage,
-  CloudAgentTaskStatus,
+import {
+  CLOUD_AGENT_STORAGE_BYTES,
+  CLOUD_AGENT_FILE_LIMITS_NOTE,
+  type CloudAgentStorageUsage,
+  type CloudAgentTask,
+  type CloudAgentTaskPage,
+  type CloudAgentTaskStatus,
 } from "../../shared/cloud-agent";
 
 const labels: Record<CloudAgentTaskStatus, string> = {
@@ -64,6 +67,95 @@ function TaskResult({ id, content }: { id: string; content: string }) {
       </div>
       <CopyMessage text={content} label="复制结果" />
     </>
+  );
+}
+
+function storageSize(bytes: number) {
+  if (bytes > 0 && bytes < 1024 * 1024) return "不足 1 MiB";
+  return `${(bytes / (1024 * 1024)).toLocaleString("zh-CN", { maximumFractionDigits: 1 })} MiB`;
+}
+
+function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
+  const { request } = useApp();
+  const [usage, setUsage] = useState<CloudAgentStorageUsage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [revision, setRevision] = useState(0);
+  // Keep active IDs across list/detail navigation, but do not treat historical
+  // terminal tasks as new completions or refresh again for delivery updates.
+  const activeTasks = useRef(new Set<string>());
+  useEffect(() => {
+    let ended = false;
+    for (const task of tasks) {
+      if (active(task.status)) activeTasks.current.add(task.id);
+      else if (activeTasks.current.delete(task.id)) ended = true;
+    }
+    if (ended) setRevision((value) => value + 1);
+  }, [tasks]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(false);
+    void taskRequest(
+      (signal) => request<CloudAgentStorageUsage>("/cloud/storage", { signal }),
+      controller,
+      "读取空间用量超时",
+    )
+      .then(
+        (result) => {
+          if (!controller.signal.aborted) setUsage(result);
+        },
+        () => {
+          if (!controller.signal.aborted) setError(true);
+        },
+      )
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+        controller.abort();
+      });
+    return () => controller.abort();
+  }, [request, revision]);
+  return (
+    <section className="panel cloud-storage" aria-label="云端空间">
+      <div className="cloud-storage-summary">
+        <strong>云端空间</strong>
+        <span>
+          {usage
+            ? `已用 ${storageSize(usage.usedBytes)} / ${storageSize(usage.maxTotalBytes)}`
+            : `每账号 ${storageSize(CLOUD_AGENT_STORAGE_BYTES)}`}
+        </span>
+        <button
+          className="text-link"
+          disabled={loading}
+          onClick={() => setRevision((value) => value + 1)}
+        >
+          {loading ? "正在读取用量…" : "刷新用量"}
+        </button>
+      </div>
+      {usage && (
+        <>
+          <progress
+            aria-label="云端空间占用"
+            max={usage.maxTotalBytes}
+            value={Math.min(usage.maxTotalBytes, usage.usedBytes + usage.reservedBytes)}
+          />
+          <p className="form-note">
+            可用 {storageSize(usage.availableBytes)}
+            {usage.reservedBytes > 0 && `，任务写入预留 ${storageSize(usage.reservedBytes)}`}。
+          </p>
+        </>
+      )}
+      {error && (
+        <p className="form-error" role="status">
+          用量暂时无法读取，请刷新重试。{usage && "当前显示上次读取的用量。"}
+        </p>
+      )}
+      <p className="form-note">
+        同账号的云端 Agent
+        共用此空间，用于工作文件、附件及任务运行数据。空间不足时无法继续写入。删除任务记录不会释放云端空间。
+      </p>
+      <p className="form-note">{CLOUD_AGENT_FILE_LIMITS_NOTE}</p>
+    </section>
   );
 }
 
@@ -218,6 +310,7 @@ export function CloudTasks() {
           </button>
         }
       />
+      <CloudStorage tasks={tasks} />
       {id && (
         <p>
           <Link className="text-link" to={`${base}/tasks${search}`}>

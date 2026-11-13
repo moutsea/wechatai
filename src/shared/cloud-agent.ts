@@ -11,6 +11,17 @@ import {
 
 export const CLOUD_AGENT_PLUGIN_ID = "wechatai/cloud-agent";
 export const CLOUD_AGENT_VERSION = "1.0.0";
+// Used before the first workspace is provisioned; existing workspaces report their own quota.
+export const CLOUD_AGENT_STORAGE_BYTES = 500 * 1024 * 1024;
+export const CLOUD_AGENT_FILE_LIMITS_NOTE =
+  "累计存储额度不代表单次处理上限。工作区单文件最大 25 MiB；转换工具单次读取或生成的工作文件，每个最大 2 MiB，输入、输出各合计最大 8 MiB。";
+
+export type CloudAgentStorageUsage = {
+  usedBytes: number;
+  reservedBytes: number;
+  maxTotalBytes: number;
+  availableBytes: number;
+};
 
 export const CLOUD_AGENT_WAITING_MESSAGE =
   "任务已接收，正在提交云端 Agent；结果会在微信回复，也可在云端任务页查看。";
