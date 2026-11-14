@@ -515,10 +515,25 @@ for (const { name, width, path, selector, axis } of [
   });
 }
 
-for (const { scenario, path, keepReading } of [
-  { scenario: "filtered-out target", path: "/docs/hermes-in-wechat", keepReading: false },
-  { scenario: "reordered target", path: "/docs/deepseek-in-wechat", keepReading: false },
-  { scenario: "offscreen target while reading", path: "/docs/hermes-in-wechat", keepReading: true },
+for (const { scenario, path, query, keepReading } of [
+  {
+    scenario: "filtered-out target",
+    path: "/docs/hermes-in-wechat",
+    query: "联网",
+    keepReading: false,
+  },
+  {
+    scenario: "reordered target",
+    path: "/docs/deepseek-in-wechat",
+    query: "DeepSeek",
+    keepReading: false,
+  },
+  {
+    scenario: "offscreen target while reading",
+    path: "/docs/hermes-in-wechat",
+    query: "联网",
+    keepReading: true,
+  },
 ]) {
   test(`handles scrolled mobile navigation during handoff: ${scenario}`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -531,7 +546,7 @@ for (const { scenario, path, keepReading } of [
     const navigation = page.locator(".docs-mobile-navigation");
     await navigation.locator("summary").click();
     const input = navigation.getByRole("searchbox");
-    await input.fill("联网");
+    await input.fill(query);
     const link = navigation.locator(`a[href="${path}"]`);
     for (let step = 0; step < 30; step++) {
       if (await link.evaluate((element) => element === document.activeElement)) break;
