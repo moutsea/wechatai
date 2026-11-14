@@ -42,6 +42,7 @@ import { DocKimiseekImport } from "./doc-kimiseek-import";
 import { DocWechatCode, DocWechatConnection, DocWechatStatus } from "./doc-wechat-connection";
 import { DocPluginSetup } from "./doc-plugin-setup";
 import { DocNotificationDelivery, DocPluginGuide, DocRoleplayLore } from "./doc-plugin-guides";
+import { DocAgentPairing, DocOpenClawConfigs, DocTutorialChat } from "./doc-agent-tutorials";
 import {
   DocAttachmentFlow,
   DocCreditExample,
@@ -395,6 +396,18 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
               <DocPluginGuide kind="notification" />
             )}
             {section.illustration === "notification-delivery" && <DocNotificationDelivery />}
+            {section.illustration === "agent-pairing-openclaw" && (
+              <DocAgentPairing kind="openclaw" />
+            )}
+            {section.illustration === "agent-pairing-hermes" && <DocAgentPairing kind="hermes" />}
+            {section.illustration === "openclaw-configs" && <DocOpenClawConfigs />}
+            {section.illustration === "tutorial-deepseek-chat" && (
+              <DocTutorialChat kind="deepseek" />
+            )}
+            {section.illustration === "tutorial-openclaw-chat" && (
+              <DocTutorialChat kind="openclaw" />
+            )}
+            {section.illustration === "tutorial-hermes-chat" && <DocTutorialChat kind="hermes" />}
             {section.illustration === "attachment-flow" && <DocAttachmentFlow />}
             {section.illustration === "voice-example" && <DocVoiceExample />}
             {section.illustration === "membership-plans" && <DocMembershipPlans />}

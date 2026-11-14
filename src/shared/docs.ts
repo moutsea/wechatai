@@ -5,6 +5,21 @@ export const DOCS_DESCRIPTION =
 
 export const DOC_TUTORIALS = [
   {
+    slug: "wechat-ai-assistant",
+    updatedAt: "2026-11-14",
+    navTitle: "小薇：免部署的 AI 助手",
+    title: "不想部署 OpenClaw？在微信使用云端 AI 助手小薇",
+    description:
+      "不想安装 OpenClaw、购买服务器或维护运行设备？用微伴云端助手小薇，在微信交代任务、处理文件和生成文档。跟着 Markdown 转 Word 示例完成配置、发送附件与接收结果；需要 Plus 和自备模型 API Key。",
+    category: "实操教程",
+    group: "tutorials",
+    requirement: "需要 Plus 和模型 API Key",
+    minutes: 4,
+    image: "/images/plugins/xiaowei.webp",
+    imageAlt: "小薇，微伴云端助手",
+    outcome: "不用安装或维护 Agent，在微信交代任务、接收文件。",
+  },
+  {
     slug: "deepseek-in-wechat",
     updatedAt: "2026-11-14",
     title: "如何在微信里使用 DeepSeek",
@@ -14,7 +29,7 @@ export const DOC_TUTORIALS = [
     group: "tutorials",
     navTitle: "在微信里使用 DeepSeek",
     requirement: "基础聊天适用 Free 用户",
-    minutes: 5,
+    minutes: 3,
     image: "/images/channels/deepseek.png",
     imageAlt: "DeepSeek",
     outcome: "把熟悉的模型，放进每天打开的聊天框。",
@@ -29,7 +44,7 @@ export const DOC_TUTORIALS = [
     category: "实操教程",
     group: "tutorials",
     requirement: "需要 Plus 会员",
-    minutes: 5,
+    minutes: 4,
     image: "/images/plugins/openclaw-brand.webp",
     imageAlt: "OpenClaw 插件",
     outcome: "添加两组配置，用不同快捷名选择助手。",
@@ -40,11 +55,11 @@ export const DOC_TUTORIALS = [
     navTitle: "在微信里使用 Hermes",
     title: "如何在微信里使用 Hermes",
     description:
-      "把已有的 Hermes Agent 接入微信：生成连接命令、在本机执行、从微信发消息，并设置后台结果推送。附配置截图和常见问题。",
+      "把已有的 Hermes Agent 接入微信：复制连接命令、在运行设备执行，再从微信发消息并接收后台结果。附连接与微信对话示意、费用说明和常见问题。",
     category: "实操教程",
     group: "tutorials",
     requirement: "Free 可配置 1 个插件",
-    minutes: 4,
+    minutes: 3,
     image: "/images/plugins/hermes-brand.webp",
     imageAlt: "Hermes 插件",
     outcome: "连接已有的 Hermes，在微信里发消息、收结果。",

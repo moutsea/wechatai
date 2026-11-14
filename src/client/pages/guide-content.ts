@@ -20,7 +20,9 @@ export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocConte
         id: "setup",
         title: "一、启用小薇，交代第一件事",
         illustration: "plugin-cloud",
-        body: `先完成[模型配置](/docs/channels-models)和[连接微信](/docs/wechat-connection)。模型需要支持工具调用；购买会员前，请先确认微信里能找到 ClawBot 入口。
+        body: `第一次使用？可以先跟着[小薇实操教程](/docs/wechat-ai-assistant)完成一次 Markdown 转 Word，再回到本页查询配额和任务规则。
+
+先完成[模型配置](/docs/channels-models)和[连接微信](/docs/wechat-connection)。模型需要支持工具调用；购买会员前，请先确认微信里能找到 ClawBot 入口。
 
 1. 打开[插件页](/app/plugins)，找到「小薇」，添加配置并启用。
 2. 默认跟随当前微信的文本模型，也可以固定选择一个；快捷名保留「小薇」即可。

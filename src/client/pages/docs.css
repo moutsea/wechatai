@@ -1417,6 +1417,52 @@
 .docs-plugin-example {
   margin: 28px 0 32px;
 }
+.docs-agent-command-placeholder {
+  padding: 18px 14px;
+  border: 1px dashed #becfc2;
+  border-radius: 10px;
+  color: var(--docs-muted);
+  background: #f7faf7;
+  font-size: var(--text-sm);
+}
+.docs-agent-terminal {
+  padding: 24px 20px;
+  background: #17271e;
+  color: #c5d5ca;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.docs-agent-terminal p {
+  margin: 20px 0;
+  color: #fff;
+  font-size: var(--text-base);
+}
+.docs-agent-terminal p > span {
+  color: #78dfa2;
+}
+.docs-agent-config-list {
+  display: grid;
+  gap: 12px;
+}
+.docs-agent-config-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--docs-border);
+  border-radius: 10px;
+}
+.docs-agent-config-list strong,
+.docs-agent-config-list span {
+  display: block;
+}
+.docs-agent-config-list span {
+  margin-top: 4px;
+  color: var(--docs-muted);
+  font-size: var(--text-sm);
+}
 .docs-plugin-guide-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

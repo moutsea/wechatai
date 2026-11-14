@@ -41,6 +41,11 @@ const publicPages = [
     ["notifications", "发送第一条通知"],
   ].map(([slug, marker]) => [`docs/${slug}.html`, `https://wechatai.app/docs/${slug}`, marker]),
   [
+    "docs/wechat-ai-assistant.html",
+    "https://wechatai.app/docs/wechat-ai-assistant",
+    "第二步：在微信把 Markdown 转成 Word",
+  ],
+  [
     "docs/deepseek-in-wechat.html",
     "https://wechatai.app/docs/deepseek-in-wechat",
     "第一步：添加 DeepSeek 渠道和模型",
@@ -144,12 +149,20 @@ for (const [file, canonical, text] of publicPages) {
   assert(assets.length >= 2, `${file}: client script and stylesheet`);
   for (const match of assets) await access(new URL(match[1].slice(1), dir));
   if (file.startsWith("docs/")) {
-    if (
-      /docs\/(deepseek-in-wechat|multiple-openclaw-in-wechat|hermes-in-wechat)\.html/.test(file)
-    ) {
+    const tutorialFigures = {
+      "docs/wechat-ai-assistant.html": ["小薇配置与使用示意"],
+      "docs/deepseek-in-wechat.html": ["DeepSeek微信对话示意"],
+      "docs/multiple-openclaw-in-wechat.html": [
+        "OpenClaw连接操作示意",
+        "OpenClaw 两组配置与独立快捷名称示意",
+        "OpenClaw微信对话示意",
+      ],
+      "docs/hermes-in-wechat.html": ["Hermes连接操作示意", "Hermes微信对话示意"],
+    };
+    for (const label of tutorialFigures[file] ?? []) {
       assert(
-        html.includes('class="docs-screenshot"'),
-        `${file}: tutorial screenshots are rendered`,
+        html.includes(`aria-label="${label}"`),
+        `${file}: ${label} rendered before JavaScript`,
       );
     }
     assert(html.includes('aria-label="文档导航"'), `${file}: shared document navigation`);
