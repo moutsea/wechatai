@@ -18,6 +18,7 @@ import {
 import { IMAGE_WAITING_MESSAGE, waitingMessageDefaults } from "../../shared/waiting-message";
 import { WaitingMessageField } from "./waiting-message-field";
 import { modelKind, modelKindLabels } from "../../shared/model-kind";
+import { IMAGE_CREDITS } from "../../shared/credits";
 
 export function ImagePluginEditor({
   plugin,
@@ -171,8 +172,8 @@ export function ImagePluginEditor({
             9:21，平台会自动转换为尺寸参数；未写比例时使用上游默认设置。所选生图服务需支持对应尺寸。
           </div>
           <div className="guide-note">
-            平台每张图片收取 5 credits，描述文字按输入 token 计费；上游生图费用由你的渠道另行收取。
-            沿用所选模型的输入和单次 credits
+            平台每张图片收取 {IMAGE_CREDITS} credits，描述文字按输入 token
+            计费；上游生图费用由你的渠道另行收取。 沿用所选模型的输入和单次 credits
             上限。每条描述独立生成，暂不支持参考图或连续改图；网页图片保留 30 天，请及时下载。
           </div>
           {error && (

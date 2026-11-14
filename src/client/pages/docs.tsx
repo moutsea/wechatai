@@ -41,6 +41,12 @@ import { DocModelProviders } from "./doc-model-providers";
 import { DocKimiseekImport } from "./doc-kimiseek-import";
 import { DocWechatCode, DocWechatConnection, DocWechatStatus } from "./doc-wechat-connection";
 import { DocPluginSetup } from "./doc-plugin-setup";
+import {
+  DocAttachmentFlow,
+  DocCreditExample,
+  DocMembershipPlans,
+  DocVoiceExample,
+} from "./doc-usage-examples";
 import { useDocumentInputs } from "../document-handoff";
 
 function DocMarkdown({ children }: { children: string }) {
@@ -379,6 +385,10 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
             {section.illustration === "wechat-code" && <DocWechatCode />}
             {section.illustration === "wechat-status" && <DocWechatStatus />}
             {section.illustration === "plugin-setup" && <DocPluginSetup />}
+            {section.illustration === "attachment-flow" && <DocAttachmentFlow />}
+            {section.illustration === "voice-example" && <DocVoiceExample />}
+            {section.illustration === "membership-plans" && <DocMembershipPlans />}
+            {section.illustration === "credit-example" && <DocCreditExample />}
             {section.screenshots?.map((shot) => (
               <figure key={shot.src} className="docs-screenshot" style={{ maxWidth: shot.width }}>
                 <a

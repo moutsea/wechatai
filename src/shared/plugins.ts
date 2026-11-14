@@ -3,7 +3,7 @@ import { z } from "zod";
 export const PLUGIN_PROTOCOL_VERSION = "1.0" as const;
 export const BILLING_POLICY_VERSION = "gateway-v1" as const;
 export const TOKENIZER_VERSION = "cl100k_base@gpt-tokenizer-4.0.0" as const;
-export const IMAGE_CREDITS = 5;
+export { IMAGE_CREDITS } from "./credits";
 const id = z.string().min(1).max(200);
 const version = z.string().regex(/^\d+\.\d+\.\d+$/);
 const modality = z.enum(["text", "image", "file"]);

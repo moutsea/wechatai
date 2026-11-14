@@ -485,7 +485,7 @@ for (const { name, width, path, selector, axis } of [
   {
     name: "wide table",
     width: 390,
-    path: "/docs/credits",
+    path: "/docs/commands",
     selector: ".docs-table-scroll",
     axis: "scrollLeft",
   },

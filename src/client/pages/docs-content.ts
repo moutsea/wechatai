@@ -25,6 +25,10 @@ export interface DocSection {
     | "wechat-code"
     | "wechat-status"
     | "plugin-setup"
+    | "attachment-flow"
+    | "voice-example"
+    | "membership-plans"
+    | "credit-example"
     | "model-providers"
     | "kimiseek-import";
   afterIllustration?: string;

@@ -1,5 +1,7 @@
-import { PLUGIN_LIMITS } from "../../shared/plugin-access";
-import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
+import { IMAGE_CREDITS, OUTPUT_TOKEN_WEIGHT, TOKENS_PER_CREDIT } from "../../shared/credits";
+import { IMAGE_CREDIT_COST_NOTE } from "../../shared/pricing-copy";
+import { BILLING_OFFERS } from "../../shared/billing-offers";
+import { REFERRAL_CREDITS } from "../../shared/referrals";
 import { wechatCommands } from "../../shared/guide";
 import { notificationSections } from "../../shared/notification-docs";
 import type { DOC_GUIDES } from "../../shared/docs";
@@ -53,7 +55,7 @@ export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocConte
 
 每轮模型调用的输入上限包含系统提示词、历史、图片、工具定义与工具结果。缺少原生计数接口的渠道使用本地估算，每张图片预留 16,000 tokens；这不是图片的精确用量，实际是否超限仍由模型服务判断。超限时可新建会话、减少附件、缩短内容，或在渠道与模型中调整上限。输出上限按每轮调用生效，单次 credits 上限约束平台最终结算，不是服务商 API 费用上限。
 
-模型 API 费用由你选择的服务商收取，包括 Agent 执行过程中多次模型调用的费用。微伴按本次输入与平台保留的最终输出计 credits，内部模型与工具消耗不另计；PDF、文本等非图片文件不另收费，返回图片每张另计 5 credits，以文件附件发送也计图片费用；不预扣，成功结算后可能形成负余额。接收提示不计费；空结果、部分结果、澄清、失败或已确认取消不收成功账单。点击停止不等于已确认取消，费用以最终结果为准。详见[会员与 credits](/docs/credits)。`,
+模型 API 费用由你选择的服务商收取，包括 Agent 执行过程中多次模型调用的费用。微伴按本次输入与平台保留的最终输出计 credits，内部模型与工具消耗不另计；PDF、文本等非图片文件不另收费，返回图片每张另计 ${IMAGE_CREDITS} credits，以文件附件发送也计图片费用；不预扣，成功结算后可能形成负余额。接收提示不计费；空结果、部分结果、澄清、失败或已确认取消不收成功账单。点击停止不等于已确认取消，费用以最终结果为准。详见[会员与 credits](/docs/credits)。`,
       },
       {
         id: "data",
@@ -400,98 +402,162 @@ Agent 的 \`/new\` 不会删除微伴聊天记录；\`/wx new\` 会在微伴新�
   },
   attachments: {
     intro:
-      "图片和文件不会一收到就提交给模型。可以连续发送几个附件，等发出文字或带转写的语音后，再一起交给 AI 处理。图片与文件输入需要微伴 Plus 会员。",
+      "看图、总结文档、整理表格，都可以先发附件，再告诉 AI 你的要求。图片与文件处理需要 Plus；单独用语音提问不要求 Plus。",
     sections: [
       {
         id: "send",
-        title: "先发附件，再说要求",
-        body: `1. 在普通模型、DS Chat 或小薇对话里发送图片或文件，可以连续发送多个。
-2. 等附件暂存成功，再发送文字，例如「比较这两张图的差别」或「总结这个文档的重点」。
-3. 微伴会把附件和本次要求一起发给模型。
+        title: "一、先发附件，再说要求",
+        body: `先选好普通聊天模型、DS Chat 或[小薇](/docs/cloud-agent)，再开始发送。需要看图时，请选用支持视觉输入的模型。
 
-暂存期间不会请求模型，也不扣 credits。附件保留 15 分钟；发送 \`/wx cancel\` 可提前清空。切换模型、插件或会话，重置上下文、重新绑定微信，也会清理暂存附件。
+1. 在微信里发送图片或文件，可以连续发送多个。
+2. 等待「已暂存」的回复，再发送文字或语音说明要求，例如「总结这份文件」或「比较这两张图」。
+3. 微伴会把这批附件和要求一起提交给 AI，结果返回当前对话。`,
+        illustration: "attachment-flow",
+        afterIllustration: `**暂存不调用模型，也不扣 credits**；提交处理后按实际使用计费，模型 API 费用另计。附件保留 **15 分钟**，发送 \`/wx cancel\` 可清空。
 
-下载等临时错误可按提示重新发送说明文字，无需重复上传。若提示附件过大、正文过长、格式或解析错误，需要替换附件时，先发送 \`/cancel\` 清空，再发送处理后的附件和要求；直接重发文件会追加到原批次。附件过期后需要重新上传。`,
+从发附件到补充要求，请保持同一微信链接、会话和模式；切换模型、插件或会话会清空暂存附件。`,
       },
       {
         id: "formats",
-        title: "支持格式和限制",
-        body: `| 项目 | 限制 |
-| --- | --- |
-| 一次附件数量 | 最多 4 个 |
-| 单个附件大小 | 最多 5 MB |
-| 小薇图片 | 单张最多 2 MB，需所用模型支持视觉输入 |
-| 同一批附件总大小 | 最多 8 MB |
-| 文档 | PDF、Word（DOCX）、TXT、Markdown、CSV 等纯文本 |
-| PDF 页数 | 最多 100 页 |
-| 单个文件提取文字 | 最多 100,000 字符 |
+        title: "二、能发什么？",
+        body: `- **图片**：需所用模型支持视觉输入；小薇的图片单张最多 **2 MB**。
+- **文档**：PDF、Word（DOCX）、TXT、Markdown、CSV 等文本文件。PDF 最多 **100 页**。
 
-图片需要支持视觉输入的模型。扫描版 PDF 请先做文字识别；旧版 Word 的 \`.doc\` 文件请转换成 \`.docx\`。附件提取的文字也受模型输入上限约束，不代表达到文件大小限制就一定能一次处理。`,
+**每批最多 4 个附件**，单个不超过 **5 MB**，同批合计不超过 **8 MB**；小薇图片仍按单张 2 MB 限制。
+
+以上是微伴普通模型、DS Chat 和小薇的附件规则；Muse、Hermes、OpenClaw 的支持范围以各自接入说明为准。`,
+        details: [
+          {
+            title: "PDF 或 Word 读不出来怎么办？",
+            body: `扫描版 PDF 请先做文字识别，或把需要的页面作为图片发送；旧版 Word 的 \`.doc\` 请先另存为 \`.docx\`。
+
+文档主要提取正文，不保证保留原来的排版、图表和内嵌图片。单个文件最多提取 100,000 字符，还受[模型输入上限](/docs/channels-models#limits)约束；过长时请拆分文件。小薇组装后的任务文字上限为 50,000 字符，详见[小薇附件限制](/docs/cloud-agent#limits)。`,
+          },
+          {
+            title: "想转换格式，或用参考图生成图片？",
+            body: `**生成 Word、PDF 等文件或转换格式，请使用[小薇](/docs/cloud-agent#setup)**，先进入小薇，再发附件和完整要求。普通聊天模型适合分析内容，不能保证生成并返回文件。
+
+[AI 生图插件](/docs/image-generation)目前支持文字描述生成图片，暂不支持参考图或文件。`,
+          },
+          {
+            title: "处理失败后，附件要重新发吗？",
+            body: `- **下载等临时错误**：按回复提示重发说明文字即可。
+- **附件过大、过长或格式错误**：先用 \`/wx cancel\` 清空，再发送处理后的文件和要求。直接重发文件会追加到原批次。
+- **暂存过期，或切换、重置了会话**：重新发送附件，再补充要求。
+- **小薇任务已受理，之后失败、取消或要求补充信息**：该批暂存已清空。再次处理时，请重发附件和完整要求，单独重发文字不会自动带上原文件。
+
+小薇的执行状态和结果可在[云端任务](/app/tasks)查看。`,
+          },
+        ],
       },
       {
         id: "voice",
-        title: "语音怎么用？",
-        body: `直接录制并发送语音即可。微伴使用微信随消息附带的转写文字，将它当作你的问题或附件说明。
-
-如果微信没有提供转写内容，微伴无法读取语音，请改发文字。当前不提供 AI 语音回复。`,
+        title: "三、也可以用语音说要求",
+        body: `直接录制并发送语音即可，既可以提问，也可以补充附件处理要求。微伴读取的是**微信随语音附带的转写文字**。`,
+        illustration: "voice-example",
+        afterIllustration: `如果提示「没有转写内容」，请先用微信转文字，再把文字发送过来。AI 当前以文字、图片或文件返回结果，不提供语音回复；语音提问按转写后的文字正常计费。`,
       },
     ],
   },
   credits: {
     intro:
-      "微伴 credits 用于消息与插件处理。自备模型、搜索和生图服务的 API 费用另付服务商；可选 Plus 云端助手小薇同样使用自备模型，API 费用另付服务商，执行次数另有限制。",
+      "免费版可以开始聊天，Plus 提供更多每日额度、微信连接和进阶功能。微伴 credits 用于平台处理；你接入的模型、搜索或生图 API，费用由对应服务商另计。",
     sections: [
       {
         id: "plans",
-        title: "Free 与 Plus 会员",
-        body: `| 功能 | Free 用户 | Plus 会员 |
-| --- | --- | --- |
-| 自定义模型文字聊天、微信会话命令 | 支持 | 支持 |
-| 微信链接数量 | 1 个 | 最多 10 个 |
-| 每日赠送 credits | ${DAILY_CREDIT_DEFAULTS.free} credits | ${DAILY_CREDIT_DEFAULTS.plus} credits |
-| 网页会话记录 | 不支持 | 支持 |
-| 图片与文件输入、模型 @快捷调用 | 不支持 | 支持 |
-| DS Chat、Agent、个人助理等插件配置 | ${PLUGIN_LIMITS.free} 个 | 不限 |
-| 消息提醒 Webhook | 支持，占用插件名额，不扣 credits | 支持，不扣 credits |
-| 小薇 | 不支持 | 运营方开放后可用，使用自备文本模型，执行次数受限 |
+        title: "一、免费版与 Plus，怎么选？",
+        body: `先用免费版配置模型、连接微信。需要处理附件、使用小薇或连接多个微信时，再选择 Plus。`,
+        illustration: "membership-plans",
+        afterIllustration: `Plus 月付和年付权益相同，**都不包含模型 API 费用**。小薇使用你配置的模型，执行次数与当前可用状态见[小薇说明](/docs/cloud-agent#limits)。
 
-每日赠送在北京时间零点刷新，当天未用完的赠送额度不累计。升级会按 Plus 会员的当日赠送上限补足，不会额外叠加一整份。
+查看[完整套餐对比](/pricing)，或到[会员与 credits](/app/billing)购买、续费。`,
+        details: [
+          {
+            title: "每日赠送什么时候刷新？升级当天怎么算？",
+            body: `每日额度在**北京时间零点**刷新，当天未用完的赠送额度不累计。升级当天按 Plus 的每日上限补足，不会再叠加一整份。
 
-会员为单次购买，支持微信支付、支付宝和银行卡，到期手动续费；提前购买会顺延有效期。已有自动续费订阅可在工作台的「管理订阅」中取消。
+有多笔额度时，优先使用最早到期的部分，所以每日赠送通常先于永久充值和邀请奖励消耗。`,
+          },
+          {
+            title: "会自动续费吗？到期后数据还在吗？",
+            body: `当前会员为单次购买，到期手动续费；提前购买会顺延有效期。以前开通过自动续费的用户，可在[会员与 credits](/app/billing)的「管理订阅」中取消。
 
-会员价格和 credits 套餐见[会员与 credits](/app/billing)。单独购买 credits 不会升级会员。`,
+Plus 到期后恢复免费版。配置和记录保留，超出免费版名额的连接、插件及 Plus 专属功能会暂停，小薇也会暂停。续费后可恢复使用。`,
+          },
+        ],
       },
       {
         id: "metering",
-        title: "文字与图片怎么计费？",
-        body: `文字按下面的公式计算，向上取整到 0.001 credit：
+        title: "二、一次使用扣多少 credits？",
+        body: `**文字按输入和回复长度计费**，向上取整到 0.001 credit：
 
-\`credits =（输入 tokens + 输出 tokens × 8）÷ 5,000\`
+\`credits =（输入 tokens + 输出 tokens × ${OUTPUT_TOKEN_WEIGHT}）÷ ${TOKENS_PER_CREDIT.toLocaleString("en-US")}\`
 
-例如输入 1,000 tokens、输出 250 tokens，消耗 0.6 credits。平台独立计量文本 tokens（cl100k_base），不依赖上游报告的用量。
+Token 是模型处理文字的计量单位，不等同于汉字数。输入还包含实际发送的系统提示词、历史对话和附件正文。`,
+        illustration: "credit-example",
+        afterIllustration: `- **图片计费**：${IMAGE_CREDIT_COST_NOTE}
+- **不扣 credits**：附件暂存、查看状态与切换会话等平台命令、消息提醒 Webhook。模型和插件的真实测试正常计费。
 
-普通模型的输入包含实际发送的系统提示词、摘要、历史和本次问题。OpenClaw、Hermes 等 Agent 按传入的内容和最终返回文本计量，其内部工具调用和模型消耗不计入微伴 credits；上游费用仍由服务商计算。
+想知道自己的用量大约需要多少额度？打开[用量估算器](/pricing#estimate)试算。`,
+        details: [
+          {
+            title: "Agent、小薇和失败请求怎么算？",
+            body: `Muse、Hermes、OpenClaw 等 Agent 按传入的内容和最终返回文本计量，内部模型与工具调用不另扣微伴 credits。
 
-小薇使用你配置的文本模型，API 费用另付服务商，平台按输入与最终回复文字计 credits，返回图片每张另计 5 credits，非图片文件不另收费；不预扣，成功后可能形成负余额。执行中的任务请求停止需要云端确认；先完成的有效结果仍可结算，详见[小薇](/docs/cloud-agent#limits)。
+小薇按输入与最终回复文字计费，返回图片每张另计 ${IMAGE_CREDITS} credits，非图片文件不额外计费。失败、需要澄清或已确认取消的任务不收成功结果的费用；任务受理后的失败仍计入执行次数。请求停止时，如果任务先完成，仍会结算有效结果。详见[小薇计费与任务规则](/docs/cloud-agent#limits)。
 
-生图每张 5 credits，提示词文字另计。微伴的状态、切换、会话管理等命令不消耗 credits；模型和插件的真实测试会正常计费。`,
+微伴的自动摘要和内部重试不额外扣平台 credits。**平台失败未扣费，不代表上游免费**：模型、搜索或生图服务商可能已产生 API 费用。`,
+          },
+          {
+            title: "为什么与模型服务商显示的 tokens 不一样？",
+            body: `微伴使用自己的文本计量方式（cl100k_base），不直接采用服务商返回的用量。不同模型的分词方式可能不同，微伴的 credits 与服务商账单应分别查看。`,
+          },
+        ],
       },
       {
         id: "balance",
-        title: "控制消耗与负余额",
-        screenshots: [DOC_SCREENSHOTS.creditsHistory],
-        body: `可以在模型中设置输入、输出和单次 credits 上限。历史越长，输入通常越多；换话题时使用 \`/wx new\`，或用 \`/wx reset\` 重置上下文。
+        title: "三、查看余额，补充额度",
+        body: `在微信发送 \`/wx balance\` 查看余额，或打开[额度明细](/app/credits)查看消耗记录。
 
-请求开始时不预扣 credits。余额大于 0 时可以发起请求，成功后按实际消耗结算，因此余额可能变成负数。余额小于或等于 0 时，新的付费请求会暂停。
+额度不够时，可以等待次日赠送、[购买 credits](/app/billing)，或邀请好友。**充值 credits 长期有效，但不会升级为 Plus。**
 
-第二天的赠送或新购 credits 会先抵扣欠额，不会直接抹掉负余额。发送 \`/wx balance\` 查看余额，或在[额度明细](/app/credits)查看记录。`,
+**为什么会出现负余额？** 请求开始时不预扣，余额大于 0 就能发起，成功后按实际消耗结算，因此可能变成负数。余额小于或等于 0 时，新付费请求会暂停。
+
+次日赠送、充值或邀请奖励会先抵扣欠额，**不会直接清零欠额**；补足后余额仍小于或等于 0 的，请求继续暂停。`,
+        details: [
+          {
+            title: "credits 充值包有哪些？",
+            body: `${BILLING_OFFERS.filter((offer) => offer.kind === "credits")
+              .map(
+                (offer) =>
+                  `- **${offer.credits.toLocaleString("en-US")} credits**：¥${offer.amount / 100}`,
+              )
+              .join(
+                "\n",
+              )}\n\n在[会员与 credits](/app/billing)选择充值包。充值只补充额度，不改变会员权益。`,
+          },
+          {
+            title: "怎样减少长对话的消耗？",
+            body: `换话题时用 \`/wx new\` 新建会话，原记录保留。也可用 \`/wx reset\` 重置当前上下文；这不会删除聊天记录。
+
+在[模型设置](/docs/channels-models#limits)中调整输入、输出和单轮 credits 上限。**单轮 credits 上限只限制微伴扣费，不限制服务商 API 账单。**`,
+          },
+        ],
       },
       {
         id: "invites",
-        title: "邀请好友，获得永久 credits",
-        body: `在[邀请好友](/app/invite)复制邀请链接。好友通过链接注册，并完成首次成功的微信 AI 对话后，你和好友各获得 500 credits，永久有效。
+        title: "四、邀请好友，获得永久 credits",
+        body: `1. 打开[邀请好友](/app/invite)，复制你的专属链接。
+2. 好友通过链接注册，再连接微信并完成首次成功的 AI 对话。
+3. 回答完整送达后，**你和好友各得 ${REFERRAL_CREDITS} credits，永久有效**；进度和奖励在邀请页查看。`,
+        details: [
+          {
+            title: "为什么好友注册了，还没收到奖励？",
+            body: `只注册或扫码还不够，需要完成一次成功的微信 AI 对话，且回答完整送达。平台命令、网页模型测试和失败回复都不算。
 
-邮箱、Google 和 GitHub 注册都支持。只注册尚未聊天不会发放奖励；已有账号不能补填邀请，不能邀请自己，同一新账号和微信只能参与一次。`,
+邮箱、Google 和 GitHub 注册都支持邀请。已有账号不能补填邀请，不能自邀，同一新账号和微信只能参与一次。奖励发放中时，可稍后在邀请页查看。`,
+          },
+        ],
       },
     ],
   },
@@ -560,7 +626,7 @@ Plus 会员到期后，最早创建的 1 个插件仍可使用，其余配置保
         title: "查看图片与计费",
         body: `成功后图片会直接发到微信，也可在网页会话记录中查看。原图保留 30 天，想长期保存请及时下载。
 
-每张图片 5 credits，提示词文字另计；模型输入上限和单次 credits 限制仍然生效。上游生图 API 的费用由服务商另行收取。`,
+每张图片 ${IMAGE_CREDITS} credits，提示词文字另计；模型输入上限和单次 credits 限制仍然生效。上游生图 API 的费用由服务商另行收取。`,
       },
     ],
   },

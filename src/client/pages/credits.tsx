@@ -3,7 +3,11 @@ import { ArrowUpRight, CreditCard } from "lucide-react";
 import { useApp } from "../context";
 import { PageHead, SectionTitle } from "../ui";
 import { formatCredits } from "../../shared/types";
-import { OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
+import {
+  OWN_API_COST_NOTE,
+  CLOUD_AGENT_COST_NOTE,
+  IMAGE_CREDIT_COST_NOTE,
+} from "../../shared/pricing-copy";
 
 export function Credits() {
   const { data, base } = useApp();
@@ -98,8 +102,9 @@ export function Credits() {
             <p>
               自动摘要、内部重试和 Agent 内部调用不额外扣本站
               credits。整理后的摘要如果包含在实际输入中，则计入该次输入。
-              图片生成暂未开放，开放后结果图片按每张 5 credits
-              计费；上传参考图、预览和重复投递不按结果图收费。
+            </p>
+            <p>
+              {IMAGE_CREDIT_COST_NOTE} <Link to="/docs/credits#metering">查看计费教程</Link>。
             </p>
             <p>
               结算后余额可以为负数，欠额在次日赠送额度刷新、充值或邀请奖励到账时优先抵扣；未抵完的部分继续保留。邀请奖励永久有效。

@@ -1,5 +1,6 @@
 export const TOKENS_PER_CREDIT = 5000;
 export const OUTPUT_TOKEN_WEIGHT = 8;
+export const IMAGE_CREDITS = 5;
 /**
  * 每日赠送额度的默认值。服务端可用 FREE_DAILY_CREDITS / PLUS_DAILY_CREDITS 覆盖，
  * 这里同时作为「公开价格页」的展示来源，避免文案和实际发放额度各写一份而漂移。
