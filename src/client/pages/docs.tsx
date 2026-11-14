@@ -11,6 +11,7 @@ import {
   List,
   MessageSquare,
   Coins,
+  Network,
   Search,
   Terminal,
 } from "lucide-react";
@@ -29,11 +30,16 @@ import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import { NotFound } from "../not-found";
 import { DOC_CONTENT } from "./docs-content";
-import { DocChannelExample, DocModelSyncExample } from "./doc-channel-example";
+import {
+  DocChannelExample,
+  DocCustomChannelExample,
+  DocModelSyncExample,
+} from "./doc-channel-example";
+import { DocModelCommands, DocModelSettings } from "./doc-model-guide";
 import { DocBridgeDiagram } from "./doc-bridge-diagram";
 import { DocModelProviders } from "./doc-model-providers";
 import { DocKimiseekImport } from "./doc-kimiseek-import";
-import { DocWechatConnection } from "./doc-wechat-connection";
+import { DocWechatCode, DocWechatConnection, DocWechatStatus } from "./doc-wechat-connection";
 import { DocPluginSetup } from "./doc-plugin-setup";
 import { useDocumentInputs } from "../document-handoff";
 
@@ -82,10 +88,16 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
   const groups = DOC_GROUPS.map((group) => ({
     group,
     articles: DOC_ARTICLES.filter(
-      (article) => article.group === group.id && matches(article as DocArticle),
+      (article) =>
+        article.slug !== "model-providers" &&
+        article.group === group.id &&
+        matches(article as DocArticle),
     ).map((article): DocArticle => article),
   }));
-  const hits = groups.reduce((total, item) => total + item.articles.length, 0);
+  const providersArticle = findDocArticle("model-providers");
+  const showProviders = providersArticle && matches(providersArticle);
+  const hits =
+    groups.reduce((total, item) => total + item.articles.length, 0) + Number(showProviders);
   return (
     <nav aria-label="文档导航" data-handoff-focus-fallback={inputId}>
       <label className="docs-search">
@@ -135,6 +147,18 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
         </p>
       )}
       <div className="docs-nav-developer">
+        {showProviders && (
+          <Link
+            id={`${inputId}-model-providers`}
+            to={docPath(providersArticle.slug)}
+            aria-current={activePath === docPath(providersArticle.slug) ? "page" : undefined}
+            onClick={() => setQuery("")}
+          >
+            <Network size={15} />
+            {providersArticle.title}
+            <ChevronRight size={13} />
+          </Link>
+        )}
         <Link id={`${inputId}-developer`} to="/developers/plugins">
           <Terminal size={15} />
           插件开发文档
@@ -327,6 +351,10 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
             <h2>{section.title}</h2>
             {section.illustration === "wechat-ai-bridge" && <DocBridgeDiagram />}
             <DocMarkdown>{section.body}</DocMarkdown>
+            {section.illustration === "channel-form" && <DocChannelExample />}
+            {section.illustration === "channel-models" && <DocModelSyncExample showTools />}
+            {section.illustration === "model-settings" && <DocModelSettings />}
+            {section.illustration === "model-commands" && <DocModelCommands />}
             {section.illustration === "channel-setup" && (
               <>
                 <DocChannelExample />
@@ -348,6 +376,8 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
             {section.illustration === "model-providers" && <DocModelProviders />}
             {section.illustration === "kimiseek-import" && <DocKimiseekImport />}
             {section.illustration === "wechat-connection" && <DocWechatConnection />}
+            {section.illustration === "wechat-code" && <DocWechatCode />}
+            {section.illustration === "wechat-status" && <DocWechatStatus />}
             {section.illustration === "plugin-setup" && <DocPluginSetup />}
             {section.screenshots?.map((shot) => (
               <figure key={shot.src} className="docs-screenshot" style={{ maxWidth: shot.width }}>
@@ -374,6 +404,24 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
               </figure>
             ))}
             {section.afterIllustration && <DocMarkdown>{section.afterIllustration}</DocMarkdown>}
+            {section.followUpIllustration === "kimiseek-import" && <DocKimiseekImport />}
+            {section.followUpIllustration === "wechat-connection" && <DocWechatConnection />}
+            {section.details && (
+              <div className="docs-disclosures">
+                {section.details.map((detail) => (
+                  <details className="docs-disclosure" key={detail.title}>
+                    <summary>
+                      <span>{detail.title}</span>
+                      <ChevronDown size={17} aria-hidden="true" />
+                    </summary>
+                    <div className="docs-disclosure-content">
+                      <DocMarkdown>{detail.body}</DocMarkdown>
+                      {detail.illustration === "custom-channel" && <DocCustomChannelExample />}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            )}
           </section>
         ))}
       </article>

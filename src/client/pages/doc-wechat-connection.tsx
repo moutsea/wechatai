@@ -1,4 +1,106 @@
-import { ArrowRight, ChevronLeft, ChevronRight, ScanLine } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Link2,
+  QrCode,
+  ScanLine,
+  Smartphone,
+} from "lucide-react";
+
+export function DocWechatCode() {
+  return (
+    <figure className="docs-channel-example" aria-label="在微伴获取微信连接二维码的界面示意">
+      <div className="docs-channel-example-card">
+        <div className="docs-channel-example-header">
+          <strong>微信连接</strong>
+          <span>工作台示意</span>
+        </div>
+        <div className="docs-channel-example-fields">
+          <div>
+            <div className="docs-channel-example-label">管理链接</div>
+            <div className="docs-channel-example-control docs-channel-example-provider">
+              <span>我的微信 · 待连接</span>
+              <ChevronDown size={16} aria-hidden="true" />
+            </div>
+          </div>
+          <div className="docs-wechat-code-preview">
+            <QrCode size={112} strokeWidth={1.2} aria-hidden="true" />
+            <strong>生成你的专属连接二维码</strong>
+            <span>示意图，不可扫码</span>
+          </div>
+          <div className="docs-channel-example-submit">
+            获取二维码
+            <ArrowRight size={17} aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+      <figcaption>请在工作台获取自己的二维码，再用手机微信 ClawBot 扫码并确认。</figcaption>
+    </figure>
+  );
+}
+
+export function DocWechatStatus() {
+  return (
+    <figure className="docs-wechat-verification" aria-label="微信连接成功并发送帮助命令的示意">
+      <div className="docs-wechat-verification-flow">
+        <div className="docs-channel-example-card">
+          <div className="docs-channel-example-header">
+            <strong>我的微信</strong>
+            <span className="docs-wechat-connected-tag">
+              <Check size={14} aria-hidden="true" /> 已连接
+            </span>
+          </div>
+          <div className="docs-channel-example-fields">
+            <div className="docs-wechat-connected-preview">
+              <Link2 size={38} aria-hidden="true" />
+              <strong>微伴 ↔ 你的微信</strong>
+              <span>个人连接 · 独立会话</span>
+            </div>
+            <div className="docs-wechat-connection-meta">
+              <div>
+                <span>当前渠道</span>
+                <strong>DeepSeek</strong>
+              </div>
+              <div>
+                <span>当前模型</span>
+                <strong>deepseek-chat</strong>
+              </div>
+            </div>
+            <div className="docs-channel-example-control docs-wechat-switch-preview">
+              切换渠道与模型
+              <ArrowRight size={16} aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+        <ArrowRight className="docs-wechat-verification-arrow" size={24} aria-hidden="true" />
+        <div className="docs-channel-example-card">
+          <div className="docs-channel-example-header">
+            <strong>微信 ClawBot</strong>
+            <Smartphone size={21} aria-hidden="true" />
+          </div>
+          <div className="docs-plugin-messages">
+            <div className="docs-plugin-bubble docs-plugin-bubble-user docs-plugin-command">
+              /wx help
+            </div>
+            <div className="docs-plugin-bubble">
+              <strong>微信命令速查</strong>
+              <div>/wx status · 查看当前配置</div>
+              <div>/wx models · 查看模型</div>
+              <div>/wx plugins · 查看插件</div>
+            </div>
+            <span className="docs-wechat-help-note">命令回复示意 · 不消耗 credits</span>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        工作台状态与微信帮助回复示意。模型名称仅为示例，扫码成功不代表模型或插件已配置好。
+      </figcaption>
+    </figure>
+  );
+}
 
 function ClawbotIcon() {
   return (

@@ -25,7 +25,7 @@ const publicPages = [
   ["docs.html", "https://wechatai.app/docs", "跟着教程配置"],
   ...[
     ["getting-started", "四、启动插件（可选）"],
-    ["channels-models", "设置提示词与输入输出上限"],
+    ["channels-models", "三、调整回答风格与用量"],
     ["model-providers", "KimiSeek 一键导入"],
     ["wechat-connection", "管理多个链接"],
     ["commands", "命令一览"],

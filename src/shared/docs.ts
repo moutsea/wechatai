@@ -67,15 +67,15 @@ export const DOC_GUIDES = [
   },
   {
     slug: "channels-models",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-14",
     seoTitle: "微信 AI 渠道与模型：API Key 与输入输出设置",
     title: "渠道与模型",
     description:
-      "配置 API Key、Base URL 和模型 ID，导入可用模型，设置输入输出上限，在微信切换模型。",
+      "添加模型渠道、同步并测试模型，按需调整提示词与用量，在微信切换使用。附配置示意与常用命令。",
     category: "开始使用",
     group: "start",
     minutes: 4,
-    outcome: "一个渠道可以添加多个模型，每个模型有自己的设置。",
+    outcome: "填入 API Key，同步并测试模型，再到微信开始使用。",
   },
   {
     slug: "model-providers",
@@ -91,14 +91,15 @@ export const DOC_GUIDES = [
   },
   {
     slug: "wechat-connection",
-    updatedAt: "2026-11-12",
+    updatedAt: "2026-11-14",
     seoTitle: "连接微信：扫码绑定 AI 与管理多个链接",
     title: "连接微信",
-    description: "创建微信链接、扫码绑定、切换当前模型，以及管理多个微信链接和重新连接。",
+    description:
+      "跟随界面示意获取二维码、在手机微信 ClawBot 扫码确认，再发送帮助命令验证连接。附多链接管理与常见故障排查。",
     category: "开始使用",
     group: "start",
     minutes: 2,
-    outcome: "扫码连接后，在微信里找到对应对话，就可以开始提问。",
+    outcome: "获取二维码，扫码确认，发一条消息验证连接。",
   },
   {
     slug: "commands",

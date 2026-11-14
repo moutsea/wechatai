@@ -1,4 +1,5 @@
-import { ArrowRight, Check, ChevronDown, Download, Plus } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Download, Pencil, Plus, Zap } from "lucide-react";
+import { protocolLabels } from "../../shared/types";
 
 /** A static, responsive example: credentials are entered only in the workspace. */
 export function DocChannelExample() {
@@ -45,7 +46,60 @@ export function DocChannelExample() {
   );
 }
 
-export function DocModelSyncExample() {
+export function DocCustomChannelExample() {
+  return (
+    <figure className="docs-channel-example" aria-label="第三方服务商自定义接口配置示意">
+      <div className="docs-channel-example-card">
+        <div className="docs-channel-example-header">
+          <strong>添加渠道</strong>
+          <span>自定义示意</span>
+        </div>
+        <div className="docs-channel-example-fields">
+          <div>
+            <div className="docs-channel-example-label">服务商</div>
+            <div className="docs-channel-example-control docs-channel-example-provider">
+              <span>自定义（第三方渠道 / 其他协议）</span>
+              <ChevronDown size={16} aria-hidden="true" />
+            </div>
+          </div>
+          <div>
+            <div className="docs-channel-example-label">渠道名称</div>
+            <div className="docs-channel-example-control">我的模型服务</div>
+          </div>
+          <div>
+            <div className="docs-channel-example-label">接口协议</div>
+            <div className="docs-channel-example-control docs-channel-example-provider">
+              <span>{protocolLabels["chat-completions"]}</span>
+              <ChevronDown size={16} aria-hidden="true" />
+            </div>
+          </div>
+          <div>
+            <div className="docs-channel-example-label">Base URL</div>
+            <div className="docs-channel-example-control">https://api.example.com/v1</div>
+            <p className="docs-custom-channel-hint">
+              示例地址，请替换为服务商提供的 Base URL，无需手动添加 /chat/completions 等请求后缀。
+            </p>
+          </div>
+          <div>
+            <div className="docs-channel-example-label">API Key</div>
+            <div className="docs-channel-example-control docs-channel-example-key">
+              填写该服务商的 API Key
+            </div>
+          </div>
+          <div className="docs-channel-example-submit">
+            保存渠道
+            <ArrowRight size={17} aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        此图为配置示意。请在工作台填写真实地址和密钥，保存后点击「获取可用模型」。
+      </figcaption>
+    </figure>
+  );
+}
+
+export function DocModelSyncExample({ showTools = false }: { showTools?: boolean }) {
   return (
     <figure className="docs-channel-example" aria-label="模型同步完成后的界面示意">
       <div className="docs-channel-example-card">
@@ -69,6 +123,12 @@ export function DocModelSyncExample() {
                   <span className="docs-model-sync-dot" aria-hidden="true" />
                   <strong>{model}</strong>
                   <span className="docs-model-sync-use">使用</span>
+                  {showTools && (
+                    <span className="docs-model-sync-tools" aria-hidden="true">
+                      <Zap size={16} />
+                      <Pencil size={16} />
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>
@@ -77,6 +137,16 @@ export function DocModelSyncExample() {
             <Check size={17} aria-hidden="true" />
             已导入 2 个模型
           </div>
+          {showTools && (
+            <div className="docs-model-sync-actions">
+              <span>
+                <Zap size={15} aria-hidden="true" /> 测试连接
+              </span>
+              <span>
+                <Pencil size={15} aria-hidden="true" /> 编辑模型
+              </span>
+            </div>
+          )}
           <div className="docs-model-sync-actions" aria-hidden="true">
             <span>
               <Download size={15} /> 获取可用模型
@@ -88,7 +158,9 @@ export function DocModelSyncExample() {
         </div>
       </div>
       <figcaption>
-        同步完成后的界面示意，模型以服务商实际返回为准。看到文本模型后，即可继续连接微信。
+        {showTools
+          ? "模型列表示意，实际模型以服务商返回为准。请在工作台测试连接或编辑模型。"
+          : "同步完成后的界面示意，模型以服务商实际返回为准。看到文本模型后，即可继续连接微信。"}
       </figcaption>
     </figure>
   );

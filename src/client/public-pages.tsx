@@ -1,4 +1,14 @@
-import { ArrowRight, Check, ChevronDown, Minus } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  CodeXml,
+  ExternalLink,
+  KeyRound,
+  Minus,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
@@ -281,6 +291,62 @@ export function Landing() {
               <ArrowRight size={15} aria-hidden="true" />
             </Link>
           </p>
+        </section>
+        <section className="landing-privacy" aria-labelledby="landing-privacy-title">
+          <div className="landing-privacy-head">
+            <div>
+              <h2 id="landing-privacy-title">数据安全与隐私保护</h2>
+              <p>了解密钥如何保存、聊天如何处理，以及记录如何删除。</p>
+            </div>
+            <Link className="landing-privacy-policy" to="/privacy">
+              查看隐私政策
+              <ArrowRight size={16} aria-hidden="true" />
+            </Link>
+          </div>
+          <div className="landing-privacy-grid">
+            <div className="landing-privacy-item">
+              <KeyRound size={22} aria-hidden="true" />
+              <div>
+                <h3>密钥加密保存</h3>
+                <p>API Key 与微信连接凭据在服务端加密存储，已保存的密钥不会回传到浏览器。</p>
+              </div>
+            </div>
+            <div className="landing-privacy-item">
+              <ShieldCheck size={22} aria-hidden="true" />
+              <div>
+                <h3>不查看用户数据</h3>
+                <p>
+                  我们不主动人工查看你的聊天和附件内容。消息由系统自动处理并转交接入服务，必要的会话与任务记录按隐私政策保存。
+                </p>
+              </div>
+            </div>
+            <div className="landing-privacy-item">
+              <Trash2 size={22} aria-hidden="true" />
+              <div>
+                <h3>会话记录可删除</h3>
+                <p>在工作台清理微伴中的会话记录；微信和第三方服务保留的副本需另行处理。</p>
+              </div>
+            </div>
+          </div>
+          <div className="landing-open-source">
+            <div className="landing-open-source-copy">
+              <CodeXml size={26} aria-hidden="true" />
+              <div>
+                <h3>开源在 GitHub</h3>
+                <p>微伴以 MIT 协议开源，欢迎查看实现、反馈问题或参与改进。</p>
+              </div>
+            </div>
+            <a
+              className="landing-repository"
+              href="https://github.com/moutsea/wechatai"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="查看 GitHub 开源仓库 moutsea/wechatai（新窗口打开）"
+            >
+              <span>moutsea/wechatai</span>
+              <ExternalLink size={16} aria-hidden="true" />
+            </a>
+          </div>
         </section>
         <section className="landing-faq" id="faq" aria-labelledby="landing-faq-title">
           <div className="landing-faq-head">

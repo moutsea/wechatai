@@ -16,12 +16,25 @@ export interface DocSection {
   body: string;
   illustration?:
     | "channel-setup"
+    | "channel-form"
+    | "channel-models"
+    | "model-settings"
+    | "model-commands"
     | "wechat-ai-bridge"
     | "wechat-connection"
+    | "wechat-code"
+    | "wechat-status"
     | "plugin-setup"
     | "model-providers"
     | "kimiseek-import";
   afterIllustration?: string;
+  followUpIllustration?: "kimiseek-import" | "wechat-connection";
+  /** Optional explanations stay collapsed so the main steps remain easy to follow. */
+  details?: readonly {
+    title: string;
+    body: string;
+    illustration?: "custom-channel";
+  }[];
   /** Figures are rendered after the body, in order. */
   screenshots?: readonly DocScreenshot[];
 }
