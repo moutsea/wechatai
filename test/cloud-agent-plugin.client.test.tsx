@@ -408,14 +408,9 @@ describe("cloud Agent plugin interactions", () => {
       data.cloudAgent = { ...data.cloudAgent, ready: true, reason: undefined };
       await render();
       const restored = container.querySelector('article[aria-label="小薇"]')!;
-      if (plan === "free")
-        expect(restored.querySelector('a[href="/app/billing"]')?.textContent).toContain(
-          "开通 Plus",
-        );
-      else
-        expect(
-          restored.querySelector<HTMLButtonElement>('button[aria-label="配置 小薇"]')?.disabled,
-        ).toBe(false);
+      expect(
+        restored.querySelector<HTMLButtonElement>('button[aria-label="配置 小薇"]')?.disabled,
+      ).toBe(false);
     },
   );
 

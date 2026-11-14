@@ -302,20 +302,14 @@ export function PluginLibrary({
                 <button className="button secondary small" disabled>
                   暂未开放
                 </button>
-              ) : id === "wechatai/cloud-agent" && data.plan !== "plus" ? (
-                <Link className="button secondary small" to={`${base}/billing`}>
-                  开通 Plus <ArrowRight size={15} />
-                </Link>
-              ) : !canAdd ? (
-                data.plan === "free" ? (
-                  <Link className="button secondary small" to={`${base}/billing`}>
-                    升级以添加更多 <ArrowRight size={15} />
-                  </Link>
-                ) : (
-                  <button className="button secondary small" disabled>
-                    已达配置上限
-                  </button>
-                )
+              ) : data.plan === "free" && (id === "wechatai/cloud-agent" || !canAdd) ? (
+                <button
+                  className="button secondary small"
+                  onClick={() => onConfigure(id)}
+                  aria-label={`配置 ${name}`}
+                >
+                  <Plus size={15} /> 配置插件
+                </button>
               ) : !data.assistants.length &&
                 id !== "wechatai/openclaw" &&
                 id !== "wechatai/notification" &&
@@ -396,14 +390,16 @@ export function PluginConfiguration({
   const cloud = isCloudAgent(selected) ? selected : null;
   const cloudAvailability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
   const cloudIssue = cloud ? (cloudAvailability?.message ?? cloud.access?.message) : null;
+  const needsUpgrade = data.plan === "free" && (kind === "wechatai/cloud-agent" || !canAdd);
   const canConfigure =
-    canAdd &&
+    (canAdd || needsUpgrade) &&
     (kind === "wechatai/cloud-agent"
-      ? !cloudAvailability
+      ? !cloudAvailability || cloudAvailability.code === "cloud_plus_required"
       : kind === "wechatai/openclaw" ||
         kind === "wechatai/notification" ||
         kind === "wechatai/hermes" ||
         kind === "wechatai/muse" ||
+        needsUpgrade ||
         data.assistants.length > 0);
   const incomplete = connection && !connection.connectedBefore;
   return (
@@ -700,14 +696,18 @@ export function PluginConfiguration({
             {!allowed && !cloud && (
               <p className="plugin-config-renew">
                 {pluginLimitIssue(data.planUntil).message}{" "}
-                <Link to={`${base}/billing`}>查看会员 / 续费 Plus</Link>
+                <button className="text-link" onClick={() => onEdit(selected)}>
+                  查看 Plus 方案
+                </button>
               </p>
             )}
             {cloudIssue && (
               <p className="plugin-config-renew">
                 {cloudIssue}
                 {cloudAvailability?.code === "cloud_plus_required" && (
-                  <Link to={`${base}/billing`}>查看会员 / 续费 Plus</Link>
+                  <button className="text-link" onClick={() => onEdit(selected)}>
+                    查看 Plus 方案
+                  </button>
                 )}
               </p>
             )}
@@ -795,7 +795,7 @@ export function PluginConfiguration({
           )}
           <button
             className="button"
-            disabled={busy || !allowed}
+            disabled={busy}
             onClick={() => {
               onSelect(selected.id);
               onEdit(selected);

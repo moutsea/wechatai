@@ -6,7 +6,7 @@ import {
   LEGACY_NUMERIC_SHORTCUT_HINT,
   PLUGIN_SHORTCUT_HINT,
 } from "../../shared/plugin-shortcut";
-import { PLUGIN_LIMITS } from "../../shared/plugin-access";
+import { PLUGIN_LIMITS, canAddPlugin, pluginAvailable } from "../../shared/plugin-access";
 import { isChatModel } from "../../shared/model-compatibility";
 import { NotificationEditor } from "./notification-editor";
 import type { NotificationPlugin } from "../../shared/notification";
@@ -22,7 +22,7 @@ import {
   remoteAgentKind,
   type RemoteAgentKind,
 } from "../../shared/remote-agent";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, FlaskConical, Power } from "lucide-react";
 import { useApp } from "../context";
@@ -42,6 +42,8 @@ import "./plugins.css";
 import { type UserPlugin, type ImageGenerationPlugin } from "../../shared/image-generation";
 import { ImagePluginEditor } from "./image-plugin-editor";
 import { PluginLibrary, PluginConfiguration, type PluginKind } from "./plugin-library";
+import { PluginUpgradeModal } from "./plugin-upgrade-modal";
+import { isPluginKind, type PluginUpgradeTarget } from "../plugin-upgrade";
 
 const initial: WebResearchInput = {
   name: "DS Chat",
@@ -72,8 +74,12 @@ export function Plugins() {
   const [roleEditor, setRoleEditor] = useState<RoleplayPlugin | "new" | null>(null);
   const [cloudEditor, setCloudEditor] = useState<CloudAgentPlugin | "new" | null>(null);
   const [imageEditor, setImageEditor] = useState<ImageGenerationPlugin | "new" | null>(null);
-  const [viewing, setViewing] = useState<PluginKind | null>(null);
-  const [viewedId, setViewedId] = useState("");
+  const [viewing, setViewing] = useState<PluginKind | null>(() => {
+    const kind = searchParams.get("plugin");
+    return isPluginKind(kind) ? kind : null;
+  });
+  const [viewedId, setViewedId] = useState(searchParams.get("config") ?? "");
+  const [upgradeTarget, setUpgradeTarget] = useState<PluginUpgradeTarget | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [limitCode, setLimitCode] = useState<string | undefined>();
@@ -84,6 +90,25 @@ export function Plugins() {
   const previousShortcut = editor && editor !== "new" ? editor.shortcut : undefined;
   const keepingLegacyShortcut =
     isLegacyNumericShortcut(previousShortcut) && form.shortcut === previousShortcut;
+  const returnAction = searchParams.get("action");
+  useEffect(() => {
+    if (!data) return;
+    const kind = searchParams.get("plugin");
+    const action = searchParams.get("action");
+    if (!isPluginKind(kind) || (action !== "create" && action !== "edit")) return;
+    const id = searchParams.get("config");
+    // 消费回跳动作，并复用正常入口的权限检查，避免取消支付后绕过限制。
+    const next = new URLSearchParams(searchParams);
+    next.delete("action");
+    setSearchParams(next, { replace: true });
+    setViewing(kind);
+    setViewedId(id ?? "");
+    if (action === "create") configure(kind);
+    else {
+      const plugin = data.plugins?.find((p) => p.id === id && p.pluginId === kind);
+      if (plugin) open(plugin);
+    }
+  }, [data, searchParams, setSearchParams]);
   if (!data) return null;
   const upgradeId = searchParams.get("upgrade");
   const upgradePlugin = upgradeId
@@ -106,6 +131,16 @@ export function Plugins() {
   const update = <K extends keyof WebResearchInput>(key: K, value: WebResearchInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const open = (p: UserPlugin | "new") => {
+    if (
+      p !== "new" &&
+      data.plan === "free" &&
+      (isCloudAgent(p)
+        ? data.cloudAgent.ready
+        : !pluginAvailable(data.plan, data.plugins ?? [], p.id))
+    ) {
+      setUpgradeTarget({ kind: p.pluginId, action: "edit", id: p.id });
+      return;
+    }
     if (p !== "new" && isCloudAgent(p)) {
       setCloudEditor(p);
       return;
@@ -136,6 +171,14 @@ export function Plugins() {
     setForm(p === "new" ? { ...initial, modelId: textModels[0]?.id ?? "" } : { ...p, apiKey: "" });
   };
   const configure = (kind: PluginKind) => {
+    if (
+      data.plan === "free" &&
+      (kind === "wechatai/cloud-agent" || !canAddPlugin(data.plan, data.plugins?.length ?? 0)) &&
+      (kind !== "wechatai/cloud-agent" || data.cloudAgent.ready)
+    ) {
+      setUpgradeTarget({ kind, action: "create" });
+      return;
+    }
     if (kind === "wechatai/notification") {
       setNotificationEditor("new");
       return;
@@ -288,6 +331,9 @@ export function Plugins() {
         credits；请求停止后仍可能完成，费用以最终结果为准。
       </p>
       {viewing &&
+        returnAction !== "create" &&
+        returnAction !== "edit" &&
+        !upgradeTarget &&
         !notificationEditor &&
         !personalEditor &&
         !personalRecords &&
@@ -304,7 +350,13 @@ export function Plugins() {
             onSelect={setViewedId}
             busy={Boolean(busy)}
             onClose={() => {
-              if (!busy) setViewing(null);
+              if (!busy) {
+                setViewing(null);
+                const next = new URLSearchParams(searchParams);
+                next.delete("plugin");
+                next.delete("config");
+                setSearchParams(next, { replace: true });
+              }
             }}
             onAdd={configure}
             onEdit={open}
@@ -333,6 +385,9 @@ export function Plugins() {
             onManage={(id, patch) => void maintain(id, patch)}
           />
         )}
+      {upgradeTarget && (
+        <PluginUpgradeModal target={upgradeTarget} onClose={() => setUpgradeTarget(null)} />
+      )}
       {notificationEditor && (
         <NotificationEditor
           plugin={notificationEditor}

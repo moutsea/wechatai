@@ -17,6 +17,7 @@ import type { Snapshot } from "../src/shared/types";
 const state = vi.hoisted(() => ({
   data: null as Snapshot | null,
   base: "/app",
+  user: { name: "测试", email: "test@example.test" },
   request: vi.fn(),
   refresh: vi.fn(async () => {}),
   notify: vi.fn(),

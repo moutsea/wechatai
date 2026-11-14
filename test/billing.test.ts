@@ -874,6 +874,8 @@ describe("isolated Stripe fulfillment", () => {
       expect(body!.get("payment_intent_data[metadata][service]")).toBe("wechatai");
       expect(body!.get("metadata[environment]")).toBe("test");
       expect(body!.get("success_url")).toContain("session_id={CHECKOUT_SESSION_ID}");
+      expect(new URL(body!.get("success_url")!).searchParams.get("offer")).toBe(offerId);
+      expect(new URL(body!.get("cancel_url")!).searchParams.get("offer")).toBe(offerId);
       expect(body!.get("branding_settings[display_name]")).toBe("微伴 Wechatai");
       if (abandoned) {
         const old = await env.DB.prepare(

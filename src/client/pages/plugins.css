@@ -2,6 +2,88 @@
   display: grid;
   gap: 16px;
 }
+.plugin-upgrade-body {
+  padding: 24px 27px;
+  display: grid;
+  gap: 20px;
+}
+.plugin-upgrade-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.plugin-upgrade-features li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.plugin-upgrade-features svg {
+  flex-shrink: 0;
+  color: var(--green);
+}
+.plugin-upgrade-plans {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.plugin-upgrade-plan {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.plugin-upgrade-plan.annual {
+  border-color: var(--green);
+  background: #f0f8f2;
+}
+.plugin-upgrade-badge {
+  font-size: var(--text-xs);
+  color: var(--green);
+}
+.plugin-upgrade-plan h3 {
+  margin: 0;
+  font-size: 18px;
+}
+.plugin-upgrade-plan p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.plugin-upgrade-price strong {
+  color: var(--ink);
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -1px;
+}
+.plugin-upgrade-price span {
+  margin-left: 6px;
+}
+.plugin-upgrade-plan .button {
+  margin-top: 4px;
+  width: 100%;
+}
+.plugin-upgrade-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.8;
+}
+@media (max-width: 520px) {
+  .plugin-upgrade-body {
+    padding: 20px;
+  }
+  .plugin-upgrade-plans,
+  .plugin-upgrade-features {
+    grid-template-columns: 1fr;
+  }
+}
 .form-body .check-label {
   display: flex;
   flex-direction: row;

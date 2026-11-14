@@ -168,23 +168,24 @@ describe("plugin entitlement controls", () => {
     expect(unreadNoticeCount(null)).toBe(0);
   });
 
-  it("offers eight general plugins and a Plus upgrade for cloud Agent", () => {
+  it("keeps configuration entry points clickable for all nine plugins", () => {
     const html = library();
-    expect(html.match(/aria-label="配置 /g)).toHaveLength(8);
+    expect(html.match(/aria-label="配置 /g)).toHaveLength(9);
     expect(html).not.toContain("升级以添加更多");
-    expect(html).toContain("开通 Plus");
+    expect(html).toContain('aria-label="配置 小薇"');
   });
   it("lets Free users edit their first plugin and offers an upgrade for more", () => {
     data.plugins = [plugin("first")];
-    expect(library()).toContain("升级以添加更多");
+    expect(library()).toContain('aria-label="配置 DS Chat"');
     expect(editButton(configuration("first"))).toBeDefined();
     expect(editButton(configuration("first"))).not.toContain("disabled");
-    expect(configuration("first")).not.toContain("添加另一组配置");
+    expect(configuration("first")).toContain("添加另一组配置");
   });
-  it("keeps excess configurations visible but disables their editing", () => {
+  it("keeps excess configurations visible with an actionable upgrade entry", () => {
     data.plugins = [plugin("first"), plugin("second")];
     expect(configuration("second")).toContain("已暂停");
-    expect(editButton(configuration("second"))).toContain("disabled");
+    expect(editButton(configuration("second"))).not.toContain("disabled");
+    expect(configuration("second")).toContain("查看 Plus 方案");
     expect(configuration("second")).toContain("删除配置");
     expect(configuration("second")).toContain("保存别名");
     expect(configuration("second")).toContain("停用插件");
@@ -267,7 +268,7 @@ describe("legacy shortcut conflict warnings", () => {
     expect(html).toContain("大小写不能用于区分");
     expect(html).toContain("修改暂停配置的别名");
     expect(html).toContain("保存别名");
-    expect(editButton(html)).toContain("disabled");
+    expect(editButton(html)).not.toContain("disabled");
     expect(channels()).toContain("重复别名");
     data.plugins[1].shortcut = "writing";
     expect(library()).not.toContain("别名重复");

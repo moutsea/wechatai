@@ -24,6 +24,7 @@ import {
   type SubscriptionInfo,
 } from "../../shared/billing";
 import { approxYuan, OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
+import { clearPluginUpgrade, pluginUpgradeReturnPath } from "../plugin-upgrade";
 
 /** 年付省多少、折合月价多少，都从 BILLING_OFFERS 推导：写死的「省 ¥49」早就和 990/8800 不符了。 */
 const plusMonthlyAmount = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")?.amount ?? 0;
@@ -32,15 +33,18 @@ const plusYearlySaving = (plusMonthlyAmount * 12 - plusYearlyAmount) / 100;
 const plusYearlyPerMonth = approxYuan(plusYearlyAmount / 12);
 
 export function Billing() {
-  const { data, request, refresh, notify, base } = useApp();
+  const { data, request, refresh, notify, base, user } = useApp();
+  const [params, setParams] = useSearchParams();
+  const requestedOffer = BILLING_OFFERS.find((offer) => offer.id === params.get("offer"));
   const [offers, setOffers] = useState<BillingOffer[]>(
     BILLING_OFFERS.map((o) => ({ ...o, price: o.amount / 100, currency: "cny", enabled: false })),
   );
   const [mode, setMode] = useState<"test" | "live">("test");
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
-  const [interval, setInterval] = useState<"month" | "year">("year");
-  const [packId, setPackId] = useState<BillingOfferId>("credits_5000");
-  const [params, setParams] = useSearchParams();
+  const [interval, setInterval] = useState<"month" | "year">(requestedOffer?.interval ?? "year");
+  const [packId, setPackId] = useState<BillingOfferId>(
+    requestedOffer?.kind === "credits" ? requestedOffer.id : "credits_5000",
+  );
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentState, setPaymentState] = useState<"pending" | "paid" | "retry" | "cancelled" | "">(
     "",
@@ -112,6 +116,7 @@ export function Billing() {
     };
   }, [checkoutResult, sessionId, retry, request, refresh]);
   if (!data) return null;
+  const pluginReturnPath = pluginUpgradeReturnPath(user.email);
   const plus = offers.find((o) => o.kind === "plus" && o.interval === interval);
   const hasRecurringSubscription =
     subscription &&
@@ -200,6 +205,18 @@ export function Billing() {
             </button>
           )}
         </div>
+      )}
+      {pluginReturnPath && (data.plan === "plus" || paymentState === "cancelled") && (
+        <p className="billing-subscription-note">
+          <Link
+            className="text-link"
+            to={pluginReturnPath}
+            onClick={() => clearPluginUpgrade(user.email)}
+          >
+            {data.plan === "plus" ? "继续配置刚才的插件" : "返回插件配置"}
+            <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+        </p>
       )}
       {subscription && (
         <p className="billing-subscription-note">
