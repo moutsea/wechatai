@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";
+import { DocMembershipPlans } from "../src/client/pages/doc-usage-examples";
 import { estimateTextCost } from "../src/shared/cost-estimate";
 import { creditUnits } from "../src/server/wallet";
 import { GUIDE_CONTENT } from "../src/client/pages/guide-content";
@@ -19,10 +22,13 @@ it("matches actual per-request metering and separates provider costs", () => {
   expect(estimateTextCost(1, 1, 1.5, 0, 0)).toBeNull();
   expect(estimateTextCost(Infinity, 1, 1, 0, 0)).toBeNull();
 });
-it("documents the implemented Free plugin allowance", () => {
-  const body = GUIDE_CONTENT.credits.sections[0].body;
-  expect(body).toContain(
-    `| DS Chat、Agent、个人助理等插件配置 | ${PLUGIN_LIMITS.free} 个 | 不限 |`,
+it("documents the implemented plugin allowances in the membership cards", () => {
+  const plans = GUIDE_CONTENT.credits.sections.find((section) => section.id === "plans");
+  expect(plans?.illustration).toBe("membership-plans");
+
+  const html = renderToStaticMarkup(createElement(DocMembershipPlans));
+  expect(html).toContain(`<li>插件配置<strong>${PLUGIN_LIMITS.free} 个</strong></li>`);
+  expect(html).toContain(
+    `<li>插件配置<strong>${PLUGIN_LIMITS.plus === null ? "不限" : `${PLUGIN_LIMITS.plus} 个`}</strong></li>`,
   );
-  expect(body).not.toContain("DS Chat、Agent 等插件 | 不支持");
 });
