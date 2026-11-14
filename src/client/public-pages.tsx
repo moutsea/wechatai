@@ -163,7 +163,7 @@ function LandingPlanCard({
       ) : (
         <Link
           className="button landing-plan-action"
-          to={`/pricing?interval=${plan.id}#plans-title`}
+          to={`/pricing?interval=${plan.id}#plan-${plan.id}`}
         >
           {plan.action}
           <ArrowRight size={17} aria-hidden="true" />
@@ -219,7 +219,7 @@ export function Landing() {
             <img
               src="/images/landing/ai-wechat-connections.webp"
               srcSet="/images/landing/ai-wechat-connections-640.webp 640w, /images/landing/ai-wechat-connections.webp 1280w"
-              sizes="(max-width: 760px) calc(100vw - 40px), (max-width: 1200px) 45vw, 520px"
+              sizes="(max-width: 760px) calc(100vw - 40px), (max-width: 1500px) 43vw, 640px"
               width={1280}
               height={1024}
               fetchPriority="high"

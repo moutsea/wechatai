@@ -24,8 +24,9 @@ const publicPages = [
   ["index.html", "https://wechatai.app/", "把你的 AI"],
   ["docs.html", "https://wechatai.app/docs", "跟着教程配置"],
   ...[
-    ["getting-started", "三步开始聊天"],
+    ["getting-started", "四、启动插件（可选）"],
     ["channels-models", "设置提示词与输入输出上限"],
+    ["model-providers", "KimiSeek 一键导入"],
     ["wechat-connection", "管理多个链接"],
     ["commands", "命令一览"],
     ["sessions", "长对话怎么处理？"],
@@ -66,21 +67,57 @@ const publicPages = [
 // page component ran during prerender instead of falling through to NotFound.
 const landingPages = [
   ["wechat-ai.html", "https://wechatai.app/wechat-ai", "微信 AI：把你的大模型接进微信聊天"],
-  ["wechat-clawbot.html", "https://wechatai.app/wechat-clawbot", "微信 ClawBot 插件：入口、绑定与不回复排查"],
-  ["wechat-ai-ban-risk.html", "https://wechatai.app/wechat-ai-ban-risk", "微信用 AI 会被封号吗：三类接法的风险差异"],
-  ["wechat-clawbot-models.html", "https://wechatai.app/wechat-clawbot-models", "微信 ClawBot 支持哪些模型？"],
-  ["bring-your-own-api-key.html", "https://wechatai.app/bring-your-own-api-key", "用自己的 API Key，把 AI 接进微信"],
-  ["wechat-deepseek.html", "https://wechatai.app/wechat-deepseek", "想在微信里用 DeepSeek？从这里开始"],
+  [
+    "wechat-clawbot.html",
+    "https://wechatai.app/wechat-clawbot",
+    "微信 ClawBot 插件：入口、绑定与不回复排查",
+  ],
+  [
+    "wechat-ai-ban-risk.html",
+    "https://wechatai.app/wechat-ai-ban-risk",
+    "微信用 AI 会被封号吗：三类接法的风险差异",
+  ],
+  [
+    "wechat-clawbot-models.html",
+    "https://wechatai.app/wechat-clawbot-models",
+    "微信 ClawBot 支持哪些模型？",
+  ],
+  [
+    "bring-your-own-api-key.html",
+    "https://wechatai.app/bring-your-own-api-key",
+    "用自己的 API Key，把 AI 接进微信",
+  ],
+  [
+    "wechat-deepseek.html",
+    "https://wechatai.app/wechat-deepseek",
+    "想在微信里用 DeepSeek？从这里开始",
+  ],
   ["wechat-claude.html", "https://wechatai.app/wechat-claude", "微信接入 Claude：绕开桥接的那条路"],
   ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
   ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],
-  ["wechat-ai-options.html", "https://wechatai.app/wechat-ai-options", "微信 AI 怎么选：四类方案的真实取舍"],
-  ["wechat-ai-partner.html", "https://wechatai.app/wechat-ai-partner", "微信 AI 搭档：聊天框里的固定搭子"],
-  ["wechat-character-card.html", "https://wechatai.app/wechat-character-card", "微信聊天人物卡：从角色卡到微信对话"],
+  [
+    "wechat-ai-options.html",
+    "https://wechatai.app/wechat-ai-options",
+    "微信 AI 怎么选：四类方案的真实取舍",
+  ],
+  [
+    "wechat-ai-partner.html",
+    "https://wechatai.app/wechat-ai-partner",
+    "微信 AI 搭档：聊天框里的固定搭子",
+  ],
+  [
+    "wechat-character-card.html",
+    "https://wechatai.app/wechat-character-card",
+    "微信聊天人物卡：从角色卡到微信对话",
+  ],
   ["wechat-bot.html", "https://wechatai.app/wechat-bot", "微信机器人怎么弄：先选对路线"],
   ["wechat-ai-image.html", "https://wechatai.app/wechat-ai-image", "在微信里生成图片：配置与计费"],
-  ["wechat-ai-privacy.html", "https://wechatai.app/wechat-ai-privacy", "微信 AI 的隐私：三条链路逐个说清"],
-  ["pricing.html", "https://wechatai.app/pricing", "价格：我们不卖 token"],
+  [
+    "wechat-ai-privacy.html",
+    "https://wechatai.app/wechat-ai-privacy",
+    "微信 AI 的隐私：三条链路逐个说清",
+  ],
+  ["pricing.html", "https://wechatai.app/pricing", "免费开始，按需升级 Plus"],
 ];
 publicPages.push(...landingPages);
 const publicTitles = new Set();
@@ -154,18 +191,21 @@ for (const [file, canonical, text] of publicPages) {
 // FAQPage structured data, a breadcrumb, and internal links that all resolve.
 for (const [file, , marker] of landingPages) {
   const html = await read(file);
-  // 直接回答块可能带修饰类（/pricing 用紧凑版），所以按 class 名匹配而不是整串相等。
-  assert(
-    /class="[^"]*\bseopage-answer\b[^"]*"/.test(html),
-    `${file}: direct answer block`,
-  );
+  // 直接回答块可带页面修饰类，按 class 名匹配。
+  assert(/class="[^"]*\bseopage-answer\b[^"]*"/.test(html), `${file}: direct answer block`);
   assert(html.includes('id="faq"'), `${file}: FAQ section`);
   assert(html.includes(`<h1>${marker}</h1>`), `${file}: landing heading from page data`);
   const graph = JSON.parse(
     html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
   )["@graph"];
-  assert(graph.some((item) => item["@type"] === "BreadcrumbList"), `${file}: breadcrumb data`);
-  assert(graph.some((item) => item["@type"] === "FAQPage"), `${file}: FAQ data`);
+  assert(
+    graph.some((item) => item["@type"] === "BreadcrumbList"),
+    `${file}: breadcrumb data`,
+  );
+  assert(
+    graph.some((item) => item["@type"] === "FAQPage"),
+    `${file}: FAQ data`,
+  );
   const page = graph.find((item) => item["@type"] === "WebPage" || item["@type"] === "Article");
   assert(page && (page.description || "").length > 40, `${file}: page node description`);
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
@@ -191,7 +231,7 @@ assert(
   "legacy canonical does not conflict with noindex",
 );
 assert(legacy.includes('rel="canonical" href="https://wechatai.app/docs/getting-started"'));
-assert(legacy.includes("三步开始聊天"), "legacy guide has a usable no-JS fallback");
+assert(legacy.includes("四、启动插件（可选）"), "legacy guide has a usable no-JS fallback");
 assert(legacy.includes('href="/docs/commands"'), "legacy guide exposes command reference");
 assert(!(await read("sitemap.xml")).includes("https://wechatai.app/guide"));
 const redirectRules = await read("_redirects");
@@ -219,10 +259,7 @@ for (const [file] of publicPages.filter(([file]) => file.startsWith("docs/"))) {
 // 统一页头之后顶部导航是 .site-header-nav；文档与价格都必须能从首页直接点进去，
 // 否则「价格」只能靠页脚和正文露出。
 for (const target of ['href="/docs"', 'href="/pricing"'])
-  assert(
-    (await read("index.html")).includes(target),
-    `homepage navigation includes ${target}`,
-  );
+  assert((await read("index.html")).includes(target), `homepage navigation includes ${target}`);
 for (const slug of ["deepseek-in-wechat", "multiple-openclaw-in-wechat", "hermes-in-wechat"])
   assert(
     (await read("index.html")).includes(`href="/docs/${slug}"`),

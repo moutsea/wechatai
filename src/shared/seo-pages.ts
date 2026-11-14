@@ -21,6 +21,7 @@ export interface SeoFaq {
   question: string;
   /** Plain text: it is repeated verbatim inside FAQPage structured data. */
   answer: string;
+  guide?: SeoLink;
 }
 
 export interface SeoLink {

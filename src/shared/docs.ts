@@ -1,4 +1,4 @@
-export const DOCS_INDEX_UPDATED_AT = "2026-11-11";
+export const DOCS_INDEX_UPDATED_AT = "2026-11-14";
 export const DOCS_TITLE = "微信 AI 教程与文档";
 export const DOCS_DESCRIPTION =
   "微伴 Wechatai 使用文档：配置模型、连接微信、管理会话和 credits。附 DeepSeek、OpenClaw、Hermes 与云端助手小薇使用教程，以及联网问答、生图和个人助理说明。";
@@ -54,16 +54,16 @@ export const DOC_TUTORIALS = [
 export const DOC_GUIDES = [
   {
     slug: "getting-started",
-    updatedAt: "2026-11-11",
-    seoTitle: "微信 AI 使用指南：选择 AI 并扫码连接",
+    updatedAt: "2026-11-14",
+    seoTitle: "微信 AI 使用指南：配置 AI 渠道并扫码连接",
     title: "使用指南",
     description:
-      "第一次使用微伴：先确认微信 ClawBot 入口，再配置自己的模型，可按需启用已开放的 Plus 云端助手小薇，扫码连接微信，把第一条消息发出去。",
+      "四部分入门微伴：了解工作原理、填写 API Key 同步模型、通过微信 ClawBot 扫码连接，再按需启用生图、角色扮演或云端助手小薇。附配置与微信连接示意图。",
     category: "开始使用",
     group: "start",
     requirement: "需微信 ClawBot 入口",
     minutes: 3,
-    outcome: "先确认微信 ClawBot 入口，再选择 AI 服务并发出第一条消息。",
+    outcome: "了解工作原理，完成模型配置、微信连接，再按需启用插件。",
   },
   {
     slug: "channels-models",
@@ -76,6 +76,18 @@ export const DOC_GUIDES = [
     group: "start",
     minutes: 4,
     outcome: "一个渠道可以添加多个模型，每个模型有自己的设置。",
+  },
+  {
+    slug: "model-providers",
+    updatedAt: "2026-11-14",
+    seoTitle: "支持的模型服务商：DeepSeek、KimiSeek 与第三方 API",
+    title: "支持的模型服务商",
+    description:
+      "查看微伴支持的 DeepSeek、硅基流动、OpenAI、Anthropic 等模型服务商，了解 KimiSeek 一键导入及兼容 OpenAI、Anthropic 协议的第三方渠道配置。",
+    category: "开始使用",
+    group: "start",
+    minutes: 2,
+    outcome: "选择模型服务商，准备 API Key，或通过 KimiSeek 一键导入渠道。",
   },
   {
     slug: "wechat-connection",

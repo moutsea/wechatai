@@ -11,7 +11,7 @@
 }
 .use-cases-heading h2 {
   margin: 0;
-  font-size: clamp(25px, 2.6vw, 31px);
+  font-size: var(--text-h2);
   font-weight: 550;
   line-height: 1.45;
   text-wrap: balance;
@@ -19,7 +19,7 @@
 .use-cases-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 .use-cases-grid {
   display: grid;
@@ -64,7 +64,7 @@
 }
 .use-case-copy h3 {
   margin: 0;
-  font-size: clamp(23px, 2.35vw, 29px);
+  font-size: var(--text-h3);
   font-weight: 550;
   line-height: 1.45;
   letter-spacing: -0.025em;
@@ -76,14 +76,14 @@
   max-width: 36em;
   margin: 14px 0 0;
   color: #526157;
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.85;
 }
 .use-case-copy > small {
   display: block;
   margin-top: 9px;
   color: #59665f;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 .use-case-scene {
@@ -93,7 +93,7 @@
   min-width: 0;
   min-height: 230px;
   padding: 26px 0;
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 .use-case-action {
@@ -103,7 +103,7 @@
   gap: 12px;
   padding-top: 16px;
   border-top: 1px solid #213c301a;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 550;
 }
 .use-case-action > span {
@@ -136,7 +136,7 @@ a.use-case-action:focus-visible,
 .use-cases-caption {
   margin: 12px 2px 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 
@@ -159,7 +159,7 @@ a.use-case-action:focus-visible,
 .scene-window-bar > span {
   margin-left: auto;
   color: #65726b;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .scene-chat-bubble {
   width: fit-content;
@@ -198,19 +198,19 @@ a.use-case-action:focus-visible,
   align-items: center;
   gap: 4px;
   color: #31744f;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .scene-image-result strong {
   display: block;
   margin: 10px 0 8px;
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.7;
   font-weight: 550;
 }
 .scene-image-result small {
   display: block;
   color: #65726b;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .scene-roleplay-tag {
   display: flex;
@@ -219,11 +219,11 @@ a.use-case-action:focus-visible,
   gap: 7px;
   margin-top: 12px;
   color: #77526b;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .scene-roleplay-tag > span {
   color: #6b6167;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .scene-model-stack {
   display: grid;
@@ -252,7 +252,7 @@ a.use-case-action:focus-visible,
 }
 .scene-model > span {
   margin-left: auto;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .scene-model-selected {
   color: #276440;
@@ -283,7 +283,7 @@ a.use-case-action:focus-visible,
   border-radius: 13px;
   color: #405a72;
   background: #ffffffd9;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 .scene-agent-names > a:hover {
   border-color: #90a7be;
@@ -324,7 +324,7 @@ a.use-case-action:focus-visible,
   gap: 6px;
   margin-left: 5px;
   color: #526157;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .scene-wechat > img {
   display: block;
@@ -360,7 +360,7 @@ a.use-case-action:focus-visible,
 }
 .scene-xiaowei-intro span {
   color: #526157;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .scene-task-header,
 .scene-task-header > span {
@@ -373,7 +373,7 @@ a.use-case-action:focus-visible,
 }
 .scene-task-header > span:last-child {
   color: #31744f;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .scene-task-prompt {
   width: fit-content;
@@ -412,7 +412,7 @@ a.use-case-action:focus-visible,
 .scene-task-result small {
   margin-top: 2px;
   color: #65726b;
-  font-size: 11px;
+  font-size: var(--text-xs);
 }
 .scene-task-result > svg {
   flex-shrink: 0;
@@ -459,7 +459,7 @@ a.use-case-action:focus-visible,
   }
   .scene-agent-names > a {
     padding: 14px 4px;
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
   .scene-agent-names img {
     width: 44px;
@@ -481,8 +481,7 @@ a.use-case-action:focus-visible,
   }
   .use-case-copy > p {
     margin-top: 10px;
-    font-size: 14px;
-    line-height: 1.75;
+    line-height: 1.85;
   }
   .use-case-action {
     padding-top: 12px;

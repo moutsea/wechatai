@@ -29,7 +29,44 @@ import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import { NotFound } from "../not-found";
 import { DOC_CONTENT } from "./docs-content";
+import { DocChannelExample, DocModelSyncExample } from "./doc-channel-example";
+import { DocBridgeDiagram } from "./doc-bridge-diagram";
+import { DocModelProviders } from "./doc-model-providers";
+import { DocKimiseekImport } from "./doc-kimiseek-import";
+import { DocWechatConnection } from "./doc-wechat-connection";
+import { DocPluginSetup } from "./doc-plugin-setup";
 import { useDocumentInputs } from "../document-handoff";
+
+function DocMarkdown({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ href, children }) =>
+          href?.startsWith("/") ? (
+            <Link to={href}>{children}</Link>
+          ) : (
+            <a href={href} rel="noreferrer" target="_blank">
+              {children}
+              <span className="docs-sr-only">（新窗口打开）</span>
+            </a>
+          ),
+        table: ({ children }) => (
+          <div
+            className="docs-table-scroll"
+            tabIndex={0}
+            role="region"
+            aria-label="配置与命令对照表"
+          >
+            <table>{children}</table>
+          </div>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
 
 function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: string }) {
   // 文档一共二十来篇，本地过滤就够；不做全文检索，只匹配标题、分类和摘要，
@@ -121,7 +158,7 @@ function DocsLayout({ article, children }: { article?: DocArticle; children: Rea
         <aside id="docs-sidebar" className="docs-sidebar">
           <DocsNavigation activePath={activePath} inputId="docs-search-desktop" />
         </aside>
-        <details className="docs-mobile-navigation" key={pathname}>
+        <details id="docs-mobile-navigation" className="docs-mobile-navigation" key={pathname}>
           <summary>
             <List size={17} />
             <span>文档导航</span>
@@ -271,7 +308,7 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
         </div>
       </header>
       <article className="docs-prose" aria-label={article.title}>
-        <p className="docs-intro">{content.intro}</p>
+        {content.intro && <p className="docs-intro">{content.intro}</p>}
         <details className="docs-article-toc" key={article.slug}>
           <summary>
             本页内容
@@ -288,32 +325,30 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
         {content.sections.map((section) => (
           <section key={section.id} id={section.id}>
             <h2>{section.title}</h2>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: ({ href, children }) =>
-                  href?.startsWith("/") ? (
-                    <Link to={href}>{children}</Link>
-                  ) : (
-                    <a href={href} rel="noreferrer" target="_blank">
-                      {children}
-                      <span className="docs-sr-only">（新窗口打开）</span>
-                    </a>
-                  ),
-                table: ({ children }) => (
-                  <div
-                    className="docs-table-scroll"
-                    tabIndex={0}
-                    role="region"
-                    aria-label="配置与命令对照表"
-                  >
-                    <table>{children}</table>
-                  </div>
-                ),
-              }}
-            >
-              {section.body}
-            </ReactMarkdown>
+            {section.illustration === "wechat-ai-bridge" && <DocBridgeDiagram />}
+            <DocMarkdown>{section.body}</DocMarkdown>
+            {section.illustration === "channel-setup" && (
+              <>
+                <DocChannelExample />
+                <ol start={2}>
+                  <li>
+                    填入该服务商的 <strong>API Key</strong>
+                    ，点击「保存并获取模型」，系统会尝试同步可用模型。
+                  </li>
+                </ol>
+                <DocModelSyncExample />
+                <ol start={3}>
+                  <li>
+                    确认渠道下已有想用的文本模型。若同步失败，按
+                    <Link to="/docs/channels-models#import">渠道与模型教程</Link>手动添加即可。
+                  </li>
+                </ol>
+              </>
+            )}
+            {section.illustration === "model-providers" && <DocModelProviders />}
+            {section.illustration === "kimiseek-import" && <DocKimiseekImport />}
+            {section.illustration === "wechat-connection" && <DocWechatConnection />}
+            {section.illustration === "plugin-setup" && <DocPluginSetup />}
             {section.screenshots?.map((shot) => (
               <figure key={shot.src} className="docs-screenshot" style={{ maxWidth: shot.width }}>
                 <a
@@ -338,6 +373,7 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
                 <figcaption>{shot.caption}</figcaption>
               </figure>
             ))}
+            {section.afterIllustration && <DocMarkdown>{section.afterIllustration}</DocMarkdown>}
           </section>
         ))}
       </article>

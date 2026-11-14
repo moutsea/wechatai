@@ -194,8 +194,12 @@ test("keeps the prerendered article visible while its chunk loads and React moun
   // The shared router and a second lazy route must work after initial preload.
   await page.locator('.site-header-nav a[href="/pricing"]').click();
   await expect(page).toHaveURL(`${origin}/pricing`);
-  await page.getByRole("button", { name: "年付", exact: true }).click();
-  await expect(page.locator(".plan-price-unit")).toHaveText("/ 年");
+  await expect(page.locator(".plans-grid .plan")).toHaveCount(3);
+  await expect(page.locator(".plan-year .plan-price-unit")).toHaveText("/ 年");
+  await expect(page.locator(".plan-year .plan-cta")).toHaveAttribute(
+    "href",
+    `/register?returnTo=${encodeURIComponent("/pricing?interval=year#plan-year")}`,
+  );
 });
 
 test("keeps static content and links when the initial chunk fails, and reload recovers", async ({
@@ -206,7 +210,7 @@ test("keeps static content and links when the initial chunk fails, and reload re
   await page.goto(`${origin}/docs/getting-started`);
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("你仍可阅读正文和打开链接");
-  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：选择 AI 并扫码连接");
+  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：配置 AI 渠道并扫码连接");
   await expect(page.locator('.site-header-nav a[href="/pricing"]')).toBeVisible();
   await expect(page.locator(".full-state")).toHaveCount(0);
   fail = false;
@@ -214,7 +218,7 @@ test("keeps static content and links when the initial chunk fails, and reload re
   await alert.getByRole("button", { name: "重新加载页面" }).click();
   await mounted;
   await expect(alert).toHaveCount(0);
-  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：选择 AI 并扫码连接");
+  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：配置 AI 渠道并扫码连接");
 });
 
 for (const { path, asset } of [
@@ -650,7 +654,7 @@ test("positions article anchors after navigating between lazy routes", async ({ 
   await page.locator('a[href="/docs/getting-started"]').first().click();
   await expect.poll(() => Boolean(chunk)).toBe(true);
   await chunk!.fallback();
-  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：选择 AI 并扫码连接");
+  await expect(page.locator("h1")).toHaveText("微信 AI 使用指南：配置 AI 渠道并扫码连接");
   await page.locator('a[href="/docs/wechat-connection#connect"]').first().click();
   await expect(page.locator("#connect h2")).toBeInViewport();
 });
@@ -671,7 +675,7 @@ test.describe("static public pages", () => {
       const columns = await page
         .locator(".plans-grid")
         .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
-      expect(columns).toBe(width === 390 ? 1 : 2);
+      expect(columns).toBe(width === 390 ? 1 : 3);
       await expect(page.locator(".plan").first()).toHaveCSS("padding-top", "22px");
     });
   }
@@ -751,7 +755,7 @@ test("keeps one mobile Plus card with the selected price and purchase link", asy
   await expect(plus.locator(".landing-plan-price")).toHaveText("¥88/ 年");
   await expect(plus.locator(".landing-plan-action")).toHaveAttribute(
     "href",
-    "/pricing?interval=year#plans-title",
+    "/pricing?interval=year#plan-year",
   );
   const monthly = plus.getByRole("button", { name: "月付", exact: true });
   await monthly.focus();
@@ -761,14 +765,16 @@ test("keeps one mobile Plus card with the selected price and purchase link", asy
   await expect(plus.locator(".landing-plan-price")).toHaveText("¥9.9/ 月");
   await expect(plus.locator(".landing-plan-action")).toHaveAttribute(
     "href",
-    "/pricing?interval=month#plans-title",
+    "/pricing?interval=month#plan-month",
   );
   await plus.getByRole("button", { name: "年付 · 更划算" }).click();
   await plus.locator(".landing-plan-action").click();
-  await expect(page.locator(".plan-price-unit")).toHaveText("/ 年");
-  await expect(page.locator(".plan-plus .plan-cta")).toHaveAttribute(
+  await expect(page.locator("#plan-year h3")).toBeInViewport();
+  await expect(page.locator("#plan-year .plan-cta")).toBeInViewport();
+  await expect(page.locator(".plan-year .plan-price-unit")).toHaveText("/ 年");
+  await expect(page.locator(".plan-year .plan-cta")).toHaveAttribute(
     "href",
-    `/register?returnTo=${encodeURIComponent("/pricing?interval=year")}`,
+    `/register?returnTo=${encodeURIComponent("/pricing?interval=year#plan-year")}`,
   );
   await page.goto(`${origin}/`);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -776,3 +782,52 @@ test("keeps one mobile Plus card with the selected price and purchase link", asy
   await expect(page.locator(".landing-plan-month").first()).toBeVisible();
   await expect(page.locator(".landing-plan-year").first()).toBeVisible();
 });
+
+for (const interval of ["month", "year"]) {
+  test(`returns mobile buyers to the ${interval} card after signing in`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const destination = `/pricing?interval=${interval}#plan-${interval}`;
+    let signedIn = false;
+    const user = {
+      id: "pricing-buyer",
+      name: "Buyer",
+      email: "buyer@example.test",
+      emailVerified: true,
+    };
+    const session = {
+      id: "pricing-session",
+      token: "pricing-token",
+      userId: user.id,
+      expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    };
+    await page.route("**/api/auth/get-session*", (route) =>
+      route.fulfill({ json: signedIn ? { user, session } : null }),
+    );
+    await page.route("**/api/auth/sign-in/email", (route) => {
+      signedIn = true;
+      return route.fulfill({ json: { redirect: false, token: session.token, user } });
+    });
+    await page.goto(`${origin}${destination}`);
+    const card = page.locator(`#plan-${interval}`);
+    await expect(card.locator("h3")).toBeInViewport();
+    await expect(card.locator(".plan-cta")).toBeInViewport();
+    await card.locator(".plan-cta").click();
+    await expect(page).toHaveURL(`${origin}/register?returnTo=${encodeURIComponent(destination)}`);
+    const login = page.getByRole("link", { name: "去登录" });
+    await expect(login).toHaveAttribute(
+      "href",
+      `/login?returnTo=${encodeURIComponent(destination)}`,
+    );
+    await login.click();
+    await expect(page).toHaveURL(`${origin}/login?returnTo=${encodeURIComponent(destination)}`);
+    const submit = page.getByRole("button", { name: "登录工作台", exact: true });
+    await expect(submit).toBeVisible();
+    await page.locator('input[type="email"]').fill(user.email);
+    await page.locator('input[type="password"]').fill("test-password");
+    await submit.click();
+    await expect(page).toHaveURL(`${origin}${destination}`);
+    await expect(card.locator("h3")).toBeInViewport();
+    await expect(card.locator("button.plan-cta")).toBeInViewport();
+    await expect(card.locator("button.plan-cta")).toBeEnabled();
+  });
+}

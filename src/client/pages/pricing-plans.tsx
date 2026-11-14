@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, Check, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Loader2, Minus } from "lucide-react";
 import { api, json } from "../api";
 import { useAuth } from "../auth";
 import { trackFunnel } from "../analytics-client";
@@ -20,74 +20,92 @@ const yuan = (amount: number) => `¥${Number((amount / 100).toFixed(2))}`;
 /** 折合月价只留一位小数：和 /pricing 正文、账单页说同一个数（见 shared/pricing-copy）。 */
 const approx = approxYuan;
 
-/**
- * /pricing 的价格卡。
- *
- * 这页原先只有一张 760px 宽的对比表和一篇长文，**表内表后都没有购买按钮**，
- * 想付钱的人只能自己绕到工作台里找。这里把两个档位摆出来，Plus 直接走
- * 与 /app/billing 相同的 POST /billing/checkout。
- */
+const features = [
+  { label: "每天赠送 credits", free: DAILY_CREDIT_DEFAULTS.free, plus: DAILY_CREDIT_DEFAULTS.plus },
+  {
+    label: "微信连接",
+    free: `${WECHAT_LINK_LIMITS.free} 个`,
+    plus: `${WECHAT_LINK_LIMITS.plus} 个`,
+  },
+  { label: "插件配置", free: `${PLUGIN_LIMITS.free} 个`, plus: "不限" },
+  { label: "图片与文件输入", free: false, plus: true },
+  { label: "网页查看聊天记录", free: false, plus: true },
+  { label: "小薇 AI 云端助手", free: false, plus: true, href: "/docs/cloud-agent" },
+];
+
+function PlanFeatures({ plus }: { plus: boolean }) {
+  return (
+    <ul className="plan-features">
+      {features.map((feature) => {
+        const value = feature[plus ? "plus" : "free"];
+        return (
+          <li key={feature.label}>
+            <span>
+              {feature.href ? <Link to={feature.href}>{feature.label}</Link> : feature.label}
+            </span>
+            {typeof value === "boolean" ? (
+              <strong className={value ? "plan-supported" : "plan-unavailable"}>
+                {value ? (
+                  <Check size={16} aria-hidden="true" />
+                ) : (
+                  <Minus size={16} aria-hidden="true" />
+                )}
+                {value ? "支持" : "不支持"}
+              </strong>
+            ) : (
+              <strong className={typeof value === "number" ? "plan-credit-value" : undefined}>
+                {value}
+              </strong>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 export function PricingPlans() {
   const { data: session, isPending } = useAuth();
   const [params] = useSearchParams();
-  const requestedInterval = params.get("interval") === "year" ? "year" : "month";
-  const [interval, setInterval] = useState<"month" | "year">(requestedInterval);
-  useEffect(() => setInterval(requestedInterval), [requestedInterval]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const requestedInterval = params.get("interval");
+  const [busyOffer, setBusyOffer] = useState<string | null>(null);
+  const [error, setError] = useState<{ offerId: string; message: string } | null>(null);
 
-  const offer = interval === "year" ? yearly : monthly;
-  // 主价格永远是「这一档真实要付的钱」，月均价只作为副标注，避免 ¥7.33 看起来像月付价。
-  const headline = interval === "year" ? yearly.amount : monthly.amount;
-  const perMonth = yearly.amount / 12 / 100;
-
-  async function startCheckout() {
-    setError("");
-    setBusy(true);
+  async function startCheckout(offer: typeof monthly | typeof yearly) {
+    setError(null);
+    setBusyOffer(offer.id);
     trackFunnel("checkout_start", { offer: offer.id, from: "pricing" });
     try {
       const result = await api<{ url: string }>("/billing/checkout", json({ offerId: offer.id }));
       window.location.assign(result.url);
     } catch (e) {
-      setError((e as Error).message);
+      setError({ offerId: offer.id, message: (e as Error).message });
     } finally {
-      setBusy(false);
+      setBusyOffer(null);
     }
   }
 
   return (
     <section className="plans" aria-labelledby="plans-title">
       <div className="plans-head">
-        <h2 id="plans-title">两个档位，随时切换</h2>
-        <p>每天赠送额度，按需选择。会员单次购买，不自动续费。</p>
+        <h2 id="plans-title" className="visually-hidden">
+          免费版与 Plus 对比
+        </h2>
       </div>
       <div className="plans-grid">
         <article className="plan plan-free">
           <header>
-            <h3>免费版</h3>
+            <div className="plan-top">
+              <h3>免费版</h3>
+              <span className="plan-badge">轻松体验</span>
+            </div>
+            <p className="plan-description">从日常问答开始</p>
             <p className="plan-price">
               <strong>¥0</strong>
-              <span>永久免费</span>
+              <span className="plan-price-unit">永久免费</span>
             </p>
+            <p className="plan-note">无需购买会员，即可开始使用</p>
           </header>
-          <ul>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              每天 {DAILY_CREDIT_DEFAULTS.free} credits
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              {WECHAT_LINK_LIMITS.free} 个微信链接
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              {PLUGIN_LIMITS.free} 个插件
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              自带 API Key，模型费用付给服务商
-            </li>
-          </ul>
           {isPending ? null : session ? (
             <Link className="button secondary plan-cta" to="/app">
               进入工作台
@@ -99,100 +117,80 @@ export function PricingPlans() {
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           )}
+          <PlanFeatures plus={false} />
         </article>
 
-        <article className="plan plan-plus">
-          <header>
-            <div className="plan-top">
-              <h3>Plus</h3>
-              <div className="plan-switch" role="group" aria-label="计费周期">
-                <button
-                  type="button"
-                  aria-pressed={interval === "month"}
-                  onClick={() => setInterval("month")}
-                >
-                  月付
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={interval === "year"}
-                  onClick={() => setInterval("year")}
-                >
-                  年付
-                </button>
-              </div>
-            </div>
-            <p className="plan-price">
-              <strong>{yuan(headline)}</strong>
-              <span className="plan-price-unit">{interval === "year" ? "/ 年" : "/ 月"}</span>
-            </p>
-            <p className="plan-note">
-              {interval === "year"
-                ? `折合 ${approx(perMonth * 100)} / 月，比按月付省 ${yuan(yearlySaving * 100)}`
-                : `年付 ${yuan(yearly.amount)}，折合 ${approx(perMonth * 100)} / 月`}
-            </p>
-          </header>
-          <ul>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              每天 {DAILY_CREDIT_DEFAULTS.plus} credits
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              {WECHAT_LINK_LIMITS.plus} 个微信链接
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              插件数量不限
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              图片与文件输入
-            </li>
-            <li>
-              <Check size={15} aria-hidden="true" />
-              <Link to="/docs/cloud-agent">小薇 AI 云端助手</Link>
-            </li>
-          </ul>
-          {isPending ? null : session ? (
-            <button
-              type="button"
-              className="button plan-cta"
-              disabled={busy}
-              onClick={startCheckout}
+        {[monthly, yearly].map((offer) => {
+          const annual = offer.interval === "year";
+          return (
+            <article
+              id={`plan-${offer.interval}`}
+              className={`plan plan-plus plan-${offer.interval}`}
+              key={offer.id}
+              aria-labelledby={`plan-${offer.interval}-title`}
+              aria-current={requestedInterval === offer.interval ? "true" : undefined}
             >
-              {busy ? (
-                <>
-                  <Loader2 size={17} className="spin" aria-hidden="true" />
-                  正在跳转支付…
-                </>
+              <header>
+                <div className="plan-top">
+                  <h3 id={`plan-${offer.interval}-title`}>{offer.name}</h3>
+                  <span className="plan-badge">
+                    {annual ? `省 ${yuan(yearlySaving * 100)}` : "灵活选择"}
+                  </span>
+                </div>
+                <p className="plan-description">
+                  {annual ? "长期使用，年付更划算" : "更多额度，解锁小薇 AI"}
+                </p>
+                <p className="plan-price">
+                  <strong>{yuan(offer.amount)}</strong>
+                  <span className="plan-price-unit">{annual ? "/ 年" : "/ 月"}</span>
+                </p>
+                <p className="plan-note">
+                  {annual
+                    ? `折合 ${approx(yearly.amount / 12)} / 月，比按月买省 ${yuan(yearlySaving * 100)}`
+                    : "按月购买，按需续费"}
+                </p>
+              </header>
+              {isPending ? null : session ? (
+                <button
+                  type="button"
+                  className="button plan-cta"
+                  disabled={busyOffer !== null}
+                  onClick={() => startCheckout(offer)}
+                >
+                  {busyOffer === offer.id ? (
+                    <>
+                      <Loader2 size={17} className="spin" aria-hidden="true" />
+                      正在跳转支付…
+                    </>
+                  ) : (
+                    <>
+                      开通{offer.name} · {yuan(offer.amount)}
+                      <ArrowRight size={17} aria-hidden="true" />
+                    </>
+                  )}
+                </button>
               ) : (
-                <>
-                  开通 Plus · {interval === "year" ? yuan(yearly.amount) : yuan(monthly.amount)}
+                <Link
+                  className="button plan-cta"
+                  to={`/register?returnTo=${encodeURIComponent(`/pricing?interval=${offer.interval}#plan-${offer.interval}`)}`}
+                >
+                  选择{offer.name}
                   <ArrowRight size={17} aria-hidden="true" />
-                </>
+                </Link>
               )}
-            </button>
-          ) : (
-            <Link
-              className="button plan-cta"
-              to={`/register?returnTo=${encodeURIComponent(`/pricing?interval=${interval}`)}`}
-            >
-              注册后继续开通 Plus
-              <ArrowRight size={17} aria-hidden="true" />
-            </Link>
-          )}
-          {error && (
-            <p className="plan-error" role="alert">
-              {error}
-            </p>
-          )}
-        </article>
+              {error?.offerId === offer.id && (
+                <p className="plan-error" role="alert">
+                  {error.message}
+                </p>
+              )}
+              <PlanFeatures plus />
+            </article>
+          );
+        })}
       </div>
+      <p className="plans-common">所有方案均支持模型聊天、AI 生图、角色扮演与免费服务通知推送。</p>
       <p className="plans-fineprint">
-        本次付款为所选周期的完整金额，单次购买、不自动续费。支付由 Stripe 处理。credits
-        用完后可以单独购买加油包，价格见下方说明。 小薇 AI
-        使用你配置的模型，执行次数与服务状态以插件页为准。
+        Plus 单次购买，不自动续费；月付与年付权益相同。每日赠额当天有效、不累积。
       </p>
     </section>
   );

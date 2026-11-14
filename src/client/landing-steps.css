@@ -13,7 +13,7 @@
 }
 .steps-heading h2 {
   margin: 17px 0 0;
-  font-size: clamp(29px, 3vw, 36px);
+  font-size: var(--text-h2);
   font-weight: 600;
   line-height: 1.5;
   text-wrap: balance;
@@ -33,7 +33,7 @@
   max-width: 52em;
   margin: 16px auto 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.8;
 }
 .steps-requirements a {
@@ -44,7 +44,7 @@
 .steps-alternatives {
   margin: 22px auto 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.85;
   text-align: center;
 }
@@ -69,7 +69,7 @@
   border-radius: 10px;
   background: #fff;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-base);
   transition:
     background 0.16s,
     border-color 0.16s;
@@ -82,7 +82,7 @@
   border-radius: 50%;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .steps-tabs button:hover {
   border-color: var(--green);
@@ -118,18 +118,18 @@
 }
 .steps-page-number {
   color: var(--green);
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: 1.5px;
 }
 .steps-copy h3 {
-  font-size: 29px;
+  font-size: var(--text-h3);
   margin: 15px 0;
 }
 .steps-copy > p {
   margin: 0 0 24px;
   color: var(--muted);
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.95;
 }
 .steps-copy .text-link {
@@ -160,7 +160,7 @@
 .steps-providers > strong {
   display: block;
   margin-bottom: 18px;
-  font-size: 14px;
+  font-size: var(--text-base);
   font-weight: 550;
 }
 .steps-provider-grid {
@@ -183,7 +183,7 @@
   border-radius: 9px;
   background: #fff;
   color: #344d3e;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   text-align: center;
   overflow-wrap: anywhere;
@@ -199,7 +199,7 @@
 .steps-providers > p {
   margin: 16px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 .steps-preview-success {
@@ -208,7 +208,7 @@
   justify-content: center;
   gap: 7px;
   margin-top: 20px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--green);
 }
 .steps-connect {
@@ -221,11 +221,11 @@
 }
 .steps-preview-label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin-bottom: 12px;
 }
 .steps-connect > strong {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 550;
 }
 .steps-qr {
@@ -238,13 +238,13 @@
 }
 .steps-connect > span:not(.steps-preview-label) {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 .steps-qr-note {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 .steps-chat {
@@ -257,14 +257,14 @@
   padding: 16px;
   background: #f7f7f7;
   border-bottom: 1px solid #dedede;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .steps-chat-heading > img {
   border-radius: 6px;
 }
 .steps-chat-heading > span {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 .steps-chat-body {
@@ -274,7 +274,7 @@
   gap: 17px;
   padding: 24px 20px;
   background: #ededed;
-  font-size: 12px;
+  font-size: var(--text-base);
   line-height: 1.8;
 }
 .steps-chat-sent,
@@ -297,7 +297,7 @@
   width: 100%;
   text-align: center;
   color: #737373;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .steps-controls {
   display: flex;
@@ -305,7 +305,7 @@
   align-items: center;
   margin-top: 18px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   letter-spacing: 1px;
 }
 .steps-controls b {
@@ -359,7 +359,7 @@
   .steps-tabs button {
     gap: 6px;
     padding: 12px 5px;
-    font-size: 13px;
+    font-size: var(--text-base);
     line-height: 1.6;
   }
   .steps-tabs button > span {
@@ -375,7 +375,7 @@
     font-size: 24px;
   }
   .steps-copy > p {
-    font-size: 15px;
+    font-size: var(--text-base);
   }
   .steps-preview {
     padding: 18px;
@@ -391,7 +391,7 @@
     min-height: 68px;
     padding: 8px 3px;
     gap: 5px;
-    font-size: 11px;
+    font-size: var(--text-xs);
   }
 }
 @media (prefers-reduced-motion: reduce) {

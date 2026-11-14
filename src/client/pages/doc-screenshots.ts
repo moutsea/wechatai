@@ -12,14 +12,16 @@ export const DOC_SCREENSHOTS = {
   channelModels: {
     src: "/images/docs/channels-overview.jpg",
     alt: "渠道卡片中的模型列表、测试连接闪电按钮，以及获取可用模型和添加模型入口",
-    caption: "模型在所属渠道内显示；行末闪电图标用于测试连接。图中模型为示例数据，请以服务商提供的实际模型 ID 为准。",
+    caption:
+      "模型在所属渠道内显示；行末闪电图标用于测试连接。图中模型为示例数据，请以服务商提供的实际模型 ID 为准。",
     width: 1265,
     height: 712,
   },
   modelLimits: {
     src: "/images/docs/model-limits.jpg",
     alt: "模型更多设置：输入 Token 上限、输出 Token 上限、上下文窗口、单轮 credits 上限与有效输入空间",
-    caption: "编辑模型后展开「更多设置」。图中数值是示例设置，不代表默认值；请按模型实际能力和自己的预算填写。",
+    caption:
+      "编辑模型后展开「更多设置」。图中数值是示例设置，不代表默认值；请按模型实际能力和自己的预算填写。",
     width: 425,
     height: 699,
   },
@@ -40,7 +42,8 @@ export const DOC_SCREENSHOTS = {
   imageGeneration: {
     src: "/images/docs/image-generation-config.jpg",
     alt: "AI 生图配置中的微信快捷名称、生图模型、启用状态和等待提示文案",
-    caption: "选择自己的生图模型，设置快捷名称与等待提示。图中模型仅用于示例，请以服务商的可用模型为准。",
+    caption:
+      "选择自己的生图模型，设置快捷名称与等待提示。图中模型仅用于示例，请以服务商的可用模型为准。",
     width: 425,
     height: 699,
   },

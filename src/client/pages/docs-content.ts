@@ -14,11 +14,19 @@ export interface DocSection {
   id: string;
   title: string;
   body: string;
+  illustration?:
+    | "channel-setup"
+    | "wechat-ai-bridge"
+    | "wechat-connection"
+    | "plugin-setup"
+    | "model-providers"
+    | "kimiseek-import";
+  afterIllustration?: string;
   /** Figures are rendered after the body, in order. */
   screenshots?: readonly DocScreenshot[];
 }
 export interface DocContent {
-  intro: string;
+  intro?: string;
   sections: DocSection[];
 }
 

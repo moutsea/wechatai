@@ -351,8 +351,8 @@ describe("published prices stay in sync with billing", () => {
     const monthly = offers.find((offer) => offer.id === "plus_monthly");
     const yearly = offers.find((offer) => offer.id === "plus_yearly");
     expect(monthly && yearly).toBeTruthy();
-    expect(pricingText).toContain(`**¥${yuan(monthly!.amount)} / 月**`);
-    expect(pricingText).toContain(`**¥${yuan(yearly!.amount)} / 年**`);
+    expect(pricingText).toContain(`¥${yuan(monthly!.amount)}/月`);
+    expect(pricingText).toContain(`¥${yuan(yearly!.amount)}/年`);
   });
 
   it("quotes the current credit packs on the pricing page", () => {
@@ -361,13 +361,6 @@ describe("published prices stay in sync with billing", () => {
         `¥${yuan(offer.amount)} / ${offer.credits}`,
       );
     }
-  });
-
-  it("matches the enforced plugin and WeChat link limits", () => {
-    expect(pricingText).toContain(`| 插件数量 | ${PLUGIN_LIMITS.free} 个 | 不限 |`);
-    expect(pricingText).toContain(
-      `| 微信链接 | ${WECHAT_LINK_LIMITS.free} 个 | ${WECHAT_LINK_LIMITS.plus} 个 |`,
-    );
   });
 
   it("keeps the llms.txt summary consistent with billing", () => {

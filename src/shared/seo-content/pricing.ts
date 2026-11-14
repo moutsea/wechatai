@@ -1,142 +1,67 @@
 import type { SeoPage } from "../seo-pages";
-import { OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../pricing-copy";
+import { BILLING_OFFERS } from "../billing-offers";
+import { DAILY_CREDIT_DEFAULTS } from "../credits";
+import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN, approxYuan } from "../pricing-copy";
+
+const packs = BILLING_OFFERS.filter((offer) => offer.kind === "credits")
+  .map((offer) => `¥${offer.amount / 100} / ${offer.credits} credits`)
+  .join("、");
+const intro =
+  "免费版满足日常问答，Plus 解锁更多额度与小薇 AI。模型需自备 API Key，费用另付服务商。";
 
 export const pricingPage: SeoPage = {
   path: "/pricing",
   kind: "pricing",
-  title: "价格：免费版每天 100 credits，Plus ¥9.9/月",
-  description:
-    "自备 API 费用另付服务商；运营方开放的 Plus 云端助手小薇也使用自备模型，API 费用另付服务商，仍消耗 credits 并限制次数。免费版每天 100 credits，Plus ¥9.9/月或 ¥88/年。",
-  eyebrow: "价格",
-  h1: "价格：我们不卖 token",
-  lede: "先用免费版，按需升级 Plus。会员与 credits 用于平台服务，模型 API 费用另付服务商。",
-  answer: `${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}微伴文字部分按加权 token 收取 credits，AI 生图每张 5 credits，描述文字另计。免费版每天赠送 100 credits、可绑定 1 个微信链接与 1 个插件；Plus 为 ¥9.9/月或 ¥88/年，每天 1000 credits、插件不限、可绑定 10 个微信链接，并解锁附件功能。`,
+  title: `价格：免费版每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus ¥${PLUS_MONTHLY_YUAN}/月`,
+  description: `对比微伴免费版与 Plus：每日额度、微信连接、插件、附件与小薇 AI。免费版每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus ¥${PLUS_MONTHLY_YUAN}/月或 ¥${PLUS_YEARLY_YUAN}/年，单次购买，不自动续费。模型 API 费用另付。`,
+  eyebrow: "价格与方案",
+  h1: "免费开始，按需升级 Plus",
+  lede: intro,
+  answer: intro,
   primaryKeyword: "微信 AI 价格",
   secondaryKeywords: ["微伴 价格", "微信 ai 收费", "微信 ai 免费额度", "clawbot 收费吗"],
-  highlights: ["免费版每天 100 credits", "Plus ¥9.9/月，单次购买", "云端以插件页开放状态为准"],
-  sections: [
-    {
-      id: "two-bills",
-      title: "自备 API 与小薇怎么收费",
-      body: `${OWN_API_COST_NOTE}
-
-**第一笔 · 模型费用 → 你的 API 服务商**
-你在 DeepSeek、Anthropic、OpenAI 或任何兼容服务处充值，按官方价目表扣费。本站不参与这笔钱，也无法查看你的消费明细。
-
-**第二笔 · 中转费用 → 微伴**
-消息从微信进来、再发回去，中间要做协议转换、会话管理、插件调度。文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计。相同的计量用量适用相同费率，不随模型品牌变化。
-
-以上两笔费用适用于自备 API，可分别在服务商后台和微伴额度明细中核对。
-
-**云端助手小薇**
-${CLOUD_AGENT_COST_NOTE}购买 Plus 不代表云端一定可用，请先在插件页确认；完整边界见[小薇指南](/docs/cloud-agent)。`,
-    },
-    {
-      id: "plans",
-      title: "免费版与 Plus",
-      body: `| | 免费版 | Plus |
-| --- | --- | --- |
-| 价格 | ¥0 | **¥9.9 / 月**，或 **¥88 / 年**（约 ¥7.3/月） |
-| 每日赠送 credits | 100 | 1000 |
-| 插件数量 | 1 个 | 不限 |
-| 微信链接 | 1 个 | 10 个 |
-| 附件（图片、文件） | 不支持 | 支持 |
-| 消息提醒推送 | 支持 | 支持 |
-| 普通模型聊天需自带 API Key | 是 | 是 |
-| 仅使用消息提醒需模型 Key | 否 | 否 |
-| 小薇 | 不支持 | 运营方开放后可用，使用自备文本模型，执行次数受限 |
-
-说明几件容易被忽略的事：
-
-- **每日赠送是「每天重置」，不累积**。用于抵扣平台 credits 消耗；自备 API 的服务商费用另付。
-- **credits 用完可以单独购买**，不必升级套餐：¥9.9 / 5000、¥29 / 20000、¥59 / 50000。买来的 credits 长期有效。
-- **Plus 的附件能力**是硬性差异 —— 图片、文档这类内容在免费版上无法处理。
-- **单次购买，不自动续费**：新购买的会员到期后手动续费，提前购买会顺延有效期；到期未续费则恢复免费版，已购 credits 仍然保留。历史自动续费订阅可在「管理订阅」中取消后续续费，已付款权益保留至到期。
-- **退款申请**：请提供订单信息[联系我们](/contact)，我们会根据实际订单、使用情况及适用法律处理，具体见[服务协议](/terms)。`,
-    },
-    {
-      id: "credits-math",
-      title: "credits 怎么算：一次对话大概多少",
-      body: `算法是公开的，写在 [会员与 credits](/docs/credits) 里，这里给直觉：
-
-- **文字部分**：credits =（输入 token + 输出 token × 8）÷ 5000，即 5000 个加权 token = 1 credit。
-- **AI 生图**：每张生成图片 **5 credits**，描述文字另计；图片费用不按文字 token 换算。
-- **Agent 主动推送文字**：只计输出 token，仍按 8 倍权重计算，不属于免费推送。
-
-例如，一次请求计量为 1000 个输入 token、1000 个输出 token，文字费用就是 1.8 credits。生成一张图片则收取 5 credits，再加上描述文字的费用。具体消耗取决于实际计量用量，可在额度明细中查看。
-
-使用自备 API 时，**credits 与服务商费用分开计算**，看总成本要把两边加起来。小薇的模型 API 费用同样由所选服务商收取，平台按任务输入与最终回复文字计 credits，返回图片每张另计 5 credits，非图片文件不另收费；不重复计收内部模型和工具的 credits；次数限制仍独立生效。`,
-    },
-    {
-      id: "what-is-free",
-      title: "哪些东西不花 credits",
-      body: `以下操作不扣 credits：
-
-- **消息提醒推送**：自己的服务通过 HTTP Webhook 把内容推到微信，这条通道不扣 credits。适合订单、告警、构建结果这类高频通知。
-- **切换模型、查看余额、查看状态**：\`/wx model 2\`、\`/wx balance\`、\`/wx status\` 这类命令不产生对话消耗；模型编号先用 \`/wx models\` 查看。
-
-自备模型可使用每日赠送的 credits 试聊，无需先购买微伴会员或 credits；试聊仍正常消耗 credits，API 服务商费用另计。小薇需要 Plus 且服务已开放。
-
-对应的文档分别是 [消息提醒](/docs/notifications) 与 [微信命令速查](/docs/commands)。`,
-    },
-    {
-      id: "worth-it",
-      title: "什么时候值得升级到 Plus",
-      body: `不是所有人都需要 Plus。判断标准很具体：
-
-- **你绑了两个以上微信链接**（工作号 + 生活号）→ 需要。
-- **你要用两个以上插件**（比如 DS Chat 联网 + 生图）→ 需要。
-- **你要发图片或文件给模型** → 需要。
-- **你要使用小薇** → 先确认插件页已开放，再开通 Plus；另有执行次数限制。
-- **你的实际用量超过每天 100 credits** → 可考虑，先用上方估算器核算；轮数本身不能确定费用。
-
-如果使用自备模型，只是偶尔在微信里问两句、只用一个插件、只绑一个号，可以先用免费版。
-
-使用自备模型或自己的 Agent 时，如果主要成本来自服务商的模型调用，升级 Plus 不会降低服务商单价，可先优化模型选择与任务设计。`,
-    },
-    {
-      id: "compare-cost",
-      title: "跟「买平台积分」比，到底省不省",
-      body: `是否更省取决于同一模型、同一用量、缓存折扣和双方套餐，不能只凭聊天轮数判断。
-
-使用自备 API 时，把 **微伴会员或加油包支出 + 服务商模型支出**，与另一方案在相同输入输出用量下的总价对照。免费赠额每日重置，不能按月累积；Plus 不降低自备 API 的服务商单价。
-
-上方估算器的服务商费用适用于自备 API，不代替实际账单；小薇同样使用自备模型并另付 API 费用，仍受平台 credits 与执行次数限制。没有对照报价与用量数据时，本站不宣称自带 Key 一定更便宜。方案取舍见 [微信 AI 的几种接入方案](/wechat-ai-options)。`,
-    },
-  ],
+  highlights: [],
+  sections: [],
   faq: [
     {
-      question: "微伴卖 token 吗？",
-      answer: `不卖。微伴文字部分按加权 token 收取 credits，AI 生图每张 5 credits，描述文字另计。${OWN_API_COST_NOTE}${CLOUD_AGENT_COST_NOTE}`,
+      question: "会员费包含模型费用吗？",
+      answer:
+        "不包含。会员与 credits 用于微伴的平台服务；普通聊天、生图和小薇使用你配置的模型 API，费用另付模型服务商。已有 Muse、Hermes、OpenClaw 沿用各自的模型与费用配置。",
+      guide: { label: "了解模型配置", href: "/docs/channels-models" },
     },
     {
-      question: "免费版能一直免费用吗？",
-      answer:
-        "免费版每天赠送 100 credits 并每日重置，可以长期使用。用于抵扣平台消耗，自备 API 费用另付服务商；插件限 1 个、微信链接限 1 个、不支持附件。小薇需 Plus 且服务已开放。",
+      question: "credits 怎么用？每天的额度会累积吗？",
+      answer: `credits 是平台用量额度。文字按输入、输出和历史上下文计量，例如一次 1000 输入 tokens、1000 输出 tokens 约消耗 1.8 credits；生成图片每张另计 5 credits，描述文字另计。免费版每天赠送 ${DAILY_CREDIT_DEFAULTS.free}、Plus 每天 ${DAILY_CREDIT_DEFAULTS.plus} credits，当天有效、不累积。服务通知的 Webhook 推送不扣 credits。`,
+      guide: { label: "查看完整计费规则", href: "/docs/credits" },
     },
     {
-      question: "plus 多少钱？可以按年付吗？",
-      answer:
-        "Plus 为 ¥9.9/月，或 ¥88/年（约合 ¥7.3/月）。新购买的会员为单次付费，不自动续费；到期未续费则恢复免费版，已购买的 credits 不受影响。退款需提供订单信息联系支持，按实际订单、使用情况及适用法律处理。",
+      question: "额度用完了怎么办？",
+      answer: `可以等第二天赠额重置，或单独购买加油包：${packs}。加油包无需 Plus，购买的 credits 长期有效；购买加油包不会解锁 Plus 专属功能。`,
+      guide: { label: "前往会员与 credits", href: "/app/billing" },
     },
     {
-      question: "credits 用完了怎么办？",
+      question: "Plus 的小薇 AI 能做什么？",
       answer:
-        "可以单独购买 credits 包（¥9.9 / 5000、¥29 / 20000、¥59 / 50000），不需要升级套餐；也可以第二天等待每日赠额重置，或升级 Plus 获得更高的每日额度。",
+        "小薇是在微伴云端运行的助手，可以处理文件、生成文档并执行任务，将结果发回微信。无需自行安装或部署，配置文本模型后即可启用。执行次数、存储额度与服务状态以插件页为准；模型 API 费用另付。",
+      guide: { label: "认识小薇与使用条件", href: "/docs/cloud-agent" },
     },
     {
-      question: "消息提醒推送要钱吗？",
+      question: "Plus 多少钱？会自动续费吗？",
+      answer: `Plus ¥${PLUS_MONTHLY_YUAN}/月，或 ¥${PLUS_YEARLY_YUAN}/年（折合约 ${approxYuan((PLUS_YEARLY_YUAN * 100) / 12)}/月）。新购买的会员均为单次付费，不自动续费；提前续费会顺延有效期。到期未续费则恢复免费版，已购买的 credits 保留。历史自动续费订阅可在「管理订阅」中取消后续续费。`,
+    },
+    {
+      question: "购买后可以退款吗？",
       answer:
-        "这条通道不扣 credits。你自己的服务通过 HTTP Webhook 把内容推到微信，适合订单、告警等高频通知场景。",
+        "如需退款，请提供订单信息联系我们。我们会根据实际订单、使用情况及适用法律处理，具体以服务协议为准。",
+      guide: { label: "联系支持", href: "/contact" },
+    },
+    {
+      question: "开始使用前，需要准备什么？",
+      answer:
+        "先确认手机微信已有 ClawBot 入口，微伴无法替账号开通该入口。普通聊天和小薇还需准备模型 API Key；生图需配置图片模型与插件。手机扫码连接时，可用电脑或另一台设备展示二维码。",
+      guide: { label: "查看入门教程", href: "/docs/getting-started" },
     },
   ],
-  related: [
-    { label: "会员与 credits（文档）", href: "/docs/credits" },
-    { label: "小薇的费用与使用边界", href: "/docs/cloud-agent" },
-    { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },
-    { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },
-    { label: "微信 AI", href: "/wechat-ai" },
-    { label: "注册并免费试用", href: "/register" },
-  ],
-  updatedAt: "2026-11-12",
+  related: [],
+  updatedAt: "2026-11-14",
 };

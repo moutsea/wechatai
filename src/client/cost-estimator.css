@@ -1,6 +1,6 @@
 .cost-estimator {
   color: #243d35;
-  width: min(1120px, calc(100% - 40px));
+  width: var(--container-w);
   margin: 72px auto;
   padding: 30px;
   border: 1px solid #dbe6df;
@@ -19,7 +19,7 @@
   margin: 12px 0;
 }
 .cost-estimator p {
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.8;
   color: #496158;
 }
@@ -36,7 +36,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--text-base);
   color: #354e42;
 }
 .cost-fields input {
@@ -64,7 +64,7 @@
 }
 .cost-results span {
   display: block;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 .cost-results strong {
   display: block;
@@ -79,7 +79,7 @@
 .hero-prerequisite {
   max-width: 520px;
   color: #425e4e !important;
-  font-size: 14px !important;
+  font-size: var(--text-base) !important;
   line-height: 1.8 !important;
 }
 .hero-prerequisite a {
@@ -101,6 +101,6 @@
   scroll-margin-top: 100px;
 }
 .cost-estimator p.cost-estimator-note {
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 1.75;
 }

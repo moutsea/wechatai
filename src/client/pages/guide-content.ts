@@ -73,64 +73,84 @@ export const GUIDE_CONTENT: Record<(typeof DOC_GUIDES)[number]["slug"], DocConte
     ),
   },
   "getting-started": {
-    intro:
-      "先确认手机微信有 ClawBot 入口，再选择模型、已有 Agent 或服务通知。扫码绑定本身无需模型；普通聊天与小薇执行任务前需要配置文本模型。",
     sections: [
       {
         id: "clawbot-entry",
-        title: "先确认微信 ClawBot 入口",
-        body: `微伴通过微信「插件 → 微信 ClawBot」这个通道收发消息。入口由微信按账号开放，不在微伴这边，所以第一步不是注册或准备 API Key，而是先确认自己的微信里有它。
+        title: "一、微伴如何工作",
+        illustration: "wechat-ai-bridge",
+        body: `微伴是 AI 与微信之间的桥梁，通过 **微信 ClawBot 协议**接入微信。你在微信发消息，微伴交给已配置的模型或 Agent 处理，再把结果发回微信。
 
-1. 打开手机微信，点右下角「我」→「设置」。
-2. 在「设置」里向下找到「功能」分组，点「插件」。
-3. 在插件列表里找到「微信 ClawBot」卡片。
+网页负责配置，微信负责日常使用，无需在电脑上安装或一直运行微伴。
 
-**如果找不到入口：** 微伴无法替你的账号开通，也没有绕过这个入口的绑定方式。先在「设置 → 关于微信」检查版本并更新，完全退出微信后重进再看一次；入口按账号逐步开放，未开放的账号暂时无法强制开启。**在确认入口可用之前，无需付款或提交 API Key。** 可以先阅读后面的配置步骤和界面截图，入口说明见[微信 ClawBot 排查](/wechat-clawbot)。
+**开始前：** 先确认手机微信里有「我 → 设置 → 插件 → 微信 ClawBot」入口。找不到该入口时，请更新微信至最新版本。普通模型聊天还需要服务商提供的 API Key（不是聊天网站的登录密码）。
 
-确认有入口后，再继续下面的准备和连接步骤；完整扫码路径见[连接微信](/docs/wechat-connection#connect)。`,
+模型 API 费用由服务商收取，与微伴的 credits 分开计算。[了解费用](/docs/credits)。`,
       },
       {
         id: "prepare",
-        title: "准备账号和模型服务",
-        body: `先[注册微伴账号](/register)并[登录](/login)，按需要选择接入方式：
+        title: "二、配置模型",
+        illustration: "channel-setup",
+        body: `微伴不提供大模型服务。使用模型聊天前，需要接入模型供应商，使用该供应商提供的 **API Key**。
 
-- **聊模型或使用小薇：** 配置自己的模型服务，也可用该模型运行已开放的 [Plus 云端助手小薇](/docs/cloud-agent)。
-- **已有 Agent：** 直接按 [Muse 托管助理](/developers/muse)、[Hermes](/developers/hermes) 或 [OpenClaw](/developers/openclaw) 指南在插件页配对，无需在微伴另配模型。Muse 连接指令发到自己的 Muse 主聊天，其他两种在运行 Agent 的设备执行。
-- **只收服务通知：** 先扫码绑定微信并发送 /wx help，再配置[消息提醒](/docs/notifications)，无需模型 API Key。
+支持 DeepSeek、硅基流动、OpenAI、Anthropic 等服务商，也支持兼容 OpenAI、Anthropic 协议的第三方渠道。[查看支持的模型服务商与接入方式](/docs/model-providers)。
 
-使用自己的模型时，准备好服务商提供的 API Key 和服务地址，可以使用官方 API 或第三方服务。小薇沿用你配置的文本模型，还需服务已开放并添加、启用插件；购买 Plus 不代表云端一定可用，以插件页为准。
+进入[工作台](/app)，打开「渠道与模型」：
 
-**API 模型服务不等同于网页版会话，可能产生费用。** 模型价格请参考模型服务提供商。微伴的 credits 与服务商的 API 余额分开计算。
-
-Free 用户可使用基础文字聊天，并配置 1 个插件；Plus 会员插件配置数量不限，并支持图片与文件输入、网页会话记录等功能。`,
+1. 点击「添加渠道」，选择你使用的服务商。`,
       },
       {
         id: "start",
-        title: "三步开始聊天",
-        screenshots: [DOC_SCREENSHOTS.channelConfig],
-        body: `1. 打开[渠道与模型](/app/channels)，点击「添加渠道」，选择服务商并填写 API Key。第三方地址选择「自定义（第三方渠道 / 其他协议）」后填写协议和 Base URL。保存后确认已有文本模型：预设渠道会尝试自动导入，自定义渠道可点击「获取可用模型」；获取失败或缺少所需模型时，点击「添加模型」。然后点击文本模型行的闪电图标「测试连接」，系统会发送固定测试请求并正常计费。
-2. 打开[微信连接](/app/wechat)，创建链接，获取连接二维码。在微信按上面的入口路径进入「微信 ClawBot → 扫一扫」，扫描二维码并确认连接。
-3. 在对应的微信对话中发一句话，收到回答后就可以继续聊了。
+        title: "三、连接微信",
+        illustration: "wechat-connection",
+        body: `1. 打开[微信连接](/app/wechat)，点击「创建链接」，再点击「获取二维码」。
+2. 在手机微信进入 **我 → 设置 → 插件 → 微信 ClawBot「详情」→ 连接新的 OpenClaw**，扫描微伴的二维码并确认。部分版本显示为「扫一扫」，无需安装 OpenClaw。`,
+        afterIllustration: `3. 微伴显示「已连接」后，普通聊天选好当前渠道与模型；使用已有 Agent 时，先完成下一节的插件配置。随后在对应的微信会话发一句「你好」，收到回答就能继续聊了。
 
-添加渠道时拿不准怎么填，可以跟着[在微信里使用 DeepSeek](/docs/deepseek-in-wechat)操作。每个字段的说明见[渠道与模型](/docs/channels-models)。
-
-如果选择小薇，第 1 步改为在[插件页](/app/plugins)添加并启用小薇，然后扫码连接。连接后发送 \`/use 小薇\` 选择它（快捷名以配置为准），详见[小薇指南](/docs/cloud-agent)。
-
-Free 用户可创建 1 个微信链接，Plus 会员最多 10 个。连接方式和重新绑定见[连接微信](/docs/wechat-connection)。`,
+**用手机看本站？** 请用电脑或另一台设备显示二维码，再用手机微信扫码。找不到入口或连接失败时，查看[连接微信教程](/docs/wechat-connection#connect)。`,
       },
       {
         id: "next",
-        title: "连上以后，常用这几项",
-        body: `| 想做什么 | 在微信中发送 |
-| --- | --- |
-| 看看当前在用哪个模型或插件 | \`/wx status\` |
-| 换个话题，保留原来的记录 | \`/wx new\` |
-| 查看剩余额度 | \`/wx balance\` |
-| 查看命令帮助 | \`/wx help\` |
+        title: "四、启动插件（可选）",
+        illustration: "plugin-setup",
+        body: `普通模型聊天不需要插件。想扩展能力时：
 
-这些微伴命令不消耗 credits。完整列表见[微信命令速查](/docs/commands)。
+1. 打开[插件页](/app/plugins)，找到想用的插件，点击「配置插件」。
+2. 按页面提示选择模型、填写配置，设置容易记住的「微信快捷名称」，保存并保持启用。
+3. 在微信发送 \`/use 快捷名\` 选用它。例如快捷名设为「画图」，发送 \`/use 画图\`，再描述想画的内容。`,
+        afterIllustration: `**只想用一次？** 发送 \`@画图 画一只在窗边晒太阳的猫\`；发送 \`/exit\` 可回到普通模型聊天。快捷名以你保存的配置为准，网页启用插件不会自动切换微信当前会话。
 
-继续了解：[会话与上下文](/docs/sessions) · [图片、文件与语音](/docs/attachments) · [会员与 credits](/docs/credits)。遇到问题可以先看[常见问题](/docs/faq)。`,
+按需了解：[AI 生图（需生图模型）](/docs/image-generation) · [角色扮演](/docs/roleplay) · [小薇：处理文件与任务（仅 Plus）](/docs/cloud-agent)。已有 Agent 的连接方法见 [Muse](/developers/muse)、[Hermes](/developers/hermes)、[OpenClaw](/developers/openclaw)。`,
+      },
+    ],
+  },
+  "model-providers": {
+    intro:
+      "微伴负责把 AI 接入微信，不提供大模型服务。使用模型聊天时，需要接入你选择的模型供应商；模型 API 费用由该供应商收取。",
+    sections: [
+      {
+        id: "providers",
+        title: "支持的模型服务商",
+        illustration: "model-providers",
+        body: `打开[渠道与模型](/app/channels)，点击「添加渠道」即可接入下列服务商。预设渠道填入自己的 API Key，接口地址和协议会自动填好；KimiSeek 使用一键导入入口。
+
+另支持智谱、百炼、火山方舟的 Coding Plan。使用这类套餐时，请选择对应的 Coding Plan 预设，使用该套餐提供的 API Key。
+
+保存后会尝试同步可用模型；若同步失败，可按[模型导入教程](/docs/channels-models#import)手动添加。模型是否可用取决于服务商提供的模型、账号权限和余额。`,
+      },
+      {
+        id: "kimiseek",
+        title: "KimiSeek 一键导入",
+        illustration: "kimiseek-import",
+        body: `打开[渠道与模型](/app/channels)，点击「添加渠道」，再点击「服务商」旁的 **kimiseek 一键导入**，按新页面提示完成关联。
+
+关联完成后，微伴会自动导入渠道并尝试同步模型，无需手动填写 API Key。回到渠道页确认所需模型已导入，即可继续[连接微信](/docs/getting-started#start)。`,
+      },
+      {
+        id: "custom",
+        title: "其他兼容协议的第三方服务商",
+        body: `也支持兼容 **OpenAI Chat Completions、OpenAI Responses** 或 **Anthropic Messages** 协议的第三方服务商。
+
+添加渠道时选择「自定义（第三方渠道 / 其他协议）」，按服务商说明填写协议、接口地址（Base URL）和 API Key，再获取模型或手动添加模型 ID。具体步骤见[渠道与模型教程](/docs/channels-models#configure)。`,
       },
     ],
   },

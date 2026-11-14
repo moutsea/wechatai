@@ -15,6 +15,7 @@ import { referralSummary, qualifyReferral, wechatIdentityHash } from "../src/ser
 import { encrypt } from "../src/server/security";
 import { Wallet } from "../src/server/wallet";
 import { CloudAgentStore } from "../src/server/cloud-agent-store";
+import { CLOUD_AGENT_SHORTCUT } from "../src/shared/cloud-agent";
 import type { WxMessage } from "../src/server/wechat";
 import { useManualAlarms } from "./helpers/wechat-delivery";
 
@@ -360,7 +361,7 @@ describe("permanent bilateral invitation rewards", () => {
           { item_list: [{ type: 1, text_item: { text } }] },
           "default",
         );
-      await send("/use 云");
+      await send(`/use ${CLOUD_AGENT_SHORTCUT}`);
       expect(await send("整理今天的计划")).toContain("任务已接收");
       const store = new CloudAgentStore(state.storage);
       const task = store.active()[0];

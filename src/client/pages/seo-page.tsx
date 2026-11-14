@@ -5,8 +5,7 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Check, ChevronDown, Sprout } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { SiteHeader } from "../site-header";
-import { CostEstimator } from "../cost-estimator";
-import { PricingPlans } from "./pricing-plans";
+import { PricingPage } from "./pricing-page";
 import { SiteFooter } from "../site-footer";
 
 /** Markdown with router-aware links, the same treatment the documentation uses. */
@@ -86,6 +85,7 @@ function SeoRelated({ links }: { links: SeoPage["related"] }) {
 }
 
 export function SeoPageView({ page, children }: { page: SeoPage; children?: ReactNode }) {
+  if (page.path === "/pricing") return <PricingPage page={page}>{children}</PricingPage>;
   return (
     <div className="seopage">
       <a className="seopage-skip" href="#seopage-content">
@@ -129,18 +129,8 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
               </li>
             ))}
           </ul>
-          {/* 价格页把这段「直接回答」放到方案卡下面：卡已经给了可扫的数字，
-              先念一遍整段会把首屏占满。 */}
-          {page.path !== "/pricing" && <p className="seopage-answer">{page.answer}</p>}
+          <p className="seopage-answer">{page.answer}</p>
         </header>
-        {page.path === "/pricing" && (
-          <>
-            <PricingPlans />
-            <CostEstimator />
-            {/* 这段是给摘要/AEO 用的完整句子，排在卡后面，视觉上降级为注释，不再抢卡片。 */}
-            <p className="seopage-answer seopage-answer-compact">{page.answer}</p>
-          </>
-        )}
         {page.steps && <SeoSteps steps={page.steps} />}
         <article className="seopage-prose">
           {page.sections.length > 2 && (

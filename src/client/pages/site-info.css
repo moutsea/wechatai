@@ -17,12 +17,12 @@
 }
 .info-intro p {
   color: var(--muted);
-  font-size: 15px;
+  font-size: var(--text-base);
 }
 .info-intro time {
   display: block;
   margin-top: 22px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 .info-navigation {
@@ -35,7 +35,7 @@
   padding: 14px 0;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
-  font-size: 14px;
+  font-size: var(--text-base);
   color: var(--muted);
 }
 .info-navigation a.active {
@@ -58,7 +58,7 @@
 .info-document p,
 .info-document li {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-base);
   line-height: 2;
   overflow-wrap: anywhere;
 }
@@ -117,7 +117,7 @@
 }
 .contact-content p {
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 .contact-address {
   margin: 24px 0 12px;
@@ -135,7 +135,7 @@
 .contact-email > span:last-child {
   display: block;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .contact-grid {
   display: grid;
@@ -151,14 +151,14 @@
   margin-bottom: 16px;
 }
 .contact-grid h2 {
-  font-size: 18px;
+  font-size: var(--text-lg);
 }
 .contact-note,
 .contact-grid .text-link {
   margin-top: 16px;
 }
 .contact-content .contact-note {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .contact-privacy {
   margin-top: 36px;
@@ -167,7 +167,7 @@
 }
 .auth-form .auth-policies {
   margin-top: 18px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   color: var(--muted);
 }
@@ -197,6 +197,6 @@
 @media (max-width: 400px) {
   .contact-address {
     gap: 6px;
-    font-size: 17px;
+    font-size: var(--text-lg);
   }
 }
