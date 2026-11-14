@@ -35,7 +35,7 @@ const publicPages = [
     ["faq", "模型自称和我的配置不一样？"],
     ["ds-chat", "配置模型与搜索服务"],
     ["image-generation", "描述画面和比例"],
-    ["roleplay", "导入角色卡与世界书"],
+    ["roleplay", "角色卡是什么，怎么导入"],
     ["personal-assistant", "定时提醒"],
     ["cloud-agent", "查看进度、结果与停止任务"],
     ["notifications", "发送第一条通知"],
@@ -108,7 +108,7 @@ const landingPages = [
   [
     "wechat-character-card.html",
     "https://wechatai.app/wechat-character-card",
-    "微信聊天人物卡：从角色卡到微信对话",
+    "微信角色卡导入教程：PNG、V2 JSON 与兼容说明",
   ],
   ["wechat-bot.html", "https://wechatai.app/wechat-bot", "微信机器人怎么弄：先选对路线"],
   ["wechat-ai-image.html", "https://wechatai.app/wechat-ai-image", "在微信里生成图片：配置与计费"],

@@ -41,6 +41,7 @@ import { DocModelProviders } from "./doc-model-providers";
 import { DocKimiseekImport } from "./doc-kimiseek-import";
 import { DocWechatCode, DocWechatConnection, DocWechatStatus } from "./doc-wechat-connection";
 import { DocPluginSetup } from "./doc-plugin-setup";
+import { DocNotificationDelivery, DocPluginGuide, DocRoleplayLore } from "./doc-plugin-guides";
 import {
   DocAttachmentFlow,
   DocCreditExample,
@@ -385,6 +386,15 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
             {section.illustration === "wechat-code" && <DocWechatCode />}
             {section.illustration === "wechat-status" && <DocWechatStatus />}
             {section.illustration === "plugin-setup" && <DocPluginSetup />}
+            {section.illustration === "plugin-cloud" && <DocPluginGuide kind="cloud" />}
+            {section.illustration === "plugin-search" && <DocPluginGuide kind="search" />}
+            {section.illustration === "plugin-roleplay" && <DocPluginGuide kind="roleplay" />}
+            {section.illustration === "roleplay-lore" && <DocRoleplayLore />}
+            {section.illustration === "plugin-assistant" && <DocPluginGuide kind="assistant" />}
+            {section.illustration === "plugin-notification" && (
+              <DocPluginGuide kind="notification" />
+            )}
+            {section.illustration === "notification-delivery" && <DocNotificationDelivery />}
             {section.illustration === "attachment-flow" && <DocAttachmentFlow />}
             {section.illustration === "voice-example" && <DocVoiceExample />}
             {section.illustration === "membership-plans" && <DocMembershipPlans />}

@@ -1,15 +1,15 @@
 export const DOCS_INDEX_UPDATED_AT = "2026-11-14";
 export const DOCS_TITLE = "微信 AI 教程与文档";
 export const DOCS_DESCRIPTION =
-  "微伴 Wechatai 使用文档：配置模型、连接微信、管理会话和 credits。附 DeepSeek、OpenClaw、Hermes 与云端助手小薇使用教程，以及联网问答、生图和个人助理说明。";
+  "微伴 Wechatai 使用文档：配置自己的模型 API，通过微信 ClawBot 连接 AI，按需使用联网问答、生图、角色扮演、个人助理、云端助手小薇和消息提醒，并了解会员与 credits 计费。";
 
 export const DOC_TUTORIALS = [
   {
     slug: "deepseek-in-wechat",
-    updatedAt: "2026-11-09",
+    updatedAt: "2026-11-14",
     title: "如何在微信里使用 DeepSeek",
     description:
-      "从 API Key、渠道和模型配置到扫码连接微信，手把手使用 DeepSeek 聊天，并了解如何通过 DS Chat 增加按需联网搜索。",
+      "通过微伴把自己的 DeepSeek API 接入微信：配置渠道与模型、扫码连接、发送第一条消息，再按需用 DS Chat 配置独立搜索服务。",
     category: "实操教程",
     group: "tutorials",
     navTitle: "在微信里使用 DeepSeek",
@@ -21,7 +21,7 @@ export const DOC_TUTORIALS = [
   },
   {
     slug: "multiple-openclaw-in-wechat",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-14",
     navTitle: "连接多个 OpenClaw",
     title: "如何在微信里使用多个 OpenClaw",
     description:
@@ -36,7 +36,7 @@ export const DOC_TUTORIALS = [
   },
   {
     slug: "hermes-in-wechat",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-14",
     navTitle: "在微信里使用 Hermes",
     title: "如何在微信里使用 Hermes",
     description:
@@ -71,7 +71,7 @@ export const DOC_GUIDES = [
     seoTitle: "微信 AI 渠道与模型：API Key 与输入输出设置",
     title: "渠道与模型",
     description:
-      "添加模型渠道、同步并测试模型，按需调整提示词与用量，在微信切换使用。附配置示意与常用命令。",
+      "了解微伴渠道与模型的区别，填写服务商 API Key、同步并测试模型，调整提示词与输入输出上限，再在微信切换使用。附配置示意。",
     category: "开始使用",
     group: "start",
     minutes: 4,
@@ -103,10 +103,11 @@ export const DOC_GUIDES = [
   },
   {
     slug: "commands",
-    updatedAt: "2026-11-11",
+    updatedAt: "2026-11-14",
     seoTitle: "微信命令速查：切换 AI 模型、插件与会话",
     title: "微信命令速查",
-    description: "微伴微信命令一览：查看状态、切换渠道和插件、新建会话、清理上下文与查询 credits。",
+    description:
+      "查询微伴微信命令：切换模型和插件、新建会话、清理上下文与查看 credits。区分免费控制命令、计费的 @ 调用及 OpenClaw、Hermes 原生命令。",
     category: "日常功能",
     group: "daily",
     minutes: 3,
@@ -114,10 +115,11 @@ export const DOC_GUIDES = [
   },
   {
     slug: "sessions",
-    updatedAt: "2026-11-11",
+    updatedAt: "2026-11-14",
     seoTitle: "微信 AI 会话与上下文：新建、切换与自动摘要",
     title: "会话与上下文",
-    description: "新建、切换、归档和清理微信 AI 会话，了解自动摘要、上下文上限与网页聊天记录。",
+    description:
+      "在微伴新建、切换和清理微信 AI 会话，区分重置上下文与删除聊天记录，了解自动摘要、输入上限和 Plus 网页记录功能。",
     category: "日常功能",
     group: "daily",
     minutes: 4,
@@ -129,7 +131,7 @@ export const DOC_GUIDES = [
     seoTitle: "微信 AI 图片、文件与语音使用教程",
     title: "图片、文件与语音",
     description:
-      "跟随对话示意发送图片、PDF、Word 或文本文件，再补充处理要求；了解 Plus 附件限制、语音转写与失败后的重试方法。",
+      "在微信向微伴发送图片、PDF、Word 或文本文件，再补充处理要求；了解 Plus 附件限制、微信语音转写，以及用小薇转换文件和失败后的重试方法。",
     category: "日常功能",
     group: "daily",
     requirement: "图片与文件需要 Plus",
@@ -142,7 +144,7 @@ export const DOC_GUIDES = [
     seoTitle: "微伴会员与 credits：额度、计费与邀请奖励",
     title: "会员与 credits",
     description:
-      "对比 Free 与 Plus 会员权益，通过算例了解文字与图片计费，查看每日赠送、充值、负余额和邀请奖励规则。",
+      "了解微伴 credits 与模型 API 余额的区别，对比 Free 与 Plus 权益，通过算例查看文字和图片计费，以及每日赠送、充值、负余额和邀请奖励规则。",
     category: "日常功能",
     group: "daily",
     minutes: 3,
@@ -150,7 +152,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "faq",
-    updatedAt: "2026-11-12",
+    updatedAt: "2026-11-14",
     seoTitle: "微信 AI 常见问题：连接、模型和插件排查",
     title: "常见问题",
     description: "排查微信连接、模型调用和插件问题，了解聊天数据、隐私和会员到期后的变化。",
@@ -161,40 +163,41 @@ export const DOC_GUIDES = [
   },
   {
     slug: "cloud-agent",
-    updatedAt: "2026-11-13",
+    updatedAt: "2026-11-14",
     seoTitle: "小薇 · 云端助手：在微信处理文件与任务",
     title: "小薇 · 云端助手",
     description:
-      "不用安装，不用折腾。认识运行在微伴云端的小薇，选好模型、启用插件后，在微信交代任务、接收文件；附 Plus 条件、费用与使用范围。",
+      "小薇是微伴的云端 Agent 助手，无需安装，可在微信提交文件处理、文档转换等任务。了解模型配置、附件发送、进度查询与结果下载；需要 Plus 和自备模型 API Key。",
     category: "插件",
     group: "plugins",
     requirement: "需要 Plus 且云端服务已开放",
     minutes: 4,
-    outcome: "在微信提交文字任务，在任务页查看进度和结果。",
+    outcome: "在微信交代任务、处理文件，在任务页查看进度与结果。",
     image: "/images/plugins/xiaowei.webp",
     imageAlt: "小薇，微伴云端助手",
   },
   {
     slug: "ds-chat",
-    updatedAt: "2026-11-09",
+    updatedAt: "2026-11-14",
     seoTitle: "DS Chat 联网问答：在微信配置模型与搜索 API",
     title: "DS Chat 联网问答",
     description:
-      "Free 可配置 1 个插件：DS Chat 用你自己的回答模型和搜索 API 联网问答，模型与搜索费用另计，支持快捷名进入、切换或单次调用。",
+      "用微伴 DS Chat 插件在微信联网问答、查询信息与来源。学习配置自己的回答模型和搜索 API，了解搜索范围、调用命令与费用；Free 可配置 1 个插件。",
     category: "插件",
     group: "plugins",
     requirement: "Free 可配置 1 个插件",
     minutes: 3,
-    outcome: "基于 DeepSeek Harness 开源项目开发，模型和搜索服务都由你选择。",
+    outcome: "给回答模型接入搜索服务，在微信查询信息与来源。",
     image: "/images/plugins/ds-chat-brand.webp",
     imageAlt: "DS Chat 插件",
   },
   {
     slug: "image-generation",
-    updatedAt: "2026-11-08",
-    seoTitle: "AI 生图：在微信使用自己的画图模型",
+    updatedAt: "2026-11-14",
+    seoTitle: "微信 AI 生图教程：模型配置、提示词与图片保存",
     title: "AI 生图",
-    description: "接入自己的生图 API，通过微信提示词生成图片，设置画面比例并查看生图计费。",
+    description:
+      "通过微伴 AI 生图插件，把自己的生图 API 接入微信。学习配置模型、描述画面与比例、接收和保存图片，并了解每次生成的 credits 与服务商费用。",
     category: "插件",
     group: "plugins",
     requirement: "Free 可配置 1 个插件",
@@ -203,39 +206,41 @@ export const DOC_GUIDES = [
   },
   {
     slug: "roleplay",
-    updatedAt: "2026-11-08",
-    seoTitle: "微信 AI 角色扮演：角色卡、人设与剧情记忆",
+    updatedAt: "2026-11-14",
+    seoTitle: "微信 AI 角色扮演教程：角色卡与世界书怎么用",
     title: "角色扮演",
-    description: "选择原创角色或导入角色卡，自定义人设、世界书和剧情记忆，在微信里继续角色对话。",
+    description:
+      "用微伴在微信与 AI 角色聊天、共同续写故事。从内置角色开始，学习导入 V2 角色卡、配置世界书和延续剧情；需要自备模型 API，Free 可配置 1 个插件。",
     category: "插件",
     group: "plugins",
     requirement: "Free 可配置 1 个插件",
     minutes: 4,
-    outcome: "设定角色、关系和故事开场，聊一段属于你的剧情。",
+    outcome: "从聊天搭子到互动故事，选一个角色，让下一幕由你续写。",
   },
   {
     slug: "personal-assistant",
-    updatedAt: "2026-11-08",
+    updatedAt: "2026-11-14",
     seoTitle: "微信个人助理：记事、记账、待办与定时提醒",
     title: "个人助理",
-    description: "在微信里记事、记账、管理待办和设置定时提醒，并在网页查看、修改和导出个人记录。",
+    description:
+      "配置微伴个人助理，在微信记事、记账、管理待办和设置定时提醒，在网页查看与导出记录。了解模型要求、记录共享和微信回复窗口限制；Free 也能使用。",
     category: "插件",
     group: "plugins",
     requirement: "Free 可配置 1 个插件",
-    minutes: 4,
+    minutes: 3,
     outcome: "随手记下事情和开销，把需要提醒的事交给助理。",
   },
   {
     slug: "notifications",
-    updatedAt: "2026-11-09",
+    updatedAt: "2026-11-14",
     seoTitle: "微信消息提醒 Webhook：订单、告警与任务推送",
     title: "消息提醒",
     description:
-      "Free 可配置 1 个插件，Webhook 推送不扣 credits：配置专属 Token，把文字通知推送到微信，并可查询投递结果和处理重试。",
+      "通过微伴消息提醒 Webhook，把订单、告警和脚本结果推送到微信。学习生成专属 Token、发送 HTTP 请求、查询投递和重试；无需模型 API，推送不扣 credits。",
     category: "插件",
     group: "plugins",
     requirement: "Free 可配置 1 个插件 · 不扣 credits",
-    minutes: 4,
+    minutes: 3,
     outcome: "用一条 HTTP 请求，把重要消息送到微信。",
   },
 ] as const;

@@ -155,11 +155,11 @@ describe("search indexing boundaries", () => {
       const canonical = `https://wechatai.app${docPath(article.slug)}`;
       const seo = getPageSeo(`${docPath(article.slug)}/?utm_source=wechat#faq`);
       expect(seo.canonical).toBe(canonical);
-      expect(seo.title).toContain(article.title);
+      expect(seo.title).toContain("seoTitle" in article ? article.seoTitle : article.title);
       expect(renderSeoHead(seo)).toContain('property="og:type" content="article"');
       const graph = seo.structuredData?.["@graph"] as Array<Record<string, unknown>>;
       expect(graph.find((item) => item["@type"] === "Article")).toMatchObject({
-        headline: article.title,
+        headline: "seoTitle" in article ? article.seoTitle : article.title,
         mainEntityOfPage: canonical,
         description: article.description,
       });

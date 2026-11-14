@@ -335,7 +335,7 @@ export function getPageSeo(pathname: string): PageSeo {
                 "@id": `${canonical}#article`,
                 url: canonical,
                 mainEntityOfPage: canonical,
-                headline: title,
+                headline: article.seoTitle ?? title,
                 description,
                 inLanguage: "zh-CN",
                 image: SOCIAL_IMAGE,

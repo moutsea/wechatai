@@ -1241,6 +1241,7 @@
   margin-top: 24px;
 }
 .docs-disclosure {
+  min-width: 0;
   border: 1px solid var(--docs-border);
   border-radius: 12px;
   background: #fafcfb;
@@ -1415,6 +1416,107 @@
 }
 .docs-plugin-example {
   margin: 28px 0 32px;
+}
+.docs-plugin-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 20px;
+}
+.docs-plugin-guide-grid .docs-channel-example-header {
+  flex-wrap: wrap;
+}
+.docs-plugin-guide-fields {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 20px;
+}
+.docs-plugin-guide-fields dt {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.docs-plugin-guide-fields dd {
+  margin: 0;
+  color: #263d2d;
+  font-size: var(--text-base);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.docs-plugin-guide-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 20px;
+  background: #edf6f0;
+  color: var(--green);
+  font-size: var(--text-sm);
+}
+.docs-plugin-guide-footer > svg {
+  flex-shrink: 0;
+}
+.docs-plugin-guide-footer > svg:last-child {
+  margin-left: auto;
+}
+.docs-plugin-guide-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dce5df;
+  border-radius: 10px;
+  background: #fff;
+  color: #263d2d;
+}
+.docs-plugin-guide-file > svg {
+  flex-shrink: 0;
+  color: var(--green);
+}
+.docs-plugin-guide-file strong,
+.docs-plugin-guide-file span {
+  display: block;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.docs-plugin-guide-file span {
+  margin-top: 4px;
+  color: var(--muted);
+}
+.docs-notification-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.docs-notification-flow > div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid #dce5df;
+  border-radius: 14px;
+  background: #f7faf7;
+}
+.docs-notification-flow strong {
+  font-size: var(--text-base);
+}
+.docs-notification-flow > div > span:last-child {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+@media (max-width: 1050px) {
+  .docs-plugin-guide-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+@media (max-width: 600px) {
+  .docs-notification-flow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .docs-notification-flow > div {
+    padding: 16px;
+  }
 }
 .docs-attachment-stage {
   color: #496752;

@@ -25,6 +25,13 @@ export interface DocSection {
     | "wechat-code"
     | "wechat-status"
     | "plugin-setup"
+    | "plugin-cloud"
+    | "plugin-search"
+    | "plugin-roleplay"
+    | "roleplay-lore"
+    | "plugin-assistant"
+    | "plugin-notification"
+    | "notification-delivery"
     | "attachment-flow"
     | "voice-example"
     | "membership-plans"
@@ -55,17 +62,17 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
     sections: [
       {
         id: "before-setup",
-        title: "开始前：确认路径与条件",
-        body: "本页负责逐步配置与验证。还没有决定托管聊天还是本机 Agent？先看[DeepSeek 选型对比](/wechat-deepseek)。动手前先确认手机微信「我 → 设置 → 功能 → 插件」里有「微信 ClawBot」：没有这个入口时，微伴无法替你开通，也不必先付款或提交 Key，可先看[带截图的配置教程](/docs/deepseek-in-wechat#channel)。确认入口后再准备服务商 Key 与余额；测试连接与正式聊天均可能产生费用。",
+        title: "先选对接入方式",
+        body: "只想在微信直接和 DeepSeek 聊天，配置模型 API 即可，无需安装 OpenClaw。本页介绍这条路径；如果还在比较直接聊天和本机 Agent，先看[DeepSeek 接入方式对比](/wechat-deepseek)。",
       },
       {
         id: "prepare",
-        title: "开始前，准备好什么？",
-        body: `你需要在微伴[注册账号](/register)并[登录](/login)，同时准备好 DeepSeek 模型官方或第三方 API 服务。
+        title: "准备账号与 API Key",
+        body: `进入微伴[工作台](/app)，准备 DeepSeek 官方或第三方服务商的 API Key 和可用余额。本文以 [DeepSeek 官方 API](https://api-docs.deepseek.com/) 为例；第三方渠道使用对应服务商的接口地址和密钥。
 
-**API 模型服务不等同于网页版会话，可能产生费用**。模型价格请参考模型服务提供商。
+手机微信还需有「我 → 设置 → 插件 → 微信 ClawBot」入口。找不到时先更新微信，界面示意见[连接微信教程](/docs/wechat-connection#connect)。
 
-本文以 [DeepSeek 官方 API](https://api-docs.deepseek.com/) 为例。如果使用第三方渠道，请填写该服务商提供的地址（base_url）与密钥（apikey）。`,
+**API Key 不是聊天网站的登录密码，网页版会员也不等于 API 余额。** 模型测试和正式聊天都可能产生服务商费用，微伴 credits 另计。`,
       },
       {
         id: "channel",
@@ -82,7 +89,7 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
         id: "connect",
         title: "第二步：连接微信，发出第一条消息",
         body: `1. 打开[微信连接](/app/wechat)，创建自己的微信链接。
-2. 打开微信「设置」，在「功能」分组中进入「插件」，选择「微信 ClawBot → 扫一扫」，扫描微伴页面上的二维码并确认连接。
+2. 按[连接微信教程](/docs/wechat-connection#connect)，在手机微信 ClawBot 中扫描二维码并确认连接。
 3. 确认页面显示的当前渠道与模型是你刚添加的 DeepSeek；需要调整时，点击「切换渠道与模型」。
 4. 进入连接对应的微信对话，先发一句简单的问题，例如「帮我把这句话写得更自然：明天上午开会」。
 5. 收到回答后，继续发送文字即可延续当前对话。
@@ -95,14 +102,13 @@ export const DOC_CONTENT: Record<DocSlug, DocContent> = {
         id: "search",
         title: "可选：为 DeepSeek 配置联网搜索",
         screenshots: [DOC_SCREENSHOTS.dsSearch],
-        body: `普通 DeepSeek 模型聊天不会因为接入微信就自动获得搜索能力。如果希望它能处理最新信息，可以在[插件](/app/plugins)中配置 **DS Chat**：
+        body: `普通 DeepSeek 模型聊天不会因为接入微信就自动获得搜索能力。需要查询最新信息时，在[插件](/app/plugins)中配置 **DS Chat**：
 
-1. 选择刚才添加的文本模型作为回答模型。
-2. 配置你自己的搜索服务。默认提供 DeepSeek 原生搜索类型和地址，也可以选择其他已支持的搜索接口。
-3. 填入对应搜索服务的密钥，保存一个容易记住的快捷名称，例如 \`ds\`。
-4. 在微信发送 \`/use ds\`，之后直接提问，例如「查一下今天上海的天气，并给出来源」。
+1. 选择支持工具调用的 DeepSeek 文本模型作为回答模型。
+2. 另行选择搜索服务并填入搜索 API Key；它与回答模型的密钥分开配置。支持范围见[DS Chat 配置教程](/docs/ds-chat#configure)。
+3. 保存快捷名 \`ds\`，在微信发送 \`/use ds\`，再问「查一下今天上海的天气，并给出来源」。
 
-DS Chat 基于 DeepSeek Harness 开源项目开发。实际是否使用工具取决于问题、模型判断和接口是否可用。**模型和搜索 API 都由你提供。**
+**模型和搜索 API 都由你提供，费用另计。** 是否实际搜索取决于问题、模型判断和接口是否可用。
 
 只想临时问一次，可以发送 \`@ds 查一下今天上海天气\`，这不会改变当前默认模型或插件。发送 \`/exit\` 可退出插件并恢复普通模型会话；没有可用会话时会新建，原记录保留。`,
       },
@@ -111,7 +117,7 @@ DS Chat 基于 DeepSeek Harness 开源项目开发。实际是否使用工具取
         title: "第三步：管理话题与使用额度",
         body: `不同话题可以分开聊：发送 \`/wx new\` 新建会话，原来的记录会保留；发送 \`/wx sessions\` 查看会话，再用 \`/wx switch 编号\` 切换。
 
-如果只是希望模型忘记当前上下文，使用 \`/wx reset\`。它会重置上下文和历史摘要，**不会删除聊天记录**。长期对话还会使用自动摘要与最近对话来管理上下文，具体输入仍受你的模型设置限制。
+如果只是希望模型忘记当前上下文，使用 \`/wx reset\`。它会重置上下文和历史摘要，**不会删除聊天记录**。长期对话的摘要与输入限制见[会话与上下文](/docs/sessions#context)。
 
 模型服务商的 API 费用与微伴 credits 分开计算。普通模型请求会带上实际需要的上下文，历史越长，输入消耗可能越高。可通过 \`/wx balance\` 查看额度，详细规则见 [Credits 与会员](/docs/credits)。`,
       },
@@ -128,7 +134,7 @@ DS Chat 基于 DeepSeek Harness 开源项目开发。实际是否使用工具取
 
 ### 能发送图片和语音吗？
 
-图片与文件输入需要微伴 Plus 会员，且对应模型必须具备相应能力。可以先发附件，再发文字说明要求。语音依赖微信随消息提供的转写内容；没有转写时请改发文字。
+图片与文件输入需要微伴 Plus 会员，且对应模型必须具备相应能力。按[附件教程](/docs/attachments#send)先发附件，再发要求。语音依赖微信随消息提供的转写内容；没有转写时请改发文字。
 
 ### 这是 DeepSeek 或微信的官方功能吗？
 
@@ -205,7 +211,7 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
       {
         id: "switch",
         title: "第三步：在微信里切换助手",
-        body: `在微伴的[微信连接](/app/wechat)页面创建链接，获取二维码。然后打开微信「设置」，在「功能」分组中进入「插件」，选择「微信 ClawBot → 扫一扫」，扫描二维码并确认连接。分步说明见[连接微信](/docs/wechat-connection#connect)。已有微信连接可以直接用，不必再建一个。
+        body: `先按[连接微信教程](/docs/wechat-connection#connect)完成扫码。已有微信连接可以直接用，不必为每个助手再建一个链接。
 
 连接后，向对应微信对话发送下面的命令：
 
@@ -229,7 +235,7 @@ Agent 就是你在 OpenClaw 中设置的助手。连接后，微伴会显示可�
 
 比如，你正在和生活助手聊天，工作助手的任务完成了，微信消息会标明它来自工作助手。想追问时，发 \`@work 后续问题\` 即可；想继续和它聊，就发 \`/use work\`。
 
-只会推送指定发往当前微信对话的结果。更详细的任务投递设置见 [OpenClaw 接入指南](/developers/openclaw)。`,
+只会推送指定发往当前微信对话的结果。微信回复窗口为最近互动后的 **24 小时**；超时后在原对话发送 \`/wx help\` 更新窗口，已过期结果不保证补发。更详细的任务投递设置见 [OpenClaw 接入指南](/developers/openclaw)。`,
       },
       {
         id: "faq",
@@ -295,7 +301,7 @@ hermes gateway run
       {
         id: "chat",
         title: "第三步：在微信里发消息",
-        body: `先在微伴的[微信连接](/app/wechat)页面创建链接，获取二维码。打开微信「设置」，在「功能」分组中进入「插件」，选择「微信 ClawBot → 扫一扫」，扫描二维码并确认连接。分步说明见[连接微信](/docs/wechat-connection#connect)。
+        body: `先按[连接微信教程](/docs/wechat-connection#connect)完成扫码。已有微信连接可以直接使用。
 
 进入对应微信对话后发送：
 
@@ -329,7 +335,7 @@ hermes gateway run
 
 Hermes 支持哪些命令，以它自己的 \`/help\` 为准。如果旧连接器提示不支持原生命令，在微伴重新生成并执行连接命令即可升级；此功能需要连接器 1.1.0 或更新版本。
 
-清理微伴聊天记录不会删除 Hermes 本机的文件和记忆。同一 profile 下的新会话，也可能读到已有的长期记忆。`,
+清理微伴聊天记录不会删除 Hermes 本机的文件和记忆。同一 profile 下的新会话，也可能读到已有的长期记忆。更多微伴命令见[命令速查](/docs/commands#agent-commands)。`,
       },
       {
         id: "notifications",
@@ -338,7 +344,7 @@ Hermes 支持哪些命令，以它自己的 \`/help\` 为准。如果旧连接�
 
 你切换到其他插件后，Hermes 仍可发回任务结果。消息会标明来源，并附上 \`/use\` 和 \`@\` 的回复方式，不会自动把当前插件切回 Hermes。
 
-推送配置有问题时，可以查看 [Hermes 接入指南](/developers/hermes)里的详细说明。`,
+微信回复窗口为最近互动后的 **24 小时**；超时后在原对话发送 \`/wx help\` 更新窗口，已过期结果不保证补发。推送配置有问题时，可以查看 [Hermes 接入指南](/developers/hermes)里的详细说明。`,
       },
       {
         id: "faq",
@@ -357,7 +363,7 @@ Hermes 支持哪些命令，以它自己的 \`/help\` 为准。如果旧连接�
 
 ### Hermes 内部调用多次模型，都要扣 credits 吗？
 
-微伴只计算本次发给插件的文字和最终回复，主动推送只计输出。Hermes 内部模型调用的费用由你的模型服务商收取。
+微伴只计算本次发给插件的文字和最终回复，主动推送只计输出。Hermes 内部模型调用的费用由你的模型服务商收取，计算方式见[credits 计费说明](/docs/credits#metering)。
 
 插件设置里的输入、输出上限控制微信这次传入和返回的文字量，不限制 Hermes 内部的模型用量。`,
       },
