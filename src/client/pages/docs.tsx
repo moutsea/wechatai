@@ -177,6 +177,50 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
   );
 }
 
+function DocTableOfContents({
+  article,
+  mobile = false,
+}: {
+  article: DocArticle;
+  mobile?: boolean;
+}) {
+  return (
+    <details
+      id={`docs-toc-${mobile ? "mobile" : "desktop"}`}
+      className={`docs-article-toc${mobile ? " docs-article-toc-mobile" : ""}`}
+      key={article.slug}
+      open={mobile ? undefined : true}
+      onKeyDown={(event) => {
+        if (mobile && event.key === "Escape") {
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector("summary")?.focus();
+        }
+      }}
+    >
+      <summary>
+        <List size={16} aria-hidden="true" />
+        本文目录
+        <ChevronDown size={14} aria-hidden="true" />
+      </summary>
+      <nav aria-label="本文目录">
+        {DOC_CONTENT[article.slug].sections.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              if (mobile) event.currentTarget.closest("details")!.open = false;
+              document.getElementById(section.id)?.focus({ preventScroll: true });
+            }}
+          >
+            {section.title}
+          </a>
+        ))}
+      </nav>
+    </details>
+  );
+}
+
 function DocsLayout({ article, children }: { article?: DocArticle; children: ReactNode }) {
   const { pathname } = useLocation();
   const activePath = article ? docPath(article.slug) : "/docs";
@@ -188,6 +232,7 @@ function DocsLayout({ article, children }: { article?: DocArticle; children: Rea
       <SiteHeader active="/docs" />
       <div className="docs-layout">
         <aside id="docs-sidebar" className="docs-sidebar">
+          {article && <DocTableOfContents article={article} />}
           <DocsNavigation activePath={activePath} inputId="docs-search-desktop" />
         </aside>
         <details id="docs-mobile-navigation" className="docs-mobile-navigation" key={pathname}>
@@ -209,6 +254,7 @@ function DocsLayout({ article, children }: { article?: DocArticle; children: Rea
           </nav>
           {children}
         </main>
+        {article && <DocTableOfContents article={article} mobile />}
       </div>
       <SiteFooter />
     </div>
@@ -341,21 +387,8 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
       </header>
       <article className="docs-prose" aria-label={article.title}>
         {content.intro && <p className="docs-intro">{content.intro}</p>}
-        <details className="docs-article-toc" key={article.slug}>
-          <summary>
-            本页内容
-            <ChevronDown size={14} />
-          </summary>
-          <nav aria-label="本文目录">
-            {content.sections.map((section) => (
-              <a key={section.id} href={`#${section.id}`}>
-                {section.title}
-              </a>
-            ))}
-          </nav>
-        </details>
         {content.sections.map((section) => (
-          <section key={section.id} id={section.id}>
+          <section key={section.id} id={section.id} tabIndex={-1}>
             <h2>{section.title}</h2>
             {section.illustration === "wechat-ai-bridge" && <DocBridgeDiagram />}
             <DocMarkdown>{section.body}</DocMarkdown>

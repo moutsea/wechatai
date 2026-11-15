@@ -674,6 +674,60 @@ test("positions article anchors after navigating between lazy routes", async ({ 
   await expect(page.locator("#connect h2")).toBeInViewport();
 });
 
+for (const width of [320, 390, 1280]) {
+  test(`keeps article sections reachable while reading at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/docs/getting-started`);
+    await mounted;
+    const mobile = width < 761;
+    const toc = page.locator(`#docs-toc-${mobile ? "mobile" : "desktop"}`);
+    const target = page.locator(".docs-prose > section").last();
+    const targetId = await target.getAttribute("id");
+    await target.scrollIntoViewIfNeeded();
+    await expect(toc.locator("summary")).toBeInViewport();
+    if (mobile) await toc.locator("summary").click();
+    await toc.locator(`a[href="#${targetId}"]`).click();
+    await expect(target).toBeFocused();
+    await expect.poll(async () => (await target.boundingBox())!.y).toBeGreaterThan(60);
+    await expect(target.locator("h2")).toBeInViewport();
+    if (mobile) {
+      await expect(toc).not.toHaveAttribute("open");
+      await toc.locator("summary").click();
+      await toc.locator("a").first().focus();
+      await page.keyboard.press("Escape");
+      await expect(toc).not.toHaveAttribute("open");
+      await expect(toc.locator("summary")).toBeFocused();
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+  });
+}
+
+test("preserves the mobile article menu through the static-to-React handoff", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let chunk: Route | undefined;
+  await page.route("**/assets/docs-*.js", (route) => {
+    chunk = route;
+  });
+  await page.goto(`${origin}/docs/getting-started`, { waitUntil: "domcontentloaded" });
+  await expect.poll(() => Boolean(chunk)).toBe(true);
+  const toc = page.locator("#docs-toc-mobile");
+  await toc.locator("summary").click();
+  await toc.locator("a").last().focus();
+  const position = await page.evaluate(() => scrollY);
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await chunk!.fallback();
+  await mounted;
+  await expect(toc).toHaveAttribute("open", "");
+  await expect(toc.locator("a").last()).toBeFocused();
+  expect(await page.evaluate(() => scrollY)).toBe(position);
+  await page.keyboard.press("Enter");
+  await expect(toc).not.toHaveAttribute("open");
+  await expect(page.locator(".docs-prose > section").last().locator("h2")).toBeInViewport();
+});
+
 test.describe("static public pages", () => {
   test.use({ javaScriptEnabled: false });
   for (const width of [390, 1280]) {

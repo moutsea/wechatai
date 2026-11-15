@@ -346,17 +346,27 @@
   background: #f8faf8;
   border: 1px solid var(--docs-border);
   border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 34px;
+  padding: 0 12px;
+  margin-bottom: 22px;
 }
 .docs-article-toc summary {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
   cursor: pointer;
   color: #526858;
   font-size: var(--text-sm);
   list-style: none;
+}
+.docs-article-toc summary > svg {
+  flex-shrink: 0;
+}
+.docs-article-toc summary > svg:last-child {
+  margin-left: auto;
+}
+.docs-article-toc-mobile {
+  display: none;
 }
 .docs-article-toc summary::-webkit-details-marker {
   display: none;
@@ -368,12 +378,24 @@
 .docs-article-toc nav {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  padding-top: 16px;
+  padding: 0 0 8px;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.docs-prose .docs-article-toc a {
+.docs-article-toc a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 6px 0;
   font-size: var(--text-sm);
+  line-height: 1.7;
   text-decoration: none;
+}
+.docs-article-toc a:hover {
+  color: var(--docs-green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .docs-pagination {
   display: grid;
@@ -427,6 +449,9 @@
 .docs-prose section {
   scroll-margin-top: 106px;
   margin-bottom: 42px;
+}
+.docs-prose section:focus {
+  outline: none;
 }
 .docs-prose h2 {
   color: #1b2b20;
@@ -1863,6 +1888,33 @@
   }
 }
 @media (max-width: 760px) {
+  .docs-article-toc-mobile {
+    display: block;
+    position: fixed;
+    right: max(var(--gutter), env(safe-area-inset-right, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    z-index: 35;
+    max-width: calc(100vw - 2 * var(--gutter));
+    margin: 0;
+    background: #fff;
+    border-color: #c4d7c9;
+    box-shadow: 0 6px 24px #163b2c20;
+  }
+  .docs-article-toc-mobile nav {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
+    width: min(22rem, calc(100vw - 2 * var(--gutter)));
+    max-height: min(50dvh, 24rem);
+    padding: 8px 16px;
+    border: 1px solid var(--docs-border);
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 6px 24px #163b2c20;
+  }
+  .docs-page:has(.docs-article-toc-mobile) .landing-footer-bottom {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
   .docs-prose .docs-provider-card {
     padding: 16px;
     gap: 12px;
