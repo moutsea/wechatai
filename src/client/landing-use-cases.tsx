@@ -165,8 +165,7 @@ const useCases = [
     kind: "creative",
     lead: "一句描述",
     title: "在微信里生成图片",
-    description:
-      "描述想要的画面，生成图片直接发回微信。也能自定义角色人设、展开剧情，让聊天更有趣。",
+    description: "在微信里描述画面、接收图片；也可启用角色扮演，自定义人设与剧情。",
     note: "生图需配置图片模型，API 费用另付服务商",
     href: "/wechat-ai-image",
     action: "探索 AI 生图",
@@ -176,7 +175,7 @@ const useCases = [
     kind: "models",
     lead: "DeepSeek、Claude、GPT",
     title: "顶级模型自由接入",
-    description: "接入自己的模型 API，在同一个微信里按需切换。问答、写作、翻译，选择适合你的模型。",
+    description: "接入自己的模型 API，在同一个微信里切换模型，随时问答、写作、翻译。",
     note: "自备 API Key，模型费用另付服务商",
     href: "/docs/channels-models",
     action: "查看模型配置",
@@ -186,8 +185,7 @@ const useCases = [
     kind: "cloud",
     lead: "小薇，你的云端助手",
     title: "处理文件，生成文档",
-    description:
-      "在微信交代任务、接收文件，无需自己安装或部署。像使用云端 OpenClaw、WorkBuddy 一样，配置模型后即可启用。",
+    description: "在微信交代任务、接收文件。无需安装或部署，配置模型即可启用。",
     note: "仅对 Plus 会员开放",
     href: "/docs/cloud-agent",
     action: "认识小薇，开始使用",

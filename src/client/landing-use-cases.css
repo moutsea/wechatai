@@ -447,18 +447,26 @@ a.use-case-action:focus-visible,
     border-radius: 20px;
   }
   .use-case-copy h3 {
-    font-size: 25px;
+    font-size: 1.4375rem;
   }
   .use-case-scene {
     min-height: 0;
-    padding: 18px 0;
+    padding: 14px 0;
+  }
+  .scene-window-bar,
+  .scene-image-result strong,
+  .scene-image-result small,
+  .scene-roleplay-tag > span,
+  .scene-xiaowei-intro > div {
+    display: none;
   }
   .scene-image-chat,
   .scene-task {
     padding: 16px;
   }
   .scene-agent-names > a {
-    padding: 14px 4px;
+    gap: 8px;
+    padding: 10px 4px;
     font-size: var(--text-sm);
   }
   .scene-agent-names img {
@@ -469,15 +477,34 @@ a.use-case-action:focus-visible,
     padding: 12px 14px;
   }
   .scene-bridge-lines {
-    height: 40px;
+    height: 28px;
   }
   .scene-xiaowei-intro {
-    margin-bottom: 14px;
+    justify-content: flex-start;
+    margin-bottom: -14px;
+    position: relative;
+    padding-left: 12px;
   }
   .scene-xiaowei-intro > img {
-    width: 64px;
-    height: 64px;
-    border-radius: 20px;
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+  .scene-task-header {
+    justify-content: flex-end;
+  }
+  .scene-task-header > span:first-child {
+    display: none;
+  }
+  .scene-task-prompt {
+    margin-top: 12px;
+    padding: 8px 10px;
+  }
+  .scene-task-result {
+    padding: 10px;
+  }
+  .scene-model {
+    padding: 10px 12px;
   }
   .use-case-copy > p {
     margin-top: 10px;
