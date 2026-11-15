@@ -58,17 +58,19 @@ async function onboarding(keepModels = false) {
 
 describe("cloud Agent onboarding", () => {
   it.each(["free", "plus"] as const)(
-    "does not offer configuration or upgrade while the service is unavailable for %s",
+    "offers service status instead of configuration or upgrade while unavailable for %s",
     async (plan) => {
       data.plan = plan;
       data.cloudAgent = { ...plugin().status!, ready: false };
       data.plugins = [plugin()]; // Cached plugin status must not override the global gate.
       await onboarding();
-      await click("我了解了，下一步");
-      expect(container.textContent).toContain("小薇暂未开放");
+      await choosePurpose("使用云端助手小薇");
+      expect(container.textContent).toContain("小薇当前暂不可用");
       expect(container.textContent).not.toContain("小薇已就绪");
-      expect(container.textContent).not.toContain("了解 Plus 云端助手小薇");
-      expect(container.textContent).toContain("接入已有 Agent 或接收通知");
+      expect(container.textContent).not.toContain("了解小薇与 Plus");
+      expect(container.textContent).not.toContain("去配置小薇");
+      await click("查看小薇状态");
+      expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/plugins");
     },
   );
 
@@ -78,13 +80,8 @@ describe("cloud Agent onboarding", () => {
       data.plan = plan;
       data.cloudAgent = plugin().status!;
       await onboarding();
-      await click("我了解了，下一步");
-      const label = plan === "plus" ? "使用小薇" : "了解 Plus 云端助手小薇";
-      const card = [...container.querySelectorAll("button")].find(
-        (button) => button.querySelector("strong")?.textContent === label,
-      );
-      expect(card).toBeDefined();
-      await act(async () => card!.click());
+      await choosePurpose("使用云端助手小薇");
+      await click(plan === "plus" ? "去配置小薇" : "了解小薇与 Plus");
       expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/plugins");
       expect(request).toHaveBeenCalledExactlyOnceWith("/onboarding/dismiss", { method: "POST" });
     },
@@ -96,10 +93,9 @@ describe("cloud Agent onboarding", () => {
     await onboarding(true);
     await click("新手引导");
     expect(container.querySelector("dialog")).not.toBeNull();
-    await click("我了解了，下一步");
-    expect(container.textContent).toContain("小薇已就绪");
+    await choosePurpose("使用云端助手小薇");
     expect(container.textContent).toContain("执行模型已就绪");
-    await click("下一步");
+    await click("继续连接微信");
     await click("去连接微信");
     expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/wechat");
   });
@@ -130,8 +126,8 @@ describe("cloud Agent onboarding", () => {
       }
       await onboarding(true);
       await click("新手引导");
-      await click("我了解了，下一步");
-      await click("下一步");
+      await choosePurpose("使用云端助手小薇");
+      await click("继续连接微信");
       const commands = [...container.querySelectorAll(".onboarding-wechat-steps code")].map(
         (code) => code.textContent,
       );
@@ -174,8 +170,8 @@ describe("cloud Agent onboarding", () => {
       data.currentSession = { ...data.currentSession!, pluginInstanceId: "selected" };
       await onboarding(withModels);
       if (withModels) await click("新手引导");
-      await click("我了解了，下一步");
-      await click("下一步");
+      await choosePurpose("连接已有 Agent");
+      await click("继续连接微信");
       const commands = [...container.querySelectorAll(".onboarding-wechat-steps code")].map(
         (c) => c.textContent,
       );
@@ -192,8 +188,8 @@ describe("cloud Agent onboarding", () => {
   it("allows transport binding before choosing an AI service", async () => {
     data.cloudAgent = plugin().status!;
     await onboarding();
-    await click("我了解了，下一步");
     await click("下一步");
+    await click("继续连接微信");
     expect(container.textContent).toContain("可以先绑定微信");
     await click("去连接微信");
     expect(container.querySelector('[data-testid="path"]')?.textContent).toBe("/app/wechat");
@@ -203,6 +199,13 @@ describe("cloud Agent onboarding", () => {
 });
 async function render(view = <Plugins />) {
   await act(async () => root.render(<MemoryRouter>{view}</MemoryRouter>));
+}
+async function choosePurpose(title: string) {
+  const button = [
+    ...container.querySelectorAll<HTMLButtonElement>(".onboarding-choices button"),
+  ].find((element) => element.querySelector("strong")?.textContent === title);
+  expect(button, title).toBeDefined();
+  await act(async () => button!.click());
 }
 async function click(label: string) {
   const button = [...container.querySelectorAll("button")].find(

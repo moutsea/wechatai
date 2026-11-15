@@ -117,21 +117,31 @@ describe("funnel event reporting", () => {
     expect(events[1].sessionId).toBe(events[0].sessionId);
   });
 
-  it("tracks every onboarding step, completion and skip in the real workspace", async () => {
-    await mount(<DashboardOnboarding data={state.data!} />);
-    await click("新手引导");
-    await click("我了解了，下一步");
-    await click("下一步");
-    await click("完成引导");
-    await click("新手引导");
-    await click("稍后设置");
-    expect(names()).toEqual([
-      "onboarding_step",
-      "onboarding_step",
-      "onboarding_done",
-      "onboarding_skip",
-    ]);
-  });
+  it.each([false, true])(
+    "tracks onboarding through purpose selection (%s), completion and skip",
+    async (selectPurpose) => {
+      await mount(<DashboardOnboarding data={state.data!} />);
+      await click("新手引导");
+      if (selectPurpose) {
+        await act(async () =>
+          container.querySelector<HTMLButtonElement>(".onboarding-choices button")!.click(),
+        );
+      } else {
+        await click("下一步");
+      }
+      await click("继续连接微信");
+      await click("完成引导");
+      await click("新手引导");
+      await click("稍后设置");
+      expect(names()).toEqual([
+        "onboarding_step",
+        "onboarding_step",
+        "onboarding_done",
+        "onboarding_skip",
+      ]);
+      expect(events.slice(0, 2).map((event) => event.props?.step)).toEqual([1, 2]);
+    },
+  );
 });
 
 describe("channel configuration versus model import events", () => {

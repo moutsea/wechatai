@@ -35,58 +35,16 @@
   color: var(--green);
   font-weight: 600;
 }
-.onboarding-intro {
-  display: flex;
-  gap: 16px;
-  padding: 22px;
-  border-radius: 12px;
-  background: var(--dark-surface);
-  color: white;
-}
-.onboarding-key {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  border-radius: 10px;
-  background: var(--dark-raised);
-  color: var(--lime);
-}
-.onboarding-intro h3 {
-  font-size: var(--text-lg);
-  line-height: 1.5;
-}
-.onboarding-intro p {
-  font-size: var(--text-base);
-  color: var(--on-green-muted);
-  margin-top: 8px;
-}
 .onboarding-explainer {
   font-size: var(--text-base);
   margin: 18px 0;
   color: var(--muted);
 }
-.onboarding-costs,
 .onboarding-providers {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
-.onboarding-costs > div {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 17px;
-}
-.onboarding-costs span {
-  font-size: var(--text-sm);
-  color: var(--muted);
-}
-.onboarding-costs h4 {
-  margin: 8px 0;
-  font-size: var(--text-base);
-}
-.onboarding-costs p,
 .onboarding-providers p {
   font-size: var(--text-base);
   color: var(--muted);
@@ -102,6 +60,9 @@
 }
 .onboarding-section-title h3 {
   font-size: var(--text-lg);
+}
+.onboarding-section-title h3:focus {
+  outline: none;
 }
 .onboarding-section-title p {
   font-size: var(--text-base);
@@ -125,6 +86,27 @@
 }
 .onboarding-own-key > svg {
   color: var(--green);
+  flex-shrink: 0;
+}
+.onboarding-own-key > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.onboarding-choices .onboarding-own-key {
+  margin: 12px 0;
+}
+.onboarding-help {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin-top: 12px;
+}
+.onboarding-note > summary {
+  cursor: pointer;
+}
+.onboarding-note > p {
+  margin-top: 10px;
 }
 .onboarding-own-key > svg:last-child {
   margin-left: auto;
@@ -261,18 +243,6 @@
     font-size: var(--text-sm);
     gap: 5px;
   }
-  .onboarding-intro {
-    padding: 18px;
-    gap: 12px;
-  }
-  .onboarding-intro h3 {
-    font-size: var(--text-base);
-  }
-  .onboarding-key {
-    width: 32px;
-    height: 32px;
-  }
-  .onboarding-costs,
   .onboarding-providers {
     grid-template-columns: 1fr;
   }
