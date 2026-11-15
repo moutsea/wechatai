@@ -691,7 +691,14 @@ test.describe("static public pages", () => {
         .locator(".plans-grid")
         .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
       expect(columns).toBe(width === 390 ? 1 : 3);
-      await expect(page.locator(".plan").first()).toHaveCSS("padding-top", "22px");
+      if (width === 390) {
+        await expect(page.locator(".plan-highlights").first()).toBeVisible();
+        await expect(page.locator(".plan-features").first()).toBeHidden();
+        await expect(page.locator(".plans-comparison")).toBeVisible();
+      } else {
+        await expect(page.locator(".plan-features").first()).toBeVisible();
+        await expect(page.locator(".plans-comparison")).toBeHidden();
+      }
     });
   }
   test("keeps advanced troubleshooting collapsed and usable without JavaScript", async ({

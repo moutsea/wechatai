@@ -226,6 +226,10 @@
   text-align: center;
   line-height: 1.8;
 }
+.plans .plan-highlights,
+.plans-comparison {
+  display: none;
+}
 .pricing-faq {
   width: min(760px, 100%);
   margin: 60px auto 0;
@@ -320,6 +324,99 @@
     max-width: 540px;
     margin-inline: auto;
     gap: 18px;
+  }
+  .plans .plan {
+    gap: 16px;
+    padding: 20px;
+  }
+  .plans .plan-top {
+    min-height: 0;
+  }
+  .plans .plan-price {
+    margin-top: 14px;
+  }
+  .plans .plan-price strong {
+    font-size: 2.5rem;
+  }
+  .plans .plan-note {
+    min-height: 0;
+  }
+  .plans .plan-features {
+    display: none;
+  }
+  .plans .plan-highlights {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  .plans .plan-highlights dt {
+    color: var(--muted);
+    font-size: var(--text-sm);
+  }
+  .plans .plan-highlights dd {
+    margin: 4px 0 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+  .plans .plan-year .plan-highlights {
+    border-color: #40604e;
+  }
+  .plans .plan-year .plan-highlights dt {
+    color: #c3d8c9;
+  }
+  .plans-comparison {
+    display: block;
+    max-width: 540px;
+    margin: 28px auto 0;
+  }
+  .plans-comparison table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+  }
+  .plans-comparison caption {
+    margin-bottom: 14px;
+    text-align: left;
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+  .plans-comparison th,
+  .plans-comparison td {
+    padding: 12px 6px;
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+  }
+  .plans-comparison th:first-child {
+    width: 44%;
+    text-align: left;
+    font-weight: 500;
+  }
+  .plans-comparison thead th {
+    background: var(--surface-soft);
+  }
+  .plans-comparison td:last-child {
+    background: #f4faf5;
+  }
+  .plans-comparison strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .plans-comparison a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--green);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 }
 @media (max-width: 720px) {

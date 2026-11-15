@@ -33,6 +33,30 @@ const features = [
   { label: "小薇 AI 云端助手", free: false, plus: true, href: "/docs/cloud-agent" },
 ];
 
+function PlanValue({ value }: { value: string | number | boolean }) {
+  return typeof value === "boolean" ? (
+    <strong className={value ? "plan-supported" : "plan-unavailable"}>
+      {value ? <Check size={16} aria-hidden="true" /> : <Minus size={16} aria-hidden="true" />}
+      {value ? "支持" : "不支持"}
+    </strong>
+  ) : (
+    <strong className={typeof value === "number" ? "plan-credit-value" : undefined}>{value}</strong>
+  );
+}
+
+function PlanHighlights({ plus }: { plus: boolean }) {
+  return (
+    <dl className="plan-highlights">
+      {["每天 credits", "微信连接", "插件配置"].map((label, index) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{features[index][plus ? "plus" : "free"]}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function PlanFeatures({ plus }: { plus: boolean }) {
   return (
     <ul className="plan-features">
@@ -43,20 +67,7 @@ function PlanFeatures({ plus }: { plus: boolean }) {
             <span>
               {feature.href ? <Link to={feature.href}>{feature.label}</Link> : feature.label}
             </span>
-            {typeof value === "boolean" ? (
-              <strong className={value ? "plan-supported" : "plan-unavailable"}>
-                {value ? (
-                  <Check size={16} aria-hidden="true" />
-                ) : (
-                  <Minus size={16} aria-hidden="true" />
-                )}
-                {value ? "支持" : "不支持"}
-              </strong>
-            ) : (
-              <strong className={typeof value === "number" ? "plan-credit-value" : undefined}>
-                {value}
-              </strong>
-            )}
+            <PlanValue value={value} />
           </li>
         );
       })}
@@ -117,6 +128,7 @@ export function PricingPlans() {
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           )}
+          <PlanHighlights plus={false} />
           <PlanFeatures plus={false} />
         </article>
 
@@ -183,10 +195,38 @@ export function PricingPlans() {
                   {error.message}
                 </p>
               )}
+              <PlanHighlights plus />
               <PlanFeatures plus />
             </article>
           );
         })}
+      </div>
+      <div className="plans-comparison">
+        <table>
+          <caption>权益对比 · Plus 月付与年付权益相同</caption>
+          <thead>
+            <tr>
+              <th scope="col">功能与额度</th>
+              <th scope="col">免费版</th>
+              <th scope="col">Plus</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((feature) => (
+              <tr key={feature.label}>
+                <th scope="row">
+                  {feature.href ? <Link to={feature.href}>{feature.label}</Link> : feature.label}
+                </th>
+                <td>
+                  <PlanValue value={feature.free} />
+                </td>
+                <td>
+                  <PlanValue value={feature.plus} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
       <p className="plans-common">所有方案均支持模型聊天、AI 生图、角色扮演与免费服务通知推送。</p>
       <p className="plans-fineprint">

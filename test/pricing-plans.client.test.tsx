@@ -141,4 +141,11 @@ it("compares the enforced plan limits and Plus access in matching rows", async (
   ];
   expect(values("month")).toEqual(plusValues);
   expect(values("year")).toEqual(plusValues);
+  const rows = [...container.querySelectorAll(".plans-comparison tbody tr")];
+  expect(rows.map((row) => row.querySelector("td:last-child")?.textContent)).toEqual(plusValues);
+  expect(rows.map((row) => row.querySelector("td")?.textContent)).toEqual(values("free"));
+  for (const plan of ["free", "month", "year"]) {
+    const highlights = [...container.querySelectorAll(`.plan-${plan} .plan-highlights dd`)];
+    expect(highlights.map((item) => item.textContent)).toEqual(values(plan).slice(0, 3));
+  }
 });
