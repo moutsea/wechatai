@@ -35,13 +35,13 @@
 .cloud-tasks-toolbar h2,
 .cloud-storage h2,
 .cloud-tasks-help h2 {
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 600;
   margin: 0;
 }
 .cloud-tasks-toolbar > div > span,
 .cloud-tasks-live {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 .cloud-tasks-live {
@@ -86,7 +86,7 @@
   min-width: 0;
 }
 .cloud-task-heading {
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 600;
   line-height: 1.65;
   margin: 0;
@@ -103,7 +103,7 @@
 }
 .cloud-task-source {
   margin: 5px 0 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.7;
   overflow-wrap: anywhere;
@@ -118,7 +118,7 @@
   border-radius: 7px;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
   flex-shrink: 0;
   max-width: 190px;
@@ -156,7 +156,7 @@
   justify-content: space-between;
   list-style: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 500;
   padding: 14px 0 0;
 }
@@ -197,7 +197,7 @@
 .cloud-task-request > h3,
 .cloud-task-output > h3,
 .cloud-task-files > h3 {
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-weight: 600;
   margin: 0 0 12px;
 }
@@ -240,17 +240,17 @@
   overflow-wrap: anywhere;
 }
 .cloud-task-file strong {
-  font-size: 13px;
+  font-size: var(--text-base);
   font-weight: 500;
   line-height: 1.6;
 }
 .cloud-task-file small {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin-top: 3px;
 }
 .cloud-task-files .form-note {
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin: 10px 0 0;
 }
 .cloud-task-footer {
@@ -267,7 +267,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 9px 18px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.7;
 }
@@ -287,7 +287,7 @@
   border: 0;
   padding: 0;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .cloud-tasks .cloud-task-stop {
   color: var(--muted);
@@ -300,7 +300,7 @@
   margin: 16px 0 0;
   padding: 12px 14px;
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   overflow-wrap: anywhere;
 }
@@ -322,7 +322,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-sm);
   margin-bottom: 16px;
 }
 .cloud-task-pagination {
@@ -337,7 +337,7 @@
   gap: 12px;
   padding: 64px 20px;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 .cloud-tasks-empty .empty {
   padding: 64px 24px;
@@ -346,7 +346,7 @@
   max-width: 340px;
   margin: 0 auto 24px;
   line-height: 1.9;
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 .cloud-storage {
   padding: 22px;
@@ -360,7 +360,7 @@
 .cloud-storage-heading > div > span {
   display: block;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin-top: 4px;
 }
 .cloud-storage-capacity {
@@ -370,7 +370,7 @@
   margin: 26px 0 8px;
 }
 .cloud-storage-capacity strong {
-  font-size: 34px;
+  font-size: 2.125rem;
   font-weight: 550;
   letter-spacing: -1.5px;
   font-variant-numeric: tabular-nums;
@@ -378,7 +378,7 @@
 .cloud-storage-capacity span,
 .cloud-storage-used,
 .cloud-storage-available {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.8;
 }
@@ -417,12 +417,12 @@
   margin-top: 20px;
 }
 .cloud-storage-notes .form-note {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.9;
   margin: 12px 0 0;
 }
 .cloud-storage .form-error {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
 }
 .cloud-tasks-help {
@@ -436,7 +436,7 @@
 .cloud-tasks-help p,
 .cloud-task-stop-note {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.9;
 }
 .cloud-tasks-help .cloud-tasks-retention {
@@ -483,7 +483,7 @@
   }
   .cloud-tasks-actions .button {
     flex: 1;
-    font-size: 13px;
+    font-size: var(--text-sm);
   }
   .cloud-task {
     padding: 18px;

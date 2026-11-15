@@ -49,7 +49,7 @@
 }
 .plugin-upgrade-plan h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--text-lg);
 }
 .plugin-upgrade-plan p {
   margin: 0;
@@ -58,7 +58,7 @@
 }
 .plugin-upgrade-price strong {
   color: var(--ink);
-  font-size: 34px;
+  font-size: 2.125rem;
   font-weight: 650;
   letter-spacing: -1px;
 }
@@ -90,7 +90,7 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .form-body .check-label input {
   width: 16px;
@@ -104,13 +104,13 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-soft);
-  font-size: 12px;
+  font-size: var(--text-base);
   line-height: 1.9;
   color: var(--muted);
 }
 .claw-setup {
   border-top: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--text-base);
   line-height: 1.9;
 }
 .claw-setup h3,
@@ -121,7 +121,7 @@
   color: var(--muted);
 }
 .claw-setup textarea {
-  font: 11px/1.7 monospace;
+  font: var(--text-sm)/1.7 monospace;
   overflow-wrap: anywhere;
 }
 .plugin-entry {
@@ -166,7 +166,7 @@
 }
 .plugin-entry-heading h2 {
   margin: 0;
-  font-size: 19px;
+  font-size: 1.1875rem;
   letter-spacing: -0.4px;
 }
 .plugin-status {
@@ -178,7 +178,7 @@
   border-radius: 6px;
   background: #f3f4f3;
   color: #7c857f;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.5;
   font-weight: 500;
 }
@@ -189,7 +189,7 @@
 .plugin-entry-content > p {
   margin: 9px 0 11px;
   max-width: 590px;
-  font-size: 13px;
+  font-size: var(--text-base);
   line-height: 1.85;
   color: var(--muted);
 }
@@ -197,7 +197,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #526359;
 }
 .plugin-entry-tags span + span::before {
@@ -208,7 +208,7 @@
 .plugin-attribution {
   display: block;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   margin-top: 9px;
 }
@@ -221,7 +221,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #64766b;
   margin-top: 17px;
 }
@@ -241,7 +241,7 @@
 .research-commands {
   margin: 22px 2px 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 2;
 }
 .research-commands code {
@@ -250,7 +250,7 @@
 .research-billing {
   margin: 0 2px;
   max-width: 780px;
-  font-size: 12px;
+  font-size: var(--text-base);
   line-height: 1.9;
   color: var(--muted);
 }
@@ -266,7 +266,7 @@
 }
 .plugin-config-selector h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-base);
   overflow-wrap: anywhere;
 }
 .plugin-config-selector label {
@@ -274,7 +274,7 @@
   min-width: 0;
   display: grid;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
 }
 .plugin-config-selector select {
@@ -284,7 +284,7 @@
   display: grid;
   gap: 17px;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-sm);
   line-height: 1.65;
 }
 .plugin-config-details > div {
@@ -303,7 +303,7 @@
 .plugin-model-id {
   display: block;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: #6a7c70;
 }
 .plugin-config-usage {
@@ -311,7 +311,7 @@
   padding: 14px 16px;
   border-radius: 10px;
   background: #f5f8f5;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 2;
   color: #5e6e63;
   overflow-wrap: anywhere;
@@ -328,10 +328,10 @@
 }
 .plugin-config-tools .text-link {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .plugin-config-renew {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   color: var(--muted);
 }
@@ -378,7 +378,7 @@
     gap: 8px;
   }
   .plugin-entry-heading h2 {
-    font-size: 18px;
+    font-size: var(--text-lg);
   }
   .plugin-entry-action {
     grid-column: 2;
@@ -430,10 +430,10 @@
   border-color: #cee9d8;
 }
 .claw-connection strong {
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 .claw-connection p {
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   color: var(--muted);
   margin: 5px 0 0;
@@ -457,16 +457,16 @@
   place-items: center;
   background: #edf5ef;
   color: #34714a;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 .claw-steps strong {
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .claw-steps p {
   margin: 5px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.7;
 }
 .claw-command-panel {
@@ -481,7 +481,7 @@
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
 }
 .claw-upgrade-version {
@@ -504,16 +504,16 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .claw-command-heading small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .claw-command-panel pre {
   margin: 14px 0;
   padding: 13px;
-  font: 11px/1.7 monospace;
+  font: var(--text-sm)/1.7 monospace;
   max-height: 104px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -525,7 +525,7 @@
 .claw-command-panel p,
 .claw-install-note {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   margin: 12px 0 0;
 }
@@ -538,7 +538,7 @@
   gap: 7px;
   margin-top: 14px;
   color: #537260;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .claw-spin {
   animation: claw-spin 2s linear infinite;
@@ -563,11 +563,11 @@
   display: inline-flex;
   gap: 5px;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .claw-preferences {
   border-top: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .claw-preferences summary {
   cursor: pointer;
@@ -575,7 +575,7 @@
 }
 .claw-preferences summary span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   margin-left: 12px;
 }
 .claw-preferences-body {
@@ -584,7 +584,7 @@
   margin-top: 20px;
 }
 .claw-agent-label {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   margin: 0;
 }
@@ -594,7 +594,7 @@
 }
 .claw-deliveries {
   padding-left: 18px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--muted);
   line-height: 1.9;
 }
@@ -604,7 +604,7 @@
   background: none;
   border: 0;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .waiting-message-field {
   display: grid;
@@ -637,12 +637,12 @@
   margin-top: 2px;
 }
 .notification-setup-hint strong {
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .notification-setup-hint p,
 .notification-token-panel p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.8;
   margin: 8px 0 0;
 }
@@ -657,7 +657,7 @@
   flex-wrap: wrap;
 }
 .notification-token-heading h3 {
-  font-size: 15px;
+  font-size: var(--text-base);
   margin: 0;
 }
 .notification-token-panel .notification-token {
@@ -669,7 +669,7 @@
 .notification-endpoint {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 .notification-access .claw-command-panel pre {
   max-height: 240px;
@@ -691,7 +691,7 @@
 }
 .notification-token textarea {
   width: 100%;
-  font: 12px/1.6 monospace;
+  font: var(--text-sm)/1.6 monospace;
   word-break: break-all;
 }
 .notification-token button {
@@ -713,10 +713,10 @@
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .notification-deliveries small,
 .notification-deliveries p {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
