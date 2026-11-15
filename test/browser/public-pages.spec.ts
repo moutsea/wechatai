@@ -728,6 +728,30 @@ test("preserves the mobile article menu through the static-to-React handoff", as
   await expect(page.locator(".docs-prose > section").last().locator("h2")).toBeInViewport();
 });
 
+test("preserves an expanded mobile footer and focus when React takes over", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  let entry: Route | undefined;
+  await page.route("**/assets/index-*.js", (route) => {
+    entry = route;
+  });
+  await page.goto(`${origin}/`, { waitUntil: "commit" });
+  await expect.poll(() => Boolean(entry)).toBe(true);
+  const group = page.locator("#footer-group-0");
+  await group.locator("summary").click();
+  await group.locator("a").last().focus();
+  const position = await page.evaluate(() => scrollY);
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await entry!.fallback();
+  await mounted;
+  await expect(group).toHaveAttribute("open", "");
+  await expect(group.locator("a").last()).toBeFocused();
+  expect(await page.evaluate(() => scrollY)).toBe(position);
+  await group.locator("summary").click();
+  await expect(group.locator("a").first()).toBeHidden();
+  await page.locator('.landing-footer-quick a[href="/pricing"]').click();
+  await expect(page).toHaveURL(`${origin}/pricing`);
+});
+
 test.describe("static public pages", () => {
   test.use({ javaScriptEnabled: false });
   for (const width of [390, 1280]) {
@@ -749,9 +773,16 @@ test.describe("static public pages", () => {
         await expect(page.locator(".plan-highlights").first()).toBeVisible();
         await expect(page.locator(".plan-features").first()).toBeHidden();
         await expect(page.locator(".plans-comparison")).toBeVisible();
+        await expect(page.locator(".landing-footer-desktop")).toBeHidden();
+        const group = page.locator("#footer-group-0");
+        await expect(group.locator("a").first()).toBeHidden();
+        await group.locator("summary").click();
+        await expect(group.locator("a").first()).toBeVisible();
       } else {
         await expect(page.locator(".plan-features").first()).toBeVisible();
         await expect(page.locator(".plans-comparison")).toBeHidden();
+        await expect(page.locator(".landing-footer-mobile")).toBeHidden();
+        await expect(page.locator(".landing-footer-desktop a").first()).toBeVisible();
       }
     });
   }
