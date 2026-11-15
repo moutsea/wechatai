@@ -241,7 +241,8 @@ for (const { path, asset } of [
     await mounted;
     // Include deferred effects and smooth scrolling, which previously jumped back to the hash.
     await page.waitForTimeout(1000);
-    expect(await page.evaluate(() => window.scrollY)).toBe(1600);
+    // Layout can round the restored offset by one pixel when React takes over.
+    expect(Math.abs((await page.evaluate(() => window.scrollY)) - 1600)).toBeLessThanOrEqual(1);
     // Later navigation must still resolve an anchor after the destination's lazy chunk loads.
     await page.locator('.site-header-nav a[href="/#how"]').click();
     await expect(page.locator("#how")).toBeInViewport();

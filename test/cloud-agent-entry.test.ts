@@ -172,6 +172,7 @@ async function fullTask(stub: Account) {
 }
 async function wake(stub: Account) {
   await runInDurableObject(stub, async (instance, state) => {
+    await useManualAlarms(state);
     const store = new CloudAgentStore(state.storage);
     for (const task of store.active()) store.patch(task, { nextAt: Date.now() });
     await instance.alarm();
@@ -1945,6 +1946,7 @@ describe("cloud Agent user entry", () => {
       network.mockRestore();
       await abortAllDurableObjects();
       stub = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(stub, (_, state) => useManualAlarms(state));
       await runInDurableObject(stub, (_, state) => {
         expect(
           state.storage.sql
@@ -2270,6 +2272,7 @@ describe("cloud Agent user entry", () => {
         );
       });
       const restored = env.ACCOUNTS.get(stub.id);
+      await runInDurableObject(restored, (_, state) => useManualAlarms(state));
       expect(await api(restored, "cloud.task", { id: task.id })).toMatchObject({
         ok: true,
         data: { prompt: displayPrompt },
