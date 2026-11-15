@@ -119,6 +119,7 @@ test("the menu fits a short viewport after scrolling and can scroll to sign out"
 });
 
 for (const [path, label] of [
+  ["/", "首页"],
   ["/#how", "如何使用"],
   ["/pricing", "价格"],
   ["/docs", "文档"],

@@ -13,12 +13,13 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  * 之前每个版块各有一套页头（landing / seo / docs / info / guide），
  * 导航项、CTA 文案、容器宽度、顶栏高度都不一样，跨页跳转时 logo 会横向位移。
  * 现在统一成这一套：
- *  - 导航项固定为「价格 / 文档 / 如何使用」，营销页与文档页都有价格入口；
+ *  - 导航项固定为「首页 / 价格 / 文档 / 如何使用」，营销页与文档页共用；
  *  - CTA 文案只有一种（免费开始 / 进入工作台），并按登录态切换；
  *  - 容器宽度取 --container-w，与主内容同一个左边缘；
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
+  { to: "/", label: "首页", match: "/" },
   { to: "/pricing", label: "价格", match: "/pricing" },
   { to: "/docs", label: "文档", match: "/docs" },
   { to: "/#how", label: "如何使用", match: "/#how" },
@@ -34,6 +35,7 @@ type SiteHeaderProps = {
 export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { data: session } = useAuth();
   const { pathname, hash } = useLocation();
+  const current = active ?? (pathname === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
 
@@ -52,7 +54,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const links = (
     <>
       {NAV.map((item) => (
-        <Link key={item.to} to={item.to} aria-current={active === item.match ? "page" : undefined}>
+        <Link key={item.to} to={item.to} aria-current={current === item.match ? "page" : undefined}>
           {item.label}
         </Link>
       ))}
@@ -141,7 +143,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           <Link
             key={item.to}
             to={item.to}
-            aria-current={active === item.match ? "page" : undefined}
+            aria-current={current === item.match ? "page" : undefined}
           >
             {item.label}
           </Link>
