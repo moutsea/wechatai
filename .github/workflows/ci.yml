@@ -32,7 +32,6 @@ jobs:
       - run: pnpm test:monitor
 
   secrets:
-    if: github.event_name == 'pull_request' || github.repository != 'moutsea/wechatai'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

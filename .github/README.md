@@ -2,6 +2,8 @@
 
 外部 Pull Request 的完整检查继续在 GitHub 托管 runner 上运行。公开仓库不注册持久 SG runner，避免外部 PR 代码接触共享主机。
 
+原有 Gitleaks 任务也继续对每次 main 推送独立运行，及时发现泄漏，不必等待 SG 队列或应用测试；SG 的完整检查中仍保留历史扫描。
+
 `main` 推送的 `Trusted main checks on SG` 把本次提交送到私有执行仓 `moutsea/wechatai-ci`，然后等待来源 SHA 与执行仓 SHA 均匹配的结果。SG 全部检查通过后公开仓才显示成功；失败、取消或等待超时显示失败。维护者可在[私有 CI 运行记录](https://github.com/moutsea/wechatai-ci/actions)查看详细日志，公开 Actions 的摘要会给出对应运行链接。
 
 私有执行仓在 SG 上保留原完整检查：`setup:local`、公开内容扫描、lint、类型、Workers/D1 与客户端测试、构建、Playwright 浏览器测试、OpenClaw / receiver / executor / monitor 测试，以及 Gitleaks 全历史扫描。使用固定镜像的一次性 rootless 容器，限制 CPU / 内存，并加入其他项目共用的主机串行锁。
