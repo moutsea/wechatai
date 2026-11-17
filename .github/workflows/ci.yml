@@ -89,7 +89,10 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           for attempt in {1..460}; do
-            git fetch --quiet --depth=1 origin results
+            if ! git fetch --quiet --depth=1 origin results; then
+              sleep 15
+              continue
+            fi
             if git show "FETCH_HEAD:results/$SOURCE_SHA.json" > "$RUNNER_TEMP/sg-result.json" 2>/dev/null; then
               result=$(python3 - <<'PY'
           import json, os
