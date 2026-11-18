@@ -10,9 +10,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   check:
-    if: github.event_name == 'pull_request' || github.repository != 'moutsea/wechatai'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
@@ -28,6 +27,11 @@ jobs:
       - run: pnpm test:browser
       - run: pnpm test:openclaw
       - run: pnpm test:receiver
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: pnpm test:receiver-watchdog
       - name: Verify receiver release modes under a restrictive umask
         run: |
           umask 077
@@ -41,7 +45,7 @@ jobs:
       - run: pnpm test:monitor
 
   secrets:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -53,74 +57,3 @@ jobs:
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           /tmp/gitleaks git --redact --log-opts="--all"
-
-  sg-main:
-    name: Trusted main checks on SG
-    if: github.repository == 'moutsea/wechatai' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    steps:
-      # Only trusted main receives this key. It can write solely to the private
-      # CI controller; no SG runner is registered to this public repository.
-      - name: Check out private CI controller
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          repository: moutsea/wechatai-ci
-          ref: main
-          ssh-key: ${{ secrets.SG_CI_BRIDGE_KEY }}
-
-      - name: Queue this main commit
-        env:
-          SOURCE_SHA: ${{ github.sha }}
-          SOURCE_REQUEST: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          python3 - <<'PY'
-          import json, os, re
-          sha = os.environ['SOURCE_SHA']
-          assert re.fullmatch(r'[0-9a-f]{40}', sha)
-          request = os.environ['SOURCE_REQUEST']
-          assert re.fullmatch(r'[0-9]+-[0-9]+', request)
-          with open('source.json', 'w') as target:
-              json.dump({'repository': 'moutsea/wechatai', 'sha': sha, 'request_id': request}, target, indent=2)
-              target.write('\n')
-          PY
-          git config user.name 'WeChatAI CI'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add source.json
-          if git diff --cached --quiet; then
-            echo 'This commit was already queued.'
-          else
-            git commit -m "ci: check WeChatAI ${SOURCE_SHA}"
-            git push origin HEAD:main
-          fi
-          printf 'CONTROLLER_SHA=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-
-      - name: Wait for the actual SG test result
-        env:
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          for attempt in {1..460}; do
-            if ! git fetch --quiet --depth=1 origin results; then
-              sleep 15
-              continue
-            fi
-            if git show "FETCH_HEAD:results/$SOURCE_SHA.json" > "$RUNNER_TEMP/sg-result.json" 2>/dev/null; then
-              result=$(python3 - <<'PY'
-          import json, os
-          with open(os.environ['RUNNER_TEMP']+'/sg-result.json') as source:
-              result = json.load(source)
-          if result.get('source_sha') == os.environ['SOURCE_SHA'] and result.get('controller_sha') == os.environ['CONTROLLER_SHA']:
-              print(result['conclusion'])
-              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
-                  summary.write('SG result: '+result['conclusion']+' — '+result['run_url']+'\n')
-          PY
-              )
-              case "$result" in
-                success) exit 0 ;;
-                failure|cancelled) echo "SG checks $result"; exit 1 ;;
-              esac
-            fi
-            sleep 15
-          done
-          echo 'Timed out waiting for SG checks; inspect moutsea/wechatai-ci Actions.' >&2
-          exit 1
