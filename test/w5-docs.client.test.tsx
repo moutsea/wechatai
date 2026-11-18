@@ -44,6 +44,19 @@ it.each([
   expect(guidance?.textContent).toMatch(/切换到聊天模型.*重发附件和处理要求/);
 });
 
+it("explains that clearing and deleting both erase cloud tasks but only deleting frees a slot", () => {
+  const page = renderDoc("sessions");
+  const history = Array.from(page.querySelectorAll("#history li"));
+  const clear = history.find((item) => item.querySelector("strong")?.textContent === "清空消息");
+  const remove = history.find((item) => item.querySelector("strong")?.textContent === "删除会话");
+  expect(clear?.textContent).toMatch(/删除.*对应云端任务内容.*保留会话.*不释放会话名额/);
+  expect(remove?.textContent).toMatch(/永久删除.*对应云端任务内容.*释放一个会话名额/);
+  const help = Array.from(page.querySelectorAll("#troubleshoot li")).find((item) =>
+    item.querySelector("strong")?.textContent?.includes("小薇任务记录不见了"),
+  );
+  expect(help?.textContent).toMatch(/清空或删除会话.*删除.*对应任务正文与结果.*账单保留/);
+});
+
 it("explains that explicit rejection of native tools can fall back to compatibility mode", () => {
   const items = renderDoc("ds-chat").querySelectorAll("#troubleshoot li");
   const guidance = Array.from(items).find((item) =>
