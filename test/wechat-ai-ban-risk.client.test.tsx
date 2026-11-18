@@ -23,3 +23,26 @@ it("identifies the CNCERT announcement link as a reprint by 安全内参", () =>
   expect(citation?.textContent).toMatch(/安全内参.*转载/);
   expect(citation?.parentElement?.textContent).not.toContain("授权转载");
 });
+
+it("publishes Skill-related account bans as a possibility, not a WeChat penalty", () => {
+  const question = "装 AI 插件 Skill 也有风险吗？";
+  const faq = [...page.querySelectorAll("#faq details")].find(
+    (item) => item.querySelector("summary")?.textContent === question,
+  );
+  const answer = faq?.querySelector("p")?.textContent;
+  expect(answer).toMatch(/可能导致[^。]*账号[^。]*封禁/);
+  expect(answer).toContain("并非针对微信账号");
+
+  const graph = JSON.parse(page.querySelector("script[data-seo]")!.textContent!)["@graph"] as {
+    "@type": string;
+    mainEntity?: { name: string; acceptedAnswer: { text: string } }[];
+  }[];
+  const faqNode = graph.find((node) => node["@type"] === "FAQPage");
+  expect(faqNode?.mainEntity?.find((item) => item.name === question)?.acceptedAnswer.text).toBe(
+    answer,
+  );
+
+  const section = page.querySelector("#skill-supply");
+  expect(section?.textContent).toMatch(/可能导致[^。]*账号[^。]*封禁/);
+  expect(section?.textContent).not.toContain("却同样触发平台处罚");
+});
