@@ -34,3 +34,12 @@ it("starts the attachment expiry window at the last successful addition", () => 
   expect(instructions).toMatch(/最后一次成功追加.*重新计时.*15 分钟/);
   expect(instructions).not.toContain("距离首次发送超过 15 分钟");
 });
+
+it.each([
+  ["attachments", "#formats"],
+  ["image-generation", "#draw"],
+])("tells readers of %s to resend attachments and instructions after switching", (slug, section) => {
+  const paragraphs = renderDoc(slug).querySelectorAll(`${section} p`);
+  const guidance = Array.from(paragraphs).find((p) => p.textContent?.includes("切换到聊天模型"));
+  expect(guidance?.textContent).toMatch(/切换到聊天模型.*重发附件和处理要求/);
+});
