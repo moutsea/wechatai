@@ -9,6 +9,7 @@ if (!secret || secret.length < 32) throw new Error("Missing receiver secret");
 const service = new ReceiverService({
   endpoint,
   secret,
+  dedicated: process.env.WECHAT_RECEIVER_POOL === "dedicated",
   onlyAccounts: new Set(
     (process.env.WECHAT_RECEIVER_ONLY || "")
       .split(",")
@@ -18,6 +19,11 @@ const service = new ReceiverService({
   directory: process.env.STATE_DIRECTORY || "/var/lib/wechatai-receiver",
 });
 const server = createServer((request, response) => {
+  if (request.method === "GET" && request.url === "/watchdog") {
+    response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    response.end(JSON.stringify({ sessions: service.watchdogSessions() }));
+    return;
+  }
   if (request.method !== "GET" || request.url !== "/health") {
     response.writeHead(404).end();
     return;

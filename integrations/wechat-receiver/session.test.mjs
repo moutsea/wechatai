@@ -5,8 +5,32 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocketServer } from "ws";
-import { ReceiverAccount, PING, PONG } from "./receiver.mjs";
+import { ReceiverAccount, ReceiverService, PING, PONG } from "./receiver.mjs";
 import { setTimeout as sleep } from "node:timers/promises";
+
+test("a dedicated receiver drains its existing account when an older Worker returns the shared list", async (t) => {
+  const accountId = "b".repeat(64);
+  const server = createServer((req, res) => {
+    assert.equal(req.headers["x-wechatai-receiver-pool"], "dedicated");
+    res.end(JSON.stringify({ accounts: [accountId], next: null }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => server.close());
+  const receiver = new ReceiverService({
+    dedicated: true,
+    endpoint: `http://127.0.0.1:${server.address().port}`,
+  });
+  let stopped = false;
+  receiver.accounts.set(accountId, {
+    stop() {
+      stopped = true;
+    },
+    done: Promise.resolve(),
+  });
+  await receiver.discover();
+  assert.equal(stopped, true);
+  assert.equal(receiver.accounts.size, 0);
+});
 
 test(
   "typing config updates keep the existing receive poll and cancel on disconnect",

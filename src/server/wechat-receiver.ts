@@ -1,5 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import {
+  enrollWatchdog,
+  forgetWatchdogSession,
+  watchdogBackupMs,
+  watchdogEnabled,
+} from "./receiver-watchdog";
 import { secret } from "./config";
 import { decrypt } from "./security";
 import type { WxCredentials, WxMessage } from "./wechat";
@@ -9,6 +15,15 @@ export const RECEIVER_PING = "wechatai-receiver-ping-v1";
 export const RECEIVER_PONG = "wechatai-receiver-pong-v1";
 export const RECEIVER_LEASE_MS = 60_000;
 export const RECEIVER_MAX_BYTES = 1024 * 1024;
+export const receiverPoolHeader = "X-Wechatai-Receiver-Pool";
+
+// Discovery and the WebSocket upgrade must agree on the account's sole receiver.
+export function receiverPoolMatches(env: Env, accountId: string, pool?: string) {
+  const dedicated = secret(env, "WECHAT_RECEIVER_DEDICATED_ACCOUNTS", false)
+    .split(",")
+    .some((id) => id.trim() === accountId);
+  return dedicated ? pool === "dedicated" : !pool;
+}
 
 export function receiverAuthorized(env: Env, authorization: string) {
   const expected = secret(env, "WECHAT_RECEIVER_SECRET", false);
@@ -47,7 +62,15 @@ const configKeyFor = (links: ReceiverLink[]) =>
       ),
     )
     .digest("hex");
-type Attachment = { kind: typeof RECEIVER_TAG; connectedAt: number; configKey?: string };
+type Attachment = {
+  kind: typeof RECEIVER_TAG;
+  connectedAt: number;
+  configKey?: string;
+  watchdogSession?: string;
+  localWatchdog?: boolean;
+  watchdogCapable?: boolean;
+  retryWatchdogAt?: number;
+};
 const messageSchema = z
   .object({
     // WeChat uses 64-bit IDs, already parsed as numbers by the existing receive
@@ -112,16 +135,74 @@ export class WechatReceiver {
       return false;
     });
   }
-  checkAt() {
-    const socket = this.socket();
-    if (!socket) return null;
-    const attachment = socket.deserializeAttachment() as Attachment;
+  supervised(socket: WebSocket) {
+    const a = socket.deserializeAttachment() as Attachment;
     return (
-      (this.ctx.getWebSocketAutoResponseTimestamp(socket)?.getTime() ?? attachment.connectedAt) +
-      RECEIVER_LEASE_MS
+      !!a.watchdogSession && !a.localWatchdog && watchdogEnabled(this.env, this.ctx.id.toString())
     );
   }
-  async connect() {
+  checkAt(socket: WebSocket) {
+    const seen =
+      this.ctx.getWebSocketAutoResponseTimestamp(socket)?.getTime() ??
+      (socket.deserializeAttachment() as Attachment).connectedAt;
+    return seen + (this.supervised(socket) ? watchdogBackupMs : RECEIVER_LEASE_MS);
+  }
+  private async enrollIfReady(socket: WebSocket) {
+    const a = socket.deserializeAttachment() as Attachment;
+    if (
+      !a.watchdogCapable ||
+      (a.watchdogSession && !a.localWatchdog) ||
+      (a.retryWatchdogAt ?? 0) > Date.now() ||
+      !watchdogEnabled(this.env, this.ctx.id.toString())
+    )
+      return;
+    socket.serializeAttachment({ ...a, retryWatchdogAt: Date.now() + RECEIVER_LEASE_MS });
+    const session = crypto.randomUUID();
+    try {
+      if (
+        (await enrollWatchdog(this.env.DB, this.ctx.id.toString(), session)) &&
+        this.socket() === socket
+      )
+        socket.serializeAttachment({
+          ...socket.deserializeAttachment(),
+          watchdogSession: session,
+          localWatchdog: false,
+          configKey: undefined,
+        });
+    } catch {
+      console.warn(JSON.stringify({ event: "wechat.watchdog_enroll_failed" }));
+    }
+  }
+  async recoverWatchdog(session: string) {
+    const live = this.ctx
+      .getWebSockets(RECEIVER_TAG)
+      .filter((ws) => ws.readyState === WebSocket.OPEN);
+    const socket = live.find(
+      (ws) => (ws.deserializeAttachment() as Attachment)?.watchdogSession === session,
+    );
+    if (!socket && live.length) return;
+    if (socket) {
+      const attachment = socket.deserializeAttachment() as Attachment;
+      socket.serializeAttachment({
+        ...attachment,
+        localWatchdog: true,
+        retryWatchdogAt: Date.now() + RECEIVER_LEASE_MS,
+        configKey: undefined,
+      });
+    }
+    await this.hooks.schedule();
+  }
+  async disconnected(socket: WebSocket) {
+    const session = (socket.deserializeAttachment() as Attachment | null)?.watchdogSession;
+    await this.hooks.schedule();
+    // The account has already rescheduled. Remove this session's registration
+    // so a normal reconnect does not cause another recovery RPC a minute later.
+    if (session)
+      await forgetWatchdogSession(this.env.DB, session).catch(() => {
+        console.warn(JSON.stringify({ event: "wechat.watchdog_cleanup_retry" }));
+      });
+  }
+  async connect(supportsWatchdog = false) {
     if (!this.enabled()) return new Response("Receiver disabled", { status: 403 });
     // Close before accepting: there is one receiver per account, across restarts.
     for (const old of this.ctx.getWebSockets(RECEIVER_TAG)) old.close(1012, "receiver replaced");
@@ -130,6 +211,7 @@ export class WechatReceiver {
     pair[1].serializeAttachment({
       kind: RECEIVER_TAG,
       connectedAt: Date.now(),
+      watchdogCapable: supportsWatchdog,
     } satisfies Attachment);
     this.hooks.wake();
     await this.sync();
@@ -168,6 +250,8 @@ export class WechatReceiver {
     }
     const socket = this.socket();
     if (!socket) return;
+    await this.enrollIfReady(socket);
+    if (this.socket() !== socket) return;
     const attachment = socket.deserializeAttachment() as Attachment;
     const configKey = configKeyFor(links);
     if (attachment.configKey === configKey) return;
@@ -185,8 +269,15 @@ export class WechatReceiver {
     );
     // Decryption yields. A disconnect, plan change or newer configuration wins.
     if (socket !== this.socket() || configKey !== configKeyFor(this.hooks.links())) return;
-    socket.send(JSON.stringify({ type: "config", links: configs }));
-    socket.serializeAttachment({ ...attachment, configKey });
+    const current = socket.deserializeAttachment() as Attachment;
+    socket.send(
+      JSON.stringify({
+        type: "config",
+        links: configs,
+        watchdogSession: current.localWatchdog ? undefined : current.watchdogSession,
+      }),
+    );
+    socket.serializeAttachment({ ...current, configKey });
   }
   async message(socket: WebSocket, raw: string | ArrayBuffer) {
     if (socket !== this.socket()) {

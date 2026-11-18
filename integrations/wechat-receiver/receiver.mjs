@@ -150,6 +150,8 @@ export class ReceiverAccount {
       headers: {
         Authorization: `Bearer ${this.options.secret}`,
         "User-Agent": "WeChatAI-Receiver/1.0",
+        "X-Wechatai-Receiver-Watchdog": "1",
+        ...(this.options.dedicated ? { "X-Wechatai-Receiver-Pool": "dedicated" } : {}),
       },
       handshakeTimeout: 15000,
       maxPayload: 1024 * 1024,
@@ -158,7 +160,8 @@ export class ReceiverAccount {
     const session = new AbortController();
     const acks = new Map();
     let configChain = Promise.resolve();
-    let pongAt = Date.now();
+    this.watchdogSession = null;
+    this.lastPong = 0;
     let configured = false;
     const connectedAt = Date.now();
     const ended = new Promise((resolve) => {
@@ -208,7 +211,7 @@ export class ReceiverAccount {
     });
     socket.on("message", (raw) => {
       if (raw.toString() === PONG) {
-        pongAt = Date.now();
+        this.lastPong = Date.now();
         return;
       }
       let message;
@@ -271,12 +274,17 @@ export class ReceiverAccount {
             });
             this.links.set(config.id, { generation: config.generation, abort, done, typing });
           }
+          this.watchdogSession =
+            typeof message.watchdogSession === "string" ? message.watchdogSession : null;
           log("account_configured", { accountId: this.accountId, links: this.links.size });
         })
         .catch(() => socket.terminate());
     });
     const heartbeat = setInterval(() => {
-      if (Date.now() - pongAt > 45000 || (!configured && Date.now() - connectedAt > 20000))
+      if (
+        Date.now() - (this.lastPong || connectedAt) > 45000 ||
+        (!configured && Date.now() - connectedAt > 20000)
+      )
         socket.terminate();
       else if (socket.readyState === WebSocket.OPEN) socket.send(PING);
     }, 15000);
@@ -313,6 +321,7 @@ export class ReceiverService {
         headers: {
           Authorization: `Bearer ${this.options.secret}`,
           "User-Agent": "WeChatAI-Receiver/1.0",
+          ...(this.options.dedicated ? { "X-Wechatai-Receiver-Pool": "dedicated" } : {}),
         },
         redirect: "manual",
         signal: AbortSignal.any([this.stopSignal.signal, AbortSignal.timeout(15000)]),
@@ -322,6 +331,11 @@ export class ReceiverService {
         throw new Error(`discovery_http_${response.status}`);
       }
       const result = await readJsonLimited(response);
+      // An older Worker lists the shared pool even when asked for the dedicated pool.
+      if (this.options.dedicated && result.pool !== "dedicated") {
+        wanted.clear();
+        break;
+      }
       for (const id of result.accounts) {
         if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("invalid_account");
         if (this.options.onlyAccounts?.size && !this.options.onlyAccounts.has(id)) continue;
@@ -357,11 +371,23 @@ export class ReceiverService {
       await sleep(30000, undefined, { signal: this.stopSignal.signal }).catch(() => {});
     }
   }
+  watchdogSessions() {
+    return [...this.accounts.values()]
+      .filter(
+        (account) =>
+          account.connected &&
+          account.socket?.readyState === WebSocket.OPEN &&
+          account.lastPong > Date.now() - 45000 &&
+          account.watchdogSession,
+      )
+      .map((account) => account.watchdogSession);
+  }
   health() {
     const connected = [...this.accounts.values()].filter((a) => a.connected).length;
     return {
       ok: Date.now() - this.lastDiscovery < 90000 && connected === this.accounts.size,
       accounts: this.accounts.size,
+      supervisedSessions: this.watchdogSessions().length,
       connected,
       links: [...this.accounts.values()].reduce((n, a) => n + a.links.size, 0),
       ...this.metrics,
