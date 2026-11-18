@@ -101,6 +101,17 @@ it("separates local OpenClaw costs and credentials from cloud API requirements",
   );
 });
 
+it("distinguishes hosted Word generation from tasks needing local access or custom tools", async () => {
+  await renderAt("/compare/wechatai-vs-openclaw");
+  const lede = container.querySelector(".seopage-lede")?.textContent;
+  expect(lede).toMatch(/云端小薇[^。；]*生成 Word[^。；]*无需自行部署/);
+  for (const selector of [".seopage-lede", ".seopage-answer"]) {
+    expect(container.querySelector(selector)?.textContent).toMatch(
+      /访问本机文件[^。；]*运行本机命令[^。；]*自定义工具[^。；]*自建 OpenClaw/,
+    );
+  }
+});
+
 it("discloses server-side Key storage, use and revocation before recommending Wechatai", async () => {
   await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
   const copy = container.querySelector("#when-wechatai")?.textContent;
