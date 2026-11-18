@@ -84,7 +84,7 @@ export const wechatGlmPage: SeoPage = {
     {
       question: "GLM 的 API Key 和微伴 credits 有什么区别？",
       answer:
-        "API Key 用来向硅基流动或智谱发起模型请求，模型费用由该平台按账户结算；微伴 credits 用于消息中转计量，按实际输入输出 tokens 扣除。两者余额独立，需要分别充值并分别核对账单。",
+        "API Key 用来向硅基流动或智谱发起模型请求，模型费用由该平台按账户结算；微伴 credits 用于消息中转计量，按实际输入输出 tokens 扣除。模型服务商和微伴分别计量、分别核对；微伴每日赠额够用时无需充值。",
     },
     {
       question: "同步后没有目标 GLM 模型怎么办？",
