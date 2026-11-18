@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DAILY_CREDIT_DEFAULTS } from "../src/shared/credits";
+import { BILLING_PRICE_CHECKED_AT } from "../src/shared/billing-offers";
 import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
 import { PricingPlans } from "../src/client/pages/pricing-plans";
@@ -119,6 +120,9 @@ it.each(["month", "year"])(
 
 it("compares the enforced plan limits and Plus access in matching rows", async () => {
   await mount("/pricing");
+  const checked = container.querySelector(".plans-checked");
+  expect(checked?.textContent).toBe(`价格核查于 ${BILLING_PRICE_CHECKED_AT}`);
+  expect(checked?.querySelector("time")?.dateTime).toBe(BILLING_PRICE_CHECKED_AT);
   const values = (plan: string) =>
     [...container.querySelectorAll(`.plan-${plan} .plan-features strong`)].map(
       (e) => e.textContent,

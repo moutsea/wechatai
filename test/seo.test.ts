@@ -17,7 +17,7 @@ import {
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN } from "../src/shared/pricing-copy";
 import { SEO_PAGES } from "../src/shared/seo-pages";
 import { FAQ_DOC_SECTIONS, faqAnswerText } from "../src/shared/faq-doc";
-import { BILLING_OFFERS } from "../src/shared/billing";
+import { BILLING_OFFERS, BILLING_PRICE_CHECKED_AT } from "../src/shared/billing";
 import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
 import { llmsText } from "../src/shared/plugin-docs";
@@ -309,6 +309,11 @@ describe("organization and application structured data", () => {
   it("derives offers from BILLING_OFFERS instead of hard-coded prices", () => {
     const offers = nodeOf("/", "SoftwareApplication")?.offers as Array<Record<string, unknown>>;
     expect(offers[0]).toMatchObject({ name: "免费版", price: 0, priceCurrency: "CNY" });
+    expect(offers[0].priceSpecification).toMatchObject({
+      "@type": "UnitPriceSpecification",
+      price: 0,
+      priceCurrency: "CNY",
+    });
     expect(String(offers[0].description)).toContain(`${WECHAT_LINK_LIMITS.free} 个微信链接`);
     expect(String(offers[0].description)).toContain(`${PLUGIN_LIMITS.free} 个插件`);
     const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus");
@@ -319,6 +324,38 @@ describe("organization and application structured data", () => {
         name: plan.name,
         price: plan.amount / 100,
         priceCurrency: "CNY",
+      });
+    });
+  });
+
+  it("publishes free and Plus offers with unit price specifications on /pricing", () => {
+    const service = nodeOf("/pricing", "Service")!;
+    expect(service.provider).toEqual({ "@id": "https://wechatai.app/#organization" });
+    const offers = service.offers as Array<Record<string, unknown>>;
+    const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus");
+    expect(offers).toHaveLength(plans.length + 1);
+    expect(offers[0]).toMatchObject({
+      name: "免费版",
+      price: 0,
+      priceCurrency: "CNY",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: 0,
+        priceCurrency: "CNY",
+      },
+    });
+    plans.forEach((plan, index) => {
+      expect(offers[index + 1]).toMatchObject({
+        name: plan.name,
+        price: plan.amount / 100,
+        priceCurrency: "CNY",
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: plan.amount / 100,
+          priceCurrency: "CNY",
+          billingDuration: plan.interval === "month" ? "P1M" : "P1Y",
+          billingIncrement: 1,
+        },
       });
     });
   });
@@ -370,6 +407,12 @@ describe("published prices stay in sync with billing", () => {
     expect(llmsText).toContain(`¥${yuan(yearly.amount)}/年`);
     expect(llmsText).toContain(`${PLUGIN_LIMITS.free} 个插件`);
     expect(llmsText).toContain(`${WECHAT_LINK_LIMITS.plus} 个微信链接`);
+  });
+
+  it("exposes a valid price check date from the billing source", () => {
+    expect(BILLING_PRICE_CHECKED_AT).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Number.isNaN(Date.parse(`${BILLING_PRICE_CHECKED_AT}T00:00:00Z`))).toBe(false);
+    expect(BILLING_PRICE_CHECKED_AT <= new Date().toISOString().slice(0, 10)).toBe(true);
   });
 });
 

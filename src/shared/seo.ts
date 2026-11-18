@@ -187,6 +187,11 @@ function softwareApplicationOffers() {
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
       description: `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: 0,
+        priceCurrency: "CNY",
+      },
     },
     ...plans,
   ];
@@ -262,6 +267,18 @@ function seoLandingPage(page: SeoPage): PageSeo {
       "@context": "https://schema.org",
       "@graph": [
         webPage,
+        ...(page.kind === "pricing"
+          ? [
+              {
+                "@type": "Service",
+                "@id": `${canonical}#plans`,
+                name: `${SITE_NAME} 免费版与 Plus`,
+                serviceType: "微信 AI 接入服务",
+                provider: { "@id": ORGANIZATION_ID },
+                offers: softwareApplicationOffers(),
+              },
+            ]
+          : []),
         breadcrumbList([
           { name: "首页", item: `${SITE_URL}/` },
           { name: page.title, item: canonical },

@@ -4,7 +4,7 @@ import { ArrowRight, Check, Loader2, Minus } from "lucide-react";
 import { api, json } from "../api";
 import { useAuth } from "../auth";
 import { trackFunnel } from "../analytics-client";
-import { BILLING_OFFERS } from "../../shared/billing-offers";
+import { BILLING_OFFERS, BILLING_PRICE_CHECKED_AT } from "../../shared/billing-offers";
 import { approxYuan } from "../../shared/pricing-copy";
 import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
@@ -231,6 +231,10 @@ export function PricingPlans() {
       <p className="plans-common">所有方案均支持模型聊天、AI 生图、角色扮演与免费服务通知推送。</p>
       <p className="plans-fineprint">
         Plus 单次购买，不自动续费；月付与年付权益相同。每日赠额当天有效、不累积。
+      </p>
+      <p className="plans-checked">
+        价格核查于{" "}
+        <time dateTime={BILLING_PRICE_CHECKED_AT}>{BILLING_PRICE_CHECKED_AT}</time>
       </p>
     </section>
   );
