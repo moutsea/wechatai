@@ -41,13 +41,32 @@ try {
   await writeFile(resolve(output, "sitemap.xml"), renderSitemap());
   // Asset HTML normalization defaults to 307. These aliases are permanent;
   // generate exact rules from public routes without redirecting unknown URLs.
-  const redirects = await readFile(resolve("public/_redirects"), "utf8");
+  //
+  // Cloudflare counts every rule after the first splat or placeholder as dynamic
+  // and silently drops whatever exceeds 100 dynamic rules, so the hand-written
+  // rules are split: static ones first, generated canonicals next, splats last.
+  // A comment stays attached to the rule that follows it.
+  const source = (await readFile(resolve("public/_redirects"), "utf8")).trimEnd().split("\n");
+  const staticRules = [];
+  const dynamicRules = [];
+  let comments = [];
+  for (const line of source) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      comments.push(line);
+      continue;
+    }
+    const from = trimmed.split(/\s+/)[0];
+    (/\*|:/.test(from) ? dynamicRules : staticRules).push(...comments, line);
+    comments = [];
+  }
+  staticRules.push(...comments);
   const canonicalRedirects = PUBLIC_PATHS.flatMap((path) =>
     path === "/" ? ["/index.html / 301"] : [`${path}/ ${path} 301`, `${path}.html ${path} 301`],
   );
   await writeFile(
     resolve(output, "_redirects"),
-    `${redirects.trimEnd()}\n\n# Generated canonical public URLs\n${canonicalRedirects.join("\n")}\n`,
+    `${staticRules.join("\n").trimEnd()}\n\n# Generated canonical public URLs\n${canonicalRedirects.join("\n")}\n\n# Dynamic rules go last: Cloudflare treats each rule after the first splat or\n# placeholder as dynamic and keeps only the first 100 of them.\n${dynamicRules.join("\n").trimEnd()}\n`,
   );
   console.log(
     `Prerendered ${PUBLIC_PATHS.length} public pages, private route shells and a 404 page.`,

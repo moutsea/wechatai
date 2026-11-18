@@ -79,6 +79,11 @@ const landingPages = [
     "微信 ClawBot 插件：入口、绑定与不回复排查",
   ],
   [
+    "wechat-muse.html",
+    "https://wechatai.app/wechat-muse",
+    "微信接入 Muse 托管助理：连接、切换与不回复排查",
+  ],
+  [
     "wechat-ai-ban-risk.html",
     "https://wechatai.app/wechat-ai-ban-risk",
     "微信用 AI 会被封号吗：三类接法的风险差异",
@@ -288,6 +293,16 @@ assert(legacy.includes("四、启动插件（可选）"), "legacy guide has a us
 assert(legacy.includes('href="/docs/commands"'), "legacy guide exposes command reference");
 assert(!(await read("sitemap.xml")).includes("https://wechatai.app/guide"));
 const redirectRules = await read("_redirects");
+// Cloudflare counts every rule after the first splat or placeholder as dynamic and
+// drops whatever exceeds 100 of them, so the canonical aliases must stay static.
+const ruleLines = redirectRules
+  .split("\n")
+  .map((line) => line.trim())
+  .filter((line) => line && !line.startsWith("#"));
+const dynamicStart = ruleLines.findIndex((rule) => /[*:]/.test(rule.split(/\s+/)[0]));
+assert(dynamicStart >= 0, "_redirects keeps the splat rewrite");
+assert(ruleLines.length - dynamicStart <= 100, "_redirects stays within 100 dynamic rules");
+const staticRuleIndex = new Map(ruleLines.map((rule, index) => [rule, index]));
 for (const path of ["/guide", "/guide/", "/guide.html"]) {
   assert(
     redirectRules.includes(`${path} /docs/getting-started 301`),
@@ -296,11 +311,16 @@ for (const path of ["/guide", "/guide/", "/guide.html"]) {
 }
 for (const [, canonical] of publicPages) {
   const path = new URL(canonical).pathname;
-  for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`])
+  for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`]) {
     assert(
       redirectRules.includes(`${alias} ${path} 301`),
       `${alias}: permanent redirect to canonical URL`,
     );
+    assert(
+      staticRuleIndex.get(`${alias} ${path} 301`) < dynamicStart,
+      `${alias}: canonical redirect precedes the dynamic rules`,
+    );
+  }
 }
 const docsIndex = await read("docs.html");
 for (const [file] of publicPages.filter(([file]) => file.startsWith("docs/"))) {

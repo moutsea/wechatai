@@ -127,6 +127,7 @@ describe("search indexing boundaries", () => {
       ...DOC_ARTICLES.map((article) => `https://wechatai.app${docPath(article.slug)}`),
       "https://wechatai.app/wechat-ai",
       "https://wechatai.app/wechat-clawbot",
+      "https://wechatai.app/wechat-muse",
       "https://wechatai.app/wechat-ai-ban-risk",
       "https://wechatai.app/wechat-clawbot-models",
       "https://wechatai.app/bring-your-own-api-key",
@@ -242,9 +243,9 @@ describe("query landing pages", () => {
   });
 
   it("only links to pages that exist", () => {
-    const known = new Set(PUBLIC_PATHS);
-    // Setup tutorials also link to the existing, authenticated channel setup route.
-    for (const path of ["/register", "/login", "/docs", "/app/channels"]) known.add(path);
+    // Setup tutorials link to the existing authenticated setup routes, which are all
+    // declared in PRIVATE_PATHS rather than repeated per page.
+    const known = new Set<string>([...PUBLIC_PATHS, ...PRIVATE_PATHS, "/docs"]);
     for (const page of SEO_PAGES) {
       for (const link of page.related) {
         const [path] = link.href.split("#");
