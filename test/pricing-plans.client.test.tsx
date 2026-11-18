@@ -2,12 +2,19 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { getPageSeo } from "../src/shared/seo";
 import { DAILY_CREDIT_DEFAULTS } from "../src/shared/credits";
+import { BILLING_PRICE_CHECKED_AT } from "../src/shared/billing-offers";
 import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
 import { PricingPlans } from "../src/client/pages/pricing-plans";
 
 const mocks = vi.hoisted(() => ({ api: vi.fn(), signedIn: true }));
+// A nonzero test value exposes any public consumer still hard-coding zero.
+vi.mock(import("../src/shared/billing-offers"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  FREE_PLAN_AMOUNT_CENTS: 123,
+}));
 vi.mock("../src/client/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../src/client/api")>()),
   api: mocks.api,
@@ -56,6 +63,25 @@ async function checkout(interval: "month" | "year", offerId: string, price: stri
   });
   expect(window.location.assign).toHaveBeenCalledWith("https://checkout.stripe.com/test");
 }
+
+it("uses the shared Free plan amount in the card and both pricing schema fields", async () => {
+  await mount("/pricing");
+  const graph = getPageSeo("/pricing").structuredData?.["@graph"] as Record<string, unknown>[];
+  const service = graph.find((node) => node["@type"] === "Service");
+  expect({
+    cardPrice: container.querySelector(".plan-free .plan-price strong")?.textContent,
+    offers: service?.offers,
+  }).toMatchObject({
+    cardPrice: "¥1.23",
+    offers: expect.arrayContaining([
+      expect.objectContaining({
+        name: "免费版",
+        price: 1.23,
+        priceSpecification: expect.objectContaining({ price: 1.23 }),
+      }),
+    ]),
+  });
+});
 
 it.each([
   ["/pricing", "month", "plus_monthly", "¥9.9"],
@@ -119,6 +145,9 @@ it.each(["month", "year"])(
 
 it("compares the enforced plan limits and Plus access in matching rows", async () => {
   await mount("/pricing");
+  const checked = container.querySelector(".plans-checked");
+  expect(checked?.textContent).toBe(`价格核查于 ${BILLING_PRICE_CHECKED_AT}`);
+  expect(checked?.querySelector("time")?.dateTime).toBe(BILLING_PRICE_CHECKED_AT);
   const values = (plan: string) =>
     [...container.querySelectorAll(`.plan-${plan} .plan-features strong`)].map(
       (e) => e.textContent,

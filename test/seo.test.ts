@@ -17,7 +17,8 @@ import {
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN } from "../src/shared/pricing-copy";
 import { SEO_PAGES } from "../src/shared/seo-pages";
 import { FAQ_DOC_SECTIONS, faqAnswerText } from "../src/shared/faq-doc";
-import { BILLING_OFFERS } from "../src/shared/billing";
+import { BILLING_OFFERS, BILLING_PRICE_CHECKED_AT } from "../src/shared/billing";
+import { FREE_PLAN_AMOUNT_CENTS } from "../src/shared/billing-offers";
 import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
 import { llmsText } from "../src/shared/plugin-docs";
@@ -331,6 +332,7 @@ describe("organization and application structured data", () => {
     (getPageSeo(path).structuredData?.["@graph"] ?? []) as Array<Record<string, unknown>>;
   const nodeOf = (path: string, type: string) =>
     graphOf(path).find((node) => node["@type"] === type) as Record<string, unknown> | undefined;
+  const freePrice = FREE_PLAN_AMOUNT_CENTS / 100;
 
   it("keeps a square logo and only verifiable profiles", () => {
     const organization = nodeOf("/", "Organization")!;
@@ -343,19 +345,56 @@ describe("organization and application structured data", () => {
     expect(organization.sameAs).toEqual(["https://github.com/moutsea/wechatai"]);
   });
 
-  it("derives offers from BILLING_OFFERS instead of hard-coded prices", () => {
+  it("derives homepage offer prices from the shared billing amounts", () => {
     const offers = nodeOf("/", "SoftwareApplication")?.offers as Array<Record<string, unknown>>;
-    expect(offers[0]).toMatchObject({ name: "免费版", price: 0, priceCurrency: "CNY" });
+    expect(offers[0]).toMatchObject({ name: "免费版", price: freePrice, priceCurrency: "CNY" });
+    expect(offers[0].priceSpecification).toMatchObject({
+      "@type": "UnitPriceSpecification",
+      price: freePrice,
+      priceCurrency: "CNY",
+    });
     expect(String(offers[0].description)).toContain(`${WECHAT_LINK_LIMITS.free} 个微信链接`);
     expect(String(offers[0].description)).toContain(`${PLUGIN_LIMITS.free} 个插件`);
     const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus");
-    const paid = offers.filter((offer) => offer.price !== 0);
+    const paid = offers.slice(1);
     expect(paid).toHaveLength(plans.length);
     plans.forEach((plan, index) => {
       expect(paid[index]).toMatchObject({
         name: plan.name,
         price: plan.amount / 100,
         priceCurrency: "CNY",
+      });
+    });
+  });
+
+  it("publishes free and Plus offers with unit price specifications on /pricing", () => {
+    const service = nodeOf("/pricing", "Service")!;
+    expect(service.provider).toEqual({ "@id": "https://wechatai.app/#organization" });
+    const offers = service.offers as Array<Record<string, unknown>>;
+    const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus");
+    expect(offers).toHaveLength(plans.length + 1);
+    expect(offers[0]).toMatchObject({
+      name: "免费版",
+      price: freePrice,
+      priceCurrency: "CNY",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: freePrice,
+        priceCurrency: "CNY",
+      },
+    });
+    plans.forEach((plan, index) => {
+      expect(offers[index + 1]).toMatchObject({
+        name: plan.name,
+        price: plan.amount / 100,
+        priceCurrency: "CNY",
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: plan.amount / 100,
+          priceCurrency: "CNY",
+          billingDuration: plan.interval === "month" ? "P1M" : "P1Y",
+          billingIncrement: 1,
+        },
       });
     });
   });
@@ -407,6 +446,12 @@ describe("published prices stay in sync with billing", () => {
     expect(llmsText).toContain(`¥${yuan(yearly.amount)}/年`);
     expect(llmsText).toContain(`${PLUGIN_LIMITS.free} 个插件`);
     expect(llmsText).toContain(`${WECHAT_LINK_LIMITS.plus} 个微信链接`);
+  });
+
+  it("exposes a valid price check date from the billing source", () => {
+    expect(BILLING_PRICE_CHECKED_AT).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Number.isNaN(Date.parse(`${BILLING_PRICE_CHECKED_AT}T00:00:00Z`))).toBe(false);
+    expect(BILLING_PRICE_CHECKED_AT <= new Date().toISOString().slice(0, 10)).toBe(true);
   });
 });
 

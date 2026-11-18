@@ -14,14 +14,15 @@ function SeoMarkdown({ children }: { children: string }) {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        a: ({ href, children: label }) =>
-          href?.startsWith("/") ? (
-            <Link to={href}>{label}</Link>
-          ) : (
+        a: ({ href, children: label }) => {
+          if (href?.startsWith("#")) return <a href={href}>{label}</a>;
+          if (href?.startsWith("/")) return <Link to={href}>{label}</Link>;
+          return (
             <a href={href} rel="noreferrer noopener" target="_blank">
               {label}
             </a>
-          ),
+          );
+        },
         table: ({ children: table }) => (
           <div className="seopage-table-scroll" tabIndex={0} role="region" aria-label="对照表">
             <table>{table}</table>

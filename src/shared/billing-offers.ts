@@ -4,7 +4,16 @@
  * 单独成文件是刻意的：营销页（首页价格锚、/pricing 方案卡）只要这几个常量，
  * 而 `billing.ts` 里还有结账、订阅状态等只在账单页用到的类型与逻辑；放在一起会让
  * 首页预加载一整块本页用不到的代码。`billing.ts` 会 re-export 这里的定义。
+ *
+ * `BILLING_PRICE_CHECKED_AT` 是最近一次人工核对公开价格的日期（YYYY-MM-DD）；
+ * 构建与发布把该值写进静态页面，它不是构建时间。改动金额、额度或周期时同步更新。
  */
+export const BILLING_PRICE_CHECKED_AT = "2026-11-18";
+
+/** 免费版金额（分），只用于公开定价，不属于可购买档位。 */
+export const FREE_PLAN_AMOUNT_CENTS: number = 0;
+
+/** 可购买档位。 */
 export const BILLING_OFFERS = [
   {
     id: "plus_monthly",

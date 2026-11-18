@@ -226,6 +226,12 @@
   text-align: center;
   line-height: 1.8;
 }
+.plans .plans-checked {
+  margin: 4px 0 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+  text-align: center;
+}
 .plans .plan-highlights,
 .plans-comparison {
   display: none;

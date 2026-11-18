@@ -1,4 +1,4 @@
-export { BILLING_OFFERS } from "./billing-offers";
+export { BILLING_OFFERS, BILLING_PRICE_CHECKED_AT } from "./billing-offers";
 import { BILLING_OFFERS } from "./billing-offers";
 
 export const BILLING_SERVICE = "wechatai";

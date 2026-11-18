@@ -256,6 +256,27 @@ for (const [file, , marker] of landingPages) {
     assert(target.includes(`id="${match[2]}"`), `${file}: cross-page anchor ${match[0]}`);
   }
 }
+// /pricing must ship plan offers and a machine-readable price check date in the
+// static HTML, not only after client JavaScript runs.
+const pricingHtml = await read("pricing.html");
+const pricingGraph = JSON.parse(
+  pricingHtml.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+)["@graph"];
+const pricingService = pricingGraph.find((item) => item["@type"] === "Service");
+assert(pricingService, "pricing: Service node");
+assert(pricingService.offers.length >= 3, "pricing: free and Plus offers");
+for (const offer of pricingService.offers) {
+  assert.equal(
+    offer.priceSpecification?.["@type"],
+    "UnitPriceSpecification",
+    `pricing: ${offer.name} unit price specification`,
+  );
+}
+assert.match(
+  pricingHtml,
+  /价格核查于(?:<!-- -->)?\s*<time [^>]*(?:datetime|dateTime)="\d{4}-\d{2}-\d{2}">\d{4}-\d{2}-\d{2}<\/time>/,
+  "pricing: rendered price check date",
+);
 const legacy = await read("guide.html");
 assert(
   !legacy.includes('content="noindex, follow"'),
