@@ -100,3 +100,11 @@ it("separates local OpenClaw costs and credentials from cloud API requirements",
     /本地 Ollama[^；。]*不产生[^；。]*API 费.*云 API[^；。]*服务商/,
   );
 });
+
+it("discloses server-side Key storage, use and revocation before recommending Wechatai", async () => {
+  await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
+  const copy = container.querySelector("#when-wechatai")?.textContent;
+  expect(copy).toMatch(/微伴[^。；]*加密保存[^。；]*Key[^。；]*代你调用/);
+  expect(copy).toMatch(/服务商后台撤销[^。；]*Key/);
+  expect(copy).toMatch(/不能接受[^。；]*保存[^。；]*不适合/);
+});
