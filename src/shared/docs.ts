@@ -130,19 +130,19 @@ export const DOC_GUIDES = [
   },
   {
     slug: "sessions",
-    updatedAt: "2026-11-14",
+    updatedAt: "2026-11-18",
     seoTitle: "微信 AI 会话与上下文：新建、切换与自动摘要",
     title: "会话与上下文",
     description:
       "在微伴新建、切换和清理微信 AI 会话，区分重置上下文与删除聊天记录，了解自动摘要、输入上限和 Plus 网页记录功能。",
     category: "日常功能",
     group: "daily",
-    minutes: 4,
+    minutes: 5,
     outcome: "不同话题分开聊，需要时再接着上次的内容。",
   },
   {
     slug: "attachments",
-    updatedAt: "2026-11-14",
+    updatedAt: "2026-11-18",
     seoTitle: "微信 AI 图片、文件与语音使用教程",
     title: "图片、文件与语音",
     description:
@@ -150,7 +150,7 @@ export const DOC_GUIDES = [
     category: "日常功能",
     group: "daily",
     requirement: "图片与文件需要 Plus",
-    minutes: 2,
+    minutes: 5,
     outcome: "先发附件，再告诉 AI 你想让它做什么。",
   },
   {
@@ -167,13 +167,13 @@ export const DOC_GUIDES = [
   },
   {
     slug: "faq",
-    updatedAt: "2026-11-14",
+    updatedAt: "2026-11-18",
     seoTitle: "微信 AI 常见问题：连接、模型和插件排查",
     title: "常见问题",
     description: "排查微信连接、模型调用和插件问题，了解聊天数据、隐私和会员到期后的变化。",
     category: "日常功能",
     group: "daily",
-    minutes: 3,
+    minutes: 5,
     outcome: "连不上、没有回复或模型不对，可以从这里开始排查。",
   },
   {
@@ -193,7 +193,7 @@ export const DOC_GUIDES = [
   },
   {
     slug: "ds-chat",
-    updatedAt: "2026-11-14",
+    updatedAt: "2026-11-18",
     seoTitle: "DS Chat 联网问答：在微信配置模型与搜索 API",
     title: "DS Chat 联网问答",
     description:
@@ -201,14 +201,14 @@ export const DOC_GUIDES = [
     category: "插件",
     group: "plugins",
     requirement: "Free 可配置 1 个插件",
-    minutes: 3,
+    minutes: 5,
     outcome: "给回答模型接入搜索服务，在微信查询信息与来源。",
     image: "/images/plugins/ds-chat-brand.webp",
     imageAlt: "DS Chat 插件",
   },
   {
     slug: "image-generation",
-    updatedAt: "2026-11-14",
+    updatedAt: "2026-11-18",
     seoTitle: "微信 AI 生图教程：模型配置、提示词与图片保存",
     title: "AI 生图",
     description:
@@ -216,7 +216,7 @@ export const DOC_GUIDES = [
     category: "插件",
     group: "plugins",
     requirement: "Free 可配置 1 个插件",
-    minutes: 2,
+    minutes: 5,
     outcome: "配置自己的生图服务，在微信里描述想画的内容。",
   },
   {

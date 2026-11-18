@@ -306,6 +306,12 @@
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+.docs-faq-group {
+  margin: 38px 0 2px;
+}
+.docs-prose section:first-of-type > .docs-faq-group {
+  margin-top: 0;
+}
 .docs-article-header {
   padding-bottom: 26px;
   border-bottom: 1px solid var(--docs-border);

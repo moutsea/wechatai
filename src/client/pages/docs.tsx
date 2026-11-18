@@ -387,8 +387,11 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
       </header>
       <article className="docs-prose" aria-label={article.title}>
         {content.intro && <p className="docs-intro">{content.intro}</p>}
-        {content.sections.map((section) => (
+        {content.sections.map((section, index) => (
           <section key={section.id} id={section.id} tabIndex={-1}>
+            {section.group && section.group !== content.sections[index - 1]?.group && (
+              <p className="docs-kicker docs-faq-group">{section.group}</p>
+            )}
             <h2>{section.title}</h2>
             {section.illustration === "wechat-ai-bridge" && <DocBridgeDiagram />}
             <DocMarkdown>{section.body}</DocMarkdown>

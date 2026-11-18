@@ -11,6 +11,8 @@ export interface DocScreenshot {
 
 export interface DocSection {
   id: string;
+  /** Optional visible group label; consecutive sections with the same group show one heading. */
+  group?: string;
   title: string;
   body: string;
   illustration?:
