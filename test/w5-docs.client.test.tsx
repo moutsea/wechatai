@@ -51,3 +51,10 @@ it("explains that explicit rejection of native tools can fall back to compatibil
   );
   expect(guidance?.textContent).toMatch(/首次请求.*明确拒绝.*原生工具调用.*兼容模式.*JSON/);
 });
+
+it("does not tell DS Chat users that one exhausted tool ends the reply", () => {
+  const items = renderDoc("ds-chat").querySelectorAll("#troubleshoot li");
+  const guidance = Array.from(items).find((item) => item.textContent?.includes("阅读次数用完"));
+  expect(guidance?.textContent).toMatch(/只限制该项.*已有资料.*回答.*另一项.*剩余次数/);
+  expect(guidance?.textContent).not.toContain("本轮会提前结束");
+});
