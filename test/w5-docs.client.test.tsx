@@ -65,3 +65,15 @@ it("directs users with no reply to check the bound account and connection diagno
   expect(answer?.textContent).not.toContain("说明消息没有进入微伴");
   expect(answer?.querySelector('a[href="/app/wechat"]')?.textContent).toBe("微信连接");
 });
+
+it("distinguishes a DS Chat test answer from a verified search", () => {
+  const page = renderDoc("ds-chat");
+  const setup = page.querySelector("#configure ol li:last-child")?.textContent;
+  const help = Array.from(page.querySelectorAll("#troubleshoot li")).find((item) =>
+    item.querySelector("strong")?.textContent?.includes("测试"),
+  )?.textContent;
+  expect(setup).toMatch(/可能直接回答.*不一定调用搜索服务/);
+  expect(setup).toMatch(/按输入与最终输出扣 credits.*实际调用.*API 费用/);
+  expect(help).toMatch(/最新.*平台附加的.*来源/);
+  expect(help).not.toContain("测试也会真实调用搜索服务");
+});
