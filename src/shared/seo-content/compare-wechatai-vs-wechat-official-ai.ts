@@ -41,11 +41,11 @@ export const wechataiVsWechatAiPage: SeoPage = {
       },
       {
         label: "是否需设备在线",
-        values: ["普通模型聊天不需要；接入自建 Agent 时需要", "否（由微信提供）"],
+        values: ["普通模型聊天不需要；接入自建 Agent 时需要", null],
       },
       {
         label: "是否需自行部署",
-        values: ["普通聊天不需要；接入 Agent 时需要", "否"],
+        values: ["普通聊天不需要；接入 Agent 时需要", null],
       },
     ],
     note:
@@ -68,7 +68,7 @@ export const wechataiVsWechatAiPage: SeoPage = {
 
 第二项差异是**能不能换模型**。官方内置不可替换模型；微伴支持兼容 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 协议的模型，具体可用范围取决于你选择的模型服务商与账号权限。
 
-群聊、设备在线与部署三项在官方侧没有找到统一、可引用的公开口径，因此表中留空。不要用「—」推断对方不支持；如果群聊是硬需求，应直接以微信当前功能说明为准，而不是按第三方的二手总结下结论。`,
+群聊、设备在线与部署三项在官方侧没有找到统一、可引用的公开口径，因此表中留空。「—」不代表不支持或不需要；如果这些条件会影响选型，请查微信对应功能的当前说明。`,
     },
     {
       id: "price",

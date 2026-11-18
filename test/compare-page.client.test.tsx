@@ -66,3 +66,18 @@ it("distinguishes text usage from per-image credits in the commercial comparison
     expect(copy).toMatch(/生图[^。；]*每张[^。；]*5\s*credits/);
   }
 });
+
+it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-commercial-wechat-ai"])(
+  "shows unverified device and deployment requirements as unknown for %s",
+  async (pair) => {
+    await renderAt(`/compare/${pair}`);
+    const rows = [...container.querySelectorAll(".seopage-compare-table tbody tr")];
+    for (const label of ["是否需设备在线", "是否需自行部署"]) {
+      const row = rows.find((row) => row.querySelector("th")?.textContent === label);
+      expect(row?.querySelector("td:last-child")?.textContent?.trim(), label).toBe("—");
+    }
+    expect(container.querySelector("#five-facts")?.textContent).toMatch(
+      /设备在线与部署[^。]*表中留空/,
+    );
+  },
+);
