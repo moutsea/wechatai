@@ -57,3 +57,12 @@ it("falls back to not found for an unknown pair", async () => {
   expect(container.querySelector("h1")?.textContent).toBe("这个页面没有找到。");
   expect(container.querySelector(".seopage-compare-table")).toBeNull();
 });
+
+it("distinguishes text usage from per-image credits in the commercial comparison", async () => {
+  await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
+  for (const selector of [".seopage-answer", "#two-models"]) {
+    const copy = container.querySelector(selector)?.textContent;
+    expect(copy).toMatch(/文字[^。；]*(?:输入|输出)[^。；]*credits/);
+    expect(copy).toMatch(/生图[^。；]*每张[^。；]*5\s*credits/);
+  }
+});

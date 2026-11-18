@@ -1,5 +1,5 @@
 import type { SeoPage } from "../seo-pages";
-import { DAILY_CREDIT_DEFAULTS } from "../credits";
+import { DAILY_CREDIT_DEFAULTS, IMAGE_CREDITS } from "../credits";
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN } from "../pricing-copy";
 
 export const wechataiVsCommercialPage: SeoPage = {
@@ -12,7 +12,7 @@ export const wechataiVsCommercialPage: SeoPage = {
   h1: "微伴 vs 商业微信 AI 平台：费用和模型归谁管",
   lede: "商业平台把模型与中转打包，注册即用；微伴只做中转，Key 和模型账单在你自己手里。选哪边，取决于你想省配置还是想保留控制权。",
   answer:
-    "商业微信 AI 平台通常代管模型与计费，按平台积分或套餐收费，模型范围受平台上架列表限制；微伴要求你自备模型 API Key，平台只按消息量收 credits，模型费另付服务商。想少配置、接受平台报价，选商业平台；想自选模型、分开核对两笔账单，选微伴。",
+    `商业微信 AI 平台通常代管模型与计费，按平台积分或套餐收费，模型范围受平台上架列表限制；微伴要求你自备模型 API Key。微伴的文字按输入与输出用量计 credits，生图每张另计 ${IMAGE_CREDITS} credits，模型费另付服务商。想少配置、接受平台报价，选商业平台；想自选模型、分开核对两笔账单，选微伴。`,
   primaryKeyword: "微伴 商业微信AI平台 对比",
   secondaryKeywords: [
     "微信AI平台哪个好",
@@ -58,7 +58,7 @@ export const wechataiVsCommercialPage: SeoPage = {
       title: "两种收费结构：打包报价 vs 两笔账单",
       body: `商业平台通常把模型调用、中转和界面打包成积分或套餐：注册后按平台规则扣积分，用户不需要自己开模型服务商，也不容易把模型成本与平台服务费拆开核对。
 
-微伴只做中转：模型 API Key 由你自己提供，模型费直接付给服务商；微伴按消息文字量收 credits。好处是两笔账能分开看、换模型不用换平台；代价是要自己开通服务商、管理 Key 与余额。
+微伴只做中转：模型 API Key 由你自己提供，模型费直接付给服务商。微伴的文字按输入（含历史上下文）和输出用量计 credits，生图每张另计 ${IMAGE_CREDITS} credits，描述文字另计。好处是两笔账能分开看、换模型不用换平台；代价是要自己开通服务商、管理 Key 与余额。
 
 两种结构没有绝对优劣。用量稳定、希望一张账单解决的人，可能更适合商业平台；要按模型分别核算成本、或需要随时换模型的人，更适合自带 Key 的中转。`,
     },
