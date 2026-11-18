@@ -447,6 +447,17 @@ describe("Muse hosted hook channel", () => {
     expect((await ctx.call("poll")).data.jobs).toHaveLength(0);
   });
 
+  it("documents what happens to Muse tasks and notifications when credits run out", async () => {
+    const guide = await SELF.fetch("https://wechatai.app/developers/muse.md");
+    const sections = (await guide.text()).split(/^#{2,3} /m);
+    for (const heading of ["4. 排错", "额度暂停时任务会丢吗？"]) {
+      const section = sections.find((part) => part.startsWith(`${heading}\n`));
+      expect(section, heading).toMatch(
+        /余额不足[^。]*拒绝新任务[^。]*暂停主动通知[^。]*已受理任务[^。]*回传[^。]*结算/,
+      );
+    }
+  });
+
   it("publishes the Muse guide and matching manifest", async () => {
     const manifest = await (
       await SELF.fetch("https://wechatai.app/api/plugins/muse")
