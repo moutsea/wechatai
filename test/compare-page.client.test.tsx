@@ -58,6 +58,18 @@ it("falls back to not found for an unknown pair", async () => {
   expect(container.querySelector(".seopage-compare-table")).toBeNull();
 });
 
+it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-openclaw", "wechatai-vs-commercial-wechat-ai"])(
+  "distinguishes Wechatai model requirements from an existing OpenClaw connection for %s",
+  async (pair) => {
+    await renderAt(`/compare/${pair}`);
+    const rows = [...container.querySelectorAll(".seopage-compare-table tbody tr")];
+    const key = rows.find((row) => row.querySelector("th")?.textContent === "是否需自备 Key");
+    const wechatai = key?.querySelector("td")?.textContent;
+    expect(wechatai).toMatch(/普通聊天[^；]*小薇[^；]*需[^；]*API Key/);
+    expect(wechatai).toMatch(/已有 OpenClaw[^；]*沿用[^；]*Agent[^；]*模型配置[^；]*无需[^；]*微伴模型渠道/);
+  },
+);
+
 it("distinguishes text usage from per-image credits in the commercial comparison", async () => {
   await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
   for (const selector of [".seopage-answer", "#two-models"]) {

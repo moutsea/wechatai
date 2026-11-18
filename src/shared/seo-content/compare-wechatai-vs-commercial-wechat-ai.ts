@@ -34,7 +34,10 @@ export const wechataiVsCommercialPage: SeoPage = {
       },
       {
         label: "是否需自备 Key",
-        values: ["需要（模型服务商的 API Key）", "一般不需要（平台代管）"],
+        values: [
+          "普通聊天和小薇需要模型 API Key；接入已有 OpenClaw 沿用 Agent 的模型配置，无需微伴模型渠道",
+          "一般不需要（平台代管）",
+        ],
       },
       {
         label: "是否支持群聊",
