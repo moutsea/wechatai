@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AnonymousAuthProvider } from "../src/client/auth";
 import { ComparePage } from "../src/client/pages/compare-page";
+import { SeoLandingPage } from "../src/client/pages/seo-landing";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -28,6 +29,7 @@ async function renderAt(path: string) {
         <AnonymousAuthProvider>
           <Routes>
             <Route path="/compare/:pair" element={<ComparePage />} />
+            <Route path="/:slug" element={<SeoLandingPage />} />
             <Route path="*" element={<p>这个页面没有找到。</p>} />
           </Routes>
         </AnonymousAuthProvider>
@@ -69,6 +71,28 @@ it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-openclaw", "wechatai-vs-
     expect(wechatai).toMatch(/已有 OpenClaw[^；]*沿用[^；]*Agent[^；]*模型配置[^；]*无需[^；]*微伴模型渠道/);
   },
 );
+
+it("leaves unverified device requirements unknown and separates local and cloud self-hosting", async () => {
+  await renderAt("/wechat-ai-options");
+  const rows = [...container.querySelectorAll("#four table tbody tr")];
+  const cellsFor = (label: string) => {
+    const row = rows.find((row) => row.firstElementChild?.textContent === label);
+    return Array.from(row?.querySelectorAll("td") ?? [], (cell) => cell.textContent);
+  };
+  const [, officialDevice, commercialDevice, selfHostedDevice, relayDevice] =
+    cellsFor("需要设备常开");
+  expect([officialDevice, commercialDevice]).toEqual(["未核实", "未核实"]);
+  expect(selfHostedDevice).toMatch(/运行 Agent 的设备[^；]*在线/);
+  expect(relayDevice).toMatch(/普通模型聊天[^；]*不需要.*自建 Agent[^；]*设备[^；]*在线/);
+
+  const [, , , selfHostedKey, relayKey] = cellsFor("需要自己的 API Key");
+  expect(selfHostedKey).toMatch(/本地[^；]*无需真实服务商凭据.*云 API[^；]*(?:Key|账号)/);
+  expect(relayKey).toMatch(/普通聊天[^；]*小薇[^；]*需要.*已有 OpenClaw[^；]*无需微伴模型渠道/);
+
+  const [, , , selfHostedCost, relayCost] = cellsFor("费用结构");
+  expect(selfHostedCost).toMatch(/运行环境[^；]*维护.*本地[^；]*不产生[^；]*API 费.*云 API[^；]*服务商/);
+  expect(relayCost).toMatch(/中转费.*使用云 API[^；]*模型费[^；]*另付服务商/);
+});
 
 it("distinguishes text usage from per-image credits in the commercial comparison", async () => {
   await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
