@@ -10,7 +10,7 @@ export const wechatMusePage: SeoPage = {
   h1: "微信接入 Muse 托管助理：连接、切换与不回复排查",
   lede: "这里不是让微伴再配一个模型，而是把你自己已有的 Muse 托管助理接进微信：任务在 Muse 的环境里执行，微伴负责收发文字并计费。",
   answer:
-    "微信接入 Muse 分三步：一、在微伴「微信连接」扫码绑定，并在对应微信对话发送 /wx help；二、到插件页添加 Muse，点「连接 Muse」复制指令，粘贴进自己的 Muse 主聊天，由 Muse 在 Python 3.10+ 环境执行安装、按生成的 SETUP.md 注册并启用 hook（不要在本机终端执行）；三、微伴显示「Muse 已连接」后，在微信发送 /use muse 进入该助手，或用 @muse 单次调用，实际快捷名以配置为准。不回复时按「微信已绑定 → hook 已启用 → 微伴实际轮询成功」的顺序排查。",
+    "微信接入 Muse 分三步：一、在微伴「微信连接」扫码绑定，并在对应微信对话发送 /wx help；二、到插件页添加 Muse，先点「连接 Muse」生成指令，再点「复制 Muse 连接指令」，粘贴进自己的 Muse 主聊天；指令 10 分钟内有效，过期后重新生成，由 Muse 在 Python 3.10+ 环境执行安装、按生成的 SETUP.md 注册并启用 hook（不要在本机终端执行；安装完成或 dry run 通过都不等于在线）；三、微伴实际轮询成功后显示「Muse 已连接」，此时在微信发送 /use muse 进入该助手，或用 @muse 单次调用，实际快捷名以配置为准。不回复时按「微信已绑定 → hook 已启用 → 微伴实际轮询成功」的顺序排查。",
   primaryKeyword: "微信接入 muse",
   secondaryKeywords: [
     "muse 接入微信",
@@ -26,18 +26,26 @@ export const wechatMusePage: SeoPage = {
   ],
   ctaHref: "/app/wechat",
   ctaLabel: "扫码绑定微信",
+  secondaryCta: { label: "添加 Muse 插件", href: "/app/plugins" },
+  stepsSummary: "三步概览",
+  commands: [
+    { label: "建立回复通道", command: "/wx help" },
+    { label: "切到 Muse", command: "/use muse" },
+    { label: "单次调用", command: "@muse 任务内容" },
+    { label: "核对当前插件", command: "/wx status" },
+  ],
   steps: [
     {
       title: "绑定微信，发一次 /wx help",
       text: "在微伴的微信连接页扫码绑定，再到对应的微信对话发送 /wx help，建立能收到回复的通道。扫码本身不需要配置模型。",
     },
     {
-      title: "在插件里生成 Muse 连接指令",
-      text: "打开插件页添加 Muse，点击「连接 Muse」复制指令，粘贴到你自己的 Muse 主聊天。不要在本机终端执行，也不要公开分享含一次性配对信息的指令。",
+      title: "在插件里先连接、再复制指令",
+      text: "打开插件页添加 Muse，先点「连接 Muse」生成一次性连接指令，再点「复制 Muse 连接指令」粘贴到你自己的 Muse 主聊天。指令 10 分钟内有效，过期后重新生成。不要在本机终端执行，也不要公开分享含一次性配对信息的指令。",
     },
     {
       title: "显示已连接后，在微信切换过去",
-      text: "Muse 在 Python 3.10+ 环境执行安装，按生成的 SETUP.md 注册并启用 hook。微伴显示「Muse 已连接」后，在微信发送 /use muse，或用 @muse 做单次调用。",
+      text: "Muse 在 Python 3.10+ 环境执行安装，按生成的 SETUP.md 注册并启用 hook。微伴实际轮询成功后才会显示「Muse 已连接」，安装完成或 dry run 通过都不算在线。此时在微信发送 /use muse，或用 @muse 做单次调用，实际快捷名以配置为准。",
     },
   ],
   sections: [
@@ -57,7 +65,7 @@ export const wechatMusePage: SeoPage = {
       title: "完整接入步骤：从扫码绑定到第一条任务",
       body: `1. **绑定微信。** 登录微伴，在[微信连接](/app/wechat)扫码绑定。扫码这一步不需要模型，也不需要你先配好 Muse。
 2. **建立回复通道。** 在刚刚绑定的那个微信对话里发送 \`/wx help\`，微伴会回一份命令说明，表示这条对话能收到回复。
-3. **添加插件并生成指令。** 打开[插件页](/app/plugins)，在插件库中添加「Muse」，在弹窗里点「连接 Muse」即可生成一次性连接指令。页面会显示 10 分钟倒计时。
+3. **添加插件并生成指令。** 打开[插件页](/app/plugins)，在插件库中添加「Muse」，在弹窗里点「连接 Muse」即可生成一次性连接指令。页面会显示 10 分钟倒计时，过期后在弹窗里重新生成即可，不需要重新扫码。
 4. **把指令交给 Muse。** 点击「复制 Muse 连接指令」，粘贴到你自己的 Muse **主聊天**，让它执行。**不要在本机终端执行** —— 安装程序必须落在 Muse 的托管环境里，而不是你的电脑上。
 5. **让 Muse 注册并启用 hook。** Muse 执行安装后会在它的环境里生成 \`SETUP.md\`，按其中的说明注册并启用 hook。安装要求 Python 3.10+，只用标准库，不需要额外装依赖、开放端口或重启 Muse。
 6. **确认连接，切进插件。** 回到微伴，等插件状态变成「Muse 已连接」。然后在微信发送 \`/use muse\` 切到 Muse，再发一条文字任务；也可以用 \`@muse\` 做单次调用，实际快捷名以插件配置里的「快捷名称」为准。
