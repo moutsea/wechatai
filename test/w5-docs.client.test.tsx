@@ -112,3 +112,10 @@ it("distinguishes saved upstream API keys from newly generated notification toke
   expect(answer).toMatch(/通知 Token.*生成或重置时.*完整展示一次.*立即复制/);
   expect(answer).not.toContain("页面始终显示掩码");
 });
+
+it("tells readers to wait for queued notification retries and reuse the original request if acceptance is unknown", () => {
+  const answer = renderDoc("faq").querySelector("#reply-window")?.textContent;
+  expect(answer).toMatch(/原来的微信对话.*\/wx help.*更新回复窗口/);
+  expect(answer).toMatch(/已入队.*先查.*最近投递.*等待自动重试/);
+  expect(answer).toMatch(/不确定.*已受理.*重提.*相同的 Idempotency-Key 和请求体/);
+});
