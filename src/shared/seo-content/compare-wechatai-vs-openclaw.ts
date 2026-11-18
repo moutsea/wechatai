@@ -10,7 +10,7 @@ export const wechataiVsOpenclawPage: SeoPage = {
     "对比微伴托管聊天与开源自建 OpenClaw：是否要自备 Key、设备是否常开、要不要部署、群聊与费用差异。写不出的字段留空并注明，不编造数据。",
   eyebrow: "微伴 × OpenClaw",
   h1: "微伴 vs 自建 OpenClaw：把运行和维护也算进成本",
-  lede: "日常对话可用微伴托管聊天；Plus 的云端小薇可用你发来的材料生成 Word，无需自行部署。需要访问本机文件、运行本机命令或接入自定义工具时，再考虑自建 OpenClaw。",
+  lede: "日常对话可用微伴托管聊天。服务经运营方开放后，Plus 会员可用云端小薇把发来的材料生成 Word，无需自行部署。需要访问本机文件、运行本机命令或接入自定义工具时，再考虑自建 OpenClaw。",
   answer:
     "微伴托管普通模型聊天，不需要你的设备常开，平台按 credits 计费，模型 API 费用另付；自建 OpenClaw 需要自己部署并保持运行设备在线，本地模型只算运行与维护成本，使用云 API 时另算服务商费用。微伴不托管 OpenClaw 进程；需要访问本机文件、运行本机命令或接入自定义工具时，再考虑自建 OpenClaw。",
   primaryKeyword: "微伴 OpenClaw 对比",
@@ -63,7 +63,7 @@ export const wechataiVsOpenclawPage: SeoPage = {
 
 自建 OpenClaw 则相反：Agent 进程、工具、文件访问和运行环境都在你这里。微信只是入口，设备关机或休眠后任务就无法执行；要持续可用，就得部署到常开的电脑或服务器。
 
-日常问答可用微伴托管聊天，用你发来的材料生成文档可用[云端小薇](/docs/wechat-ai-assistant)，无需自行部署。需要访问本机文件、运行本机命令或接入自定义工具时，再考虑自建 Agent。托管聊天与自建 Agent 可以共用一个微信链接，用命令切换，见[把 Agent 接进微信](/wechat-agent)。`,
+日常问答可用微伴托管聊天。服务经运营方开放后，Plus 会员可用[云端小薇](/docs/wechat-ai-assistant)把发来的材料生成 Word，无需自行部署。需要访问本机文件、运行本机命令或接入自定义工具时，再考虑自建 Agent。托管聊天与自建 Agent 可以共用一个微信链接，用命令切换，见[把 Agent 接进微信](/wechat-agent)。`,
     },
     {
       id: "five-facts",

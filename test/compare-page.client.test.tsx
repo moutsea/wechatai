@@ -148,6 +148,15 @@ it("distinguishes hosted Word generation from tasks needing local access or cust
   }
 });
 
+it("states the operator and Plus requirements wherever hosted Word generation is recommended", async () => {
+  await renderAt("/compare/wechatai-vs-openclaw");
+  for (const selector of [".seopage-lede", "#hosted-vs-selfhosted"]) {
+    expect(container.querySelector(selector)?.textContent, selector).toMatch(
+      /运营方开放[^。；]*Plus 会员[^。；]*云端小薇[^。；]*生成 Word[^。；]*无需自行部署/,
+    );
+  }
+});
+
 it("discloses server-side Key storage, use and revocation before recommending Wechatai", async () => {
   await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
   const copy = container.querySelector("#when-wechatai")?.textContent;
