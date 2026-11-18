@@ -77,3 +77,10 @@ it("distinguishes a DS Chat test answer from a verified search", () => {
   expect(help).toMatch(/最新.*平台附加的.*来源/);
   expect(help).not.toContain("测试也会真实调用搜索服务");
 });
+
+it("distinguishes saved upstream API keys from newly generated notification tokens", () => {
+  const answer = renderDoc("faq").querySelector("#key-storage")?.textContent;
+  expect(answer).toMatch(/已保存的上游 API Key.*不会回显明文/);
+  expect(answer).toMatch(/通知 Token.*生成或重置时.*完整展示一次.*立即复制/);
+  expect(answer).not.toContain("页面始终显示掩码");
+});
