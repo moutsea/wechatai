@@ -22,6 +22,8 @@ import { FREE_PLAN_AMOUNT_CENTS } from "../src/shared/billing-offers";
 import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
 import { llmsText } from "../src/shared/plugin-docs";
+import { MUSE_FAQ } from "../src/shared/muse-faq";
+import { museGuide } from "../src/shared/muse-docs";
 
 describe("search indexing boundaries", () => {
   it("includes notification routes in the deployable private pages", () => {
@@ -489,5 +491,82 @@ describe("/docs/faq structured data", () => {
         article.slug,
       ).toBe(false);
     }
+  });
+});
+
+describe("Muse discovery metadata and internal links", () => {
+  it("points each canonical at itself and keeps OG fields in sync", () => {
+    for (const [path, canonical] of [
+      ["/wechat-muse", "https://wechatai.app/wechat-muse"],
+      ["/developers/muse", "https://wechatai.app/developers/muse"],
+    ] as const) {
+      const seo = getPageSeo(`${path}?utm_source=wechat#faq`);
+      expect(seo.indexable, path).toBe(true);
+      expect(seo.canonical, path).toBe(canonical);
+      const head = renderSeoHead(seo);
+      expect(head, path).toContain(`property="og:url" content="${canonical}"`);
+      expect(head, path).toContain(`property="og:title" content="${seo.title}"`);
+      expect(head, path).toContain(`property="og:description" content="${seo.description}"`);
+      expect(head, path).not.toContain('content="noindex');
+    }
+  });
+
+  it("publishes the guide as an Article with FAQPage answers from the guide source", () => {
+    const seo = getPageSeo("/developers/muse");
+    expect(seo.ogType).toBe("article");
+    const graph = (seo.structuredData?.["@graph"] ?? []) as Array<Record<string, unknown>>;
+    expect(graph.find((item) => item["@type"] === "Article")).toMatchObject({
+      url: "https://wechatai.app/developers/muse",
+      mainEntityOfPage: "https://wechatai.app/developers/muse",
+      headline: "Muse 接入指南",
+      description: seo.description,
+      dateModified: pageLastModified("/developers/muse"),
+    });
+    const faq = graph.find((item) => item["@type"] === "FAQPage") as
+      | { "@id": string; mainEntity: { name: string; acceptedAnswer: { text: string } }[] }
+      | undefined;
+    expect(faq?.["@id"]).toBe("https://wechatai.app/developers/muse#faq");
+    expect(faq?.mainEntity).toEqual(
+      MUSE_FAQ.map((item) => ({
+        "@type": "Question",
+        name: item.question,
+        acceptedAnswer: { "@type": "Answer", text: item.answer },
+      })),
+    );
+    for (const item of MUSE_FAQ) {
+      expect(museGuide, item.question).toContain(`### ${item.question}`);
+      expect(museGuide, item.question).toContain(item.answer);
+    }
+  });
+
+  it("links the landing page and technical guide in both directions", () => {
+    for (const path of [
+      "/wechat-clawbot",
+      "/wechat-agent",
+      "/wechat-ai-options",
+      "/compare/wechatai-vs-wechat-official-ai",
+      "/compare/wechatai-vs-openclaw",
+      "/compare/wechatai-vs-commercial-wechat-ai",
+      "/pricing",
+    ]) {
+      const page = SEO_PAGES.find((item) => item.path === path);
+      expect(
+        page?.related.some((link) => link.href === "/wechat-muse"),
+        path,
+      ).toBe(true);
+    }
+    const muse = SEO_PAGES.find((page) => page.path === "/wechat-muse");
+    const hrefs = muse?.related.map((link) => link.href) ?? [];
+    for (const href of [
+      "/developers/muse",
+      "/app/plugins",
+      "/pricing",
+      "/wechat-agent",
+      "/wechat-ai-options",
+      "/compare/wechatai-vs-openclaw",
+    ]) {
+      expect(hrefs, href).toContain(href);
+    }
+    expect(museGuide).toContain("[微信接入 Muse](/wechat-muse)");
   });
 });

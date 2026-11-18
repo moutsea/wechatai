@@ -6,6 +6,7 @@ import { CostEstimator } from "../cost-estimator";
 import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import { PricingPlans } from "./pricing-plans";
+import { SeoRelated } from "./seo-related";
 
 export function PricingPage({ page, children }: { page: SeoPage; children?: ReactNode }) {
   const { hash } = useLocation();
@@ -64,6 +65,7 @@ export function PricingPage({ page, children }: { page: SeoPage; children?: Reac
             <Link to="/terms">服务协议</Link>
           </p>
         </section>
+        <SeoRelated links={page.related} />
       </main>
       <SiteFooter />
       {children}

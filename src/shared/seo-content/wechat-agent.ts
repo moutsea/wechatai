@@ -134,6 +134,7 @@ OpenClaw 与 Hermes 的主动推送需要开启「接收定时任务和后台结
   ],
   related: [
     { label: "Muse 托管助理接入指南", href: "/developers/muse" },
+    { label: "微信接入 Muse", href: "/wechat-muse" },
     { label: "OpenClaw 接入指南", href: "/developers/openclaw" },
     { label: "Hermes 接入指南", href: "/developers/hermes" },
     { label: "在微信里使用多个 OpenClaw", href: "/docs/multiple-openclaw-in-wechat" },
@@ -141,5 +142,5 @@ OpenClaw 与 Hermes 的主动推送需要开启「接收定时任务和后台结
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },
     { label: "插件协议与开发文档", href: "/developers/plugins" },
   ],
-  updatedAt: "2026-11-13",
+  updatedAt: "2026-11-19",
 };

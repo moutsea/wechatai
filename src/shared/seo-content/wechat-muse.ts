@@ -152,11 +152,13 @@ Muse 的 hook 默认每 5 秒触发一次，单次最多等 15 秒长轮询，�
   ],
   related: [
     { label: "Muse 接入指南", href: "/developers/muse" },
+    { label: "插件库（登录后添加 Muse）", href: "/app/plugins" },
     { label: "把 Agent 接进微信", href: "/wechat-agent" },
     { label: "微信 AI 怎么选", href: "/wechat-ai-options" },
+    { label: "微伴 vs 自建 OpenClaw", href: "/compare/wechatai-vs-openclaw" },
     { label: "微信命令速查", href: "/docs/commands" },
     { label: "连接微信（文档）", href: "/docs/wechat-connection" },
     { label: "价格与 credits", href: "/pricing" },
   ],
-  updatedAt: "2026-11-18",
+  updatedAt: "2026-11-19",
 };

@@ -26,3 +26,16 @@ it("tells readers to generate the command with Connect Muse before using the cop
   expect(steps.slice(connect, copy + 1).join(" ")).not.toContain("「生成连接命令」");
   expect(steps[copy]).toContain("主聊天");
 });
+
+it("links the technical guide, plugin library, pricing, and related topics", () => {
+  for (const href of [
+    "/developers/muse",
+    "/app/plugins",
+    "/pricing",
+    "/wechat-agent",
+    "/wechat-ai-options",
+    "/compare/wechatai-vs-openclaw",
+  ]) {
+    expect(page.querySelector(`.seopage-related a[href="${href}"]`), href).toBeTruthy();
+  }
+});

@@ -75,7 +75,7 @@ function AgentsScene() {
     <div className="scene-bridge">
       <div className="scene-agent-names">
         {[
-          { name: "Muse", logo: "/images/plugins/muse.svg", href: "/developers/muse" },
+          { name: "Muse", logo: "/images/plugins/muse.svg", href: "/wechat-muse" },
           {
             name: "Hermes",
             logo: "/images/plugins/hermes-brand.webp",

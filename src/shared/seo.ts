@@ -13,6 +13,7 @@ import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
 import { LANDING_FAQ } from "./landing-faq";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
+import { MUSE_FAQ } from "./muse-faq";
 
 // Public search URLs always use the production domain, including local builds.
 export const SITE_URL = "https://wechatai.app";
@@ -65,12 +66,12 @@ const APPLICATION_ID = `${SITE_URL}/#application`;
 const OFFICIAL_PROFILES = ["https://github.com/moutsea/wechatai"];
 
 /**
- * `/developers/*` 三页不走 `SEO_PAGES` 的内容表：正文分别来自 `openclaw-docs.ts`、
- * `hermes-docs.ts` 与 `plugin-docs.ts`，这几个模块没有导出更新日期。这里的 `updatedAt`
- * 和 `HOME_UPDATED_AT` / `DOCS_INDEX_UPDATED_AT` / `INFO_PAGE_UPDATED_AT` 一样手动维护：
- * 取该页正文模块与其渲染组件最近一次改动的日期，手动维护，绝不用构建时间冒充内容更新。
- * 三个页面都是 2026-10-24：plugin-docs.ts 与 openclaw-guide.tsx（同时渲染 OpenClaw 与
- * Hermes 两页）在这一天改动。
+ * `/developers/*` 页面不走 `SEO_PAGES` 的内容表：正文分别来自 `openclaw-docs.ts`、
+ * `hermes-docs.ts`、`muse-docs.ts` 与 `plugin-docs.ts`，这几个模块没有导出更新日期。
+ * 这里的 `updatedAt` 和 `HOME_UPDATED_AT` / `DOCS_INDEX_UPDATED_AT` / `INFO_PAGE_UPDATED_AT`
+ * 一样手动维护：取该页正文模块与其渲染组件最近一次改动的日期，绝不用构建时间冒充内容更新。
+ * Muse 指南有可见的问答段落，因此额外发布 Article 与 FAQPage；问题与答案来自同一份
+ * `MUSE_FAQ`，指南 Markdown 也由它生成。
  */
 const DEVELOPER_PAGES = {
   "/developers/plugins": {
@@ -92,7 +93,9 @@ const DEVELOPER_PAGES = {
     name: "Muse 接入指南",
     description:
       "将已有 Muse 托管助理通过 hook 连接到微伴，在微信发送文字任务、接收最终回复和授权的主动通知。",
-    updatedAt: "2026-11-13",
+    updatedAt: "2026-11-19",
+    article: true,
+    faq: MUSE_FAQ,
   },
   "/developers/hermes": {
     title: "Hermes 微信接入：定时任务与后台推送",
@@ -414,31 +417,66 @@ export function getPageSeo(pathname: string): PageSeo {
   const developer = findDeveloperPage(path);
   if (developer) {
     const canonical = `${SITE_URL}${path}`;
+    const isArticle = "article" in developer && developer.article === true;
+    const faq = "faq" in developer ? developer.faq : undefined;
     return {
       title: `${developer.title} | ${SITE_NAME}`,
       description: developer.description,
       indexable: true,
       canonical,
+      ogType: isArticle ? "article" : "website",
       structuredData: {
         "@context": "https://schema.org",
         "@graph": [
-          {
-            "@type": "WebPage",
-            "@id": `${canonical}#webpage`,
-            url: canonical,
-            name: developer.name,
-            description: developer.description,
-            inLanguage: "zh-CN",
-            dateModified: developer.updatedAt,
-            about: softwareApplicationRef(),
-            publisher: organizationNode(),
-          },
-          // 站内没有 /developers 索引页（只有三个子路由），中间层给 item 会指向 404，
+          isArticle
+            ? {
+                "@type": "Article",
+                "@id": `${canonical}#article`,
+                url: canonical,
+                mainEntityOfPage: canonical,
+                headline: developer.name,
+                description: developer.description,
+                inLanguage: "zh-CN",
+                image: SOCIAL_IMAGE,
+                dateModified: developer.updatedAt,
+                author: {
+                  "@id": ORGANIZATION_ID,
+                  "@type": "Organization",
+                  name: SITE_NAME,
+                  url: `${SITE_URL}/`,
+                },
+                publisher: organizationNode(),
+              }
+            : {
+                "@type": "WebPage",
+                "@id": `${canonical}#webpage`,
+                url: canonical,
+                name: developer.name,
+                description: developer.description,
+                inLanguage: "zh-CN",
+                dateModified: developer.updatedAt,
+                about: softwareApplicationRef(),
+                publisher: organizationNode(),
+              },
+          // 站内没有 /developers 索引页（只有子路由），中间层给 item 会指向 404，
           // 因此与 landing 页一样用两级：首页 → 当前页。
           breadcrumbList([
             { name: "首页", item: `${SITE_URL}/` },
             { name: developer.name, item: canonical },
           ]),
+          ...(faq?.length
+            ? [
+                {
+                  "@type": "FAQPage",
+                  "@id": `${canonical}#faq`,
+                  mainEntity: faq.map((item) => ({
+                    "@type": "Question",
+                    name: item.question,
+                    acceptedAnswer: { "@type": "Answer", text: item.answer },
+                  })),
+                },
+              ]
+            : []),
         ],
       },
     };

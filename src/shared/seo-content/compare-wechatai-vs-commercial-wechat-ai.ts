@@ -150,6 +150,7 @@ export const wechataiVsCommercialPage: SeoPage = {
     },
   ],
   related: [
+    { label: "微信接入 Muse 托管助理", href: "/wechat-muse" },
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },
     { label: "微伴 vs 微信官方内置 AI", href: "/compare/wechatai-vs-wechat-official-ai" },
     { label: "微伴 vs 自建 OpenClaw", href: "/compare/wechatai-vs-openclaw" },
@@ -157,5 +158,5 @@ export const wechataiVsCommercialPage: SeoPage = {
     { label: "微信 AI：把你的大模型接进微信", href: "/wechat-ai" },
     { label: "价格与免费额度", href: "/pricing" },
   ],
-  updatedAt: "2026-11-18",
+  updatedAt: "2026-11-19",
 };

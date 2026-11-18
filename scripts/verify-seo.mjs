@@ -350,6 +350,71 @@ assert(
   pluginsIndex.includes('href="/developers/muse"'),
   "plugins index links the Muse guide",
 );
+// Muse 承接页与指南必须双向可达；主题页、对比页、定价页和首页都要有明确入口。
+for (const [file, marker] of [
+  ["index.html", "homepage"],
+  ["pricing.html", "pricing"],
+  ["wechat-clawbot.html", "ClawBot"],
+  ["wechat-agent.html", "Agent"],
+  ["wechat-ai-options.html", "options"],
+  ["compare/wechatai-vs-wechat-official-ai.html", "official comparison"],
+  ["compare/wechatai-vs-openclaw.html", "OpenClaw comparison"],
+  ["compare/wechatai-vs-commercial-wechat-ai.html", "commercial comparison"],
+  ["developers/muse.html", "Muse guide"],
+]) {
+  const html = await read(file);
+  assert(html.includes('href="/wechat-muse"'), `${marker}: links /wechat-muse`);
+  if (file === "developers/muse.html") {
+    assert(html.includes("面向站内读者的完整接入与排错说明"), "Muse guide: landing link context");
+  }
+}
+const museLandingHtml = await read("wechat-muse.html");
+for (const href of [
+  "/developers/muse",
+  "/app/plugins",
+  "/pricing",
+  "/wechat-agent",
+  "/wechat-ai-options",
+  "/compare/wechatai-vs-openclaw",
+]) {
+  assert(museLandingHtml.includes(`href="${href}"`), `Muse landing: links ${href}`);
+}
+// 两页的 OG 字段必须与页面自身的 title/description/canonical 一致。
+for (const [file, canonical] of [
+  ["wechat-muse.html", "https://wechatai.app/wechat-muse"],
+  ["developers/muse.html", "https://wechatai.app/developers/muse"],
+]) {
+  const html = await read(file);
+  const title = html.match(/<title[^>]*>(.*?)<\/title>/s)?.[1];
+  const description = html.match(/<meta name="description" content="([^"]+)"/)?.[1];
+  assert(title && description, `${file}: title and description`);
+  assert(html.includes(`property="og:url" content="${canonical}"`), `${file}: og:url`);
+  assert(html.includes(`property="og:title" content="${title}"`), `${file}: og:title`);
+  assert(
+    html.includes(`property="og:description" content="${description}"`),
+    `${file}: og:description`,
+  );
+}
+// 指南的可见问答段落必须同时发布为 FAQPage，并与 Article 指向同一 URL。
+const museGuideGraph = JSON.parse(
+  (await read("developers/muse.html")).match(
+    /<script type="application\/ld\+json" data-seo>(.*?)<\/script>/,
+  )[1],
+)["@graph"];
+const museArticle = museGuideGraph.find((item) => item["@type"] === "Article");
+assert(museArticle?.url === "https://wechatai.app/developers/muse", "Muse guide: Article url");
+assert(
+  museArticle?.headline === "Muse 接入指南",
+  "Muse guide: Article headline matches the visible H1",
+);
+const museGuideFaq = museGuideGraph.find((item) => item["@type"] === "FAQPage");
+assert.equal(museGuideFaq?.mainEntity.length, 6, "Muse guide: FAQPage covers six visible answers");
+for (const question of museFaqQuestions) {
+  assert(
+    museGuideFaq.mainEntity.some((item) => item.name === question),
+    `Muse guide FAQPage: ${question}`,
+  );
+}
 await access(new URL("developers/muse.html", dir));
 // 统一页头之后顶部导航是 .site-header-nav；文档与价格都必须能从首页直接点进去，
 // 否则「价格」只能靠页脚和正文露出。
