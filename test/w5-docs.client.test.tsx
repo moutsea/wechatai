@@ -43,3 +43,11 @@ it.each([
   const guidance = Array.from(paragraphs).find((p) => p.textContent?.includes("切换到聊天模型"));
   expect(guidance?.textContent).toMatch(/切换到聊天模型.*重发附件和处理要求/);
 });
+
+it("explains that explicit rejection of native tools can fall back to compatibility mode", () => {
+  const items = renderDoc("ds-chat").querySelectorAll("#troubleshoot li");
+  const guidance = Array.from(items).find((item) =>
+    item.textContent?.includes("回答模型报工具调用错误"),
+  );
+  expect(guidance?.textContent).toMatch(/首次请求.*明确拒绝.*原生工具调用.*兼容模式.*JSON/);
+});
