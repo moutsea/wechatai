@@ -440,6 +440,28 @@ for (const width of [390, 1280]) {
     const other = page.locator(width === 390 ? "#docs-search-desktop" : "#docs-search-mobile");
     await expect(other).toHaveValue("");
   });
+
+  test(`finds the Muse guide using document search at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/docs`);
+    await mounted;
+    const navigation = page.locator(width === 390 ? ".docs-mobile-navigation" : ".docs-sidebar");
+    if (width === 390) await navigation.locator("summary").click();
+    const input = navigation.getByRole("searchbox");
+    const museGuide = navigation.getByRole("link", { name: "Muse 接入指南" });
+
+    await input.fill("Muse");
+    await expect(navigation.getByRole("status")).toHaveCount(0);
+    await expect(museGuide).toBeVisible();
+    await input.fill("不可能匹配的关键词");
+    await expect(navigation.getByRole("status")).toContainText("没有匹配");
+    await expect(museGuide).toHaveCount(0);
+    await input.fill("Muse");
+    await museGuide.click();
+    await expect(page).toHaveURL(`${origin}/developers/muse`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Muse 接入指南");
+  });
 }
 
 test("preserves a scrolled sidebar and its visible keyboard target during handoff", async ({
