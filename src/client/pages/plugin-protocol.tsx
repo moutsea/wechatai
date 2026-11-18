@@ -138,6 +138,8 @@ export function PluginProtocol() {
           <p>
             内置 LLM 对话、DS Chat 内置插件与平台计量已实现，AI
             生图支持图片交付。第三方注册、远程执行、代码上传及第三方媒体接入尚未开放；现在可以按协议编写并在本地验证适配器。
+            已有 Muse 托管助理？按<Link to="/developers/muse">Muse 接入指南</Link>
+            把它的 hook 接到微信；这是用户自备 Agent 的接入说明，不属于本协议。
           </p>
         </div>
         <div className="guide-layout protocol-layout">

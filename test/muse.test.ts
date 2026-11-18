@@ -447,6 +447,17 @@ describe("Muse hosted hook channel", () => {
     expect((await ctx.call("poll")).data.jobs).toHaveLength(0);
   });
 
+  it("documents what happens to Muse tasks and notifications when credits run out", async () => {
+    const guide = await SELF.fetch("https://wechatai.app/developers/muse.md");
+    const sections = (await guide.text()).split(/^#{2,3} /m);
+    for (const heading of ["4. 排错", "额度暂停时任务会丢吗？"]) {
+      const section = sections.find((part) => part.startsWith(`${heading}\n`));
+      expect(section, heading).toMatch(
+        /余额不足[^。]*拒绝新任务[^。]*暂停主动通知[^。]*已受理任务[^。]*回传[^。]*结算/,
+      );
+    }
+  });
+
   it("publishes the Muse guide and matching manifest", async () => {
     const manifest = await (
       await SELF.fetch("https://wechatai.app/api/plugins/muse")
@@ -455,6 +466,31 @@ describe("Muse hosted hook channel", () => {
     expect(manifest.manifest.capabilities.commands).toBe("platform");
     const guide = await SELF.fetch("https://wechatai.app/developers/muse.md");
     expect(guide.headers.get("content-type")).toContain("text/markdown");
-    expect(await guide.text()).toContain("不是 Muse Code");
+    const text = await guide.text();
+    expect(text).toContain("不是 Muse Code");
+    expect(
+      text
+        .split(/^## /m)
+        .slice(1)
+        .map((section) => section.split("\n")[0]),
+    ).toEqual([
+      "1. 前置条件",
+      "2. 连接步骤",
+      "3. 支持范围",
+      "4. 排错",
+      "5. 计费与限额",
+      "6. 主动通知",
+      "7. 接口和联调",
+      "8. 常见问题",
+    ]);
+    const faq = text.split("## 8. 常见问题")[1];
+    expect([...faq.matchAll(/^### (.+)$/gm)].map((match) => match[1])).toEqual([
+      "插件页一直没显示「Muse 已连接」？",
+      "微信收不到回复？",
+      "连接指令过期了怎么办？",
+      "hook 未注册或没有启用？",
+      "额度暂停时任务会丢吗？",
+      "可以和别人共用同一个 Muse 环境吗？",
+    ]);
   });
 });

@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  Bot,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -88,11 +89,14 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
   const inputs = useDocumentInputs();
   const [query, setQuery] = useState(() => inputs?.get(inputId) ?? "");
   const keyword = query.trim().toLowerCase();
-  const matches = (article: DocArticle) =>
-    !keyword ||
-    `${article.title} ${article.navTitle ?? ""} ${article.category} ${article.description}`
-      .toLowerCase()
-      .includes(keyword);
+  const matches = (entry: DocArticle | string) => {
+    if (!keyword) return true;
+    const text =
+      typeof entry === "string"
+        ? entry
+        : `${entry.title} ${entry.navTitle ?? ""} ${entry.category} ${entry.description}`;
+    return text.toLowerCase().includes(keyword);
+  };
   const groups = DOC_GROUPS.map((group) => ({
     group,
     articles: DOC_ARTICLES.filter(
@@ -104,8 +108,12 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
   }));
   const providersArticle = findDocArticle("model-providers");
   const showProviders = providersArticle && matches(providersArticle);
+  const museTitle = "Muse 接入指南";
+  const showMuse = matches(museTitle);
   const hits =
-    groups.reduce((total, item) => total + item.articles.length, 0) + Number(showProviders);
+    groups.reduce((total, item) => total + item.articles.length, 0) +
+    Number(showProviders) +
+    Number(showMuse);
   return (
     <nav aria-label="文档导航" data-handoff-focus-fallback={inputId}>
       <label className="docs-search">
@@ -165,6 +173,13 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
             <Network size={15} />
             {providersArticle.title}
             <ChevronRight size={13} />
+          </Link>
+        )}
+        {showMuse && (
+          <Link id={`${inputId}-muse`} to="/developers/muse">
+            <Bot size={15} />
+            {museTitle}
+            <ArrowUpRight size={13} />
           </Link>
         )}
         <Link id={`${inputId}-developer`} to="/developers/plugins">
