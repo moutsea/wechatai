@@ -21,7 +21,7 @@ import { BILLING_OFFERS, BILLING_PRICE_CHECKED_AT } from "../src/shared/billing"
 import { FREE_PLAN_AMOUNT_CENTS } from "../src/shared/billing-offers";
 import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
-import { llmsText } from "../src/shared/plugin-docs";
+import { llmsFullText, llmsText } from "../src/shared/llms-docs";
 
 describe("search indexing boundaries", () => {
   it("includes notification routes in the deployable private pages", () => {
@@ -440,13 +440,15 @@ describe("published prices stay in sync with billing", () => {
     }
   });
 
-  it("keeps the llms.txt summary consistent with billing", () => {
+  it("keeps llms.txt and llms-full.txt consistent with billing", () => {
     const monthly = offers.find((offer) => offer.id === "plus_monthly")!;
     const yearly = offers.find((offer) => offer.id === "plus_yearly")!;
-    expect(llmsText).toContain(`¥${yuan(monthly.amount)}/月`);
-    expect(llmsText).toContain(`¥${yuan(yearly.amount)}/年`);
-    expect(llmsText).toContain(`${PLUGIN_LIMITS.free} 个插件`);
-    expect(llmsText).toContain(`${WECHAT_LINK_LIMITS.plus} 个微信链接`);
+    for (const text of [llmsText, llmsFullText]) {
+      expect(text).toContain(`¥${yuan(monthly.amount)}/月`);
+      expect(text).toContain(`¥${yuan(yearly.amount)}/年`);
+      expect(text).toContain(`${PLUGIN_LIMITS.free} 个插件`);
+      expect(text).toContain(`${WECHAT_LINK_LIMITS.plus} 个微信链接`);
+    }
   });
 
   it("exposes a valid price check date from the billing source", () => {

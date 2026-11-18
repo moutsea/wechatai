@@ -12,6 +12,7 @@ const workerDocuments = [
   ["/developers/hermes.md", "text/markdown", "# Hermes 接入指南"],
   ["/developers/notifications.md", "text/markdown", "# 消息提醒 HTTP 接入"],
   ["/llms.txt", "text/plain", "# Wechatai"],
+  ["/llms-full.txt", "text/plain", "# Wechatai"],
 ];
 // These are dynamic responses. An asset-first navigation otherwise returns the
 // static 404 page even when a direct Worker unit test passes.
@@ -380,7 +381,75 @@ for (const file of [
   assert(!html.includes('rel="canonical"'), `${file}: no public canonical`);
 }
 assert((await read("404.html")).includes("这个页面没有找到。"));
-assert((await read("robots.txt")).includes("Sitemap: https://wechatai.app/sitemap.xml"));
+const robots = await read("robots.txt");
+assert(robots.includes("Sitemap: https://wechatai.app/sitemap.xml"));
+const robotsGroups = [];
+let robotsGroup = null;
+for (const raw of robots.split("\n")) {
+  const line = raw.replace(/#.*/, "").trim();
+  if (!line) continue;
+  const separator = line.indexOf(":");
+  if (separator < 0) continue;
+  const directive = line.slice(0, separator).trim().toLowerCase();
+  const value = line.slice(separator + 1).trim();
+  if (directive === "user-agent") {
+    if (!robotsGroup || robotsGroup.rules.length > 0) {
+      robotsGroup = { agents: [], rules: [] };
+      robotsGroups.push(robotsGroup);
+    }
+    robotsGroup.agents.push(value.toLowerCase());
+  } else if ((directive === "allow" || directive === "disallow") && robotsGroup) {
+    robotsGroup.rules.push({ directive, path: value });
+  }
+}
+const robotsRules = (agent) => {
+  const group = robotsGroups.find((item) => item.agents.includes(agent.toLowerCase()));
+  return group?.rules ?? robotsGroups.find((item) => item.agents.includes("*"))?.rules ?? [];
+};
+const robotsBlocksAll = (agent) =>
+  robotsRules(agent).some((rule) => rule.directive === "disallow" && rule.path === "/");
+for (const agent of [
+  "OAI-SearchBot",
+  "Claude-SearchBot",
+  "PerplexityBot",
+  "Bingbot",
+  "Googlebot",
+]) {
+  assert(!robotsBlocksAll(agent), `${agent}: search crawler allowed`);
+  assert(
+    robotsRules(agent).some((rule) => rule.directive === "allow" && rule.path === "/"),
+    `${agent}: explicit allow`,
+  );
+}
+for (const agent of [
+  "GPTBot",
+  "ClaudeBot",
+  "Google-Extended",
+  "CCBot",
+  "Applebot-Extended",
+  "Bytespider",
+  "Amazonbot",
+  "Meta-ExternalAgent",
+  "cohere-ai",
+  "Diffbot",
+]) {
+  assert(robotsBlocksAll(agent), `${agent}: training crawler disallowed`);
+  assert(
+    !robotsRules(agent).some((rule) => rule.directive === "allow" && rule.path === "/"),
+    `${agent}: no conflicting allow`,
+  );
+}
+assert(!robotsBlocksAll("*"), "wildcard: public site allowed");
+assert(
+  robotsRules("*").some((rule) => rule.directive === "disallow" && rule.path === "/api/"),
+  "wildcard: API disallowed",
+);
+assert(
+  robotsRules("*").some(
+    (rule) => rule.directive === "allow" && rule.path === "/api/plugins/protocol",
+  ),
+  "wildcard: protocol API allowed",
+);
 assert.equal(((await read("sitemap.xml")).match(/<loc>/g) || []).length, publicPages.length);
 const image = await readFile(new URL("og-image.png", dir));
 assert.equal(image.subarray(1, 4).toString(), "PNG");

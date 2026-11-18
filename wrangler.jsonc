@@ -18,6 +18,7 @@
       "/developers/muse.md",
       "/developers/notifications.md",
       "/llms.txt",
+      "/llms-full.txt",
     ],
   },
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "wechatai-media" }],

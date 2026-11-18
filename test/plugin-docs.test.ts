@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/server/index";
 import { protocolIndex, protocolJsonSchema } from "../src/server/plugin-docs";
 import {
+  LLMS_FULL_PATH,
   PLUGIN_API_PATH,
   PLUGIN_MARKDOWN_PATH,
   PLUGIN_SCHEMA_PATH,
@@ -14,7 +15,11 @@ import {
   protocolMarkdown,
   protocolSections,
 } from "../src/shared/plugin-docs";
+import { llmsFullText } from "../src/shared/llms-docs";
 import { PLUGIN_PROTOCOL_VERSION, pluginResultSchema } from "../src/shared/plugins";
+import { SEO_PAGES } from "../src/shared/seo-pages";
+import { DOC_ARTICLES, docPath } from "../src/shared/docs";
+import { SITE_URL } from "../src/shared/seo";
 
 const request = (path: string, init?: RequestInit, bindings: Env = env) =>
   worker.fetch(
@@ -58,8 +63,42 @@ describe("public plugin developer resources", () => {
     expect(protocolSections.map((s) => s.id)).toContain("quickstart");
   });
 
+  it("serves the full index with every landing page, document summary and protocol entry", async () => {
+    const discovery = await request("/llms.txt", undefined, {} as Env);
+    expect(await discovery.text()).toContain(protocolLinks.fullDiscovery);
+    const response = await request(LLMS_FULL_PATH, undefined, {} as Env);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    const text = await response.text();
+    expect(text).toBe(llmsFullText);
+    for (const page of SEO_PAGES) {
+      expect(text, page.path).toContain(`${SITE_URL}${page.path}`);
+      expect(text, page.path).toContain(page.description);
+    }
+    for (const article of DOC_ARTICLES) {
+      expect(text, article.slug).toContain(`${SITE_URL}${docPath(article.slug)}`);
+      expect(text, article.slug).toContain(article.description);
+    }
+    for (const link of [
+      protocolLinks.markdown,
+      protocolLinks.documentation,
+      protocolLinks.api,
+      protocolLinks.schema,
+    ]) {
+      expect(text).toContain(link);
+    }
+    expect(text).toContain("## 价格事实");
+    expect(text).toContain("AI 生图每张");
+  });
+
   it("supports HEAD, CORS preflight and conditional reads", async () => {
-    for (const path of [PLUGIN_API_PATH, PLUGIN_MARKDOWN_PATH, PLUGIN_SCHEMA_PATH, "/llms.txt"]) {
+    for (const path of [
+      PLUGIN_API_PATH,
+      PLUGIN_MARKDOWN_PATH,
+      PLUGIN_SCHEMA_PATH,
+      "/llms.txt",
+      LLMS_FULL_PATH,
+    ]) {
       const first = await request(path);
       const tag = first.headers.get("etag");
       expect(tag).toBeTruthy();
@@ -92,7 +131,13 @@ describe("public plugin developer resources", () => {
         supportedVersions: [PLUGIN_PROTOCOL_VERSION],
       });
     }
-    for (const path of [PLUGIN_API_PATH, PLUGIN_SCHEMA_PATH, PLUGIN_MARKDOWN_PATH, "/llms.txt"]) {
+    for (const path of [
+      PLUGIN_API_PATH,
+      PLUGIN_SCHEMA_PATH,
+      PLUGIN_MARKDOWN_PATH,
+      "/llms.txt",
+      LLMS_FULL_PATH,
+    ]) {
       const response = await request(path, { method: "POST" });
       expect(response.status).toBe(405);
       expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");
