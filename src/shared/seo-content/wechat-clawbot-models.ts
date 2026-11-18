@@ -155,7 +155,10 @@ export const wechatClawbotModelsPage: SeoPage = {
     { label: "渠道与模型配置（文档）", href: "/docs/channels-models" },
     { label: "在微信里使用 DeepSeek", href: "/wechat-deepseek" },
     { label: "在微信里使用 Claude", href: "/wechat-claude" },
+    { label: "在微信里使用 Kimi", href: "/wechat-kimi" },
+    { label: "在微信里使用通义千问", href: "/wechat-qwen" },
+    { label: "在微信里使用 GLM", href: "/wechat-glm" },
     { label: "价格与免费额度", href: "/pricing" },
   ],
-  updatedAt: "2026-11-12",
+  updatedAt: "2026-11-18",
 };

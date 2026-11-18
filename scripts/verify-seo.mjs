@@ -99,6 +99,9 @@ const landingPages = [
   ],
   ["wechat-claude.html", "https://wechatai.app/wechat-claude", "微信接入 Claude：绕开桥接的那条路"],
   ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
+  ["wechat-kimi.html", "https://wechatai.app/wechat-kimi", "微信接入 Kimi：从 KimiSeek 一键导入开始"],
+  ["wechat-qwen.html", "https://wechatai.app/wechat-qwen", "微信接入通义千问：用硅基流动渠道跑通"],
+  ["wechat-glm.html", "https://wechatai.app/wechat-glm", "微信接入 GLM：用硅基流动渠道配置"],
   ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],
   [
     "wechat-ai-options.html",

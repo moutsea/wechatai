@@ -14,7 +14,10 @@ import { wechatClaudePage } from "./wechat-claude";
 import { wechatClawbotModelsPage } from "./wechat-clawbot-models";
 import { wechatClawbotPage } from "./wechat-clawbot";
 import { wechatDeepseekPage } from "./wechat-deepseek";
+import { wechatGlmPage } from "./wechat-glm";
 import { wechatGptPage } from "./wechat-gpt";
+import { wechatKimiPage } from "./wechat-kimi";
+import { wechatQwenPage } from "./wechat-qwen";
 
 /**
  * Revenue-adjacent pages first (the ones a search visitor lands on), then the
@@ -30,6 +33,9 @@ export const SEO_CONTENT: readonly SeoPage[] = [
   wechatDeepseekPage,
   wechatClaudePage,
   wechatGptPage,
+  wechatKimiPage,
+  wechatQwenPage,
+  wechatGlmPage,
   wechatAgentPage,
   wechatOptionsPage,
   wechatAiPartnerPage,
