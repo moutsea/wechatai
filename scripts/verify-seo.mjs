@@ -375,7 +375,9 @@ for (const href of [
   "/pricing",
   "/wechat-agent",
   "/wechat-ai-options",
+  "/compare/wechatai-vs-wechat-official-ai",
   "/compare/wechatai-vs-openclaw",
+  "/compare/wechatai-vs-commercial-wechat-ai",
 ]) {
   assert(museLandingHtml.includes(`href="${href}"`), `Muse landing: links ${href}`);
 }
