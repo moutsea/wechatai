@@ -404,7 +404,8 @@ for (const raw of robots.split("\n")) {
 }
 const robotsRules = (agent) => {
   const group = robotsGroups.find((item) => item.agents.includes(agent.toLowerCase()));
-  return group?.rules ?? robotsGroups.find((item) => item.agents.includes("*"))?.rules ?? [];
+  assert(group, `${agent}: robots.txt group missing`);
+  return group.rules;
 };
 const robotsBlocksAll = (agent) =>
   robotsRules(agent).some((rule) => rule.directive === "disallow" && rule.path === "/");

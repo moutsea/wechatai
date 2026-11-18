@@ -29,6 +29,7 @@ pnpm dev
 | `pnpm exec vitest run test/billing.test.ts` | 运行指定测试文件 |
 | `pnpm build` | 本地配置构建；不会部署 |
 | `pnpm build:production` | 使用生产配置构建；不会部署 |
+| `pnpm test:seo` | 校验构建产物，包括 `robots.txt` 的具名爬虫组（不能由 `*` 替代） |
 | `pnpm check:public` | 扫描 Git 索引；发布前先暂存修改 |
 
 `env.d.ts` 为生成文件，不提交。全新克隆后先运行 `setup:local`，再执行类型检查。
