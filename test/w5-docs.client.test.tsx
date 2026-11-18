@@ -1,0 +1,30 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
+import { expect, it } from "vitest";
+import { AnonymousAuthProvider } from "../src/client/auth";
+import { DocArticlePage } from "../src/client/pages/docs";
+
+function renderDoc(slug: string) {
+  const html = renderToStaticMarkup(
+    <MemoryRouter initialEntries={[`/docs/${slug}`]}>
+      <AnonymousAuthProvider>
+        <DocArticlePage slug={slug} />
+      </AnonymousAuthProvider>
+    </MemoryRouter>,
+  );
+  return new DOMParser().parseFromString(html, "text/html");
+}
+
+it("directs each image-generation credit error to the right account or setting", () => {
+  const items = Array.from(renderDoc("image-generation").querySelectorAll("#troubleshoot li"));
+  const errorHelp = items
+    .filter((item) => /余额|上限/.test(item.querySelector("strong")?.textContent ?? ""))
+    .map((item) => item.textContent);
+  expect(errorHelp).toEqual(
+    expect.arrayContaining([
+      expect.stringMatching(/微伴.*余额不足.*每日额度刷新.*补充微伴额度/),
+      expect.stringMatching(/单次 credits 上限不足.*模型设置.*提高.*上限/),
+      expect.stringMatching(/上游.*余额或额度不足.*服务商.*账户/),
+    ]),
+  );
+});
