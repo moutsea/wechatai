@@ -10,7 +10,10 @@
  */
 export const BILLING_PRICE_CHECKED_AT = "2026-11-18";
 
-/** 价格档位。 */
+/** 免费版金额（分），只用于公开定价，不属于可购买档位。 */
+export const FREE_PLAN_AMOUNT_CENTS: number = 0;
+
+/** 可购买档位。 */
 export const BILLING_OFFERS = [
   {
     id: "plus_monthly",

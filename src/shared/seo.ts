@@ -9,7 +9,7 @@ import {
 } from "./docs";
 import { SEO_PATHS, findSeoPage, type SeoPage } from "./seo-pages";
 import { FAQ_DOC_SECTIONS, faqAnswerText } from "./faq-doc";
-import { BILLING_OFFERS } from "./billing";
+import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
 import { LANDING_FAQ } from "./landing-faq";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
@@ -154,9 +154,8 @@ function softwareApplicationRef() {
 }
 
 /**
- * 价格与免费额度都取自执行侧的单一事实源：Plus 价格来自 `billing.ts` 的
- * `BILLING_OFFERS`（单位是分），免费版额度来自 `PLUGIN_LIMITS` / `WECHAT_LINK_LIMITS`。
- * 调整价格只改 billing.ts，这里不出现任何写死的金额。
+ * 价格取自 `billing-offers.ts`（单位是分），免费版额度来自
+ * `PLUGIN_LIMITS` / `WECHAT_LINK_LIMITS`。
  * credits 加油包是加购项而不是软件本身的订阅，因此没有放进 offers。
  */
 function softwareApplicationOffers() {
@@ -178,18 +177,19 @@ function softwareApplicationOffers() {
       },
     };
   });
+  const freePrice = FREE_PLAN_AMOUNT_CENTS / 100;
   return [
     {
       "@type": "Offer",
       name: "免费版",
       url: `${SITE_URL}/`,
-      price: 0,
+      price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
       description: `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
       priceSpecification: {
         "@type": "UnitPriceSpecification",
-        price: 0,
+        price: freePrice,
         priceCurrency: "CNY",
       },
     },

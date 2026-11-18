@@ -4,7 +4,11 @@ import { ArrowRight, Check, Loader2, Minus } from "lucide-react";
 import { api, json } from "../api";
 import { useAuth } from "../auth";
 import { trackFunnel } from "../analytics-client";
-import { BILLING_OFFERS, BILLING_PRICE_CHECKED_AT } from "../../shared/billing-offers";
+import {
+  BILLING_OFFERS,
+  BILLING_PRICE_CHECKED_AT,
+  FREE_PLAN_AMOUNT_CENTS,
+} from "../../shared/billing-offers";
 import { approxYuan } from "../../shared/pricing-copy";
 import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
@@ -112,7 +116,7 @@ export function PricingPlans() {
             </div>
             <p className="plan-description">从日常问答开始</p>
             <p className="plan-price">
-              <strong>¥0</strong>
+              <strong>{yuan(FREE_PLAN_AMOUNT_CENTS)}</strong>
               <span className="plan-price-unit">永久免费</span>
             </p>
             <p className="plan-note">无需购买会员，即可开始使用</p>
