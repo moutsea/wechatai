@@ -261,6 +261,7 @@ app.get("/api/internal/wechat-receiver/accounts", async (c) => {
     .bind(after)
     .all<{ account_id: string }>();
   return c.json({
+    ...(c.req.header(receiverPoolHeader) === "dedicated" ? { pool: "dedicated" } : {}),
     accounts: rows.results
       .map((r) => r.account_id)
       .filter(
