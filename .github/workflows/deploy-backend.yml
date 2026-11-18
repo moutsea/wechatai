@@ -1,6 +1,11 @@
 name: Deploy Go backend
 on:
   workflow_call:
+    secrets:
+      VPS_SSH_PRIVATE_KEY:
+        required: true
+      VPS_KNOWN_HOSTS:
+        required: true
   workflow_dispatch:
 permissions:
   contents: read

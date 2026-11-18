@@ -90,8 +90,14 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [check, secrets, backend]
     uses: ./.github/workflows/deploy-backend.yml
+    secrets:
+      VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
 
   deploy-edge:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [check, secrets, backend]
     uses: ./.github/workflows/deploy-edge.yml
+    secrets:
+      WRANGLER_CONFIG: ${{ secrets.WRANGLER_CONFIG }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

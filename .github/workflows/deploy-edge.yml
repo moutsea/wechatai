@@ -1,6 +1,11 @@
 name: Deploy Cloudflare edge
 on:
   workflow_call:
+    secrets:
+      WRANGLER_CONFIG:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: true
   workflow_dispatch:
 permissions:
   contents: read
