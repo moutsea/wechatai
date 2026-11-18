@@ -20,6 +20,7 @@ import { wechatDeepseekPage } from "./wechat-deepseek";
 import { wechatGlmPage } from "./wechat-glm";
 import { wechatGptPage } from "./wechat-gpt";
 import { wechatKimiPage } from "./wechat-kimi";
+import { wechatMusePage } from "./wechat-muse";
 import { wechatQwenPage } from "./wechat-qwen";
 
 /**
@@ -30,6 +31,7 @@ import { wechatQwenPage } from "./wechat-qwen";
 export const SEO_CONTENT: readonly SeoPage[] = [
   wechatAiPage,
   wechatClawbotPage,
+  wechatMusePage,
   wechatBanRiskPage,
   wechatClawbotModelsPage,
   byokPage,
