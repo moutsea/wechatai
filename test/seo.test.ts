@@ -134,6 +134,9 @@ describe("search indexing boundaries", () => {
       "https://wechatai.app/wechat-gpt",
       "https://wechatai.app/wechat-agent",
       "https://wechatai.app/wechat-ai-options",
+      "https://wechatai.app/compare/wechatai-vs-wechat-official-ai",
+      "https://wechatai.app/compare/wechatai-vs-openclaw",
+      "https://wechatai.app/compare/wechatai-vs-commercial-wechat-ai",
       "https://wechatai.app/wechat-ai-partner",
       "https://wechatai.app/wechat-character-card",
       "https://wechatai.app/wechat-bot",
@@ -250,6 +253,37 @@ describe("query landing pages", () => {
         }
       }
     }
+  });
+});
+
+describe("comparison landing pages", () => {
+  const pages = SEO_PAGES.filter((page) => page.path.startsWith("/compare/"));
+
+  it("ships the three independent pairs", () => {
+    expect(pages.map((page) => page.path)).toEqual([
+      "/compare/wechatai-vs-wechat-official-ai",
+      "/compare/wechatai-vs-openclaw",
+      "/compare/wechatai-vs-commercial-wechat-ai",
+    ]);
+  });
+
+  it("keeps every row aligned with the declared columns", () => {
+    for (const page of pages) {
+      expect(page.comparison, page.path).toBeDefined();
+      const { columns, rows, note } = page.comparison!;
+      expect(columns[0]).toBe("维度");
+      expect(columns.length).toBeGreaterThan(2);
+      expect(note).toContain("不代表对方不支持");
+      for (const row of rows) {
+        expect(row.values, `${page.path}: ${row.label}`).toHaveLength(columns.length - 1);
+      }
+    }
+  });
+
+  it("links all three pairs from the options hub", () => {
+    const options = SEO_PAGES.find((page) => page.path === "/wechat-ai-options");
+    const hrefs = options?.related.map((link) => link.href) ?? [];
+    for (const page of pages) expect(hrefs).toContain(page.path);
   });
 });
 

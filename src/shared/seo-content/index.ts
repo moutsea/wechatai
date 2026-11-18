@@ -1,5 +1,8 @@
 import type { SeoPage } from "../seo-pages";
 import { byokPage } from "./bring-your-own-api-key";
+import { wechataiVsCommercialPage } from "./compare-wechatai-vs-commercial-wechat-ai";
+import { wechataiVsOpenclawPage } from "./compare-wechatai-vs-openclaw";
+import { wechataiVsWechatAiPage } from "./compare-wechatai-vs-wechat-official-ai";
 import { pricingPage } from "./pricing";
 import { wechatAgentPage } from "./wechat-agent";
 import { wechatAiPage } from "./wechat-ai";
@@ -32,6 +35,9 @@ export const SEO_CONTENT: readonly SeoPage[] = [
   wechatGptPage,
   wechatAgentPage,
   wechatOptionsPage,
+  wechataiVsWechatAiPage,
+  wechataiVsOpenclawPage,
+  wechataiVsCommercialPage,
   wechatAiPartnerPage,
   wechatCharacterCardPage,
   wechatBotPage,

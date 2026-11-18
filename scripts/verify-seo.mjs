@@ -106,6 +106,21 @@ const landingPages = [
     "微信 AI 怎么选：四类方案的真实取舍",
   ],
   [
+    "compare/wechatai-vs-wechat-official-ai.html",
+    "https://wechatai.app/compare/wechatai-vs-wechat-official-ai",
+    "微伴 vs 微信官方内置 AI：先分清你要的是哪一类能力",
+  ],
+  [
+    "compare/wechatai-vs-openclaw.html",
+    "https://wechatai.app/compare/wechatai-vs-openclaw",
+    "微伴 vs 自建 OpenClaw：把运行和维护也算进成本",
+  ],
+  [
+    "compare/wechatai-vs-commercial-wechat-ai.html",
+    "https://wechatai.app/compare/wechatai-vs-commercial-wechat-ai",
+    "微伴 vs 商业微信 AI 平台：费用和模型归谁管",
+  ],
+  [
     "wechat-ai-partner.html",
     "https://wechatai.app/wechat-ai-partner",
     "微信 AI 搭档：聊天框里的固定搭子",

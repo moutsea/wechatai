@@ -61,6 +61,9 @@ const OpenClawGuide = preloadable(async () => ({
 const SeoLandingPage = preloadable(async () => ({
   default: (await import("./pages/seo-landing")).SeoLandingPage,
 }));
+const ComparePage = preloadable(async () => ({
+  default: (await import("./pages/compare-page")).ComparePage,
+}));
 type AppRoute = RouteObject & { preload?: () => Promise<void> };
 const routes: AppRoute[] = [
   { path: "/", element: <Landing /> },
@@ -70,6 +73,7 @@ const routes: AppRoute[] = [
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/guide", element: <Guide />, preload: Guide.preload },
+  { path: "/compare/:pair", element: <ComparePage />, preload: ComparePage.preload },
   { path: "/:slug", element: <SeoLandingPage />, preload: SeoLandingPage.preload },
   { path: "/docs", element: <DocsIndex />, preload: DocsIndex.preload },
   { path: "/docs/:slug", element: <DocArticlePage />, preload: DocArticlePage.preload },

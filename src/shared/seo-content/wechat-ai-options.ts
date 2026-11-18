@@ -136,6 +136,9 @@ CowAgent 的具体接法见 [项目微信文档](https://docs.cowagent.ai/channe
     },
   ],
   related: [
+    { label: "微伴 vs 微信官方内置 AI", href: "/compare/wechatai-vs-wechat-official-ai" },
+    { label: "微伴 vs 自建 OpenClaw", href: "/compare/wechatai-vs-openclaw" },
+    { label: "微伴 vs 商业微信 AI 平台", href: "/compare/wechatai-vs-commercial-wechat-ai" },
     { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },
     { label: "微信 ClawBot 插件怎么用", href: "/wechat-clawbot" },
     { label: "微信 ClawBot 支持哪些模型", href: "/wechat-clawbot-models" },
