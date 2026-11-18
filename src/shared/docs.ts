@@ -1,4 +1,4 @@
-export const DOCS_INDEX_UPDATED_AT = "2026-11-14";
+export const DOCS_INDEX_UPDATED_AT = "2026-11-18";
 export const DOCS_TITLE = "微信 AI 教程与文档";
 export const DOCS_DESCRIPTION =
   "微伴 Wechatai 使用文档：配置自己的模型 API，通过微信 ClawBot 连接 AI，按需使用联网问答、生图、角色扮演、个人助理、云端助手小薇和消息提醒，并了解会员与 credits 计费。";

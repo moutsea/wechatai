@@ -294,6 +294,62 @@
   flex-shrink: 0;
   color: #6c8c75;
 }
+.docs-index-header > p.docs-index-lede {
+  margin-top: 12px;
+}
+.docs-index-section > p.docs-index-lede {
+  color: var(--docs-muted);
+  font-size: var(--text-sm);
+  line-height: 1.9;
+  margin: -8px 0 20px;
+}
+.docs-index-group {
+  margin-top: 26px;
+}
+.docs-index-group h3 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.docs-index-doc-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.docs-index-doc-list a {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  height: 100%;
+  padding: 15px 16px;
+  border: 1px solid var(--docs-border);
+  border-radius: 10px;
+}
+.docs-index-doc-list a:hover {
+  border-color: #a1c6ac;
+  background: #fbfdfb;
+}
+.docs-index-doc-list strong {
+  display: block;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.6;
+}
+.docs-index-doc-list small {
+  display: block;
+  color: var(--docs-muted);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  margin-top: 4px;
+}
+.docs-index-doc-list svg {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: #98a89c;
+}
 .docs-index-help {
   color: var(--docs-muted);
   font-size: var(--text-sm);
@@ -2022,6 +2078,9 @@
   }
   .docs-tutorial-list small {
     font-size: var(--text-sm);
+  }
+  .docs-index-doc-list {
+    grid-template-columns: 1fr;
   }
   .docs-article-meta {
     gap: 14px;
