@@ -18,6 +18,12 @@ it("guides readers across each checklist row without scoring their risk", () => 
   expect(section?.textContent).not.toMatch(/答「是」|平均水平|概率[^。]*量级/);
 });
 
+it("follows the inline citation to the sources section in the current tab", () => {
+  const citation = page.querySelector<HTMLAnchorElement>('#penalty a[href="#sources"]');
+  expect(citation?.target).toBe("");
+  expect(page.getElementById("sources")).not.toBeNull();
+});
+
 it("identifies the CNCERT announcement link as a reprint by 安全内参", () => {
   const citation = page.querySelector('#sources a[href="https://www.secrss.com/articles/91136"]');
   expect(citation?.textContent).toMatch(/安全内参.*转载/);
