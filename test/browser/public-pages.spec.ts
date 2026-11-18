@@ -1005,5 +1005,21 @@ for (const width of [320, 390]) {
     expect(await page.evaluate(() => (window as { __copiedText?: string }).__copiedText)).toBe(
       "/use muse",
     );
+
+    const connect = page.locator("#connect");
+    await expect(
+      connect.getByRole("heading", { name: "完整接入步骤：从扫码绑定到第一条任务" }),
+    ).toBeVisible();
+    const steps = await connect.locator("ol > li").all();
+    expect(steps).toHaveLength(6);
+    for (const step of steps) await expect(step).toBeHidden();
+    const fullSteps = connect.getByText("六步接入说明", { exact: true });
+    await fullSteps.click();
+    for (const step of steps) await expect(step).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await fullSteps.click();
+    for (const step of steps) await expect(step).toBeHidden();
   });
 }
