@@ -31,14 +31,14 @@
 
 | 页面步骤 | 实际入口或文案 | 源码 | 差异处理 |
 | --- | --- | --- | --- |
-| 微信扫码 | 主 CTA「扫码绑定微信」→ `/app/wechat`；正文「微信连接」 | `src/shared/seo-content/wechat-muse.ts:27`、`:66` | 保留原入口，主 CTA 指向实际微信连接页 |
-| 发 `/wx help` | 第一步标题与正文，命令按钮「建立回复通道」 | `src/shared/seo-content/wechat-muse.ts:39`、`:67`、`:32` | 与插件页文档一致 |
-| 插件页添加 Muse | 次 CTA「添加 Muse 插件」→ `/app/plugins`；正文插件页链接 | `src/shared/seo-content/wechat-muse.ts:29`、`:68` | 新增首屏次 CTA，手机首屏即可进入下一步 |
-| 「连接 Muse」生成 | 第 3 步「连接 Muse」生成一次性指令 | `src/shared/seo-content/wechat-muse.ts:68` | 先写生成，再写复制，不再压成一句 |
-| 「复制 Muse 连接指令」 | 第 4 步复制指令，粘贴到 Muse 主聊天 | `src/shared/seo-content/wechat-muse.ts:69`、`:43` | 与 `openclaw-editor.tsx` 的按钮文案一致 |
-| 按 `SETUP.md` 注册启用 hook | 第 5 步、步骤摘要、快速答案 | `src/shared/seo-content/wechat-muse.ts:70`、`:48`、`:13` | 明确由 Muse 在托管环境执行，不在本机终端 |
-| 实际轮询成功才在线 | 快速答案、步骤摘要、接入约束 | `src/shared/seo-content/wechat-muse.ts:13`、`:48`、`:73` | 明示安装完成或 dry run 通过不等于在线 |
-| `/use muse` / `@muse` | 第 6 步与可复制命令 | `src/shared/seo-content/wechat-muse.ts:71`、`:33-35` | 补充快捷名以配置为准 |
+| 微信扫码 | 主 CTA「扫码绑定微信」→ `/app/wechat`；正文「微信连接」 | `src/shared/seo-content/wechat-muse.ts:27`、`:69` | 保留原入口，主 CTA 指向实际微信连接页 |
+| 发 `/wx help` | 第一步标题与正文，命令按钮「建立回复通道」 | `src/shared/seo-content/wechat-muse.ts:39`、`:70`、`:32` | 与插件页文档一致 |
+| 插件页添加 Muse | 次 CTA「添加 Muse 插件」→ `/app/plugins`；正文插件页链接 | `src/shared/seo-content/wechat-muse.ts:29`、`:71` | 新增首屏次 CTA，手机首屏即可进入下一步 |
+| 「连接 Muse」生成 | 第 3 步「连接 Muse」生成一次性指令 | `src/shared/seo-content/wechat-muse.ts:71` | 先写生成，再写复制，不再压成一句 |
+| 「复制 Muse 连接指令」 | 第 4 步复制指令，粘贴到 Muse 主聊天 | `src/shared/seo-content/wechat-muse.ts:72`、`:43` | 与 `openclaw-editor.tsx` 的按钮文案一致 |
+| 按 `SETUP.md` 注册启用 hook | 第 5 步、步骤摘要、快速答案 | `src/shared/seo-content/wechat-muse.ts:73`、`:48`、`:13` | 明确由 Muse 在托管环境执行，不在本机终端 |
+| 实际轮询成功才在线 | 快速答案、步骤摘要、接入约束 | `src/shared/seo-content/wechat-muse.ts:13`、`:48`、`:76` | 明示安装完成或 dry run 通过不等于在线 |
+| `/use muse` / `@muse` | 第 6 步与可复制命令 | `src/shared/seo-content/wechat-muse.ts:74`、`:33-35` | 补充快捷名以配置为准 |
 
 同时修正快速答案与步骤摘要中的「点『连接 Muse』复制指令」压缩表述；补充指令 10 分钟有效、过期在弹窗重新生成；未出现「直接安装」「无需绑定」等误导。
 
@@ -46,12 +46,18 @@
 
 - `src/client/pages/seo-page.tsx:195-203`：可选 `secondaryCta`，Muse 页面渲染 `/app/plugins`；其它承接页未配置时保持原行为。
 - `src/client/pages/seo-page.tsx:220-232`：可选 `stepsSummary` 将三步概览包进原生 `details`（默认展开、可收起），可选 `commands` 渲染复制按钮并显示「已复制 / 复制失败」。
+- `src/shared/seo-content/wechat-muse.ts:63-80`：`#connect` 六步正文使用既有区段 `details`（默认折叠），标题和目录锚点保留；无需改通用渲染或样式。
 - `src/client/pages/seo-page.css:215-279`、`:580-582`：命令区与步骤折叠样式；窄屏单列。`code` 增加 `overflow-wrap: anywhere` 防止长路径横向溢出。
-- 测试：`test/wechat-muse.client.test.tsx:35` 起覆盖顺序、双 CTA、折叠与复制反馈；`test/browser/public-pages.spec.ts:965` 起在 320/390 px 断言双 CTA 可见、步骤可展开收起、无横向溢出、复制反馈与剪贴板内容。
+- 测试：`test/wechat-muse.client.test.tsx:35` 起覆盖顺序、双 CTA、三步概览与复制反馈；`test/browser/public-pages.spec.ts:965` 起在 320/390 px 断言双 CTA 可见、两种折叠、复制反馈与内容、无横向溢出。六步回归在 `aafbf75` 两种宽度均因第一步默认可见而失败；修复后逐项验证六步默认隐藏、展开可见、再次收起后隐藏。
 
-### 已运行验证
+### 首次开发验证（`aafbf75`，不替代返工后检查）
 
 - `pnpm check`：通过（lint、typecheck、vitest 与生产构建；构建后 prerender 51 个公开页，SEO 校验通过）。
 - `pnpm test:browser`：77 passed（含 Muse 320/390 px 用例）。
 - `pnpm exec vitest run --config vitest.client.config.ts test/wechat-muse.client.test.tsx`：6 passed。
-- 产物隔离：`dist/client`、`dist/server` 不含 `internal-docs`、`wechatai-muse-m4.md` 或卡片 ID `d4f6f902`；`/api/docs` 仅由 `src/shared/muse-docs.ts` 的 `museGuide` 提供，未登记内部文档。
+
+### 公开产物与路由隔离
+
+- 本地构建产物：`dist/client` 为公开 HTML 与客户端 bundle，`dist/wechatai` 为 Worker（`wrangler.json` 指向 `index.js` 及 `../client`）。检查两目录的文件路径及内容均无 `internal-docs`、`wechatai-muse-m4.md` 或卡号 `d4f6f902`。旧记录中的 `dist/server` 不存在。
+- 按生成的 `dist/wechatai/wrangler.json` 本地启动 Worker：`GET /developers/muse.md` 返回 `200 text/markdown`，正文与 `src/shared/muse-docs.ts` 的 `museGuide` 一致，实际注册点是 `src/server/plugin-docs.ts:183-187`。
+- `/api/docs` 是独立的隔离检查，不是 Muse 指南路由：匿名 `GET /api/docs` 返回 `401`、JSON `unauthorized`；`GET /internal-docs/wechatai-muse-m4.md` 返回 `404`。三条响应都不含上述内部标记。
