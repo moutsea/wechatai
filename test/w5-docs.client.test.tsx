@@ -28,3 +28,9 @@ it("directs each image-generation credit error to the right account or setting",
     ]),
   );
 });
+
+it("starts the attachment expiry window at the last successful addition", () => {
+  const instructions = renderDoc("attachments").querySelector("#send")?.textContent;
+  expect(instructions).toMatch(/最后一次成功追加.*重新计时.*15 分钟/);
+  expect(instructions).not.toContain("距离首次发送超过 15 分钟");
+});
