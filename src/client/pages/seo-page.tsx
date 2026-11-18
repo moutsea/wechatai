@@ -50,6 +50,51 @@ function SeoSteps({ steps }: { steps: NonNullable<SeoPage["steps"]> }) {
   );
 }
 
+function SeoCompareTable({ comparison }: { comparison: NonNullable<SeoPage["comparison"]> }) {
+  return (
+    <section className="seopage-compare" aria-labelledby="seopage-compare-title">
+      <h2 id="seopage-compare-title">{comparison.title}</h2>
+      <div className="seopage-table-scroll">
+        <table className="seopage-compare-table">
+          <caption className="visually-hidden">{comparison.title}</caption>
+          <thead>
+            <tr>
+              {comparison.columns.map((column) => (
+                <th key={column} scope="col">
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.rows.map((row) => (
+              <tr key={row.label}>
+                <th scope="row">{row.label}</th>
+                {comparison.columns.slice(1).map((column, index) => {
+                  const value = row.values[index];
+                  return (
+                    <td key={column}>
+                      {value ?? (
+                        <span
+                          className="seopage-compare-missing"
+                          title="没有找到可公开核实的来源，不代表对方不支持"
+                        >
+                          —
+                        </span>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="seopage-compare-note">{comparison.note}</p>
+    </section>
+  );
+}
+
 function SeoFaq({ items }: { items: SeoPage["faq"] }) {
   return (
     <section className="seopage-faq" id="faq" aria-labelledby="seopage-faq-title">
@@ -131,6 +176,7 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
           </ul>
           <p className="seopage-answer">{page.answer}</p>
         </header>
+        {page.comparison && <SeoCompareTable comparison={page.comparison} />}
         {page.steps && <SeoSteps steps={page.steps} />}
         <article className="seopage-prose">
           {page.sections.length > 2 && (

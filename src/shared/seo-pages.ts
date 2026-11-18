@@ -34,6 +34,23 @@ export interface SeoStep {
   text: string;
 }
 
+/**
+ * Side-by-side facts rendered above the prose. A `null` cell means the field
+ * could not be verified from a public source; it is rendered as a dash with a
+ * note, never as "unsupported".
+ */
+export interface SeoComparison {
+  title: string;
+  /** First column is the dimension label; the rest are product names. */
+  columns: readonly string[];
+  rows: readonly {
+    label: string;
+    /** One cell per entry in `columns` after the label column. */
+    values: readonly (string | null)[];
+  }[];
+  note: string;
+}
+
 export interface SeoPage {
   /** Canonical public path, no trailing slash. */
   path: string;
@@ -59,6 +76,8 @@ export interface SeoPage {
   /** Related documentation and landing pages; also used for internal linking. */
   related: readonly SeoLink[];
   steps?: readonly SeoStep[];
+  /** Optional fact table for side-by-side pages such as /compare/*. */
+  comparison?: SeoComparison;
   /** ISO date of the last content change; drives sitemap lastmod. */
   updatedAt: string;
   /** Optional label override for the primary call to action. */
