@@ -5,6 +5,7 @@ import {
   ArrowRight,
   ArrowUpRight,
   BookOpen,
+  Bot,
   ChevronDown,
   ChevronRight,
   Clock3,
@@ -167,6 +168,11 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
             <ChevronRight size={13} />
           </Link>
         )}
+        <Link id={`${inputId}-muse`} to="/developers/muse">
+          <Bot size={15} />
+          Muse 接入指南
+          <ArrowUpRight size={13} />
+        </Link>
         <Link id={`${inputId}-developer`} to="/developers/plugins">
           <Terminal size={15} />
           插件开发文档

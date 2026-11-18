@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
+import { museGuide } from "../src/shared/muse-docs.ts";
 
 // Verify the actual deployable output; metadata-only tests cannot catch an empty SPA shell.
 const dir = new URL("../dist/client/", import.meta.url);
@@ -287,6 +288,28 @@ for (const [file] of publicPages.filter(([file]) => file.startsWith("docs/"))) {
     `${file}: discoverable from docs index`,
   );
 }
+// 文档导航与开发者索引都要直达同一份 Muse 指南，且正文包含全部章节与 FAQ；
+// `/developers/muse.md` 由同一份 museGuide 提供，Worker 测试按同一清单断言。
+assert(docsIndex.includes('href="/developers/muse"'), "docs navigation links the Muse guide");
+const museHtml = await read("developers/muse.html");
+const museSections = museGuide
+  .split(/^## /m)
+  .slice(1)
+  .map((section) => section.split("\n")[0]);
+assert.equal(museSections.length, 8, "Muse guide has seven content sections and an FAQ section");
+for (const heading of museSections) assert(museHtml.includes(heading), `Muse guide HTML: ${heading}`);
+const museFaqQuestions = [...museGuide.split("## 8. 常见问题")[1].matchAll(/^### (.+)$/gm)].map(
+  (match) => match[1],
+);
+assert.equal(museFaqQuestions.length, 6, "Muse guide has six FAQs");
+for (const question of museFaqQuestions)
+  assert(museHtml.includes(question), `Muse guide HTML: ${question}`);
+const pluginsIndex = await read("developers/plugins.html");
+assert(
+  pluginsIndex.includes('href="/developers/muse"'),
+  "plugins index links the Muse guide",
+);
+await access(new URL("developers/muse.html", dir));
 // 统一页头之后顶部导航是 .site-header-nav；文档与价格都必须能从首页直接点进去，
 // 否则「价格」只能靠页脚和正文露出。
 for (const target of ['href="/docs"', 'href="/pricing"'])
