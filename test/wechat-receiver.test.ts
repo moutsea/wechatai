@@ -123,7 +123,11 @@ describe("external WeChat receiver", () => {
       [undefined, shared.id.toString(), dedicated.id.toString()],
       ["dedicated", dedicated.id.toString(), shared.id.toString()],
     ] as const) {
-      const result = (await (await request("accounts", pool)).json()) as { accounts: string[] };
+      const result = (await (await request("accounts", pool)).json()) as {
+        accounts: string[];
+        pool?: string;
+      };
+      expect(result.pool).toBe(pool);
       expect(result.accounts).toContain(allowed);
       expect(result.accounts).not.toContain(excluded);
       expect((await request("connect/" + excluded, pool)).status).toBe(404);

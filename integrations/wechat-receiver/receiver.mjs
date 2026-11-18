@@ -331,6 +331,11 @@ export class ReceiverService {
         throw new Error(`discovery_http_${response.status}`);
       }
       const result = await readJsonLimited(response);
+      // An older Worker lists the shared pool even when asked for the dedicated pool.
+      if (this.options.dedicated && result.pool !== "dedicated") {
+        wanted.clear();
+        break;
+      }
       for (const id of result.accounts) {
         if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("invalid_account");
         if (this.options.onlyAccounts?.size && !this.options.onlyAccounts.has(id)) continue;
