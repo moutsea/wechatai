@@ -4,6 +4,8 @@ ENCRYPTION_KEY=
 # Optional receive-only server credential. Empty account scope keeps local polling.
 WECHAT_RECEIVER_SECRET=
 WECHAT_RECEIVER_ACCOUNTS=
+WECHAT_RECEIVER_WATCHDOG_ACCOUNTS=
+WECHAT_RECEIVER_DEDICATED_ACCOUNTS=
 # Optional server executor, using a separate random secret; scope = account IDs or all.
 EXECUTOR_SECRET=
 EXECUTOR_ACCOUNTS=
