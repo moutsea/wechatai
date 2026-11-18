@@ -108,3 +108,16 @@ it("discloses server-side Key storage, use and revocation before recommending We
   expect(copy).toMatch(/服务商后台撤销[^。；]*Key/);
   expect(copy).toMatch(/不能接受[^。；]*保存[^。；]*不适合/);
 });
+
+it.each([
+  ["wechatai-vs-wechat-official-ai", "price"],
+  ["wechatai-vs-openclaw", "cost"],
+])("explains which estimator inputs to fill for %s", async (pair, section) => {
+  await renderAt(`/compare/${pair}`);
+  const link = container.querySelector(`#${section} a[href="/pricing#estimate"]`);
+  const instructions = link?.closest("p")?.textContent;
+  expect(instructions).toMatch(/输入[^。]*输出[^。]*轮数/);
+  expect(instructions).toMatch(/服务商[^。]*输入[^。]*输出[^。]*价/);
+  expect(instructions).toMatch(/自动估算[^。]*credits/);
+  expect(instructions).not.toContain("平台单价");
+});

@@ -77,7 +77,7 @@ export const wechataiVsWechatAiPage: SeoPage = {
 
 官方内置的收费与免费额度以微信对应功能说明为准，这里不写无法核实的具体数字。比较时不要拿「微伴 Free 的 credits」直接对比「官方免费」：credits 只抵扣中转费，模型 token 仍要另付。
 
-要估算自己的用量，可以用[费用估算器](/pricing#estimate)分别填写平台单价与模型单价，再与官方当前说明对照。没有统一口径的价格数据时，不承诺哪一方更便宜。`,
+在[费用估算器](/pricing#estimate)填入每轮输入与输出 tokens、每日轮数，工具会自动估算微伴的 credits 用量。另填服务商的输入与输出单价，可估算模型 API 费用，再与微信官方当前说明对照。没有统一口径的价格数据时，不承诺哪一方更便宜。`,
     },
     {
       id: "official-enough",

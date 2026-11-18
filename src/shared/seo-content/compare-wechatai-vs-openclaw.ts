@@ -81,7 +81,7 @@ export const wechataiVsOpenclawPage: SeoPage = {
 
 微伴的成本是 credits 加模型费：Free 每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus 为 ¥${PLUS_MONTHLY_YUAN}/月或 ¥${PLUS_YEARLY_YUAN}/年，模型调用另付服务商。credits 只抵扣中转费，不等于模型免费。
 
-如果你已经有一台常开的服务器和成熟的运维流程，自建的边际成本会低一些；如果没有，先把设备与维护时间折算进去，再与微伴的订阅费用比较。用[费用估算器](/pricing#estimate)可以分开填写两边的单价。`,
+在[费用估算器](/pricing#estimate)填入每轮输入与输出 tokens、每日轮数，工具会自动估算微伴的 credits 用量；另填服务商的输入与输出单价，可估算模型 API 费用。比较时，自建侧另算设备和维护成本，只有使用云 API 才计服务商费用。`,
     },
     {
       id: "when-hosted",
