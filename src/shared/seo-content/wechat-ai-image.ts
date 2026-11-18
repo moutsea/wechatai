@@ -1,16 +1,15 @@
 import type { SeoPage } from "../seo-pages";
+import { IMAGE_CREDITS } from "../credits";
 
 export const wechatAiImagePage: SeoPage = {
   path: "/wechat-ai-image",
   kind: "tutorial",
   title: "微信 AI 生图：配置画图模型与每张计费",
-  description:
-    "微伴的 AI 生图插件把文字提示词发到你自己配置的图片模型，生成的图直接回到微信里。这篇讲清配置步骤、快捷名触发、比例如 3:4 的写法、每张 5 credits 的计费，以及它做不到的事。",
+  description: `微伴的 AI 生图插件把文字提示词发到你自己配置的图片模型，生成的图直接回到微信里。这篇讲清配置步骤、快捷名触发、比例如 3:4 的写法、每张 ${IMAGE_CREDITS} credits 的计费，以及它做不到的事。`,
   eyebrow: "AI 生图 × 微信",
   h1: "在微信里生成图片：配置与计费",
   lede: "在微信里发一句描述，收到一张图。这件事本身不复杂，复杂的是它背后的模型从哪来、算多少钱、以及它不能做哪些事。",
-  answer:
-    "微信里生成图片需要先在微伴添加一个支持图片生成的服务渠道与模型，再启用「AI 生图」插件、为它绑定模型并设置快捷名；之后在微信中用 @快捷名 描述画面，或 /use 快捷名 进入生图模式，生成的图片会直接发回微信。该插件是文本生成图片，每张图 5 credits，提示词文字另按加权 token 计费。",
+  answer: `微信里生成图片需要先在微伴添加一个支持图片生成的服务渠道与模型，再启用「AI 生图」插件、为它绑定模型并设置快捷名；之后在微信中用 @快捷名 描述画面，或 /use 快捷名 进入生图模式，生成的图会直接发回微信。该插件是文本生成图片，每张图 ${IMAGE_CREDITS} credits，提示词文字另按加权 token 计费。`,
   primaryKeyword: "微信 AI 生图",
   secondaryKeywords: ["微信 画图 ai", "微信 ai 表情包", "微信 生成图片"],
   highlights: ["模型由你自己配置", "每张图 5 credits", "结果留在会话里"],

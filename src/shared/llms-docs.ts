@@ -13,13 +13,21 @@ import {
 } from "./credits";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
-import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN } from "./pricing-copy";
+
+const plusPrices = BILLING_OFFERS.filter((offer) => offer.kind === "plus")
+  .map((offer) => `¥${offer.amount / 100}/${offer.interval === "month" ? "月" : "年"}`)
+  .join("或 ");
+const plusPluginLimit = PLUGIN_LIMITS.plus === null ? "插件不限" : `${PLUGIN_LIMITS.plus} 个插件`;
+const freeAllowance = `每天 ${DAILY_CREDIT_DEFAULTS.free} credits、${PLUGIN_LIMITS.free} 个插件、${WECHAT_LINK_LIMITS.free} 个微信链接`;
+const plusAllowance = `每天 ${DAILY_CREDIT_DEFAULTS.plus} credits、${plusPluginLimit}、${WECHAT_LINK_LIMITS.plus} 个微信链接、支持附件`;
+const textCredits = `credits =（输入 token + 输出 token × ${OUTPUT_TOKEN_WEIGHT}）÷ ${TOKENS_PER_CREDIT}`;
+const imageCost = `AI 生图每张 ${IMAGE_CREDITS} credits，描述文字另计`;
 
 // The agent indexes are server-only. Keeping them out of plugin-docs.ts avoids
 // pulling every landing page and price table into the public protocol page chunk.
 export const llmsText = `# Wechatai · 微伴
 
-> 把自选的大模型接进微信的独立产品。用户填入自己的模型 API Key（OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议），绑定微信后即可在聊天窗口里对话、联网问答、生图、接 Agent。自备模型的费用由用户自己的 API 服务商收取；可选 Plus 云端助手小薇在运营方开放后使用用户配置的文本模型，API 费用另付服务商，执行次数受限。微伴文字部分按加权 token 计 credits，AI 生图每张 5 credits，描述文字另计。
+> 把自选的大模型接进微信的独立产品。用户填入自己的模型 API Key（OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议），绑定微信后即可在聊天窗口里对话、联网问答、生图、接 Agent。自备模型的费用由用户自己的 API 服务商收取；可选 Plus 云端助手小薇在运营方开放后使用用户配置的文本模型，API 费用另付服务商，执行次数受限。微伴文字部分按加权 token 计 credits，${imageCost}。
 
 产品身份：微伴 Wechatai，官网 ${SITE_URL}，公开仓库 https://github.com/moutsea/wechatai，维护者 ${SITE_MAINTAINER.name}（${SITE_MAINTAINER.profile}）。这是微信 ClawBot 单聊接入服务，不是腾讯微信官方 AI，不是同名桌面客户端，不支持群聊机器人；项目来源与维护者见 ${SITE_URL}/contact#maintainer。
 
@@ -35,9 +43,9 @@ export const llmsText = `# Wechatai · 微伴
 - 会话与插件：切换普通模型会进入目标模型最近的活动会话，没有则新建，并退出当前插件模式。旧记录保留，上下文不会自动交给新模型。\`/wx plugins\` 查看插件别名，\`/use 别名\` 进入插件，\`/exit\` 返回普通模型会话。
 - 内置插件：DS Chat（联网问答）、AI 生图、OpenClaw、Hermes、角色扮演、个人助理、消息提醒，以及运营方开放的 Plus 云端助手小薇。
 - DS Chat：使用用户配置的回答模型与搜索 API，由模型判断是否需要搜索或阅读网页，也可直接回答；进入插件不代表每条回复都经过联网核验。
-- 小薇：需要 Plus 且运营方已开放，使用用户在微伴配置的文本模型。支持文字、附件处理与账号记忆，可生成文件并回传微信和提供下载，后台任务可查询、请求停止；输入与最终回复文字计 credits，返回图片每张另计 5 credits，非图片文件不另收费，内部消耗不另计。使用说明：${SITE_URL}/docs/cloud-agent。
+- 小薇：需要 Plus 且运营方已开放，使用用户在微伴配置的文本模型。支持文字、附件处理与账号记忆，可生成文件并回传微信和提供下载，后台任务可查询、请求停止；输入与最终回复文字计 credits，返回图片每张另计 ${IMAGE_CREDITS} credits，非图片文件不另收费，内部消耗不另计。使用说明：${SITE_URL}/docs/cloud-agent。
 - Agent 接入：OpenClaw 与 Hermes 由用户在自己的电脑或服务器上运行，设备和 Agent 进程需保持在线；微伴提供消息中转，不托管这两个 Agent。请求原文与最终回复经过微信和微伴，并非只转发摘要；使用云端模型或外部工具时，相关内容还会发送给用户配置的服务商。
-- 计费：自备模型费用归用户的 API 服务商，小薇同样使用自备模型并另付 API 费用；微伴文字部分 credits =（输入 token + 输出 token × 8）÷ 5000，AI 生图每张 5 credits，描述文字另计。免费版每天 100 credits、1 个插件、1 个微信链接；Plus ¥9.9/月或 ¥88/年，每天 1000 credits、插件不限、10 个微信链接、支持附件。
+- 计费：自备模型费用归用户的 API 服务商，小薇同样使用自备模型并另付 API 费用；微伴文字部分 ${textCredits}，${imageCost}。免费版${freeAllowance}；Plus ${plusPrices}，${plusAllowance}。
 - 会员购买：新购买的会员为单次付费，不自动续费，到期手动续费；退款申请需联系支持，按实际订单、使用情况及适用法律处理。
 - 消息提醒 Webhook 推送不扣 credits。
 - 开源：插件协议与站点代码公开（MIT）。与微信、腾讯及模型供应商无官方关联。
@@ -80,11 +88,9 @@ ${DOC_ARTICLES.map(
 文档接口公开，读取免费，无需认证。消息提醒使用专属 Token 鉴权；第三方插件执行、注册、上传代码与媒体交付接口尚未开放，请勿臆造这些接口。
 `;
 
-const cny = (value: number) => `¥${Number.isInteger(value) ? value : value.toFixed(1)}`;
 const creditPacks = BILLING_OFFERS.filter((offer) => offer.kind === "credits")
-  .map((offer) => `${cny(offer.amount / 100)} / ${offer.credits} credits`)
+  .map((offer) => `¥${offer.amount / 100} / ${offer.credits} credits`)
   .join("、");
-const plusPluginLimit = PLUGIN_LIMITS.plus === null ? "插件不限" : `${PLUGIN_LIMITS.plus} 个插件`;
 
 // The full index reuses the same facts, plugin entries and document summaries
 // as llms.txt, and derives page entries from the public page catalogue.
@@ -108,9 +114,9 @@ ${SEO_PAGES.map(
 `;
 const llmsPricingFacts = `## 价格事实
 
-- 免费版：每天 ${DAILY_CREDIT_DEFAULTS.free} credits、${PLUGIN_LIMITS.free} 个插件、${WECHAT_LINK_LIMITS.free} 个微信链接。
-- Plus：${cny(PLUS_MONTHLY_YUAN)}/月或 ${cny(PLUS_YEARLY_YUAN)}/年，每天 ${DAILY_CREDIT_DEFAULTS.plus} credits、${plusPluginLimit}、${WECHAT_LINK_LIMITS.plus} 个微信链接、支持附件。
-- 文字 credits =（输入 token + 输出 token × ${OUTPUT_TOKEN_WEIGHT}）÷ ${TOKENS_PER_CREDIT}；AI 生图每张 ${IMAGE_CREDITS} credits，描述文字另计；消息提醒 Webhook 推送不扣 credits。
+- 免费版：${freeAllowance}。
+- Plus：${plusPrices}，${plusAllowance}。
+- 文字 ${textCredits}；${imageCost}；消息提醒 Webhook 推送不扣 credits。
 - 会员为单次付费，不自动续费；模型 API 费用另付服务商。
 - credits 加油包：${creditPacks}。加油包无需 Plus，购买的 credits 长期有效。
 - 价格与估算器：${SITE_URL}/pricing

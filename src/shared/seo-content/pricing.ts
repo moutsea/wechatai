@@ -1,7 +1,12 @@
 import type { SeoPage } from "../seo-pages";
 import { BILLING_OFFERS } from "../billing-offers";
 import { DAILY_CREDIT_DEFAULTS } from "../credits";
-import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN, approxYuan } from "../pricing-copy";
+import { approxYuan } from "../pricing-copy";
+
+const monthly = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")!;
+const yearly = BILLING_OFFERS.find((offer) => offer.id === "plus_yearly")!;
+const monthlyPrice = `¥${monthly.amount / 100}/月`;
+const yearlyPrice = `¥${yearly.amount / 100}/年`;
 
 const packs = BILLING_OFFERS.filter((offer) => offer.kind === "credits")
   .map((offer) => `¥${offer.amount / 100} / ${offer.credits} credits`)
@@ -12,8 +17,8 @@ const intro =
 export const pricingPage: SeoPage = {
   path: "/pricing",
   kind: "pricing",
-  title: `价格：免费版每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus ¥${PLUS_MONTHLY_YUAN}/月`,
-  description: `对比微伴免费版与 Plus：每日额度、微信连接、插件、附件与小薇 AI。免费版每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus ¥${PLUS_MONTHLY_YUAN}/月或 ¥${PLUS_YEARLY_YUAN}/年，单次购买，不自动续费。模型 API 费用另付。`,
+  title: `价格：免费版每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus ${monthlyPrice}`,
+  description: `对比微伴免费版与 Plus：每日额度、微信连接、插件、附件与小薇 AI。免费版每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus ${monthlyPrice}或 ${yearlyPrice}，单次购买，不自动续费。模型 API 费用另付。`,
   eyebrow: "价格与方案",
   h1: "免费开始，按需升级 Plus",
   lede: intro,
@@ -47,7 +52,7 @@ export const pricingPage: SeoPage = {
     },
     {
       question: "Plus 多少钱？会自动续费吗？",
-      answer: `Plus ¥${PLUS_MONTHLY_YUAN}/月，或 ¥${PLUS_YEARLY_YUAN}/年（折合约 ${approxYuan((PLUS_YEARLY_YUAN * 100) / 12)}/月）。新购买的会员均为单次付费，不自动续费；提前续费会顺延有效期。到期未续费则恢复免费版，已购买的 credits 保留。历史自动续费订阅可在「管理订阅」中取消后续续费。`,
+      answer: `Plus ${monthlyPrice}，或 ${yearlyPrice}（折合约 ${approxYuan(yearly.amount / 12)}/月）。新购买的会员均为单次付费，不自动续费；提前续费会顺延有效期。到期未续费则恢复免费版，已购买的 credits 保留。历史自动续费订阅可在「管理订阅」中取消后续续费。`,
     },
     {
       question: "购买后可以退款吗？",
