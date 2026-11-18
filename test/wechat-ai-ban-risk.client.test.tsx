@@ -17,3 +17,9 @@ it("guides readers across each checklist row without scoring their risk", () => 
   expect(section?.querySelector("p")?.textContent).toMatch(/危险信号[^。]*同一行[^。]*安全做法/);
   expect(section?.textContent).not.toMatch(/答「是」|平均水平|概率[^。]*量级/);
 });
+
+it("identifies the CNCERT announcement link as a reprint by 安全内参", () => {
+  const citation = page.querySelector('#sources a[href="https://www.secrss.com/articles/91136"]');
+  expect(citation?.textContent).toMatch(/安全内参.*转载/);
+  expect(citation?.parentElement?.textContent).not.toContain("授权转载");
+});

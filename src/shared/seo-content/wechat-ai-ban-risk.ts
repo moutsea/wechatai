@@ -147,7 +147,7 @@ export const wechatBanRiskPage: SeoPage = {
 
 - **《微信个人账号使用规范》**：更新日期与生效日期均为 2026-10-15，[官方页面](https://weixin.qq.com/agreement/personal_account?lang=zh_CN)。本文引用其 1.2.6、1.2.9、3.2、3.3、3.4 条及「引言」「二、内容规范」。
 - **《腾讯微信软件许可及服务协议》**：本文引用第 8.2.1.6、8.5.1 条，[官方页面](https://weixin.qq.com/agreement/service_agreement?lang=zh_CN)。该页面未标注更新或生效日期，本文不编造日期。
-- **国家互联网应急中心（CNCERT）安全公告**：2026-06-09《关于部分智能体技能包（Skills）存在越狱和挖矿风险的安全公告》，[授权转载全文](https://www.secrss.com/articles/91136)。
+- **国家互联网应急中心（CNCERT）安全公告**：2026-06-09《关于部分智能体技能包（Skills）存在越狱和挖矿风险的安全公告》，[安全内参转载全文](https://www.secrss.com/articles/91136)。
 - **《使用外挂被限制朋友圈功能说明》**：仅见于微信客户端处罚页，未找到可长期引用的官方固定链接与发布日期；本文只把其中列举的行为当作示例，不作为规则版本依据。`,
     },
   ],
