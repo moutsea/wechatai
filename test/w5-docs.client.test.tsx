@@ -86,6 +86,14 @@ it("directs users with no reply to check the bound account and connection diagno
   expect(answer?.querySelector('a[href="/app/wechat"]')?.textContent).toBe("微信连接");
 });
 
+it.each(["no-reply", "connection-test"])("explains connection test billing in FAQ #%s", (id) => {
+  const answer = renderDoc("faq").querySelector(`#${id}`)?.textContent;
+  expect(answer).toMatch(/固定短句/);
+  expect(answer).toMatch(/测试成功.*扣.*微伴 credits/);
+  expect(answer).toMatch(/微伴.*余额不足.*不调用上游/);
+  expect(answer).toMatch(/上游失败.*不扣.*微伴 credits/);
+});
+
 it("distinguishes a DS Chat test answer from a verified search", () => {
   const page = renderDoc("ds-chat");
   const setup = page.querySelector("#configure ol li:last-child")?.textContent;
