@@ -76,7 +76,7 @@ export const wechatKimiPage: SeoPage = {
     {
       question: "KimiSeek 一键导入会直接扣费吗？",
       answer:
-        "关联账号本身不会发起模型调用，也不扣微伴 credits。实际费用分两笔：模型调用由 KimiSeek 按其账户与账单结算；微伴按实际输入、输出 tokens 收取 credits。充值或购买前请在 KimiSeek 页面确认金额与计费口径。",
+        "关联账号不会发起模型调用，也不扣微伴 credits。使用模型时，KimiSeek 和微伴分别计量：模型费用以 KimiSeek 账单为准；微伴按实际输入、输出 tokens 扣除 credits。微伴每日赠额够用时，无需给微伴充值。",
     },
     {
       question: "导入后模型列表是空的怎么办？",
