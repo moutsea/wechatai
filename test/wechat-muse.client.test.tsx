@@ -16,3 +16,13 @@ it("shows the WeChat setup step without raw link markup and keeps both connectio
   );
   expect(page.querySelector('#connect a[href="/app/wechat"]')?.textContent).toBe("微信连接");
 });
+
+it("tells readers to generate the command with Connect Muse before using the copy button", () => {
+  const steps = [...page.querySelectorAll("#connect ol > li")].map((step) => step.textContent ?? "");
+  const connect = steps.findIndex((step) => step.includes("「连接 Muse」"));
+  const copy = steps.findIndex((step) => step.includes("「复制 Muse 连接指令」"));
+  expect(connect).toBeGreaterThanOrEqual(0);
+  expect(copy).toBe(connect + 1);
+  expect(steps.slice(connect, copy + 1).join(" ")).not.toContain("「生成连接命令」");
+  expect(steps[copy]).toContain("主聊天");
+});
