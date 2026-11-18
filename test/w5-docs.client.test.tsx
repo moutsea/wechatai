@@ -29,6 +29,13 @@ it("directs each image-generation credit error to the right account or setting",
   );
 });
 
+it("tells readers to retest the saved image binding and create a new config to switch models", () => {
+  const guidance = renderDoc("image-generation").querySelector("#configure > p")?.textContent;
+  expect(guidance).toMatch(/同一.*更新.*直接.*测试/);
+  expect(guidance).toMatch(/已保存的插件不能更换模型.*新建插件配置/);
+  expect(guidance).not.toContain("重新选择模型");
+});
+
 it("starts the attachment expiry window at the last successful addition", () => {
   const instructions = renderDoc("attachments").querySelector("#send")?.textContent;
   expect(instructions).toMatch(/最后一次成功追加.*重新计时.*15 分钟/);
