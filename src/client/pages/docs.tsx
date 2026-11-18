@@ -268,6 +268,11 @@ export function DocsIndex() {
         <span className="docs-kicker">微伴使用文档</span>
         <h1>在微信里，用好你的 AI。</h1>
         <p>从第一次连接，到模型、插件与会话管理。按步骤上手，或直接查找需要的功能。</p>
+        <p className="docs-index-lede">
+          文档按「开始使用 → 日常功能 → 插件 → 实操教程」组织。第一次使用，先确认手机微信有 ClawBot
+          入口，再准备模型 API Key，跟着使用指南完成配置和扫码；已经连上微信，可以直接查
+          命令、会话、附件与 credits。下面的摘要都来自各文档的现有说明，方便先判断该打开哪一篇。
+        </p>
       </header>
       <Link className="docs-start-card" to="/docs/getting-started">
         <span className="docs-start-icon">
@@ -336,6 +341,34 @@ export function DocsIndex() {
           ))}
         </div>
       </section>
+      <section className="docs-index-section" aria-labelledby="all-docs-title">
+        <h2 id="all-docs-title">按主题浏览全部文档</h2>
+        <p className="docs-index-lede">
+          每篇附一句话摘要；具体步骤、限制与报错处理以文档内正文为准。
+        </p>
+        {DOC_GROUPS.map((group) => {
+          const articles = DOC_ARTICLES.filter((article) => article.group === group.id);
+          if (!articles.length) return null;
+          return (
+            <div className="docs-index-group" key={group.id}>
+              <h3>{group.title}</h3>
+              <ul className="docs-index-doc-list">
+                {articles.map((article) => (
+                  <li key={article.slug}>
+                    <Link to={docPath(article.slug)}>
+                      <span>
+                        <strong>{article.title}</strong>
+                        <small>{article.description}</small>
+                      </span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </section>
       <div className="docs-index-help">
         <span>
           遇到问题？先看看<Link to="/docs/faq">常见问题</Link>，也可以
@@ -387,8 +420,11 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
       </header>
       <article className="docs-prose" aria-label={article.title}>
         {content.intro && <p className="docs-intro">{content.intro}</p>}
-        {content.sections.map((section) => (
+        {content.sections.map((section, index) => (
           <section key={section.id} id={section.id} tabIndex={-1}>
+            {section.group && section.group !== content.sections[index - 1]?.group && (
+              <p className="docs-kicker docs-faq-group">{section.group}</p>
+            )}
             <h2>{section.title}</h2>
             {section.illustration === "wechat-ai-bridge" && <DocBridgeDiagram />}
             <DocMarkdown>{section.body}</DocMarkdown>
