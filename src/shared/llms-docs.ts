@@ -117,7 +117,7 @@ const llmsPricingFacts = `## 价格事实
 - 免费版：${freeAllowance}。
 - Plus：${plusPrices}，${plusAllowance}。
 - 文字 ${textCredits}；${imageCost}；消息提醒 Webhook 推送不扣 credits。
-- 会员为单次付费，不自动续费；模型 API 费用另付服务商。
+- 新购买的会员为单次付费，不自动续费；已有自动续费订阅可在「管理订阅」中取消后续续费。模型 API 费用另付服务商。
 - credits 加油包：${creditPacks}。加油包无需 Plus，购买的 credits 长期有效。
 - 价格与估算器：${SITE_URL}/pricing
 

@@ -91,6 +91,15 @@ describe("public plugin developer resources", () => {
     expect(text).toContain("AI 生图每张");
   });
 
+  it("distinguishes new purchases from existing auto-renewals in the full index pricing facts", async () => {
+    const response = await request(LLMS_FULL_PATH, undefined, {} as Env);
+    const pricingFacts = (await response.text())
+      .split(/^## /m)
+      .find((section) => section.startsWith("价格事实\n"));
+    expect(pricingFacts).toContain("新购买的会员为单次付费，不自动续费");
+    expect(pricingFacts).toContain("已有自动续费订阅可在「管理订阅」中取消");
+  });
+
   it("supports HEAD, CORS preflight and conditional reads", async () => {
     for (const path of [
       PLUGIN_API_PATH,
