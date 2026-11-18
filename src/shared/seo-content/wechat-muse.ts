@@ -29,7 +29,7 @@ export const wechatMusePage: SeoPage = {
   steps: [
     {
       title: "绑定微信，发一次 /wx help",
-      text: "在微伴[微信连接](/app/wechat)扫码绑定，再到对应的微信对话发送 /wx help，建立能收到回复的通道。扫码本身不需要配置模型。",
+      text: "在微伴的微信连接页扫码绑定，再到对应的微信对话发送 /wx help，建立能收到回复的通道。扫码本身不需要配置模型。",
     },
     {
       title: "在插件里生成 Muse 连接指令",
