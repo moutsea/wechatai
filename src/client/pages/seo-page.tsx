@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ArrowRight, Check, ChevronDown, Sprout } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Copy, Sprout } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { SiteHeader } from "../site-header";
 import { PricingPage } from "./pricing-page";
@@ -49,6 +49,42 @@ function SeoSteps({ steps }: { steps: NonNullable<SeoPage["steps"]> }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+function SeoCommands({ items }: { items: NonNullable<SeoPage["commands"]> }) {
+  const [status, setStatus] = useState<{ command: string; copied: boolean } | null>(null);
+  async function copy(command: string) {
+    try {
+      await navigator.clipboard.writeText(command);
+      setStatus({ command, copied: true });
+    } catch {
+      setStatus({ command, copied: false });
+    }
+  }
+  return (
+    <div className="seopage-commands" role="group" aria-label="常用微信命令">
+      {items.map(({ label, command }) => {
+        const copied = status?.command === command && status.copied;
+        const failed = status?.command === command && !status.copied;
+        return (
+          <div className="seopage-command" key={command}>
+            <span>
+              <small>{label}</small>
+              <code>{command}</code>
+            </span>
+            <button
+              type="button"
+              aria-label={`复制命令 ${command}`}
+              onClick={() => void copy(command)}
+            >
+              {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+              <span role="status">{copied ? "已复制" : failed ? "复制失败" : "复制"}</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -142,9 +178,12 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
             </Link>
             <Link
               className="button secondary"
-              to={page.ctaHref ? "/pricing#estimate" : "/docs/getting-started"}
+              to={
+                page.secondaryCta?.href ??
+                (page.ctaHref ? "/pricing#estimate" : "/docs/getting-started")
+              }
             >
-              {page.ctaHref ? "先算使用费用" : "查看使用指南"}
+              {page.secondaryCta?.label ?? (page.ctaHref ? "先算使用费用" : "查看使用指南")}
             </Link>
           </div>
           <p className="hero-prerequisite">
@@ -162,7 +201,19 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
           <p className="seopage-answer">{page.answer}</p>
         </header>
         {page.comparison && <SeoCompareTable comparison={page.comparison} />}
-        {page.steps && <SeoSteps steps={page.steps} />}
+        {page.steps &&
+          (page.stepsSummary ? (
+            <details className="seopage-details seopage-steps-details" open>
+              <summary>
+                {page.stepsSummary}
+                <ChevronDown size={16} aria-hidden="true" />
+              </summary>
+              <SeoSteps steps={page.steps} />
+            </details>
+          ) : (
+            <SeoSteps steps={page.steps} />
+          ))}
+        {page.commands && <SeoCommands items={page.commands} />}
         <article className="seopage-prose">
           {page.sections.length > 2 && (
             <details className="seopage-toc">

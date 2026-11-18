@@ -34,6 +34,12 @@ export interface SeoStep {
   text: string;
 }
 
+/** A copyable command shown with the steps, for pages whose flow runs in WeChat. */
+export interface SeoCommand {
+  label: string;
+  command: string;
+}
+
 /**
  * Side-by-side facts rendered above the prose. A `null` cell means the field
  * could not be verified from a public source; it is rendered as a dash with a
@@ -76,6 +82,10 @@ export interface SeoPage {
   /** Related documentation and landing pages; also used for internal linking. */
   related: readonly SeoLink[];
   steps?: readonly SeoStep[];
+  /** Wraps the step overview in a native details block so long steps can be collapsed. */
+  stepsSummary?: string;
+  /** Example commands with copy buttons, rendered under the steps. */
+  commands?: readonly SeoCommand[];
   /** Optional fact table for side-by-side pages such as /compare/*. */
   comparison?: SeoComparison;
   /** ISO date of the last content change; drives sitemap lastmod. */
@@ -84,6 +94,8 @@ export interface SeoPage {
   ctaLabel?: string;
   /** Topic pages may lead to their specific tutorial before registration. */
   ctaHref?: string;
+  /** Replaces the default pricing secondary action, e.g. the next setup step. */
+  secondaryCta?: SeoLink;
 }
 
 export const SEO_PAGES: readonly SeoPage[] = SEO_CONTENT;

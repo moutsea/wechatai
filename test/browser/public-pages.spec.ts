@@ -961,3 +961,65 @@ for (const interval of ["month", "year"]) {
     await expect(card.locator("button.plan-cta")).toBeEnabled();
   });
 }
+
+for (const width of [320, 390]) {
+  test(`keeps the Muse setup reachable, collapsible and copyable at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: async (text: string) => {
+            (window as { __copiedText?: string }).__copiedText = text;
+          },
+        },
+      });
+    });
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/wechat-muse`);
+    await mounted;
+
+    const wechat = page.locator('.seopage-actions a[href="/app/wechat"]');
+    const plugins = page.locator('.seopage-actions a[href="/app/plugins"]');
+    await expect(wechat).toBeVisible();
+    await expect(plugins).toBeVisible();
+    await expect(plugins).toBeInViewport();
+
+    const details = page.locator("details.seopage-steps-details");
+    await expect(details).toHaveAttribute("open", "");
+    await details.locator("summary").click();
+    await expect(details).not.toHaveAttribute("open");
+    await details.locator("summary").click();
+    await expect(details).toHaveAttribute("open", "");
+
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+
+    const copy = page.getByRole("button", { name: "复制命令 /use muse" });
+    await copy.scrollIntoViewIfNeeded();
+    await copy.click();
+    await expect(copy).toContainText("已复制");
+    expect(await page.evaluate(() => (window as { __copiedText?: string }).__copiedText)).toBe(
+      "/use muse",
+    );
+
+    const connect = page.locator("#connect");
+    await expect(
+      connect.getByRole("heading", { name: "完整接入步骤：从扫码绑定到第一条任务" }),
+    ).toBeVisible();
+    const steps = await connect.locator("ol > li").all();
+    expect(steps).toHaveLength(6);
+    for (const step of steps) await expect(step).toBeHidden();
+    const fullSteps = connect.getByText("六步接入说明", { exact: true });
+    await fullSteps.click();
+    for (const step of steps) await expect(step).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await fullSteps.click();
+    for (const step of steps) await expect(step).toBeHidden();
+  });
+}
