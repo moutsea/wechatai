@@ -157,6 +157,27 @@ it("states the operator and Plus requirements wherever hosted Word generation is
   }
 });
 
+it.each([
+  ["wechatai-vs-wechat-official-ai", "微伴和微信官方内置 AI 是同一个产品吗？"],
+  ["wechatai-vs-commercial-wechat-ai", "商业平台需要自己准备 API Key 吗？"],
+])("scopes Key and provider charges to the relevant model path on %s", async (pair, question) => {
+  await renderAt(`/compare/${pair}`);
+  const faq = [...container.querySelectorAll("#faq details")].find((item) =>
+    item.querySelector("summary")?.textContent?.includes(question),
+  );
+  for (const element of [
+    container.querySelector(".seopage-answer"),
+    container.querySelector("#five-facts"),
+    faq?.querySelector("p"),
+  ]) {
+    const copy = element?.textContent;
+    expect(copy).toMatch(/普通聊天和小薇[^。；]*自备[^。；]*API Key/);
+    expect(copy).toMatch(/已有 OpenClaw[^。；]*沿用[^。；]*模型配置[^。；]*无需另配微伴模型渠道/);
+    expect(copy).toMatch(/云 API[^。；]*才[^。；]*服务商/);
+    expect(copy).toMatch(/本地推理[^。；]*不产生模型 API 费/);
+  }
+});
+
 it("discloses server-side Key storage, use and revocation before recommending Wechatai", async () => {
   await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
   const copy = container.querySelector("#when-wechatai")?.textContent;

@@ -11,7 +11,7 @@ export const wechataiVsWechatAiPage: SeoPage = {
   h1: "微伴 vs 微信官方内置 AI：先分清你要的是哪一类能力",
   lede: "官方内置胜在零配置，微伴胜在模型自选与插件。两者不是同一层服务，先按「能不能换模型」「要不要接自己的 Agent」排除，再比较价格。",
   answer:
-    "微信官方内置 AI 由微信提供，模型不可替换，具体能力、额度与资费以微信对应功能说明为准；微伴是第三方 ClawBot 单聊接入服务，需要你自己提供模型 API Key，平台按 credits 计费，模型费用另付服务商。只要微信自带的基础问答，官方内置更省事；需要固定模型、插件或自建 Agent，才考虑微伴。",
+    "微信官方内置 AI 的模型不可替换，能力、额度与资费以微信对应功能说明为准。微伴是第三方 ClawBot 单聊接入服务，平台按 credits 计费。普通聊天和小薇需自备模型 API Key；接入已有 OpenClaw 沿用 Agent 的模型配置，无需另配微伴模型渠道。使用云 API 才涉及服务商费用，本地推理不产生模型 API 费。只要微信自带的基础问答，官方内置更省事；需要指定模型、插件或接入自建 Agent，可考虑微伴。",
   primaryKeyword: "微伴 微信官方 AI 对比",
   secondaryKeywords: [
     "微信自带AI和第三方区别",
@@ -60,14 +60,14 @@ export const wechataiVsWechatAiPage: SeoPage = {
       title: "先分清：一个是微信自带能力，一个是第三方接入",
       body: `微信官方内置 AI 是微信自己提供的能力，入口、可用范围、免费额度与资费由微信维护，用户不需要自己准备模型 Key，也不能把模型换成别家的。它可以覆盖「偶尔问两句」的需求，但能力边界由平台决定。
 
-微伴是独立第三方服务，做的是把**你自选的模型 API** 接到微信 ClawBot 单聊。它不提供模型额度，也不与微信官方存在隶属关系；注册前仍要确认账号有 ClawBot 入口。两者不是互相替代的同一款产品，比较时应先看需求是否落在官方能力范围内。
+微伴是独立第三方服务，可将自选模型 API 或已有 Agent 接到微信 ClawBot 单聊。它不提供模型额度，也不与微信官方存在隶属关系；注册前仍要确认账号有 ClawBot 入口。两者不是互相替代的同一款产品，比较时应先看需求是否落在官方能力范围内。
 
 如果你还没有决定走哪条路线，先看[微信 AI 的几种接入方案](/wechat-ai-options)，再回到这一页核对官方内置与微伴的差别。`,
     },
     {
       id: "five-facts",
       title: "五项事实：Key、模型、群聊、设备与部署",
-      body: `上表只列能公开核实的字段。最关键的差异是 **Key 归谁**：官方内置不需要你准备 API Key，模型与额度由微信管理；微伴需要你自己的模型 Key，模型费用直接付给服务商。
+      body: `官方内置不需要你准备 API Key，模型与额度由微信管理。微伴普通聊天和小薇需自备模型 API Key；接入已有 OpenClaw 沿用 Agent 的模型配置，无需另配微伴模型渠道。使用云 API 才涉及服务商费用，本地推理不产生模型 API 费。
 
 第二项差异是**能不能换模型**。官方内置不可替换模型；微伴支持兼容 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 协议的模型，具体可用范围取决于你选择的模型服务商与账号权限。
 
@@ -76,9 +76,9 @@ export const wechataiVsWechatAiPage: SeoPage = {
     {
       id: "price",
       title: "费用怎么算：先把两笔账分开",
-      body: `微伴的账分两层：平台按消息文字量收 credits，模型调用费由你的 API 服务商收取。Free 每天赠送 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus 为 ¥${PLUS_MONTHLY_YUAN}/月或 ¥${PLUS_YEARLY_YUAN}/年；赠送额度不包含模型费用。具体规则与算例见[价格与免费额度](/pricing)。
+      body: `微伴平台按消息文字量收 credits，调用云模型 API 时，费用另付服务商。Free 每天赠送 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus 为 ¥${PLUS_MONTHLY_YUAN}/月或 ¥${PLUS_YEARLY_YUAN}/年；赠送额度不包含模型费用。具体规则与算例见[价格与免费额度](/pricing)。
 
-官方内置的收费与免费额度以微信对应功能说明为准，这里不写无法核实的具体数字。比较时不要拿「微伴 Free 的 credits」直接对比「官方免费」：credits 只抵扣中转费，模型 token 仍要另付。
+官方内置的收费与免费额度以微信对应功能说明为准，这里不写无法核实的具体数字。比较时不要拿「微伴 Free 的 credits」直接对比「官方免费」：credits 只抵扣中转费，不抵扣服务商的 API 费用。
 
 在[费用估算器](/pricing#estimate)填入每轮输入与输出 tokens、每日轮数，工具会自动估算微伴的 credits 用量。另填服务商的输入与输出单价，可估算模型 API 费用，再与微信官方当前说明对照。没有统一口径的价格数据时，不承诺哪一方更便宜。`,
     },
@@ -97,21 +97,21 @@ export const wechataiVsWechatAiPage: SeoPage = {
     {
       id: "choose-wechatai",
       title: "什么情况下选微伴",
-      body: `出现以下任一需求时，官方内置就满足不了，需要考虑自带 Key 的中转服务：
+      body: `出现以下任一需求时，可以考虑用微伴接入自选模型或已有 Agent：
 
 - **指定模型**：要固定使用某个模型，或在不同模型之间切换。
 - **插件与工具**：需要 DS Chat 联网、生图、角色卡、个人助理等插件能力。
 - **自建 Agent**：要把 OpenClaw、Hermes 等 Agent 接进微信；微伴提供 Channel，但 Agent 进程仍由你自己运行和维护。
 - **账单可控**：希望模型费与平台费分开核对，Key 掌握在自己手里。
 
-代价也要接受：需要自己开通模型服务商、管理 Key 与余额；微伴只支持 ClawBot 单聊，不支持群聊；普通聊天不需要设备常开，接入自建 Agent 后仍需要一台在线的运行环境。`,
+使用微伴普通聊天和小薇时，需自己管理模型 Key 与服务商余额；仅接入已有 OpenClaw 不用另配微伴模型渠道。微伴只支持 ClawBot 单聊，不支持群聊；普通聊天不需要设备常开，接入自建 Agent 时仍需要在线的运行环境。`,
     },
     {
       id: "misconceptions",
       title: "三个常见误区",
       body: `**误区一：微伴是微信官方产品。** 不是。微伴是独立维护的第三方接入服务，与微信、腾讯没有官方关联，也不代表微信官方立场。
 
-**误区二：免费 credits 等于模型免费用。** 不等于。credits 只抵扣微伴的中转费用，模型 API 仍由服务商按 token 计费。
+**误区二：免费 credits 等于模型免费用。** 不等于。credits 只抵扣微伴的中转费用；使用云模型 API 时，服务商费用另计。
 
 **误区三：用了第三方就一定会封号。** 不能这样下结论。账号风险取决于具体接入通道与使用行为，不能只按「官方/第三方」二分。微伴使用微信 ClawBot 官方插件通道，不修改客户端；但仍需遵守平台规则，任何第三方服务都无法保证账号绝不受限。更多说明见[微信用 AI 会不会封号](/wechat-ai-ban-risk)。`,
     },
@@ -120,7 +120,7 @@ export const wechataiVsWechatAiPage: SeoPage = {
     {
       question: "微伴和微信官方内置 AI 是同一个产品吗？",
       answer:
-        "不是。微信官方内置 AI 由微信提供；微伴是独立维护的第三方 ClawBot 单聊接入服务，与微信、腾讯没有官方关联，需要用户自备模型 API Key。",
+        "不是。微信官方内置 AI 由微信提供；微伴是独立第三方 ClawBot 单聊接入服务，与微信、腾讯没有官方关联。普通聊天和小薇需自备模型 API Key；接入已有 OpenClaw 沿用 Agent 的模型配置，无需另配微伴模型渠道。使用云 API 才涉及服务商费用，本地推理不产生模型 API 费。",
     },
     {
       question: "微伴能换模型，官方内置不能吗？",
@@ -134,12 +134,12 @@ export const wechataiVsWechatAiPage: SeoPage = {
     },
     {
       question: "微伴免费版够用吗？",
-      answer: `免费版每天赠送 ${DAILY_CREDIT_DEFAULTS.free} credits，用于抵扣微伴中转费用；模型 API 费用另付服务商。是否够用取决于消息长度、模型输出与历史上下文，可以用价格页的估算器按自己的用量计算。`,
+      answer: `免费版每天赠送 ${DAILY_CREDIT_DEFAULTS.free} credits，用于抵扣微伴中转费用；调用云模型 API 时费用另付服务商。是否够用取决于消息长度、模型输出与历史上下文，可以用价格页的估算器按自己的用量计算。`,
     },
     {
       question: "官方内置能接自己的 Agent 或插件吗？",
       answer:
-        "官方内置的能力边界由微信决定，不能替换模型，也不能按第三方插件协议接入自己的 Agent。需要这类能力时，应选择支持自备 Key 与插件的中转服务，并自行核对通道与平台规则。",
+        "官方内置的能力边界由微信决定，不能替换模型，也不能按第三方插件协议接入自己的 Agent。需要这类能力时，应选择支持相应 Agent 或插件的中转服务，并核对通道与平台规则。",
     },
   ],
   related: [
