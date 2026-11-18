@@ -189,6 +189,7 @@ import {
 import { DEFAULT_OUTPUT_TOKENS, modelInputBudget } from "../shared/context";
 import { wechatHelp, welcomeGuide } from "../shared/guide";
 import { leadingMention, nativeCommand, platformCommand } from "../shared/command-routing";
+import { watchdogHeader } from "./receiver-watchdog";
 import { REFERRAL_CREDITS } from "../shared/referrals";
 import { qualifyReferral, wechatIdentityHash, type ReferralRow } from "./referrals";
 import {
@@ -583,7 +584,8 @@ export class PersonalAccount extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
       return new Response("WebSocket required", { status: 426 });
     const path = new URL(request.url).pathname;
-    if (path === "/wechat-receiver") return this.receiver.connect();
+    if (path === "/wechat-receiver")
+      return this.receiver.connect(request.headers.get(watchdogHeader) === "1");
     if (path !== "/connector-wait") return new Response("Not found", { status: 404 });
     const pluginId = request.headers.get("X-Plugin-Id") || "";
     try {
@@ -612,17 +614,22 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   async webSocketClose(socket: WebSocket) {
     socket.close(1000, "closed");
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.scheduleWechat();
+    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.receiver.disconnected(socket);
   }
   async webSocketError(socket: WebSocket) {
     socket.close(1011, "connection error");
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.scheduleWechat();
+    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.receiver.disconnected(socket);
+  }
+  async recoverReceiverWatchdog(session: string) {
+    await this.receiver.recoverWatchdog(session);
   }
   async receiverStatus() {
+    const socket = this.receiver.socket();
     return {
       enabled: this.receiver.enabled(),
       registered: this.getSetting<boolean | null>("receiverRegistered", null),
-      delegated: !!this.receiver.socket(),
+      delegated: !!socket,
+      watchdog: socket && this.receiver.supervised(socket) ? "vps" : "account",
       connectedLinks: this.receivingLinks().filter(
         (l) => this.connection(l.id).status === "connected",
       ).length,
@@ -2758,7 +2765,7 @@ export class PersonalAccount extends DurableObject<Env> {
     await this.receiver
       .sync()
       .catch(() => console.warn(JSON.stringify({ event: "wechat.receiver_sync_failed" })));
-    const receivingExternally = !!this.receiver.socket();
+    const receivingExternally = this.receiver.socket();
     const links = this.receivingLinks()
       .map((l) => ({ ...this.connection(l.id), id: l.id }))
       .filter((l) => ["connected", "waiting", "scanned"].includes(l.status));
@@ -2787,7 +2794,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (hasPending || !receivingExternally || links.some((l) => l.status !== "connected"))
         wakeups.push(Date.now() + (links.every((l) => l.error) ? 15000 : hasPending ? 100 : 1000));
       if (receivingExternally) {
-        wakeups.push(this.receiver.checkAt()!);
+        wakeups.push(this.receiver.checkAt(receivingExternally));
         const until = this.getSetting("planUntil", 0);
         if (until > Date.now()) wakeups.push(until);
         for (const record of links) {

@@ -1,6 +1,12 @@
 import { env, runInDurableObject, createExecutionContext } from "cloudflare:test";
 import worker from "../src/server/index";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import watchdogMigration from "../migrations/0018_receiver_watchdog.sql?raw";
+import {
+  fallbackWatchdogs,
+  recoverReceiverSession,
+  watchdogHeader,
+} from "../src/server/receiver-watchdog";
 import migration from "../migrations/0011_wechat_receivers.sql?raw";
 import { RECEIVER_PING, RECEIVER_PONG, receiverAuthorized } from "../src/server/wechat-receiver";
 import { connectForManualDelivery, useManualAlarms } from "./helpers/wechat-delivery";
@@ -11,7 +17,7 @@ const accounts: ReturnType<typeof env.ACCOUNTS.getByName>[] = [];
 const sockets: WebSocket[] = [];
 const serviceSecret = "test-receiver-secret-with-at-least-32-characters";
 beforeAll(async () => {
-  for (const statement of migration
+  for (const statement of (migration + "\n" + watchdogMigration)
     .split(";")
     .map((s) => s.trim())
     .filter(Boolean))
@@ -26,7 +32,7 @@ afterEach(async () => {
     });
   vi.restoreAllMocks();
 });
-async function setup() {
+async function setup(supervised = false) {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(stub);
   await connectForManualDelivery(stub);
@@ -34,13 +40,14 @@ async function setup() {
     Object.assign(Reflect.get(instance, "env"), {
       WECHAT_RECEIVER_SECRET: serviceSecret,
       WECHAT_RECEIVER_ACCOUNTS: "all",
+      WECHAT_RECEIVER_WATCHDOG_ACCOUNTS: supervised ? stub.id.toString() : "",
     });
   });
   return stub;
 }
-async function connect(stub: ReturnType<typeof env.ACCOUNTS.getByName>) {
+async function connect(stub: ReturnType<typeof env.ACCOUNTS.getByName>, supervised = false) {
   const response = await stub.fetch("https://internal/wechat-receiver", {
-    headers: { Upgrade: "websocket" },
+    headers: { Upgrade: "websocket", ...(supervised ? { [watchdogHeader]: "1" } : {}) },
   });
   expect(response.status).toBe(101);
   const socket = response.webSocket!;
@@ -89,6 +96,40 @@ async function inspect(stub: ReturnType<typeof env.ACCOUNTS.getByName>) {
   }));
 }
 describe("external WeChat receiver", () => {
+  it("partitions discovery and rejects cross-pool connections before contacting an account", async () => {
+    const [shared, dedicated] = await Promise.all([setup(), setup()]);
+    for (const stub of [shared, dedicated])
+      await env.DB.prepare("INSERT OR REPLACE INTO wechat_receivers VALUES (?,1,?)")
+        .bind(stub.id.toString(), Date.now())
+        .run();
+    const bindings = {
+      ...env,
+      WECHAT_RECEIVER_SECRET: serviceSecret,
+      WECHAT_RECEIVER_ACCOUNTS: "all",
+      WECHAT_RECEIVER_DEDICATED_ACCOUNTS: dedicated.id.toString(),
+    };
+    const request = (path: string, pool?: string) =>
+      worker.fetch(
+        new Request("https://example.com/api/internal/wechat-receiver/" + path, {
+          headers: {
+            Authorization: "Bearer " + serviceSecret,
+            ...(pool ? { "X-Wechatai-Receiver-Pool": pool } : {}),
+          },
+        }),
+        bindings,
+        createExecutionContext(),
+      );
+    for (const [pool, allowed, excluded] of [
+      [undefined, shared.id.toString(), dedicated.id.toString()],
+      ["dedicated", dedicated.id.toString(), shared.id.toString()],
+    ] as const) {
+      const result = (await (await request("accounts", pool)).json()) as { accounts: string[] };
+      expect(result.accounts).toContain(allowed);
+      expect(result.accounts).not.toContain(excluded);
+      expect((await request("connect/" + excluded, pool)).status).toBe(404);
+      expect((await request("connect/" + allowed, pool)).status).toBe(426);
+    }
+  });
   it("pushes typing state only for accepted text, restores it on reconnect, and clears it after processing", async () => {
     const stub = await setup();
     const { socket, next } = await connect(stub);
@@ -255,6 +296,159 @@ describe("external WeChat receiver", () => {
     expect(response.webSocket).not.toBeNull();
     sockets.push(response.webSocket!);
     response.webSocket!.accept();
+  });
+  it("hands idle checks to the VPS only after a healthy scan, and wakes promptly for real work", async () => {
+    const stub = await setup(true);
+    const bindings = {
+      ...env,
+      WECHAT_RECEIVER_SECRET: serviceSecret,
+      WECHAT_RECEIVER_WATCHDOG_ACCOUNTS: stub.id.toString(),
+    };
+    const request = (path: string, method = "GET", secret = serviceSecret) =>
+      worker.fetch(
+        new Request("https://edge.test/api/internal/wechat-receiver/watchdog/" + path, {
+          method,
+          headers: { Authorization: "Bearer " + secret },
+        }),
+        bindings,
+        createExecutionContext(),
+      );
+    expect((await request("heartbeat", "POST", "bad")).status).toBe(401);
+    await env.DB.prepare("DELETE FROM receiver_watchdog_supervisor").run();
+    const before = await connect(stub, true);
+    expect(before.config.watchdogSession).toBeUndefined();
+    expect((await request("heartbeat", "POST")).status).toBe(200);
+    const legacy = await connect(stub);
+    expect(legacy.config.watchdogSession).toBeUndefined();
+    const { socket, next, config } = await connect(stub, true);
+    const session = config.watchdogSession as string;
+    expect(session).toMatch(/^[0-9a-f-]{36}$/);
+    await runInDurableObject(stub, (_, state) => {
+      const at = Number(vi.mocked(state.storage.setAlarm).mock.calls.at(-1)![0]);
+      expect(at - Date.now()).toBeGreaterThan(14 * 60000);
+    });
+    expect(await (await request("sessions")).json()).toMatchObject({ sessions: [] });
+    await env.DB.prepare("UPDATE receiver_watchdog_sessions SET check_after=0 WHERE session=?")
+      .bind(session)
+      .run();
+    expect(await (await request("sessions")).json()).toMatchObject({ sessions: [session] });
+    await fallbackWatchdogs(bindings);
+    expect(
+      await env.DB.prepare("SELECT check_after FROM receiver_watchdog_sessions WHERE session=?")
+        .bind(session)
+        .first("check_after"),
+    ).toBe(0);
+    socket.send(JSON.stringify(batch()));
+    await next("ack");
+    expect((await inspect(stub)).inbox).toHaveLength(1);
+    await runInDurableObject(stub, (_, state) => {
+      const at = Number(vi.mocked(state.storage.setAlarm).mock.calls.at(-1)![0]);
+      expect(at - Date.now()).toBeLessThan(2000);
+    });
+  });
+  it("fences recovery by session, restores the local lease after a supervisor outage and retries safely", async () => {
+    const stub = await setup(true);
+    const bindings = {
+      ...env,
+      WECHAT_RECEIVER_SECRET: serviceSecret,
+      WECHAT_RECEIVER_WATCHDOG_ACCOUNTS: "all",
+    };
+    await env.DB.prepare("INSERT OR REPLACE INTO receiver_watchdog_supervisor VALUES(1,?)")
+      .bind(Date.now())
+      .run();
+    const first = await connect(stub, true);
+    const second = await connect(stub, true);
+    const old = first.config.watchdogSession as string,
+      current = second.config.watchdogSession as string;
+    expect(current).not.toBe(old);
+    const recover = async (id: string) =>
+      worker.fetch(
+        new Request("https://edge.test/api/internal/wechat-receiver/watchdog/recover/" + id, {
+          method: "POST",
+          headers: { Authorization: "Bearer " + serviceSecret },
+        }),
+        bindings,
+        createExecutionContext(),
+      );
+    await env.DB.prepare("UPDATE receiver_watchdog_sessions SET check_after=0").run();
+    expect((await recover(old)).status).toBe(200);
+    // A recovery already claimed just before the old connection closed.
+    await stub.recoverReceiverWatchdog(old);
+    expect((await recover(old)).status).toBe(200);
+    await runInDurableObject(stub, (_, state) => {
+      const socket = state
+        .getWebSockets("wechat-receiver")
+        .find((ws) => ws.readyState === WebSocket.OPEN)!;
+      expect(socket.deserializeAttachment()).toMatchObject({ watchdogSession: current });
+      expect(socket.deserializeAttachment().localWatchdog).toBeFalsy();
+    });
+    await env.DB.prepare("UPDATE receiver_watchdog_supervisor SET seen_at=0").run();
+    await fallbackWatchdogs(bindings);
+    expect(await second.next("config")).not.toHaveProperty("watchdogSession");
+    await runInDurableObject(stub, (_, state) => {
+      const at = Number(vi.mocked(state.storage.setAlarm).mock.calls.at(-1)![0]);
+      expect(at - Date.now()).toBeGreaterThan(0);
+      expect(at - Date.now()).toBeLessThanOrEqual(60000);
+    });
+    expect(
+      await env.DB.prepare("SELECT session FROM receiver_watchdog_sessions WHERE session=?")
+        .bind(current)
+        .first(),
+    ).toBeNull();
+  });
+  it("retains a failed handoff for retry and re-enrolls the live connection after the VPS recovers", async () => {
+    const stub = await setup(true);
+    const sessionDB = env.DB;
+    await sessionDB
+      .prepare("INSERT OR REPLACE INTO receiver_watchdog_supervisor VALUES(1,?)")
+      .bind(Date.now())
+      .run();
+    const { config, next } = await connect(stub, true);
+    const id = config.watchdogSession as string;
+    await sessionDB
+      .prepare("UPDATE receiver_watchdog_sessions SET check_after=0 WHERE session=?")
+      .bind(id)
+      .run();
+    const offline = {
+      DB: sessionDB,
+      ACCOUNTS: {
+        ...env.ACCOUNTS,
+        idFromString: () => stub.id,
+        get: () => ({ recoverReceiverWatchdog: () => Promise.reject(new Error("fixture outage")) }),
+      },
+    } as unknown as Pick<Env, "DB" | "ACCOUNTS">;
+    await expect(recoverReceiverSession(offline, id)).rejects.toThrow("fixture outage");
+    const due = await sessionDB
+      .prepare("SELECT check_after FROM receiver_watchdog_sessions WHERE session=?")
+      .bind(id)
+      .first<number>("check_after");
+    expect(due).toBeGreaterThan(Date.now());
+    await recoverReceiverSession(offline, id); // Retry grace prevents a second call.
+    await sessionDB
+      .prepare("UPDATE receiver_watchdog_sessions SET check_after=0 WHERE session=?")
+      .bind(id)
+      .run();
+    await recoverReceiverSession(env, id);
+    expect(await next("config")).not.toHaveProperty("watchdogSession");
+    await runInDurableObject(stub, async (instance, state) => {
+      const socket = state.getWebSockets("wechat-receiver")[0];
+      socket.serializeAttachment({ ...socket.deserializeAttachment(), retryWatchdogAt: 0 });
+      await Reflect.get(instance, "scheduleWechat").call(instance);
+    });
+    const newID = (await next("config")).watchdogSession;
+    expect(newID).toMatch(/^[0-9a-f-]{36}$/);
+    expect(newID).not.toBe(id);
+    expect(await stub.receiverStatus()).toMatchObject({ watchdog: "vps" });
+    await sessionDB
+      .prepare("UPDATE receiver_watchdog_sessions SET check_after=0 WHERE session=?")
+      .bind(newID)
+      .run();
+    // Removing the account from a partial rollout must win even if Go is healthy.
+    await fallbackWatchdogs({
+      ...env,
+      WECHAT_RECEIVER_WATCHDOG_ACCOUNTS: "another-account",
+    } as Env);
+    expect(await stub.receiverStatus()).toMatchObject({ watchdog: "account" });
   });
   it("discovers active accounts, auto-responds to heartbeats and stops idle DO polling", async () => {
     const stub = await setup();

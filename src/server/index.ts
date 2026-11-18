@@ -24,7 +24,14 @@ import {
 } from "./cloud-agent-callback";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
 import { Hono } from "hono";
-import { receiverAuthorized, receiverEnabled } from "./wechat-receiver";
+import {
+  receiverAuthorized,
+  receiverEnabled,
+  receiverPoolHeader,
+  receiverPoolMatches,
+} from "./wechat-receiver";
+import { watchdogHeader, fallbackWatchdogs } from "./receiver-watchdog";
+import { watchdogRoutes } from "./receiver-watchdog-routes";
 import { connectorPoll } from "./connector-poll";
 import { executionAuthorized, EXECUTION_MAX_BYTES } from "./execution-store";
 import { serverMonitorAuthorized, saveServerStatus, adminServerStatus } from "./server-status";
@@ -244,6 +251,7 @@ app.use("/api/internal/wechat-receiver/*", async (c, next) => {
     return c.json({ error: "unauthorized" }, 401);
   return next();
 });
+app.route("/api/internal/wechat-receiver/watchdog", watchdogRoutes);
 app.get("/api/internal/wechat-receiver/accounts", async (c) => {
   const after = c.req.query("after") || "";
   if (after && !/^[0-9a-f]{64}$/.test(after)) return c.json({ error: "invalid_cursor" }, 400);
@@ -253,7 +261,13 @@ app.get("/api/internal/wechat-receiver/accounts", async (c) => {
     .bind(after)
     .all<{ account_id: string }>();
   return c.json({
-    accounts: rows.results.map((r) => r.account_id).filter((id) => receiverEnabled(c.env, id)),
+    accounts: rows.results
+      .map((r) => r.account_id)
+      .filter(
+        (id) =>
+          receiverEnabled(c.env, id) &&
+          receiverPoolMatches(c.env, id, c.req.header(receiverPoolHeader)),
+      ),
     next: rows.results.length === 200 ? rows.results.at(-1)!.account_id : null,
   });
 });
@@ -275,14 +289,21 @@ app.get("/api/internal/wechat-receiver/status/:accountId", async (c) => {
 });
 app.get("/api/internal/wechat-receiver/connect/:accountId", async (c) => {
   const id = c.req.param("accountId");
-  if (!/^[0-9a-f]{64}$/.test(id) || !receiverEnabled(c.env, id))
+  if (
+    !/^[0-9a-f]{64}$/.test(id) ||
+    !receiverEnabled(c.env, id) ||
+    !receiverPoolMatches(c.env, id, c.req.header(receiverPoolHeader))
+  )
     return c.json({ error: "not_found" }, 404);
   if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
     return c.json({ error: "websocket_required" }, 426);
   const response = await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).fetch(
     "https://account.internal/wechat-receiver",
     {
-      headers: { Upgrade: "websocket" },
+      headers: {
+        Upgrade: "websocket",
+        ...(c.req.header(watchdogHeader) === "1" ? { [watchdogHeader]: "1" } : {}),
+      },
     },
   );
   // DO fetch responses have immutable headers. Hono's security middleware adds
@@ -928,6 +949,9 @@ export default {
   async scheduled(_controller, env, ctx) {
     await Promise.all([
       dispatchBillingNotices(env, ctx),
+      fallbackWatchdogs(env).catch(() =>
+        console.error(JSON.stringify({ event: "wechat.watchdog_fallback_failed" })),
+      ),
       env.DB.prepare("DELETE FROM auth_email_limit WHERE last_sent_at<?")
         .bind(Date.now() - 2 * 86_400_000)
         .run()
