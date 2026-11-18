@@ -90,12 +90,12 @@ pnpm deploy:backend
 
 `CI` 在 GitHub 托管 runner 运行站点、Go 和秘密扫描，不再依赖 SG 控制仓。
 
-两套手动发布 workflow 都只接受 `main`，共用本地脚本并使用独立环境：
+推送到 `main` 后，`CI` 的 `check`、`secrets` 和 `backend` 三个任务全部成功，才会并行调用以下两个发布工作流。每个工作流发布前会核对提交是否仍是远端 `main` 的最新版本。每一端串行发布，进行中的生产操作会执行到结束。需要单独重试时，可在 Actions 中选择对应工作流，选 `main` 并点 **Run workflow**。
 
 | Workflow / Environment | Variables | Secrets |
 | --- | --- | --- |
 | `Deploy Go backend` / `backend-production` | `VPS_HOST`、`VPS_USER` | `VPS_SSH_PRIVATE_KEY`、`VPS_KNOWN_HOSTS` |
-| `Deploy Cloudflare edge` / `edge-production` | `WRANGLER_CONFIG`（完整私有 JSONC 配置）、`CLOUDFLARE_ACCOUNT_ID` | `CLOUDFLARE_API_TOKEN` |
+| `Deploy Cloudflare edge` / `edge-production` | `CLOUDFLARE_ACCOUNT_ID` | `WRANGLER_CONFIG`（完整私有 JSONC 配置）、`CLOUDFLARE_API_TOKEN` |
 
 环境限制为受信任的 main，按项目需要设置环境审核人。PR 检查没有生产凭据；不使用 `pull_request_target` 执行外部代码。Cloudflare 已有应用 Secrets 在常规发布中保留，不把它们写入 JSONC 或构建产物。
 

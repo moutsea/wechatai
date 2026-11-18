@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   check:
     runs-on: ubuntu-24.04
@@ -85,3 +85,13 @@ jobs:
       - name: Validate release control flow (simulated systemd)
         working-directory: .
         run: python3 -m unittest discover -s backend/deploy -p 'test_*.py'
+
+  deploy-backend:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, secrets, backend]
+    uses: ./.github/workflows/deploy-backend.yml
+
+  deploy-edge:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [check, secrets, backend]
+    uses: ./.github/workflows/deploy-edge.yml

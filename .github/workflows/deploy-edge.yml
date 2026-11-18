@@ -1,5 +1,6 @@
 name: Deploy Cloudflare edge
 on:
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,11 +22,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm setup:local
+        if: github.event_name == 'workflow_dispatch'
       - run: pnpm check:public
+        if: github.event_name == 'workflow_dispatch'
       - run: pnpm check
+        if: github.event_name == 'workflow_dispatch'
       - name: Prepare private production configuration
         env:
-          EDGE_WRANGLER_CONFIG: ${{ vars.WRANGLER_CONFIG }}
+          EDGE_WRANGLER_CONFIG: ${{ secrets.WRANGLER_CONFIG || vars.WRANGLER_CONFIG }}
         run: |
           node --input-type=module <<'JS'
           import { writeFileSync, appendFileSync } from 'node:fs';
@@ -35,8 +39,17 @@ jobs:
           writeFileSync(path,value,{mode:0o600});
           appendFileSync(process.env.GITHUB_ENV,`WECHATAI_WRANGLER_CONFIG=${path}\n`);
           JS
-      - name: Build and deploy edge
+      - run: pnpm build:edge
+        env:
+          WRANGLER_LOG: warn
+      - id: release-head
+        uses: ./.github/actions/release-head
+      - name: Publish Cloudflare Worker
+        if: steps.release-head.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm deploy:edge
+          WRANGLER_LOG: warn
+        run: |
+          : "${CLOUDFLARE_API_TOKEN:?Set the edge-production CLOUDFLARE_API_TOKEN secret}"
+          pnpm run publish:edge --tag "${GITHUB_SHA:0:12}"

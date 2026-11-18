@@ -1,5 +1,6 @@
 name: Deploy Go backend
 on:
+  workflow_call:
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,6 +23,7 @@ jobs:
         with:
           node-version: "22"
       - name: Validate Go backend
+        if: github.event_name == 'workflow_dispatch'
         working-directory: backend
         run: |
           test -z "$(gofmt -l .)"
@@ -29,7 +31,9 @@ jobs:
           go test -race ./...
           WECHATAI_DEPLOY_MODE=standby WECHATAI_DATA_DIR="$(mktemp -d)" go run ./cmd/wechatai check-deployment
       - run: node --test scripts/backend-artifact.node-test.mjs
+        if: github.event_name == 'workflow_dispatch'
       - run: python3 -m unittest discover -s backend/deploy -p 'test_*.py'
+        if: github.event_name == 'workflow_dispatch'
       - run: node scripts/build-backend.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -57,7 +61,11 @@ jobs:
               output.write('WECHATAI_SSH_KEY_FILE='+str(root/'key')+'\n')
               output.write('WECHATAI_SSH_KNOWN_HOSTS_FILE='+str(root/'known_hosts')+'\n')
           PY
-      - name: Deploy reviewed commit
+      - name: Check current main commit
+        id: release-head
+        uses: ./.github/actions/release-head
+      - name: Publish Go backend
+        if: steps.release-head.outputs.current == 'true'
         env:
           WECHATAI_VPS_HOST: ${{ vars.VPS_HOST }}
           WECHATAI_VPS_USER: ${{ vars.VPS_USER }}

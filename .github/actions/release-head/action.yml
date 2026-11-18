@@ -1,0 +1,20 @@
+name: Check current main commit
+description: Skip publishing a commit superseded while its build was running
+outputs:
+  current:
+    description: Whether this checkout still matches main
+    value: ${{ steps.head.outputs.current }}
+runs:
+  using: composite
+  steps:
+    - id: head
+      shell: bash
+      run: |
+        set -euo pipefail
+        head=$(git ls-remote --exit-code origin refs/heads/main | cut -f1)
+        if [[ "$(git rev-parse HEAD)" == "$head" ]]; then
+          echo 'current=true' >> "$GITHUB_OUTPUT"
+        else
+          echo 'current=false' >> "$GITHUB_OUTPUT"
+          echo "Skipped deployment because main advanced to $head."
+        fi
