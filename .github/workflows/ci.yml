@@ -28,6 +28,15 @@ jobs:
       - run: pnpm test:browser
       - run: pnpm test:openclaw
       - run: pnpm test:receiver
+      - name: Verify receiver release modes under a restrictive umask
+        run: |
+          umask 077
+          pnpm build:receiver
+          mkdir "$RUNNER_TEMP/receiver-release"
+          (umask 022 && tar -xzf backend/dist/linux-amd64/wechatai-receiver-*.tar.gz -C "$RUNNER_TEMP/receiver-release")
+          cd "$RUNNER_TEMP/receiver-release"
+          test "$(stat -c %a receiver-watchdog)" = 755
+          for file in *.mjs *.json *.service; do test "$(stat -c %a "$file")" = 644; done
       - run: pnpm test:executor
       - run: pnpm test:monitor
 

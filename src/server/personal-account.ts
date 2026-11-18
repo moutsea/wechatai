@@ -180,6 +180,7 @@ import {
   type ImageGenerationPlugin,
   type UserPlugin,
 } from "../shared/image-generation";
+import { initWechatInbox, insertWechatMessage } from "./wechat-inbox";
 import { uploadWechatImage, sendUploadedWechatImage, type UploadedWechatImage } from "./wechat";
 import {
   webResearchInputSchema,
@@ -518,6 +519,7 @@ export class PersonalAccount extends DurableObject<Env> {
       ctx.storage.sql.exec(
         "CREATE INDEX IF NOT EXISTS inbox_connection ON inbox(connectionId, state, createdAt)",
       );
+      initWechatInbox(this.sql);
       this.personalRuns.init();
       this.execution.init();
       // A new instance cannot have a live model invocation from its predecessor.
@@ -698,18 +700,15 @@ export class PersonalAccount extends DurableObject<Env> {
           message.from_user_id === credentials.userId &&
           (message.message_id || message.seq),
       );
+      const prefix = `${connectionId === DEFAULT_WECHAT_LINK ? "" : connectionId + ":"}${credentials.botId}:${credentials.userId}:`;
+      // Identical end cursors can identify a lost ACK even on pre-upgrade
+      // receipts whose processed payload (including the sequence) was cleared.
+      const replay =
+        !!link.cursor &&
+        link.cursor !== fromCursor &&
+        link.cursor === (result.get_updates_buf ?? result.sync_buf);
       for (const message of orderedWechatMessages(incoming)) {
-        const id = `${connectionId === DEFAULT_WECHAT_LINK ? "" : connectionId + ":"}${credentials.botId}:${credentials.userId}:${message.message_id ?? message.seq}`;
-        const inserted = this.sql
-          .exec(
-            "INSERT OR IGNORE INTO inbox (id,payload,createdAt,connectionId) VALUES (?, ?, ?, ?) RETURNING id",
-            id,
-            JSON.stringify(message),
-            Date.now(),
-            connectionId,
-          )
-          .toArray().length;
-        if (!inserted) continue;
+        if (!insertWechatMessage(this.sql, prefix, connectionId, message, replay)) continue;
         received = true;
         token = message.context_token || token;
         if (message.context_token)

@@ -2,6 +2,8 @@ import { mkdir, open, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 
+import { parseWechatJson } from "./message-id.mjs";
+
 export function stateFile(directory, accountId, connectionId) {
   return join(
     directory,
@@ -60,7 +62,7 @@ export async function readJsonLimited(response, limit = 1024 * 1024) {
       if (size > limit) throw new Error("response_too_large");
       chunks.push(value);
     }
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    return parseWechatJson(Buffer.concat(chunks).toString("utf8"));
   } finally {
     await reader.cancel().catch(() => {});
   }

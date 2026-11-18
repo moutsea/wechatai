@@ -145,7 +145,11 @@ export async function validatePublicDNS(baseUrl: string) {
   )
     throw new AppError("unsafe_dns", "模型服务未解析到可访问的公网地址");
 }
-export async function readJson(response: Response, maxBytes = 2_000_000): Promise<unknown> {
+export async function readJson(
+  response: Response,
+  maxBytes = 2_000_000,
+  parse: (text: string) => unknown = JSON.parse,
+): Promise<unknown> {
   if (!response.body) throw new AppError("upstream_empty", "服务返回了空响应", 502);
   const reader = response.body.getReader();
   let size = 0;
@@ -172,7 +176,7 @@ export async function readJson(response: Response, maxBytes = 2_000_000): Promis
     offset += chunk.length;
   }
   try {
-    return JSON.parse(new TextDecoder().decode(joined));
+    return parse(new TextDecoder().decode(joined));
   } catch {
     throw new AppError("upstream_format", "服务未返回有效 JSON", 502);
   }

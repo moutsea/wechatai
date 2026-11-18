@@ -1,5 +1,6 @@
 // Wire format follows OpeniLink SDK (MIT). See licenses/openilink.txt.
 import { createDecipheriv, createCipheriv, createHash } from "node:crypto";
+import { decimalId, parseWechatJson } from "../../integrations/wechat-receiver/message-id.mjs";
 import { AppError } from "./config";
 import { readJson } from "./security";
 import { MAX_ATTACHMENT_BYTES } from "./attachments";
@@ -17,8 +18,8 @@ export type WxItem = {
   ref_msg?: { title?: string; message_item?: WxItem };
 };
 export type WxMessage = {
-  message_id?: number;
-  seq?: number;
+  message_id?: number | string;
+  seq?: number | string;
   from_user_id?: string;
   to_user_id?: string;
   message_type?: number;
@@ -29,10 +30,22 @@ export type WxMessage = {
 /** getupdates batches need not be chronological. Preserve delivery order only
  * when the batch lacks comparable sender sequence numbers or timestamps. */
 export function orderedWechatMessages(messages: WxMessage[]) {
-  const has = (key: "seq" | "create_time_ms") =>
-    messages.every((m) => Number.isSafeInteger(m[key]) && Number(m[key]) > 0);
-  const key = has("seq") ? "seq" : has("create_time_ms") ? "create_time_ms" : null;
-  return key ? [...messages].sort((a, b) => a[key]! - b[key]!) : messages;
+  if (
+    messages.every(({ seq }) =>
+      typeof seq === "string"
+        ? decimalId.test(seq) && BigInt(seq) > 0n
+        : Number.isSafeInteger(seq) && seq! > 0,
+    )
+  ) {
+    return [...messages].sort((a, b) => {
+      const left = BigInt(a.seq!),
+        right = BigInt(b.seq!);
+      return left < right ? -1 : left > right ? 1 : 0;
+    });
+  }
+  if (messages.every((m) => Number.isSafeInteger(m.create_time_ms) && m.create_time_ms! > 0))
+    return [...messages].sort((a, b) => a.create_time_ms! - b.create_time_ms!);
+  return messages;
 }
 export type WxCredentials = { token: string; baseUrl: string; userId: string; botId: string };
 export class WechatRequestError extends AppError {
@@ -100,7 +113,11 @@ export async function wxRequest<T>(
       response.status,
     );
   }
-  const data = (await readJson(response)) as { ret?: number; errcode?: number } & T;
+  const data = (await readJson(
+    response,
+    undefined,
+    path === "getupdates" ? parseWechatJson : undefined,
+  )) as { ret?: number; errcode?: number } & T;
   const ret = Number.isSafeInteger(data.ret) ? data.ret : undefined;
   const errcode = Number.isSafeInteger(data.errcode) ? data.errcode : undefined;
   if (ret === -14 || errcode === -14)

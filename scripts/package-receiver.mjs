@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,6 +38,28 @@ try {
       stdio: "inherit",
     },
   );
+  const files = [
+    "main.mjs",
+    "receiver.mjs",
+    "storage.mjs",
+    "typing.mjs",
+    "wechat-api.mjs",
+    "package.json",
+    "package-lock.json",
+    "wechatai-receiver.service",
+    "wechatai-receiver-watchdog.service",
+    "session.test.mjs",
+    "storage.test.mjs",
+    "typing.test.mjs",
+    "message-id.mjs",
+  ];
+  // Install modes in the archive must be independent of the builder's umask.
+  await chmod(join(staging, "receiver-watchdog"), 0o755);
+  for (const file of files) {
+    const target = join(staging, file);
+    await copyFile(join(root, "integrations/wechat-receiver", file), target);
+    await chmod(target, 0o644);
+  }
   execFileSync(
     "tar",
     [
@@ -48,20 +70,7 @@ try {
       "-C",
       staging,
       "receiver-watchdog",
-      "-C",
-      join(root, "integrations/wechat-receiver"),
-      "main.mjs",
-      "receiver.mjs",
-      "storage.mjs",
-      "typing.mjs",
-      "wechat-api.mjs",
-      "package.json",
-      "package-lock.json",
-      "wechatai-receiver.service",
-      "wechatai-receiver-watchdog.service",
-      "session.test.mjs",
-      "storage.test.mjs",
-      "typing.test.mjs",
+      ...files,
     ],
     { env: { ...process.env, COPYFILE_DISABLE: "1" }, stdio: "inherit" },
   );

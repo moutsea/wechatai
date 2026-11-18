@@ -11,6 +11,7 @@ import migration from "../migrations/0011_wechat_receivers.sql?raw";
 import { RECEIVER_PING, RECEIVER_PONG, receiverAuthorized } from "../src/server/wechat-receiver";
 import { connectForManualDelivery, useManualAlarms } from "./helpers/wechat-delivery";
 import { encrypt } from "../src/server/security";
+import { orderedWechatMessages, wxRequest, type WxMessage } from "../src/server/wechat";
 import { wechatLinkKey } from "../src/shared/wechat-links";
 
 const accounts: ReturnType<typeof env.ACCOUNTS.getByName>[] = [];
@@ -587,6 +588,87 @@ describe("external WeChat receiver", () => {
         .first("active"),
     ).toBe(0);
   });
+  it("preserves upstream 64-bit IDs and stores socket replays once in exact sequence order", async () => {
+    const stub = await setup();
+    const { socket, next } = await connect(stub);
+    const raw =
+      '{"msgs":[{"message_id":1234567890123456790,"seq":9007199254740993},{"message_id":1234567890123456789,"seq":9007199254740992},{"seq":18446744073709551615}],"get_updates_buf":"cursor-1"}';
+    const result = await runInDurableObject(stub, async () => {
+      const network = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(raw));
+      try {
+        return await wxRequest<{ msgs: WxMessage[] }>("getupdates", {});
+      } finally {
+        network.mockRestore();
+      }
+    });
+    const msgs = result.msgs.map((m) => ({ message_type: 1, from_user_id: "owner", ...m }));
+    const ordered = orderedWechatMessages(msgs);
+    expect(ordered.map((m) => m.seq)).toEqual([
+      "9007199254740992",
+      "9007199254740993",
+      "18446744073709551615",
+    ]);
+    const message = batch({ msgs });
+    for (let i = 0; i < 2; i++) {
+      socket.send(JSON.stringify(message));
+      expect(await next("ack")).toMatchObject({ id: message.id, cursor: "cursor-1" });
+    }
+    await runInDurableObject(stub, (_, state) => {
+      const rows = state.storage.sql
+        .exec<{ payload: string }>("SELECT payload FROM inbox ORDER BY rowid")
+        .toArray();
+      expect(
+        rows.map((r) => JSON.parse(r.payload).message_id ?? JSON.parse(r.payload).seq),
+      ).toEqual(["1234567890123456789", "1234567890123456790", "18446744073709551615"]);
+    });
+  });
+  it("bridges rounded historical rows and disk replays without merging distinct precise IDs", async () => {
+    const stub = await setup();
+    const { socket, next } = await connect(stub);
+    const base = batch().msgs[0];
+    const first = "1234567890123456789",
+      second = "1234567890123456790",
+      third = "1234567890123456791";
+    const rounded = Number(first);
+    const historical = await runInDurableObject(stub, (_, state) => {
+      const id = "bot:owner:" + rounded;
+      state.storage.sql.exec(
+        "INSERT INTO inbox(id,payload,state,createdAt) VALUES(?,'{}','done',?)",
+        id,
+        Date.now(),
+      );
+      return id;
+    });
+    // Advance the cursor to reproduce a pre-upgrade ACK lost after payload cleanup.
+    const advance = batch({ msgs: [] });
+    socket.send(JSON.stringify(advance));
+    await next("ack");
+    const send = async (
+      message_id: number | string,
+      seq: number,
+      fromCursor: string,
+      cursor: string,
+    ) => {
+      const message = batch({ fromCursor, cursor, msgs: [{ ...base, message_id, seq }] });
+      socket.send(JSON.stringify(message));
+      expect(await next("ack")).toMatchObject({ id: message.id });
+    };
+    await send(first, 41, "", "cursor-1");
+    await send(second, 42, "cursor-1", "cursor-2");
+    await send(rounded, 42, "cursor-1", "cursor-2");
+    await send(rounded, 43, "cursor-2", "cursor-3");
+    await send(third, 43, "cursor-2", "cursor-3");
+    await send(rounded, 41, "", "cursor-1");
+    await runInDurableObject(stub, (_, state) => {
+      const rows = state.storage.sql
+        .exec<{ id: string; wechatExactId: string }>(
+          "SELECT id,wechatExactId FROM inbox ORDER BY rowid",
+        )
+        .toArray();
+      expect(rows.map((r) => r.wechatExactId)).toEqual([first, second, third]);
+      expect(rows[0].id).toBe(historical);
+    });
+  });
   it("accepts WeChat's large numeric message IDs and deduplicates their replay", async () => {
     const stub = await setup();
     const { socket, next } = await connect(stub);
@@ -601,6 +683,7 @@ describe("external WeChat receiver", () => {
   it("falls back to local receiving after the server disconnects", async () => {
     const stub = await setup();
     const { socket } = await connect(stub);
+    const exact = "18446744073709551615";
     socket.close();
     await vi.waitFor(async () => {
       const open = await runInDurableObject(
@@ -611,13 +694,23 @@ describe("external WeChat receiver", () => {
     });
     await runInDurableObject(stub, async (instance, state) => {
       await useManualAlarms(state);
-      const network = vi
-        .spyOn(globalThis, "fetch")
-        .mockResolvedValue(Response.json({ ret: 0, get_updates_buf: "fallback" }));
+      const network = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+        if (String(url).endsWith("/getupdates"))
+          return new Response(
+            `{"ret":0,"get_updates_buf":"fallback","msgs":[{"message_id":${exact},"message_type":1,"from_user_id":"owner"}]}`,
+          );
+        return Response.json({ ret: 0 });
+      });
       await instance.alarm();
-      expect(network).toHaveBeenCalledOnce();
+      expect(network).toHaveBeenCalled();
     });
-    expect((await inspect(stub)).connection.cursor).toBe("fallback");
+    const reconnected = await connect(stub);
+    const replay = batch({ cursor: "fallback", msgs: [{ ...batch().msgs[0], message_id: exact }] });
+    reconnected.socket.send(JSON.stringify(replay));
+    await reconnected.next("ack");
+    const state = await inspect(stub);
+    expect(state.connection.cursor).toBe("fallback");
+    expect(state.inbox.map((row) => row.id)).toEqual(["bot:owner:wx64:" + exact]);
   });
   it("fences a stale receiver heartbeat and resumes local polling", async () => {
     const stub = await setup();

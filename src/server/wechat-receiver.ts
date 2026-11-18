@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { decimalId } from "../../integrations/wechat-receiver/message-id.mjs";
 import { z } from "zod";
 import {
   enrollWatchdog,
@@ -71,12 +72,12 @@ type Attachment = {
   watchdogCapable?: boolean;
   retryWatchdogAt?: number;
 };
+const wireId = z.union([z.number().refine(Number.isInteger), z.string().regex(decimalId)]);
 const messageSchema = z
   .object({
-    // WeChat uses 64-bit IDs, already parsed as numbers by the existing receive
-    // path. Zod's int() also requires a JS-safe integer and rejects real IDs.
-    message_id: z.number().refine(Number.isInteger).optional(),
-    seq: z.number().refine(Number.isInteger).optional(),
+    // Older receivers may replay a durable batch containing rounded numbers.
+    message_id: wireId.optional(),
+    seq: wireId.optional(),
     message_type: z.number().int().optional(),
     from_user_id: z.string().optional(),
     context_token: z.string().optional(),

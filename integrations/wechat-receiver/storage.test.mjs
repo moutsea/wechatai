@@ -37,7 +37,9 @@ test("retains unacknowledged messages across process restarts, before requesting
       signal: abort.signal,
       fetchImpl: async () => {
         fetched++;
-        return Response.json({ msgs: [{ message_id: 1 }], get_updates_buf: "next" });
+        return new Response(
+          '{"msgs":[{"message_id":1234567890123456789,"seq":9007199254740993},{"message_id":1234567890123456790,"seq":9007199254740994}],"get_updates_buf":"next"}',
+        );
       },
       sendBatch: async (batch) => {
         assert.equal(JSON.parse(await readFile(f.file, "utf8")).pending.id, batch.id);
@@ -57,12 +59,45 @@ test("retains unacknowledged messages across process restarts, before requesting
     fetchImpl: async () => assert.fail("must replay before fetching"),
     sendBatch: async (batch) => {
       assert.equal(batch.id, saved.pending.id);
+      assert.deepEqual(JSON.parse(JSON.stringify(batch.msgs)), [
+        { message_id: "1234567890123456789", seq: "9007199254740993" },
+        { message_id: "1234567890123456790", seq: "9007199254740994" },
+      ]);
       abort.abort();
       return { cursor: "next" };
     },
     sendExpired: () => assert.fail(),
   });
   assert.equal(JSON.parse(await readFile(f.file, "utf8")).pending, null);
+});
+test("replays a pre-upgrade pending batch with its original numeric identity", async (t) => {
+  const f = await fixture(t);
+  const abort = new AbortController();
+  const rounded = Number("1234567890123456789");
+  const pending = {
+    id: "old-batch",
+    fromCursor: "start",
+    cursor: "next",
+    msgs: [{ message_id: rounded, seq: 41 }],
+  };
+  await writeFile(
+    f.file,
+    JSON.stringify({ generation: "g1", baseCursor: "start", cursor: "next", pending }),
+  );
+  await receiveLink({
+    ...f,
+    config,
+    accountId: "account",
+    signal: abort.signal,
+    fetchImpl: async () => assert.fail("must replay before fetching"),
+    sendBatch: async (batch) => {
+      assert.deepEqual(batch, pending);
+      abort.abort();
+      return { cursor: "next" };
+    },
+    sendExpired: () => assert.fail(),
+  });
+  assert.equal((await loadState(f.file, { ...config, cursor: "next" })).pending, null);
 });
 test("keeps empty poll cursors locally and forwards only actual message batches", async (t) => {
   const f = await fixture(t);
