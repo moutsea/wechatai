@@ -622,6 +622,84 @@ describe("external WeChat receiver", () => {
       ).toEqual(["1234567890123456789", "1234567890123456790", "18446744073709551615"]);
     });
   });
+  it.each([0, "0", "-0"])(
+    "uses the sequence for zero ID %j and ignores empty identities",
+    async (message_id) => {
+      const stub = await setup();
+      const { socket, next } = await connect(stub);
+      const base = batch().msgs[0];
+      const msg = batch({
+        msgs: [0, "0", "-0", undefined, 102, 101, "18446744073709551615"].map((seq) => ({
+          ...base,
+          message_id,
+          seq,
+        })),
+      });
+      for (let i = 0; i < 2; i++) {
+        socket.send(JSON.stringify(msg));
+        expect(await next("ack")).toMatchObject({ id: msg.id, cursor: msg.cursor });
+      }
+      const state = await inspect(stub);
+      expect(state.connection.cursor).toBe(msg.cursor);
+      expect(state.inbox.map((r) => r.id).sort()).toEqual([
+        "bot:owner:101",
+        "bot:owner:102",
+        "bot:owner:wx64:18446744073709551615",
+      ]);
+    },
+  );
+  it.each([true, false])(
+    "retains a historic zero receipt on replay after payload cleanup=%j",
+    async (cleaned) => {
+      const stub = await setup(),
+        { socket, next } = await connect(stub);
+      const base = batch().msgs[0];
+      await runInDurableObject(stub, (_, state) => {
+        state.storage.sql.exec(
+          "INSERT INTO inbox(id,payload,state,createdAt) VALUES(?,?,'done',?)",
+          "bot:owner:0",
+          cleaned ? "{}" : JSON.stringify({ ...base, message_id: 0, seq: 101 }),
+          Date.now(),
+        );
+      });
+      socket.send(JSON.stringify(batch({ msgs: [] })));
+      await next("ack");
+      const msg = batch({ msgs: [102, 101].map((seq) => ({ ...base, message_id: "0", seq })) });
+      for (let i = 0; i < 2; i++) {
+        socket.send(JSON.stringify(msg));
+        await next("ack");
+      }
+      const state = await inspect(stub);
+      expect(state.inbox.map((r) => r.id).sort()).toEqual(["bot:owner:0", "bot:owner:102"]);
+      expect(state.inbox.find((r) => r.id === "bot:owner:0")?.state).toBe("done");
+    },
+  );
+  it("recovers distinct uint64 sequences from an old zero-ID batch with a rounded stored sequence", async () => {
+    const stub = await setup(),
+      { socket, next } = await connect(stub),
+      first = "1234567890123456789",
+      second = "1234567890123456790";
+    await runInDurableObject(stub, (_, state) => {
+      state.storage.sql.exec(
+        "INSERT INTO inbox(id,payload,createdAt) VALUES('bot:owner:0',?,?)",
+        JSON.stringify({ message_id: 0, seq: Number(first) }),
+        Date.now(),
+      );
+    });
+    socket.send(JSON.stringify(batch({ msgs: [] })));
+    await next("ack");
+    const msg = batch({
+      msgs: [second, first].map((seq) => ({ ...batch().msgs[0], message_id: 0, seq })),
+    });
+    for (let i = 0; i < 2; i++) {
+      socket.send(JSON.stringify(msg));
+      await next("ack");
+    }
+    expect((await inspect(stub)).inbox.map((row) => row.id).sort()).toEqual([
+      "bot:owner:0",
+      "bot:owner:wx64:" + second,
+    ]);
+  });
   it("bridges rounded historical rows and disk replays without merging distinct precise IDs", async () => {
     const stub = await setup();
     const { socket, next } = await connect(stub);

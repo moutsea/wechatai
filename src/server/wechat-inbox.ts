@@ -18,6 +18,74 @@ function knownSequence(seq: WxMessage["seq"]) {
   return seq !== undefined && Number.isSafeInteger(seq) && seq > 0 ? String(seq) : null;
 }
 
+function nonzero(value: WxMessage["message_id"]) {
+  return value && value !== "0" && value !== "-0" ? value : undefined;
+}
+
+export function wechatReceiptId(message: WxMessage) {
+  return nonzero(message.message_id) ?? nonzero(message.seq);
+}
+
+// Old versions kept at most one row per zero spelling and sender. Keep its
+// primary key because downstream replies and billing refer to the original ID.
+function claimLegacyZero(
+  sql: SqlStorage,
+  prefix: string,
+  message: WxMessage,
+  replay: boolean,
+  canonicalId: string,
+) {
+  const value = message.seq!;
+  const sequence = String(value);
+  const rows = sql
+    .exec<{ id: string; seq: string | null; payload: string | null }>(
+      "SELECT id,wechatSeq AS seq,CASE WHEN wechatSeq IS NULL THEN payload END AS payload FROM inbox WHERE id IN (?,?) AND (wechatSeq IS NULL OR wechatSeq=?)",
+      prefix + "0",
+      prefix + "-0",
+      sequence,
+    )
+    .toArray();
+  if (!rows.length) return false;
+  const candidates = rows.map((row) => ({
+    ...row,
+    previous: row.seq ?? (row.payload ? (JSON.parse(row.payload) as WxMessage).seq : undefined),
+  }));
+  const confirmed = candidates.find(
+    (row) =>
+      row.previous !== undefined &&
+      String(row.previous) === sequence &&
+      (typeof row.previous === "string" ||
+        Number.isSafeInteger(row.previous) ||
+        typeof value === "number"),
+  );
+  // A scrubbed legacy row can only be claimed by its original spelling on
+  // replay of the committed cursor. An already recorded sibling owns its ID.
+  const match =
+    confirmed ??
+    (replay &&
+      candidates.find(
+        (row) =>
+          row.id === prefix + message.message_id &&
+          (row.payload === "{}" ||
+            (typeof row.previous === "number" &&
+              !Number.isSafeInteger(row.previous) &&
+              row.previous === Number(value))) &&
+          !sql.exec("SELECT 1 FROM inbox WHERE id=?", canonicalId).toArray().length,
+      ));
+  if (!match) return false;
+  if (match.seq === null) {
+    const large = !Number.isSafeInteger(Number(value));
+    sql.exec(
+      "UPDATE inbox SET wechatSeq=?,wechatRoundedId=?,wechatExactId=? WHERE id=?",
+      sequence,
+      large ? prefix + String(Number(value)) : null,
+      large && typeof value === "string" ? value : null,
+      match.id,
+    );
+  }
+  return true;
+}
+
 /** Called inside the transaction that commits the link cursor. */
 export function insertWechatMessage(
   sql: SqlStorage,
@@ -26,7 +94,8 @@ export function insertWechatMessage(
   message: WxMessage,
   replay: boolean,
 ) {
-  const value = message.message_id ?? message.seq!;
+  const value = wechatReceiptId(message);
+  if (value === undefined) return false;
   let id = prefix + value;
   let rounded: string | null = null;
   let exact: string | null = null;
@@ -69,6 +138,8 @@ export function insertWechatMessage(
     else if (seq !== null && receipts.some((row) => row.id === rounded))
       id = rounded + ":seq:" + seq;
   }
+  if (!nonzero(message.message_id) && claimLegacyZero(sql, prefix, message, replay, id))
+    return false;
   return (
     sql
       .exec(

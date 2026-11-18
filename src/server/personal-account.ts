@@ -180,7 +180,7 @@ import {
   type ImageGenerationPlugin,
   type UserPlugin,
 } from "../shared/image-generation";
-import { initWechatInbox, insertWechatMessage } from "./wechat-inbox";
+import { initWechatInbox, insertWechatMessage, wechatReceiptId } from "./wechat-inbox";
 import { uploadWechatImage, sendUploadedWechatImage, type UploadedWechatImage } from "./wechat";
 import {
   webResearchInputSchema,
@@ -698,7 +698,7 @@ export class PersonalAccount extends DurableObject<Env> {
         (message) =>
           message.message_type === 1 &&
           message.from_user_id === credentials.userId &&
-          (message.message_id || message.seq),
+          wechatReceiptId(message) !== undefined,
       );
       const prefix = `${connectionId === DEFAULT_WECHAT_LINK ? "" : connectionId + ":"}${credentials.botId}:${credentials.userId}:`;
       // Identical end cursors can identify a lost ACK even on pre-upgrade
