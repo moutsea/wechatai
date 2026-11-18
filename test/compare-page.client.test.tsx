@@ -72,6 +72,19 @@ it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-openclaw", "wechatai-vs-
   },
 );
 
+it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-openclaw", "wechatai-vs-commercial-wechat-ai"])(
+  "distinguishes self-hosted agents from hosted Muse on %s",
+  async (pair) => {
+    await renderAt(`/compare/${pair}`);
+    const rows = [...container.querySelectorAll(".seopage-compare-table tbody tr")];
+    const deployment = rows.find((row) => row.querySelector("th")?.textContent === "是否需自行部署");
+    const wechatai = deployment?.querySelector("td")?.textContent;
+    expect(wechatai).toMatch(/普通聊天[^；]*无需自行部署/);
+    expect(wechatai).toMatch(/自建 OpenClaw[^；]*Hermes[^；]*自行部署/);
+    expect(wechatai).toMatch(/托管 Muse[^；]*无需自行部署/);
+  },
+);
+
 it("leaves unverified device requirements unknown and separates local and cloud self-hosting", async () => {
   await renderAt("/wechat-ai-options");
   const rows = [...container.querySelectorAll("#four table tbody tr")];

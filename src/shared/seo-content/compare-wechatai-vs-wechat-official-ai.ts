@@ -48,7 +48,10 @@ export const wechataiVsWechatAiPage: SeoPage = {
       },
       {
         label: "是否需自行部署",
-        values: ["普通聊天不需要；接入 Agent 时需要", null],
+        values: [
+          "普通聊天无需自行部署；自建 OpenClaw 或 Hermes 由用户自行部署和维护；接入已有托管 Muse 需配置 hook，但无需自行部署",
+          null,
+        ],
       },
     ],
     note:
