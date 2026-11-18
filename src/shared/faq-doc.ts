@@ -21,7 +21,7 @@ export const FAQ_DOC_SECTIONS: FaqDocSection[] = [
     id: "no-reply",
     group: "连接与回复",
     title: "连上了，为什么没有回复？",
-    body: `先在微信发送免费命令 \`/wx help\`。没有命令回复时，说明消息没有进入微伴：按[连接排查步骤](/docs/wechat-connection#reconnect)检查链接状态和绑定微信，授权过期时重新扫码。手机微信找不到 ClawBot 入口时先更新微信；入口缺失无法由本站开通。
+    body: `先在微信发送免费命令 \`/wx help\`。没有收到命令回复，不代表微伴没收到消息。先确认发消息的是扫码绑定的微信，再到[微信连接](/app/wechat)查看该链接的连接状态、最近消息时间和错误提示。授权过期时，按[连接排查步骤](/docs/wechat-connection#reconnect)重新扫码。手机微信找不到 ClawBot 入口时先更新微信；入口缺失无法由本站开通。
 
 命令能回复、模型不能回复时，到[渠道与模型](/app/channels)测试连接，核对协议、服务地址、API Key、实际模型 ID 和服务商余额。**测试会消耗少量 credits，并可能产生服务商 API 费用。** 配置与排查见[模型测试教程](/docs/channels-models#import)。地址请使用最终的公开 HTTPS 接口，不要填会跳转的网页地址。
 

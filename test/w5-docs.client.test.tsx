@@ -58,3 +58,10 @@ it("does not tell DS Chat users that one exhausted tool ends the reply", () => {
   expect(guidance?.textContent).toMatch(/只限制该项.*已有资料.*回答.*另一项.*剩余次数/);
   expect(guidance?.textContent).not.toContain("本轮会提前结束");
 });
+
+it("directs users with no reply to check the bound account and connection diagnostics", () => {
+  const answer = renderDoc("faq").querySelector("#no-reply p:not(.docs-faq-group)");
+  expect(answer?.textContent).toMatch(/没有收到命令回复.*绑定的微信.*连接状态.*最近消息.*错误提示/);
+  expect(answer?.textContent).not.toContain("说明消息没有进入微伴");
+  expect(answer?.querySelector('a[href="/app/wechat"]')?.textContent).toBe("微信连接");
+});
