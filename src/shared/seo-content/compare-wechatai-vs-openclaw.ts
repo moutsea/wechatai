@@ -12,7 +12,7 @@ export const wechataiVsOpenclawPage: SeoPage = {
   h1: "微伴 vs 自建 OpenClaw：把运行和维护也算进成本",
   lede: "两条路都能在微信里用模型，差别在于服务跑在谁那里。只做日常对话，微伴省运维；要读写文件、执行工具，才需要自己跑 OpenClaw。",
   answer:
-    "微伴托管普通模型聊天，不需要你的设备常开，平台按 credits 计费，模型 API 费用另付；自建 OpenClaw 需要自己部署并保持运行设备在线，模型费与设备成本由你承担。微伴不托管 OpenClaw 进程；只做日常问答选微伴，需要工具调用与本地文件时再自建 OpenClaw。",
+    "微伴托管普通模型聊天，不需要你的设备常开，平台按 credits 计费，模型 API 费用另付；自建 OpenClaw 需要自己部署并保持运行设备在线，本地模型只算运行与维护成本，使用云 API 时另算服务商费用。微伴不托管 OpenClaw 进程；只做日常问答选微伴，需要工具调用与本地文件时再自建 OpenClaw。",
   primaryKeyword: "微伴 OpenClaw 对比",
   secondaryKeywords: [
     "OpenClaw 微信 自建",
@@ -29,12 +29,15 @@ export const wechataiVsOpenclawPage: SeoPage = {
         label: "价格",
         values: [
           `Free 每天 ${DAILY_CREDIT_DEFAULTS.free} credits；Plus ¥${PLUS_MONTHLY_YUAN}/月或 ¥${PLUS_YEARLY_YUAN}/年；模型 API 费用另付服务商`,
-          "模型 API 费用 + 运行设备或托管成本；开源软件按项目许可证使用",
+          "本地推理不产生模型 API 费；使用云 API 时另按服务商规则计费。两种方式都要算设备或托管与维护成本；开源软件按项目许可证使用",
         ],
       },
       {
         label: "是否需自备 Key",
-        values: ["需要（模型服务商的 API Key）", "需要（模型 Key 或账号，取决于接入方式）"],
+        values: [
+          "需要（模型服务商的 API Key）",
+          "本地 Ollama 无需真实服务商凭据；云 API 按服务商要求使用 Key 或账号",
+        ],
       },
       {
         label: "是否支持群聊",
@@ -69,12 +72,12 @@ export const wechataiVsOpenclawPage: SeoPage = {
 
 **部署**同样要计入：安装运行时、配置模型与工具、处理依赖升级、看日志、设置进程守护，都是持续投入。微伴只负责中转，不替你维护 OpenClaw。
 
-**自备 Key** 两边都需要，但形态可能不同：微伴要求填写模型服务商的 API Key；OpenClaw 可按项目支持的模型账号或 Key 接入，具体取决于你的配置。群聊能力没有找到统一的公开口径，因此表中留空，不能当作「不支持」。`,
+**自备 Key** 取决于模型跑在哪：微伴普通聊天要求填写模型服务商的 API Key；自建 OpenClaw 连接[本地 Ollama](https://docs.openclaw.ai/providers/ollama/setup)运行本地模型时不需要真实服务商凭据，接云 API 时按服务商要求配置 Key 或账号。群聊能力没有找到统一的公开口径，因此表中留空，不能当作「不支持」。`,
     },
     {
       id: "cost",
       title: "成本不止模型费：把设备和维护列出来",
-      body: `自建方案的总成本至少包含三块：模型 API 费、运行设备或云主机费用、维护时间。只比较模型 token 单价会漏掉后两项；一台常开机器的电费、带宽与运维时间都是真实支出。
+      body: `自建都要考虑设备或云主机以及维护时间。本地模型不产生模型 API 费用，但硬件、电费、带宽和运维时间仍是成本；使用云 API 时，还要按服务商的资费计算模型调用。只比较模型 token 单价会漏掉运行和维护成本。
 
 微伴的成本是 credits 加模型费：Free 每天 ${DAILY_CREDIT_DEFAULTS.free} credits，Plus 为 ¥${PLUS_MONTHLY_YUAN}/月或 ¥${PLUS_YEARLY_YUAN}/年，模型调用另付服务商。credits 只抵扣中转费，不等于模型免费。
 
@@ -131,7 +134,7 @@ export const wechataiVsOpenclawPage: SeoPage = {
     {
       question: "自建 OpenClaw 还需要付微伴 credits 吗？",
       answer:
-        "如果只是 OpenClaw 直连、不经过微伴中转，就不产生微伴 credits；模型 API 费用仍由你的服务商收取。若通过微伴 Channel 接入，按微伴当前计费规则另算，具体以价格页为准。",
+        "OpenClaw 直连且不经过微伴中转，不产生微伴 credits。本地 Ollama 运行本地模型不产生模型 API 费，但仍有运行和维护成本；使用云 API 时按服务商规则计费。若通过微伴 Channel 接入，微伴 credits 按当前价格页规则另算。",
     },
     {
       question: "两边都支持群聊吗？",

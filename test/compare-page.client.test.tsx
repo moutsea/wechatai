@@ -81,3 +81,22 @@ it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-commercial-wechat-ai"])(
     );
   },
 );
+
+it("separates local OpenClaw costs and credentials from cloud API requirements", async () => {
+  await renderAt("/compare/wechatai-vs-openclaw");
+  const rows = [...container.querySelectorAll(".seopage-compare-table tbody tr")];
+  const price = rows.find((row) => row.querySelector("th")?.textContent === "价格");
+  const key = rows.find((row) => row.querySelector("th")?.textContent === "是否需自备 Key");
+  expect(price?.querySelector("td:last-child")?.textContent).toMatch(
+    /本地[^；]*不产生[^；]*API 费.*云 API[^；]*服务商/,
+  );
+  expect(key?.querySelector("td:last-child")?.textContent).toMatch(
+    /本地 Ollama[^；]*无需[^；]*服务商凭据.*云 API[^；]*(?:Key|账号)/,
+  );
+  const faq = [...container.querySelectorAll("#faq details")].find((item) =>
+    item.querySelector("summary")?.textContent?.includes("自建 OpenClaw 还需要付微伴 credits 吗"),
+  );
+  expect(faq?.querySelector("p")?.textContent).toMatch(
+    /本地 Ollama[^；。]*不产生[^；。]*API 费.*云 API[^；。]*服务商/,
+  );
+});
