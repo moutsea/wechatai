@@ -15,7 +15,7 @@ type Item = {
   target?: MembershipReminderTarget;
   text?: string;
 };
-export type MembershipReminder = Item & { planUntil: number };
+export type MembershipReminder = Item & { planUntil: number; revision: number };
 type Store = { planUntil: number; revision: number; acknowledged: number; items: Item[] };
 const active = (state: State) => ["pending", "sending", "retry", "waiting"].includes(state);
 
@@ -105,7 +105,7 @@ export class MembershipReminders {
           item.retryAt <= now &&
           now < item.cutoffAt,
       )
-      .map((item) => ({ ...item, planUntil: store.planUntil }));
+      .map((item) => ({ ...item, planUntil: store.planUntil, revision: store.revision }));
   }
   private current(store: Store, job: MembershipReminder) {
     if (store.planUntil !== job.planUntil) return undefined;
@@ -114,19 +114,33 @@ export class MembershipReminders {
     );
   }
   isCurrent(job: MembershipReminder, now = Date.now()) {
-    return !!this.current(this.read(), job) && now < job.cutoffAt;
+    return this.current(this.read(), job)?.state === "sending" && now < job.cutoffAt;
+  }
+  private available(store: Store, job: MembershipReminder, now: number) {
+    if (store.revision !== job.revision) return undefined;
+    const item = this.current(store, job);
+    return item && item.state !== "waiting" && item.retryAt <= now && now < item.cutoffAt
+      ? item
+      : undefined;
+  }
+  defer(job: MembershipReminder, state: "waiting" | "cancelled", now = Date.now()) {
+    const store = this.read();
+    const item = this.available(store, job, now);
+    if (!item) return;
+    item.state = state;
+    this.save(store);
   }
   claim(job: MembershipReminder, target: MembershipReminderTarget, text: string, now = Date.now()) {
     const store = this.read();
-    const item = this.current(store, job);
-    if (!item || item.retryAt > now || now >= item.cutoffAt) return null;
+    const item = this.available(store, job, now);
+    if (!item) return null;
     item.target ??= target;
     item.text ??= text;
     item.state = "sending";
     item.attempts++;
     item.retryAt = now + 30000;
     this.save(store);
-    return { ...item, planUntil: store.planUntil };
+    return { ...item, planUntil: store.planUntil, revision: store.revision };
   }
   settle(
     job: MembershipReminder,
@@ -135,7 +149,7 @@ export class MembershipReminders {
   ) {
     const store = this.read();
     const item = this.current(store, job);
-    if (!item) return;
+    if (item?.state !== "sending") return;
     item.state = state;
     if (state === "retry")
       item.retryAt = now + Math.min(300000, 5000 * 2 ** Math.min(item.attempts, 6));
@@ -145,7 +159,10 @@ export class MembershipReminders {
     const store = this.read();
     let changed = false;
     for (const item of store.items) {
-      if (["waiting", "retry"].includes(item.state) && item.dueAt <= now && now < item.cutoffAt) {
+      if (item.dueAt > now || now >= item.cutoffAt) continue;
+      if ((item.state === "pending" || item.state === "sending") && item.retryAt <= now)
+        changed = true;
+      if (item.state === "waiting" || item.state === "retry") {
         item.state = "pending";
         item.retryAt = now;
         changed = true;

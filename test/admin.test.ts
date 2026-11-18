@@ -1,3 +1,4 @@
+import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
 import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import { env, runInDurableObject, createExecutionContext } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it, vi, afterEach } from "vitest";
@@ -26,7 +27,9 @@ import { dayWindow } from "../src/server/wallet";
 import { extendMembership } from "../src/shared/billing";
 import type { AdminAccountStats, AdminGiftResult, AdminMembership } from "../src/shared/admin";
 
+const syncGrant = { userId: "fixture-admin", adminUntil: Number.MAX_SAFE_INTEGER };
 beforeAll(async () => {
+  await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   for (const migration of [
     authMigration,
     billingMigration,
@@ -745,11 +748,15 @@ describe("admin aggregates", () => {
   });
   it("bounds sync batches and continues with a cursor", async () => {
     for (let i = 0; i < 11; i++) await user(`sync-${i.toString().padStart(2, "0")}`);
-    const first = await syncAdminStats(env, null);
+    const first = await syncAdminStats(env, null, syncGrant);
     expect(first).toMatchObject({ processed: 10, failed: 0 });
     expect(first.next).not.toBeNull();
     expect((await adminOverview(env)).coverage.synced).toBe(10);
-    expect(await syncAdminStats(env, first.next)).toEqual({ next: null, processed: 1, failed: 0 });
+    expect(await syncAdminStats(env, first.next, syncGrant)).toEqual({
+      next: null,
+      processed: 1,
+      failed: 0,
+    });
     expect((await adminOverview(env)).coverage.synced).toBe(11);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -760,7 +767,11 @@ describe("admin aggregates", () => {
     await runInDurableObject(env.ACCOUNTS.getByName(broken), (_, state) => {
       state.storage.sql.exec("INSERT INTO settings VALUES ('planUntil','invalid-json')");
     });
-    expect(await syncAdminStats(env, null)).toEqual({ next: null, processed: 2, failed: 1 });
+    expect(await syncAdminStats(env, null, syncGrant)).toEqual({
+      next: null,
+      processed: 2,
+      failed: 1,
+    });
     expect((await adminOverview(env)).summary.requests).toBe(9);
     expect((await adminUsers(env, { q: good })).items[0].syncedAt).toBeGreaterThan(1);
   });

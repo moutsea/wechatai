@@ -1,4 +1,4 @@
-import { stripTypeScriptTypes } from "node:module";
+import { writeOpenClawRuntime } from "./openclaw-runtime-files.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, rename, readFile, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
@@ -7,15 +7,7 @@ import { OPENCLAW_CONNECTOR_VERSION } from "../integrations/openclaw/version.ts"
 
 const output = resolve("public/downloads");
 await mkdir(output, { recursive: true });
-// Published plugins must contain JavaScript runtime output; TypeScript-only
-// entries are accepted only in local source checkouts by current OpenClaw.
-for (const name of ["index", "transport", "reply", "version"]) {
-  const source = await readFile(`integrations/openclaw/${name}.ts`, "utf8");
-  await writeFile(
-    `integrations/openclaw/${name}.js`,
-    stripTypeScriptTypes(source, { mode: "transform" }),
-  );
-}
+await writeOpenClawRuntime(resolve("integrations/openclaw"));
 for (const file of ["package.json", "openclaw.plugin.json"]) {
   const manifest = JSON.parse(await readFile(`integrations/openclaw/${file}`, "utf8"));
   if (manifest.version !== OPENCLAW_CONNECTOR_VERSION)

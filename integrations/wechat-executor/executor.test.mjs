@@ -56,6 +56,8 @@ test("restart retries a saved result and fails an uncertain operation without in
     return { data: { accepted: true } };
   };
   await executor.recover();
+  await executor.flushReports();
+  await executor.flushReports();
   assert.equal(reports, 2);
   assert.deepEqual(await readdir(directory), []);
 });
@@ -83,6 +85,10 @@ test("a lost acknowledgement replays a durable result without re-executing upstr
     expiresAt: Date.now() + 60000,
     input: { kind: "attachments", items: [], timeoutMs: 1000 },
   });
+  assert.equal(reports, 1);
+  // A process restart can retry immediately from disk.
+  await executor.recover();
+  await executor.flushReports();
   assert.equal(executions, 1);
   assert.equal(reports, 2);
   assert.deepEqual(await readdir(directory), []);
@@ -144,13 +150,149 @@ test("continues the next tool step directly after acknowledging its predecessor"
 });
 
 test("draining finishes the claimed activity without starting another", async () => {
-  const service = new Executor({concurrency:1});
-  let finished=false;
-  service.api = async () => {throw new Error('must not discover or claim while draining');};
-  service.execute = async () => { service.drain(); finished=true; };
-  await service.runAccount('a'.repeat(64),{id:'job'});
+  const service = new Executor({ concurrency: 1 });
+  let finished = false;
+  service.api = async () => {
+    throw new Error("must not discover or claim while draining");
+  };
+  service.execute = async () => {
+    service.drain();
+    finished = true;
+  };
+  await service.runAccount("a".repeat(64), { id: "job" });
   await service.tick();
-  assert.equal(finished,true);
-  assert.equal(service.stopController.signal.aborted,false);
-  assert.equal(service.health().draining,true);
+  assert.equal(finished, true);
+  assert.equal(service.stopController.signal.aborted, false);
+  assert.equal(service.health().draining, true);
+});
+
+test("stale and conflicting receipts stay on disk for reconciliation", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "wechatai-executor-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const service = new Executor({
+    directory,
+    concurrency: 1,
+    endpoint: "https://example.invalid",
+    secret: "fixture",
+  });
+  let reply;
+  t.mock.method(globalThis, "fetch", async () => reply);
+  for (const disposition of ["stale", "conflict"]) {
+    const record = {
+      accountId: "a".repeat(64),
+      payload: { id: "b".repeat(64), lease: "fixture", result: { ok: true, value: disposition } },
+    };
+    const file = join(directory, "c".repeat(64) + ".json");
+    await durableWrite(file, record);
+    for (const body of ['{"error":"account_changed"}', "unknown conflict", "x".repeat(8192)]) {
+      reply = new Response(body, { status: 409 });
+      assert.equal(await service.report(file, record), false);
+      assert.equal(service.pendingReports.has(file), true);
+      assert.deepEqual(JSON.parse(await readFile(file)), record);
+    }
+    reply =
+      disposition === "conflict"
+        ? Response.json({ error: "job_conflict" }, { status: 409 })
+        : Response.json({ data: { stale: true } });
+    assert.equal(await service.report(file, record), true);
+  }
+  const files = await readdir(directory);
+  assert.equal(files.length, 2);
+  assert.ok(files.every((name) => name.endsWith(".review")));
+  const values = await Promise.all(
+    files.map(
+      async (name) => JSON.parse(await readFile(join(directory, name))).payload.result.value,
+    ),
+  );
+  assert.deepEqual(values.sort(), ["conflict", "stale"]);
+  await service.recover();
+  assert.equal(service.pendingReports.size, 0);
+});
+
+test("one failed claim or unavailable receipt leaves other accounts runnable", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "wechatai-executor-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const [bad, pending, good] = ["a", "b", "c"].map((key) => key.repeat(64));
+  await durableWrite(join(directory, pending + ".json"), {
+    accountId: pending,
+    payload: { id: pending, lease: "fixture", result: { ok: true, value: "saved" } },
+  });
+  const service = new Executor({ directory, concurrency: 1 });
+  await service.recover();
+  const claims = [];
+  service.api = async (path) => {
+    if (path === "accounts") return { accounts: [bad, pending, good] };
+    if (path.endsWith("/complete")) throw new Error("temporary outage");
+    claims.push(path);
+    if (path === bad + "/claim") throw new Error("one account unavailable");
+    return { data: null };
+  };
+  await service.tick();
+  await service.tick();
+  assert.deepEqual(claims, [bad + "/claim", good + "/claim", good + "/claim"]);
+  await service.stop();
+  assert.equal((await readdir(directory)).length, 1);
+});
+
+test("a slow account claim leaves a second slot available and stop waits for its lease", async () => {
+  const [slow, fast] = ["a".repeat(64), "b".repeat(64)];
+  const service = new Executor({ concurrency: 2 });
+  const blocked = Promise.withResolvers();
+  const started = Promise.withResolvers();
+  const executed = [];
+  service.api = async (path) => {
+    if (path === "accounts") return { accounts: [slow, slow, fast] };
+    if (path === slow + "/claim") await blocked.promise;
+    else assert.equal(path, fast + "/claim");
+    return { data: { id: path } };
+  };
+  service.runAccount = async (id) => {
+    executed.push(id);
+    if (id === fast) started.resolve();
+  };
+  const tick = service.tick();
+  await started.promise;
+  assert.deepEqual(executed, [fast]);
+  service.drain();
+  let stopped = false;
+  const stop = service.stop().then(() => {
+    stopped = true;
+  });
+  await Promise.resolve();
+  assert.equal(stopped, false);
+  blocked.resolve();
+  await Promise.all([tick, stop]);
+  assert.deepEqual(executed, [fast, slow]);
+  assert.equal(service.health().active, 0);
+});
+
+test("discovery uses a freed slot while a previous poll still has an outstanding claim", async () => {
+  const [slow, first, next] = ["a", "b", "c"].map((key) => key.repeat(64));
+  const service = new Executor({ concurrency: 2 });
+  const blocked = Promise.withResolvers();
+  const firstStarted = Promise.withResolvers();
+  const processed = Promise.withResolvers();
+  let polls = 0;
+  const requested = [];
+  service.api = async (path) => {
+    if (path === "accounts") return { accounts: [slow, ++polls === 1 ? first : next] };
+    requested.push(path);
+    if (path === slow + "/claim") await blocked.promise;
+    return { data: path === slow + "/claim" ? null : {} };
+  };
+  service.runAccount = async (id) => {
+    if (id === first) firstStarted.resolve();
+    if (id === next) processed.resolve();
+  };
+  await service.tick({ waitForClaims: false });
+  await firstStarted.promise;
+  await Promise.all(service.running.values());
+  await service.tick({ waitForClaims: false });
+  await processed.promise;
+  assert.deepEqual(
+    requested,
+    [slow, first, next].map((id) => id + "/claim"),
+  );
+  blocked.resolve();
+  await service.stop();
 });

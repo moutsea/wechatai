@@ -1,0 +1,6 @@
+{
+  "secret": "test-only-compatibility-key-with-32-characters",
+  "context": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:wechat",
+  "plaintext": "{\"token\":\"fixture-token\",\"userId\":\"fixture-user\"}",
+  "ciphertext": "AAECAwQFBgcICQoL.YJZhKSYk5Ut2otdZyERnxZvywM3kfaB4NyOV1YhVLTmcs+95/B1IuvNq73ji/Os49kK5pgeZGP6oJJBoQ7XOvNs="
+}

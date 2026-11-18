@@ -1,10 +1,10 @@
 // Integration smoke test against an installed OpenClaw SDK; no real credentials or messages.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile, symlink, rm } from "node:fs/promises";
-import { stripTypeScriptTypes } from "node:module";
+import { mkdtemp, mkdir, writeFile, symlink, rm } from "node:fs/promises";
+import { writeOpenClawRuntime } from "./openclaw-runtime-files.mjs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import { OPENCLAW_CONNECTOR_VERSION } from "../integrations/openclaw/version.ts";
@@ -22,13 +22,7 @@ try {
   await symlink(root, join(dir, "node_modules", "openclaw"));
   await writeFile(join(dir, "package.json"), '{"type":"module"}');
   await writeFile(process.env.OPENCLAW_CONFIG_PATH, "{}");
-  for (const name of ["index", "transport", "reply", "version"])
-    await writeFile(
-      join(dir, `${name}.js`),
-      stripTypeScriptTypes(await readFile(resolve(`integrations/openclaw/${name}.ts`), "utf8"), {
-        mode: "transform",
-      }),
-    );
+  await writeOpenClawRuntime(dir);
   const { createWechataiChannel } = await import(pathToFileURL(join(dir, "index.js")));
   const reply = await import(pathToFileURL(join(root, "dist/plugin-sdk/reply-runtime.js")));
   const { resolveCommandAuthorization } = await import(

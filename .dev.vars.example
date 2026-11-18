@@ -40,3 +40,7 @@ AGT_APP_KEY=
 # Example shape only: {"v1":"<independent-random-secret>"}
 # Migrating from the default v1: retain the exact ENCRYPTION_KEY value as v1; add a new v2.
 AGT_CALLBACK_KEYS=
+
+# Signed edge-to-Go requests for accounts assigned to the VPS in D1.
+WECHATAI_BACKEND_ORIGIN=
+WECHATAI_RPC_SECRET=

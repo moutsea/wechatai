@@ -1,3 +1,4 @@
+import { applyAccountPayment } from "./account-route";
 import Stripe from "stripe";
 import { AppError, secret } from "./config";
 import { paymentNoticeStatements } from "./billing-notifications";
@@ -372,7 +373,7 @@ async function fulfillInvoice(
   if (sub.id !== subId || sub.metadata.orderId !== order.id || !belongs(env, sub.metadata))
     mismatch();
   await syncSubscription(env, sub);
-  await env.ACCOUNTS.getByName(order.user_id).applyPayment({
+  await applyAccountPayment(env, order.user_id, {
     id: invoice.id,
     kind: "subscription",
     units: 0,
@@ -417,7 +418,6 @@ async function fulfillSession(env: Env, session: Stripe.Checkout.Session) {
     mismatch();
   if (session.mode === "payment") {
     if (!objectId(session.payment_intent)) mismatch();
-    const account = env.ACCOUNTS.getByName(order.user_id);
     if (order.kind === "plus") {
       const months = order.membership_months;
       if (
@@ -425,9 +425,9 @@ async function fulfillSession(env: Env, session: Stripe.Checkout.Session) {
         months !== (offerFor(order.offer_id).interval === "year" ? 12 : 1)
       )
         mismatch();
-      await account.applyPayment({ id: session.id, kind: "membership", months });
+      await applyAccountPayment(env, order.user_id, { id: session.id, kind: "membership", months });
     } else {
-      await account.applyPayment({
+      await applyAccountPayment(env, order.user_id, {
         id: session.id,
         kind: "purchase",
         units: order.credits * 1000,

@@ -1,3 +1,4 @@
+import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
@@ -25,6 +26,7 @@ const testEnv = {
   ...Object.fromEntries(BILLING_OFFERS.map((o) => [o.priceEnv, `price_${o.id}`])),
 };
 beforeAll(async () => {
+  await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   await env.DB.exec(authMigration);
   await env.DB.exec(funnelMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   await env.DB.batch(

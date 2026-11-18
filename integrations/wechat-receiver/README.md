@@ -38,8 +38,8 @@
 适用于一个 VPS 接收器实例及其本机 Go 巡检进程。接收器仍处理微信长轮询、落盘和消息重放。Go 每 20 秒比较本机最近收到 pong 的会话与 Worker 的 D1 登记。健康会话不会触发账户 RPC，也不需要逐账户写 D1。每轮成功扫描只更新一条共享心跳，每页读取最多 100 个到期会话。缺失的会话交给原账户核对，迟到的旧会话回报无法接管新连接。
 
 1. 在站点的 D1 应用 `0018_receiver_watchdog.sql`，发布本版 Worker。确认生产环境已有每分钟一次的 Cron Trigger。现有接收器继续使用原协议。
-2. 在代码仓库运行 `pnpm build:receiver`。它会生成 `backend/dist/linux-amd64/wechatai-receiver-<version>.tar.gz`，包含 Node.js 接收器、独立的 Go 程序 `receiver-watchdog`、依赖锁、接收器测试和两份 systemd 单元。arm64 VPS 构建时设置 `WECHATAI_BUILD_ARCH=arm64`。生产使用已审查、已提交的版本。
-3. 按上方接收器发布步骤解压到新的版本目录，运行 `npm ci --omit=dev --ignore-scripts` 和 `npm test`，保留原状态目录并更新 `/opt/wechatai-receiver/current`。将包内的 `wechatai-receiver.service` 和 `wechatai-receiver-watchdog.service` 安装到 `/etc/systemd/system/`。随后执行以下命令。两个服务共用现有的接收器环境文件，Go 以出站 HTTPS 访问 Worker，读取回环端口的 `/watchdog`；无需开放 VPS 入站端口或配置账户数据库密钥。
+2. 在代码仓库运行 `pnpm build:receiver`。它会独立编译 Go 巡检程序 `receiver-watchdog`，与接收器、依赖锁和两份 systemd 单元一起打入 `backend/dist/linux-amd64/wechatai-receiver-<version>.tar.gz`。arm64 VPS 构建时设置 `WECHATAI_BUILD_ARCH=arm64`。生产使用已审查、已提交的版本。
+3. 按上方接收器发布步骤解压到新的版本目录，运行 `npm ci --omit=dev --ignore-scripts`，保留原状态目录并更新 `/opt/wechatai-receiver/current`。将包内的 `wechatai-receiver-watchdog.service` 安装到 `/etc/systemd/system/`。随后执行以下命令。两个服务共用现有的接收器环境文件，Go 以出站 HTTPS 访问 Worker，读取回环端口的 `/watchdog`；无需开放 VPS 入站端口或配置账户数据库密钥。
 
    ```sh
    systemctl daemon-reload

@@ -1,3 +1,4 @@
+import { accountForReferral } from "./account-route";
 import {
   CLOUD_AGENT_PLUGIN_ID,
   CLOUD_AGENT_VERSION,
@@ -174,6 +175,7 @@ import { invokeLlmChat, llmChatManifest } from "./plugins/llm-chat";
 import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
 import { pluginNotificationText } from "./plugins/notifications";
+import { assetDownload, missingAsset, validAssetId } from "./asset-download";
 import { MediaStore } from "./media";
 import {
   imageGenerationInputSchema,
@@ -191,8 +193,9 @@ import { DEFAULT_OUTPUT_TOKENS, modelInputBudget } from "../shared/context";
 import { wechatHelp, welcomeGuide } from "../shared/guide";
 import { leadingMention, nativeCommand, platformCommand } from "../shared/command-routing";
 import { watchdogHeader } from "./receiver-watchdog";
+import { referralRecipient } from "./referral-reward";
 import { REFERRAL_CREDITS } from "../shared/referrals";
-import { qualifyReferral, wechatIdentityHash, type ReferralRow } from "./referrals";
+import { qualifyReferral, wechatIdentityHash } from "./referrals";
 import {
   extractText,
   orderedWechatMessages,
@@ -956,7 +959,9 @@ export class PersonalAccount extends DurableObject<Env> {
       const row = await qualifyReferral(this.env, userId, used.hash);
       if (row?.status === "qualified") {
         await this.applyReferralReward(userId, "invitee");
-        await this.env.ACCOUNTS.getByName(row.inviter_id).applyReferralReward(userId, "inviter");
+        await (
+          await accountForReferral(this.env, row.inviter_id)
+        ).applyReferralReward(userId, "inviter");
         await this.env.DB.prepare(
           "UPDATE referral SET status = 'rewarded', rewarded_at = ? WHERE invitee_id = ? AND status = 'qualified'",
         )
@@ -974,20 +979,9 @@ export class PersonalAccount extends DurableObject<Env> {
     return Boolean(used && !used.done && this.getSetting("ownerId", ""));
   }
   async applyReferralReward(inviteeId: string, role: "inviter" | "invitee") {
-    const row = await this.env.DB.prepare(
-      "SELECT invitee_id, inviter_id, status FROM referral WHERE invitee_id = ?",
-    )
-      .bind(inviteeId)
-      .first<ReferralRow>();
-    if (
-      !row ||
-      !["qualified", "rewarded"].includes(row.status) ||
-      !["inviter", "invitee"].includes(role) ||
-      !this.ctx.id.equals(
-        this.env.ACCOUNTS.idFromName(role === "inviter" ? row.inviter_id : row.invitee_id),
-      )
-    )
-      throw new Error("Invalid referral reward recipient");
+    const { owner } = await referralRecipient(this.env.DB, inviteeId, role);
+    if (!this.env.ACCOUNTS.idFromName(owner).equals(this.ctx.id))
+      throw new AppError("invalid_referral", "邀请奖励收款账户不匹配", 403);
     this.refreshWallet();
     this.wallet.grant(
       `referral:${inviteeId}:${role}`,
@@ -2274,7 +2268,7 @@ export class PersonalAccount extends DurableObject<Env> {
           job.target &&
           (!this.links().some((link) => link.id === job.target!.connectionId) ||
             this.connection(job.target.connectionId).generation !== job.target.generation);
-        this.membershipReminders.settle(job, changed ? "cancelled" : "waiting");
+        this.membershipReminders.defer(job, changed ? "cancelled" : "waiting");
         continue;
       }
       const expires = `${beijingTime(job.planUntil)}（北京时间）`;
@@ -4441,21 +4435,9 @@ export class PersonalAccount extends DurableObject<Env> {
     this.ctx.waitUntil(this.media.cleanup().catch(() => this.scheduleWechat()));
   }
   async imageAsset(id: string): Promise<Response> {
-    if (!/^[0-9a-f-]{36}$/.test(id)) return new Response("Not found", { status: 404 });
+    if (!validAssetId(id)) return new Response("Not found", { status: 404 });
     const result = await this.media.read(id);
-    if (!result) return new Response("附件已过期或已删除", { status: 404 });
-    return new Response(result.body, {
-      headers: {
-        "content-type": result.asset.mime,
-        "content-length": String(result.asset.bytes),
-        "cache-control": "private, no-store",
-        "x-content-type-options": "nosniff",
-        "content-disposition": result.asset.name
-          ? `attachment; filename="download"; filename*=UTF-8''${encodeURIComponent(result.asset.name).replace(/'/g, "%27")}`
-          : `inline; filename="wechatai-${id}.${result.asset.mime === "image/jpeg" ? "jpg" : result.asset.mime.split("/")[1]}"`,
-        "content-security-policy": "default-src 'none'; sandbox",
-      },
-    });
+    return result ? assetDownload(id, result.asset, result.body) : missingAsset();
   }
   private async runImage(
     id: string,

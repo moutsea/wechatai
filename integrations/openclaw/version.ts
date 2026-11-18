@@ -1,2 +1,3 @@
-// Shared by the running connector and the website; the packager checks manifests.
-export const OPENCLAW_CONNECTOR_VERSION = "1.1.5";
+import release from "../../backend/contract/openclaw-release.json" with { type: "json" };
+
+export const OPENCLAW_CONNECTOR_VERSION = release.version;

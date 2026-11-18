@@ -1,3 +1,4 @@
+import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
 import { env, createExecutionContext } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import auth from "../migrations/0001_auth.sql?raw";
@@ -72,6 +73,7 @@ async function login(): Promise<Account> {
   return { id: user.id, cookie: await verifiedFixtureCookie(user.id, "test-password-only") };
 }
 beforeAll(async () => {
+  await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   for (const migration of [
     auth,
     billing,

@@ -1,0 +1,8 @@
+{
+  "secret": "test-only-edge-to-go-rpc-secret-at-least-32",
+  "timestamp": 1794960000000,
+  "requestId": "test-worker-request-0001",
+  "origin": "https://backend.example.com",
+  "body": "{\"version\":\"wechatai-rpc-v1\",\"accountId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"ownerId\":\"test-owner\",\"routeEpoch\":3,\"principal\":{\"scope\":\"billing\"},\"method\":\"applyPayment\",\"params\":[{\"id\":\"test-payment-测试\",\"kind\":\"membership\",\"months\":1}]}",
+  "signature": "9lR2z31WMxn22OTAz_-np8Apa0pRD3xQjIDa3zpSA4c"
+}

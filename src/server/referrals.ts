@@ -1,3 +1,4 @@
+import { accountForReferral } from "./account-route";
 import { parseSigned, serializeSigned } from "hono/utils/cookie";
 import { secret } from "./config";
 import { REFERRAL_CREDITS, type ReferralStatus, type ReferralSummary } from "../shared/referrals";
@@ -85,7 +86,9 @@ export async function qualifyReferral(env: Env, userId: string, hash: string) {
     .bind(userId)
     .first<ReferralRow>();
   if (!row || row.status !== "pending") return row;
-  const inviterHash = await env.ACCOUNTS.getByName(row.inviter_id).referralWechatIdentity();
+  const inviterHash = await (
+    await accountForReferral(env, row.inviter_id)
+  ).referralWechatIdentity();
   const eligible = owner && inviterHash !== hash && row.inviter_id !== userId;
   await env.DB.prepare(
     "UPDATE referral SET status = ?, qualified_at = ?, reason = ? WHERE invitee_id = ? AND status = 'pending'",
@@ -112,7 +115,7 @@ export async function referralSummary(env: Env, userId: string): Promise<Referra
   const code = await env.DB.prepare("SELECT code FROM referral_code WHERE user_id = ?")
     .bind(userId)
     .first<{ code: string }>();
-  const account = env.ACCOUNTS.getByName(userId);
+  const account = await accountForReferral(env, userId);
   const hash = await account.referralWechatIdentity();
   if (hash) await claimWechatIdentity(env, userId, hash);
   const stats = await env.DB.prepare(

@@ -1,3 +1,4 @@
+import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
 import { env, runInDurableObject, createExecutionContext } from "cloudflare:test";
 import worker from "../src/server/index";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -18,6 +19,7 @@ const accounts: ReturnType<typeof env.ACCOUNTS.getByName>[] = [];
 const sockets: WebSocket[] = [];
 const serviceSecret = "test-receiver-secret-with-at-least-32-characters";
 beforeAll(async () => {
+  await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   for (const statement of (migration + "\n" + watchdogMigration)
     .split(";")
     .map((s) => s.trim())

@@ -1,3 +1,4 @@
+import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
 import { createExecutionContext, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
@@ -41,6 +42,7 @@ async function account() {
   };
 }
 beforeAll(async () => {
+  await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   await env.DB.exec(authMigration);
   await env.DB.exec(referralMigration);
   await env.DB.exec(authEmailMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));

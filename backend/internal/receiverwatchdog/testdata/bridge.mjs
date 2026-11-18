@@ -47,7 +47,11 @@ const mf = new Miniflare({
 });
 const origin = (await mf.ready).origin;
 const db = await mf.getD1Database("DB");
-for (const name of ["0011_wechat_receivers", "0018_receiver_watchdog"]) {
+for (const name of [
+  "0011_wechat_receivers",
+  "0018_receiver_watchdog",
+  "0019_account_backend_routes",
+]) {
   const sql = await readFile(
     new URL("../../../../migrations/" + name + ".sql", import.meta.url),
     "utf8",

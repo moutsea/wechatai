@@ -1,0 +1,42 @@
+name: Deploy Cloudflare edge
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-edge-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: edge-production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm setup:local
+      - run: pnpm check:public
+      - run: pnpm check
+      - name: Prepare private production configuration
+        env:
+          EDGE_WRANGLER_CONFIG: ${{ vars.WRANGLER_CONFIG }}
+        run: |
+          node --input-type=module <<'JS'
+          import { writeFileSync, appendFileSync } from 'node:fs';
+          const value=process.env.EDGE_WRANGLER_CONFIG;
+          if (!value?.trim()) throw new Error('Set edge-production WRANGLER_CONFIG');
+          const path='wrangler.actions.local.jsonc';
+          writeFileSync(path,value,{mode:0o600});
+          appendFileSync(process.env.GITHUB_ENV,`WECHATAI_WRANGLER_CONFIG=${path}\n`);
+          JS
+      - name: Build and deploy edge
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm deploy:edge

@@ -1,5 +1,7 @@
 # 部署到 Cloudflare
 
+> Go 后端拆分正在实施，登录、支付入口和 D1 继续保留在 Cloudflare。独立构建、发布及当前未完成范围见 [Go 后端部署](go-backend-deployment.md)。完成业务和数据迁移验收之前，本页的 DO 绑定及生产部署方式继续有效。
+
 [返回 README](../README.md)
 
 应用运行在 Workers，账户状态使用 SQLite Durable Objects，D1 保存认证和订单，R2 保存媒体。提醒服务单独部署，以免每次网站发布都替换它的调度代码。先在本地通过 `pnpm check`。

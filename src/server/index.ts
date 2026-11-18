@@ -23,6 +23,14 @@ import {
   readCloudCallbackBody,
 } from "./cloud-agent-callback";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
+import {
+  accountForNotification,
+  accountForUser,
+  type AdminGrant,
+  receiveAccountCallback,
+  receiverConnection,
+  receiverStatus,
+} from "./account-route";
 import { Hono } from "hono";
 import {
   receiverAuthorized,
@@ -33,10 +41,12 @@ import {
 import { watchdogHeader, fallbackWatchdogs } from "./receiver-watchdog";
 import { watchdogRoutes } from "./receiver-watchdog-routes";
 import { connectorPoll } from "./connector-poll";
+import { executionCompletionSchema } from "../shared/executor-protocol";
 import { executionAuthorized, EXECUTION_MAX_BYTES } from "./execution-store";
 import { serverMonitorAuthorized, saveServerStatus, adminServerStatus } from "./server-status";
 import {
   isAdmin,
+  adminAccessUntil,
   adminOverview,
   adminUsers,
   syncAdminStats,
@@ -67,7 +77,7 @@ export { PersonalAccount } from "./personal-account";
 // Local development/tests colocate both classes. Production binds REMINDERS to
 // the independently deployed wechatai-reminders Worker.
 export { ReminderScheduler } from "./reminder-scheduler";
-type App = { Bindings: Env; Variables: { user: KimiseekIdentity } };
+type App = { Bindings: Env; Variables: { user: KimiseekIdentity; adminGrant: AdminGrant } };
 const app = new Hono<App>();
 // Use the same token checks, quotas and durable queue as the public endpoint,
 // without a public fetch back into this Worker (which can fail before routing).
@@ -94,13 +104,12 @@ app.post(`${CLOUD_CALLBACK_PATH}/:token`, async (c) => {
       return c.json({ error: "invalid_body" }, 400);
     }
     if (rawBody === null) return c.json({ error: "body_too_large" }, 413);
-    let account: ReturnType<typeof c.env.ACCOUNTS.get>;
     try {
-      account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(match.accountId));
+      c.env.ACCOUNTS.idFromString(match.accountId);
     } catch {
       return c.json({ error: "invalid_token" }, 401);
     }
-    const result = await account.agtCallback(match.taskId, rawBody, {
+    const result = await receiveAccountCallback(c.env, match.accountId, match.taskId, rawBody, {
       event: c.req.header("x-agent-event"),
       delivery: c.req.header("x-agent-delivery"),
       timestamp: c.req.header("x-agent-timestamp"),
@@ -157,23 +166,7 @@ app.post("/api/internal/executor/:accountId/:action", async (c) => {
     action = c.req.param("action");
   if (!/^[0-9a-f]{64}$/.test(id) || !["claim", "complete"].includes(action))
     return c.json({ error: "not_found" }, 404);
-  const payload =
-    action === "claim"
-      ? {}
-      : z
-          .object({
-            id: z.string().regex(/^[0-9a-f]{64}$/),
-            lease: z.uuid(),
-            result: z.discriminatedUnion("ok", [
-              z.object({ ok: z.literal(true), value: z.unknown() }),
-              z.object({
-                ok: z.literal(false),
-                code: z.string().max(100),
-                message: z.string().max(1000),
-              }),
-            ]),
-          })
-          .parse(await c.req.json());
+  const payload = action === "claim" ? {} : executionCompletionSchema.parse(await c.req.json());
   return c.json({
     data: await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).executionRequest(
       action as "claim" | "complete",
@@ -276,7 +269,7 @@ app.get("/api/internal/wechat-receiver/status/:accountId", async (c) => {
   const id = c.req.param("accountId");
   if (!/^[0-9a-f]{64}$/.test(id)) return c.json({ error: "invalid_account" }, 400);
   try {
-    return c.json(await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).receiverStatus());
+    return c.json(await receiverStatus(c.env, id));
   } catch (error) {
     // Authenticated operator diagnostic; no credentials/messages are read here.
     return c.json(
@@ -298,15 +291,10 @@ app.get("/api/internal/wechat-receiver/connect/:accountId", async (c) => {
     return c.json({ error: "not_found" }, 404);
   if (c.req.header("upgrade")?.toLowerCase() !== "websocket")
     return c.json({ error: "websocket_required" }, 426);
-  const response = await c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id)).fetch(
-    "https://account.internal/wechat-receiver",
-    {
-      headers: {
-        Upgrade: "websocket",
-        ...(c.req.header(watchdogHeader) === "1" ? { [watchdogHeader]: "1" } : {}),
-      },
-    },
-  );
+  const response = await receiverConnection(c.env, id, {
+    Upgrade: "websocket",
+    ...(c.req.header(watchdogHeader) === "1" ? { [watchdogHeader]: "1" } : {}),
+  });
   // DO fetch responses have immutable headers. Hono's security middleware adds
   // response headers, so clone explicitly while retaining the upgrade socket.
   return new Response(response.body, {
@@ -412,7 +400,7 @@ for (const method of ["POST", "GET"] as const) {
       ).success
     )
       return c.json({ error: "rate_limited", message: "请求过于频繁，请稍后重试" }, 429);
-    const account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(match.accountId));
+    const account = await accountForNotification(c.env, match.accountId);
     if (!(await account.notificationCredentialValid(match.pluginId, match.credential)))
       return c.json({ error: "invalid_token", message: "Token 无效或已撤销" }, 401);
     if (!(await c.env.API_LIMIT.limit({ key: `notify:${match.accountId}` })).success)
@@ -507,15 +495,16 @@ app.use("/api/*", async (c, next) => {
 app.get("/api/me", (c) => c.json({ user: c.var.user }));
 app.get("/api/admin/access", async (c) => c.json({ isAdmin: await isAdmin(c.env, c.var.user.id) }));
 app.use("/api/admin/*", async (c, next) => {
-  if (!(await isAdmin(c.env, c.var.user.id)))
-    throw new AppError("admin_required", "此页面仅对管理员开放", 403);
+  const adminUntil = await adminAccessUntil(c.env, c.var.user.id);
+  if (adminUntil <= Date.now()) throw new AppError("admin_required", "此页面仅对管理员开放", 403);
+  c.set("adminGrant", { userId: c.var.user.id, adminUntil });
   c.header("X-Robots-Tag", "noindex, nofollow");
   return next();
 });
 app.get("/api/notices", async (c) => {
   const [feed, connectorUpdate] = await Promise.all([
     listUserNotices(c.env, c.var.user.id, c.req.query()),
-    c.env.ACCOUNTS.getByName(c.var.user.id).connectorUpdateNotice(),
+    accountForUser(c.env, c.var.user.id).then((account) => account.connectorUpdateNotice()),
   ]);
   return c.json({ ...feed, connectorUpdate });
 });
@@ -523,9 +512,9 @@ app.post("/api/notices/connector-update/read", async (c) => {
   const body = await c.req.json<{ version?: unknown }>().catch(() => null);
   if (typeof body?.version !== "string" || !connectorVersionPattern.test(body.version))
     throw new AppError("invalid_notice", "通知参数无效", 400);
-  const read = await c.env.ACCOUNTS.getByName(c.var.user.id).readConnectorUpdateNotice(
-    body.version,
-  );
+  const read = await (
+    await accountForUser(c.env, c.var.user.id)
+  ).readConnectorUpdateNotice(body.version);
   if (!read) throw new AppError("notice_changed", "升级通知已变化，请刷新后查看", 409);
   return c.json({ ok: true });
 });
@@ -533,9 +522,9 @@ app.post("/api/notices/read-all", async (c) => {
   const parsed = noticeReadAllSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw new AppError("invalid_notice", "通知参数无效", 400);
   if (parsed.data.connectorVersion) {
-    const read = await c.env.ACCOUNTS.getByName(c.var.user.id).readConnectorUpdateNotice(
-      parsed.data.connectorVersion,
-    );
+    const read = await (
+      await accountForUser(c.env, c.var.user.id)
+    ).readConnectorUpdateNotice(parsed.data.connectorVersion);
     if (!read) throw new AppError("notice_changed", "升级通知已变化，请刷新后查看", 409);
   }
   return c.json(await readAllNotices(c.env, c.var.user.id, parsed.data));
@@ -576,22 +565,21 @@ app.get("/api/admin/analytics", async (c) =>
 app.get("/api/admin/server-status", async (c) => c.json(await adminServerStatus(c.env)));
 app.get("/api/admin/users", async (c) => c.json(await adminUsers(c.env, c.req.query())));
 app.get("/api/admin/users/:id/membership", async (c) =>
-  c.json(await adminMembership(c.env, c.req.param("id"))),
+  c.json(await adminMembership(c.env, c.req.param("id"), c.var.adminGrant)),
 );
 app.post("/api/admin/users/:id/gift-plus", async (c) => {
   const body = await c.req.json().catch(() => null);
-  return c.json(await giftAdminMembership(c.env, c.var.user.id, c.req.param("id"), body));
+  return c.json(await giftAdminMembership(c.env, c.var.adminGrant, c.req.param("id"), body));
 });
 app.post("/api/admin/sync", async (c) => {
   const body = await c.req.json<{ cursor?: string }>();
-  return c.json(await syncAdminStats(c.env, body.cursor));
+  return c.json(await syncAdminStats(c.env, body.cursor, c.var.adminGrant));
 });
 app.post("/api/kimiseek/start", async (c) => {
   const body = await c.req.json<{ operation?: string }>();
   if (body.operation !== "connect" && body.operation !== "recharge")
     throw new AppError("invalid_operation", "不支持的关联操作");
-  const account = c.env.ACCOUNTS.getByName(c.var.user.id);
-  await account.identify(c.var.user.id);
+  const account = await accountForUser(c.env, c.var.user.id, true);
   const flow = await callKimiseek<KimiseekFlow>(account, {
     action: "start",
     operation: body.operation,
@@ -609,7 +597,7 @@ app.post("/api/kimiseek/start", async (c) => {
 });
 app.get("/api/kimiseek/status/:id", async (c) =>
   c.json(
-    await callKimiseek<KimiseekFlow>(c.env.ACCOUNTS.getByName(c.var.user.id), {
+    await callKimiseek<KimiseekFlow>(await accountForUser(c.env, c.var.user.id), {
       action: "status",
       id: c.req.param("id"),
     }),
@@ -617,7 +605,7 @@ app.get("/api/kimiseek/status/:id", async (c) =>
 );
 app.get("/api/kimiseek/balance", async (c) =>
   c.json(
-    await callKimiseek<object>(c.env.ACCOUNTS.getByName(c.var.user.id), {
+    await callKimiseek<object>(await accountForUser(c.env, c.var.user.id), {
       action: "balance",
       identity: c.var.user,
     }),
@@ -635,7 +623,7 @@ app.get("/api/kimiseek/callback", async (c) => {
     getCookie(c, "wx_kimiseek_flow") !== id
   )
     return c.text("关联请求已失效，请回微伴重新点击一键导入。", 400);
-  const account = c.env.ACCOUNTS.getByName(c.var.user.id);
+  const account = await accountForUser(c.env, c.var.user.id);
   try {
     const flow = await callKimiseek<KimiseekFlow>(account, { action: "claim", id });
     const result = await kimiseekRequest(c.env, c.var.user, flow.operation, {
@@ -661,8 +649,7 @@ function invoke(
   payload: (c: import("hono").Context<App>) => unknown | Promise<unknown> = () => ({}),
 ) {
   return async (c: import("hono").Context<App>) => {
-    const account = c.env.ACCOUNTS.getByName(c.var.user.id);
-    await account.identify(c.var.user.id);
+    const account = await accountForUser(c.env, c.var.user.id, true);
     const result = JSON.parse(await account.api(action, await payload(c))) as {
       ok: boolean;
       data: object;
@@ -695,7 +682,7 @@ async function activationPayload(c: import("hono").Context<App>) {
   };
 }
 app.get("/api/assets/:id", async (c) =>
-  c.env.ACCOUNTS.getByName(c.var.user.id).imageAsset(c.req.param("id")),
+  (await accountForUser(c.env, c.var.user.id)).imageAsset(c.req.param("id")),
 );
 app.get("/api/dashboard", invoke("snapshot"));
 app.post("/api/onboarding/dismiss", invoke("onboarding.dismiss"));

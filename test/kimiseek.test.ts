@@ -1,3 +1,4 @@
+import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
 import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import { env, runInDurableObject, createExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -201,6 +202,7 @@ describe("model classification", () => {
 });
 describe("browser flow boundary", () => {
   beforeAll(async () => {
+    await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
     await env.DB.exec(migration);
     await env.DB.exec(referrals);
     await env.DB.exec(authEmailMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));

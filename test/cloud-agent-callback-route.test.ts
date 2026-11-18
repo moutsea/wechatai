@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { createExecutionContext, env, runInDurableObject } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
+import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/server/index";
 import {
   CLOUD_CALLBACK_MAX_BYTES,
@@ -11,6 +12,10 @@ import {
 import { CloudAgentStore, type CloudTask } from "../src/server/cloud-agent-store";
 import { cloudAgentScope } from "../src/server/cloud-agent-provision";
 import { useManualAlarms } from "./helpers/wechat-delivery";
+
+beforeAll(async () => {
+  await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\s+/g, " "));
+});
 
 type Account = ReturnType<typeof env.ACCOUNTS.getByName>;
 const accounts: Account[] = [];

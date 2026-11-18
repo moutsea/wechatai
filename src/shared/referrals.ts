@@ -1,4 +1,6 @@
-export const REFERRAL_CREDITS = 500;
+import contract from "../../backend/contract/contract.json";
+
+export const REFERRAL_CREDITS = contract.referralCredits;
 export type ReferralStatus = "pending" | "qualified" | "rewarded" | "ineligible";
 export type ReferralSummary = {
   url: string;

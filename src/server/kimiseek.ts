@@ -37,7 +37,7 @@ export type KimiseekCommand =
   | { action: "fail"; id: string; message: string }
   | { action: "balance"; identity: KimiseekIdentity };
 export async function callKimiseek<T>(
-  account: DurableObjectStub<import("./personal-account").PersonalAccount>,
+  account: { kimiseek(command: KimiseekCommand): Promise<string> },
   command: KimiseekCommand,
 ): Promise<T> {
   const result = JSON.parse(await account.kimiseek(command));

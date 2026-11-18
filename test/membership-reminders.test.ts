@@ -329,6 +329,28 @@ describe("membership expiry notifications", () => {
     });
     expect(await scheduler(stub).status()).toEqual(original);
   });
+  it("preserves an inbound wake when an old target decision arrives late", async () => {
+    const stub = await account();
+    await runInDurableObject(stub, (_, state) => {
+      const store = new MembershipReminders(state.storage.sql);
+      store.sync(now + 7 * DAY, now);
+      const old = store.due(now)[0];
+      store.wake(now);
+      store.defer(old, "waiting", now);
+      const fresh = store.due(now)[0];
+      expect(fresh.revision).toBeGreaterThan(old.revision);
+      store.defer(fresh, "waiting", now);
+      store.wake(now + 1);
+      store.defer(fresh, "waiting", now + 1);
+      store.defer(old, "waiting", now + 1);
+      const target = { connectionId: "default", generation: "g1" };
+      expect(store.claim(old, target, "old", now + 1)).toBeNull();
+      const claimed = store.claim(store.due(now + 1)[0], target, "new", now + 1)!;
+      store.settle(claimed, "sent", now + 2);
+      store.settle(claimed, "waiting", now + 3);
+      expect(store.status().stages[0].state).toBe("sent");
+    });
+  });
   it("retains an unacknowledged send lease and ignores stale acknowledgements", async () => {
     const stub = await account();
     await runInDurableObject(stub, (_, state) => {

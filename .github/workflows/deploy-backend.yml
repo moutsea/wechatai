@@ -1,0 +1,72 @@
+name: Deploy Go backend
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: backend-production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: "1.27.4"
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+      - name: Validate Go backend
+        working-directory: backend
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race ./...
+          WECHATAI_DEPLOY_MODE=standby WECHATAI_DATA_DIR="$(mktemp -d)" go run ./cmd/wechatai check-deployment
+      - run: node --test scripts/backend-artifact.node-test.mjs
+      - run: python3 -m unittest discover -s backend/deploy -p 'test_*.py'
+      - run: node scripts/build-backend.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-${{ github.sha }}
+          path: backend/dist/linux-amd64/
+          retention-days: 7
+      - name: Prepare SSH credentials
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])/'wechatai-ssh'
+          root.mkdir(mode=0o700)
+          for name,key in [('key','VPS_SSH_PRIVATE_KEY'),('known_hosts','VPS_KNOWN_HOSTS')]:
+              value=os.environ[key]
+              if not value.strip():
+                  raise SystemExit('Missing deployment credential: '+key)
+              path=root/name
+              path.write_text(value.rstrip()+'\n')
+              path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a') as output:
+              output.write('WECHATAI_SSH_KEY_FILE='+str(root/'key')+'\n')
+              output.write('WECHATAI_SSH_KNOWN_HOSTS_FILE='+str(root/'known_hosts')+'\n')
+          PY
+      - name: Deploy reviewed commit
+        env:
+          WECHATAI_VPS_HOST: ${{ vars.VPS_HOST }}
+          WECHATAI_VPS_USER: ${{ vars.VPS_USER }}
+        run: node scripts/deploy-backend.mjs
+      - name: Remove temporary credentials
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          shutil.rmtree(Path(os.environ['RUNNER_TEMP'])/'wechatai-ssh',ignore_errors=True)
+          PY

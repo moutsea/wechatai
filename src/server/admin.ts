@@ -1,3 +1,4 @@
+import { accountForAdmin, type AdminGrant } from "./account-route";
 import { AppError } from "./config";
 import { billingMode } from "./billing";
 import { dayWindow } from "./wallet";
@@ -23,19 +24,19 @@ export async function isAdmin(env: Env, userId: string): Promise<boolean> {
   return (await adminAccessUntil(env, userId)) > Date.now();
 }
 
-async function membershipAccount(env: Env, userId: string) {
+async function membershipAccount(env: Env, userId: string, grant: AdminGrant) {
   if (
     !userId ||
     userId.length > 128 ||
     !(await env.DB.prepare("SELECT 1 FROM user WHERE id=?").bind(userId).first())
   )
     throw new AppError("user_not_found", "没有找到这个用户", 404);
-  return env.ACCOUNTS.getByName(userId);
+  return accountForAdmin(env, userId, grant);
 }
 
-export async function adminMembership(env: Env, userId: string) {
+export async function adminMembership(env: Env, userId: string, grant: AdminGrant) {
   try {
-    return await (await membershipAccount(env, userId)).adminMembership();
+    return await (await membershipAccount(env, userId, grant)).adminMembership();
   } catch (error) {
     if (!(error instanceof AppError))
       console.error(
@@ -50,15 +51,15 @@ export async function adminMembership(env: Env, userId: string) {
 
 export async function giftAdminMembership(
   env: Env,
-  actorId: string,
+  grant: AdminGrant,
   userId: string,
   body: unknown,
 ) {
   const input = adminGiftInputSchema.safeParse(body);
   if (!input.success)
     throw new AppError("invalid_gift", "请提供有效的操作编号，赠送原因最多 200 字");
-  const account = await membershipAccount(env, userId);
-  const result = await account.adminGiftPlus(actorId, input.data);
+  const account = await membershipAccount(env, userId, grant);
+  const result = await account.adminGiftPlus(grant.userId, input.data);
   if (!result.ok)
     throw new AppError("gift_conflict", "操作编号已被使用，请刷新页面核对赠送记录", 409);
   // The entitlement and audit record already committed together in the account.
@@ -80,7 +81,11 @@ export async function saveAdminStats(env: Env, id: string, data: AdminAccountSta
 }
 
 // A cursor keeps each HTTP request bounded. No full-account fan-out on normal user requests.
-export async function syncAdminStats(env: Env, cursor: unknown): Promise<AdminSync> {
+export async function syncAdminStats(
+  env: Env,
+  cursor: unknown,
+  grant: AdminGrant,
+): Promise<AdminSync> {
   if (cursor != null && (typeof cursor !== "string" || cursor.length > 128))
     throw new AppError("invalid_cursor", "无效的同步位置");
   const rows = (
@@ -95,7 +100,7 @@ export async function syncAdminStats(env: Env, cursor: unknown): Promise<AdminSy
     const results = await Promise.allSettled(
       batch.slice(i, i + 2).map(async (row) => {
         if (row.synced_at && row.synced_at > Date.now() - 30000) return;
-        const stats = await env.ACCOUNTS.getByName(row.id).adminStats();
+        const stats = await (await accountForAdmin(env, row.id, grant)).adminStats();
         await saveAdminStats(env, row.id, stats);
       }),
     );

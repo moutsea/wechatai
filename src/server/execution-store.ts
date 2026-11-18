@@ -1,10 +1,11 @@
+import contract from "../../backend/contract/contract.json";
 import { createHash } from "node:crypto";
 import { AppError, secret, MODEL_TURN_TIMEOUT_MS } from "./config";
 import { encrypt, decrypt } from "./security";
 import { ExecutionPending, type Activity } from "./execution-context";
 import { receiverAuthorized } from "./wechat-receiver";
 
-export const EXECUTION_MAX_BYTES = 32 * 1024 * 1024;
+export const EXECUTION_MAX_BYTES = contract.limits.executionBytes;
 export function executionAuthorized(env: Env, authorization: string) {
   const configured = { ...env, WECHAT_RECEIVER_SECRET: secret(env, "EXECUTOR_SECRET", false) };
   return receiverAuthorized(configured, authorization);
