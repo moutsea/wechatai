@@ -1,11 +1,23 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { runnerImport } from "vite";
+import { splitLocalePath } from "../src/shared/i18n/index.ts";
 import { museGuide } from "../src/shared/muse-docs.ts";
 
 // Verify the actual deployable output; metadata-only tests cannot catch an empty SPA shell.
 const dir = new URL("../dist/client/", import.meta.url);
 const read = (name) => readFile(new URL(name, dir), "utf8");
-const museIndexLinks = ["(https://wechatai.app/wechat-muse)", "(https://wechatai.app/developers/muse)"];
+const {
+  module: { alternateLinks, defaultLocale, locale404Probes, localePageGroups },
+} = await runnerImport(fileURLToPath(new URL("./locale-expectations.ts", import.meta.url)));
+const localeByPath = new Map(localePageGroups.flat().map((page) => [page.path, page]));
+const publicPaths = [...localeByPath.keys()];
+const htmlFile = (path) => (path === "/" ? "index.html" : `${path.slice(1)}.html`);
+const museIndexLinks = [
+  "(https://wechatai.app/wechat-muse)",
+  "(https://wechatai.app/developers/muse)",
+];
 const workerDocuments = [
   ["/developers/plugins.md", "text/markdown", "给 AI agent 的起点"],
   ["/developers/openclaw.md", "text/markdown", "# OpenClaw 接入指南"],
@@ -111,7 +123,11 @@ const landingPages = [
   ],
   ["wechat-claude.html", "https://wechatai.app/wechat-claude", "微信接入 Claude：绕开桥接的那条路"],
   ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
-  ["wechat-kimi.html", "https://wechatai.app/wechat-kimi", "微信接入 Kimi：从 KimiSeek 一键导入开始"],
+  [
+    "wechat-kimi.html",
+    "https://wechatai.app/wechat-kimi",
+    "微信接入 Kimi：从 KimiSeek 一键导入开始",
+  ],
   ["wechat-qwen.html", "https://wechatai.app/wechat-qwen", "微信接入通义千问：用硅基流动渠道跑通"],
   ["wechat-glm.html", "https://wechatai.app/wechat-glm", "微信接入 GLM：用硅基流动渠道配置"],
   ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],
@@ -297,7 +313,8 @@ assert(
 assert(legacy.includes('rel="canonical" href="https://wechatai.app/docs/getting-started"'));
 assert(legacy.includes("四、启动插件（可选）"), "legacy guide has a usable no-JS fallback");
 assert(legacy.includes('href="/docs/commands"'), "legacy guide exposes command reference");
-assert(!(await read("sitemap.xml")).includes("https://wechatai.app/guide"));
+const sitemap = await read("sitemap.xml");
+assert(!sitemap.includes("https://wechatai.app/guide"));
 const redirectRules = await read("_redirects");
 // Cloudflare counts every rule after the first splat or placeholder as dynamic and
 // drops whatever exceeds 100 of them, so the canonical aliases must stay static.
@@ -315,8 +332,7 @@ for (const path of ["/guide", "/guide/", "/guide.html"]) {
     `${path}: permanent guide redirect without overriding fragment`,
   );
 }
-for (const [, canonical] of publicPages) {
-  const path = new URL(canonical).pathname;
+for (const path of publicPaths) {
   for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`]) {
     assert(
       redirectRules.includes(`${alias} ${path} 301`),
@@ -344,7 +360,8 @@ const museSections = museGuide
   .slice(1)
   .map((section) => section.split("\n")[0]);
 assert.equal(museSections.length, 8, "Muse guide has seven content sections and an FAQ section");
-for (const heading of museSections) assert(museHtml.includes(heading), `Muse guide HTML: ${heading}`);
+for (const heading of museSections)
+  assert(museHtml.includes(heading), `Muse guide HTML: ${heading}`);
 const museFaqQuestions = [...museGuide.split("## 8. 常见问题")[1].matchAll(/^### (.+)$/gm)].map(
   (match) => match[1],
 );
@@ -352,10 +369,7 @@ assert.equal(museFaqQuestions.length, 6, "Muse guide has six FAQs");
 for (const question of museFaqQuestions)
   assert(museHtml.includes(question), `Muse guide HTML: ${question}`);
 const pluginsIndex = await read("developers/plugins.html");
-assert(
-  pluginsIndex.includes('href="/developers/muse"'),
-  "plugins index links the Muse guide",
-);
+assert(pluginsIndex.includes('href="/developers/muse"'), "plugins index links the Muse guide");
 // Muse 承接页与指南必须双向可达；主题页、对比页、定价页和首页都要有明确入口。
 for (const [file, marker] of [
   ["index.html", "homepage"],
@@ -523,7 +537,63 @@ assert(
   ),
   "wildcard: protocol API allowed",
 );
-assert.equal(((await read("sitemap.xml")).match(/<loc>/g) || []).length, publicPages.length);
+const translations = localePageGroups.flatMap(([, ...translated]) => translated);
+assert.deepEqual(
+  [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(([, url]) => url).sort(),
+  [
+    ...publicPages.map(([, canonical]) => canonical),
+    ...translations.map(({ canonical }) => canonical),
+  ].sort(),
+  "sitemap: exactly the public Chinese and registered localized URLs",
+);
+const localizedFiles = (await readdir(dir, { recursive: true })).filter(
+  (file) => file.endsWith(".html") && splitLocalePath(`/${file.slice(0, -5)}`),
+);
+assert.deepEqual(
+  localizedFiles.sort(),
+  translations.map(({ path }) => htmlFile(path)).sort(),
+  "localized HTML: exactly the registered public URLs",
+);
+for (const group of localePageGroups) {
+  for (const expected of group) {
+    const { path, htmlLang, ogLocale, canonical, lastmod } = expected;
+    const html = await read(htmlFile(path));
+    assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
+    assert(html.includes(`property="og:locale" content="${ogLocale}"`), `${path}: og:locale`);
+    assert.deepEqual(
+      [...html.matchAll(/<link rel="canonical" href="([^"]+)"/g)].map(([, href]) => href),
+      [canonical],
+      `${path}: single self canonical`,
+    );
+    assert.deepEqual(
+      [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g)].map(
+        ([, lang, href]) => [lang, href],
+      ),
+      alternateLinks(group),
+      `${path}: hreflang lists exactly the published page group`,
+    );
+    const switchTargets = group
+      .filter((target) => target !== expected)
+      .map((target) => [target.path, target.htmlLang]);
+    assert.deepEqual(
+      [...html.matchAll(/<a href="([^"]+)" hreflang="([^"]+)"/gi)].map(([, href, lang]) => [
+        href,
+        lang,
+      ]),
+      [...switchTargets, ...switchTargets], // Desktop header and mobile menu.
+      `${path}: switcher links exactly the other published languages`,
+    );
+    if (lastmod) {
+      assert(
+        sitemap.includes(`<loc>${canonical}</loc><lastmod>${lastmod}</lastmod>`),
+        `${path}: lastmod`,
+      );
+      assert.equal((html.match(/<h1\b/g) || []).length, 1, `${path}: rendered page heading`);
+      assert(!html.includes("这个页面没有找到。"), `${path}: not the 404 page`);
+      assert(html.includes('content="index, follow, max-image-preview:large"'), `${path}: indexable`);
+    }
+  }
+}
 const image = await readFile(new URL("og-image.png", dir));
 assert.equal(image.subarray(1, 4).toString(), "PNG");
 assert.equal(image.readUInt32BE(16), 1200);
@@ -547,7 +617,7 @@ if (process.argv[2]) {
     }
   }
   for (const path of [
-    ...publicPages.map(([, canonical]) => new URL(canonical).pathname),
+    ...publicPaths,
     "/login",
     "/register",
     "/app",
@@ -566,14 +636,20 @@ if (process.argv[2]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);
     const html = await response.text();
-    assert(html.includes('<html lang="zh-CN">'), `${path}: HTML`);
-    if (!publicPages.some(([, canonical]) => new URL(canonical).pathname === path)) {
+    const expectedLocale = localeByPath.get(new URL(path, origin).pathname);
+    const { htmlLang } = expectedLocale ?? defaultLocale;
+    assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
+    if (expectedLocale) {
+      assert(
+        html.includes(`property="og:locale" content="${expectedLocale.ogLocale}"`),
+        `${path}: og locale`,
+      );
+    } else {
       assert.match(response.headers.get("x-robots-tag") || "", /noindex/, `${path}: header`);
       assert(html.includes('content="noindex, follow"'), `${path}: noindex HTML`);
     }
   }
-  for (const [, canonical] of publicPages) {
-    const path = new URL(canonical).pathname;
+  for (const path of publicPaths) {
     for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`]) {
       const response = await fetch(new URL(alias, origin), { redirect: "manual" });
       assert.equal(response.status, 301, `${alias}: permanent canonical redirect`);
@@ -593,10 +669,20 @@ if (process.argv[2]) {
     assert.equal(destination.hash, "", "Location must not replace historical section fragments");
     await response.body?.cancel();
   }
-  for (const path of ["/not-a-real-page", "/nested/not-a-real-page", "/docs/not-a-real-article"]) {
-    const response = await fetch(new URL(path, origin));
+  for (const path of [
+    "/not-a-real-page",
+    "/nested/not-a-real-page",
+    "/docs/not-a-real-article",
+    ...locale404Probes,
+  ]) {
+    const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 404, `${path}: real 404`);
-    assert((await response.text()).includes("这个页面没有找到。"));
+    assert.equal(response.headers.get("location"), null, `${path}: no redirect to Chinese`);
+    const body = await response.text();
+    assert(body.includes("这个页面没有找到。"), `${path}: 404 body`);
+    for (const marker of ["把你的 AI", "免费开始，按需升级 Plus"]) {
+      assert(!body.includes(marker), `${path}: does not render Chinese page ${marker}`);
+    }
   }
   for (const path of ["/sitemap.xml", "/robots.txt", "/og-image.png", "/favicon.svg"]) {
     const response = await fetch(new URL(path, origin));

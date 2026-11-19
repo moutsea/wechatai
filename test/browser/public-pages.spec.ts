@@ -1,11 +1,19 @@
 import { expect, test, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runnerImport } from "vite";
+import type * as LocaleExpectations from "../../scripts/locale-expectations";
 import { createFakeApi } from "../support/fake-api";
 
 // Run `pnpm build` first: these regressions depend on real code splitting and prerendering.
 const assets = new URL("../../dist/client/", import.meta.url);
 const origin = "http://public-pages.test";
+const {
+  module: { alternateLinks, locale404Probes, localePageGroups },
+} = await runnerImport<typeof LocaleExpectations>(
+  fileURLToPath(new URL("../../scripts/locale-expectations.ts", import.meta.url)),
+);
 
 test.beforeEach(async ({ page }) => {
   const fakeApi = createFakeApi();
@@ -37,10 +45,67 @@ test.beforeEach(async ({ page }) => {
         }[extname(filename)] ?? "application/octet-stream";
       return route.fulfill({ body, contentType });
     } catch {
-      return route.fulfill({ status: 404, body: "Not found" });
+      try {
+        const body = await readFile(new URL("404.html", assets));
+        return route.fulfill({ status: 404, body, contentType: "text/html" });
+      } catch {
+        return route.fulfill({ status: 404, body: "Not found" });
+      }
     }
   });
 });
+
+for (const group of localePageGroups) {
+  // Keep the Chinese homepage/pricing regressions and cover both sides of each registered group.
+  if (group.length === 1 && !["/", "/pricing"].includes(group[0].path)) continue;
+  for (const expected of group) {
+    test(`serves ${expected.path} with ${expected.htmlLang} metadata and published alternatives`, async ({
+      page,
+    }) => {
+      const mounted = page.waitForRequest("**/api/auth/get-session");
+      const response = await page.goto(`${origin}${expected.path}`);
+      expect(response?.status()).toBe(200);
+      await mounted;
+      await expect(page.locator("html")).toHaveAttribute("lang", expected.htmlLang);
+      await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute(
+        "content",
+        expected.ogLocale,
+      );
+      await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", expected.canonical);
+      const alternates = page.locator('link[rel="alternate"][hreflang]');
+      const links = alternateLinks(group);
+      await expect(alternates).toHaveCount(links.length);
+      for (const [lang, href] of links) {
+        await expect(alternates.and(page.locator(`[hreflang="${lang}"]`))).toHaveAttribute(
+          "href",
+          href,
+        );
+      }
+      const switcher = page.locator(".site-language");
+      const targets = group.filter((target) => target !== expected);
+      await expect(switcher).toHaveCount(targets.length ? 1 : 0);
+      await expect(switcher.locator("a")).toHaveCount(targets.length);
+      for (const { htmlLang, label, path } of targets) {
+        const link = switcher.getByRole("link", { name: label, exact: true });
+        await expect(link).toHaveAttribute("href", path);
+        await expect(link).toHaveAttribute("hreflang", htmlLang);
+      }
+    });
+  }
+}
+
+// An unregistered prefix must not fall back to the Chinese homepage or pricing page.
+for (const path of locale404Probes) {
+  test(`shows the built 404 page for the unregistered locale path ${path}`, async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    const response = await page.goto(`${origin}${path}`);
+    expect(response?.status()).toBe(404);
+    await mounted;
+    await expect(page.getByRole("heading", { name: "这个页面没有找到。" })).toBeVisible();
+    await expect(page.getByText("免费开始，按需升级 Plus")).toHaveCount(0);
+    await expect(page.locator(".site-header a[hreflang]")).toHaveCount(0);
+  });
+}
 
 for (const width of [390, 1280]) {
   for (const path of ["/", "/#how"]) {
