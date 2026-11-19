@@ -4,6 +4,7 @@ package grokwake
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -30,21 +31,25 @@ func (w wakeRequest) valid() bool {
 		len(w.WebhookKey) <= 2048 && keyFormat.MatchString(w.WebhookKey)
 }
 
-func Mount(next http.Handler, secret string) (http.Handler, error) {
+func Mount(ctx context.Context, next http.Handler, secret, receiptPath string) (http.Handler, func(), error) {
 	if secret == "" {
-		return next, nil
+		return next, func() {}, nil
 	}
 	signer, err := rpc.NewSigner(secret)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	store, err := openReceipts(ctx, receiptPath)
+	if err != nil {
+		return nil, nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("POST "+Path, handler(signer, http.DefaultTransport))
+	mux.Handle("POST "+Path, handler(signer, http.DefaultTransport, store))
 	mux.Handle("/", next)
-	return mux, nil
+	return mux, func() { store.db.Close() }, nil
 }
 
-func handler(signer *rpc.Signer, transport http.RoundTripper) http.HandlerFunc {
+func handler(signer *rpc.Signer, transport http.RoundTripper, store *receipts) http.HandlerFunc {
 	client := &http.Client{
 		Transport:     transport,
 		Timeout:       8 * time.Second,
@@ -74,21 +79,35 @@ func handler(signer *rpc.Signer, transport http.RoundTripper) http.HandlerFunc {
 		}
 		req.Header.Set("Authorization", "Bearer "+input.WebhookKey)
 		req.Header.Set("Content-Type", "application/json")
-		res, err := client.Do(req)
+		prior, err := store.reserve(r.Context(), input.TaskID)
 		if err != nil {
+			w.Header().Set("X-Wechatai-Grok-Wake", "not-sent")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		defer res.Body.Close()
-		switch {
-		case res.StatusCode == 200:
-			w.WriteHeader(http.StatusNoContent)
-		case res.StatusCode == 429:
-			w.WriteHeader(http.StatusTooManyRequests)
-		case res.StatusCode >= 500:
-			w.WriteHeader(http.StatusServiceUnavailable)
-		default:
-			w.WriteHeader(http.StatusUnprocessableEntity)
+		if prior != 0 {
+			w.WriteHeader(prior)
+			return
 		}
+		res, err := client.Do(req)
+		if err != nil {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		defer res.Body.Close()
+		status := http.StatusUnprocessableEntity
+		switch {
+		case res.StatusCode == http.StatusOK:
+			status = http.StatusNoContent
+		case res.StatusCode == http.StatusTooManyRequests:
+			status = http.StatusTooManyRequests
+		case res.StatusCode >= 500 || res.StatusCode == http.StatusRequestTimeout:
+			status = http.StatusAccepted
+		}
+		if err := store.finish(context.WithoutCancel(r.Context()), input.TaskID, status); err != nil {
+			// The durable reservation still suppresses a duplicate.
+			status = http.StatusAccepted
+		}
+		w.WriteHeader(status)
 	}
 }

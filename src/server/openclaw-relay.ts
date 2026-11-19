@@ -253,6 +253,13 @@ export class OpenClawRelay {
     this.pollWaiters.get(`${pluginId}:control`)?.();
     this.hooks.wake?.(pluginId);
   }
+  requireRoute(routeId: string) {
+    const route = this.sql
+      .exec<ClawRoute>("SELECT * FROM claw_routes WHERE id=?", routeId)
+      .toArray()[0];
+    if (!route) throw new AppError("claw_route_gone", "会话已重置或断开", 409);
+    this.hooks.validateRoute(route);
+  }
   cancelSession(sessionId: string) {
     this.sql.exec(
       "UPDATE claw_jobs SET state = 'cancelled', text = '' WHERE routeId IN (SELECT id FROM claw_routes WHERE sessionId = ?) AND state IN ('pending','claimed')",
@@ -470,11 +477,7 @@ export class OpenClawRelay {
           throw new AppError("claw_job_gone", "任务已结束或取消", 409);
         if (job.command && !nativeCommands)
           throw new AppError("connector_upgrade_required", "连接器需要升级才能执行原生命令", 409);
-        const route = this.sql
-          .exec<ClawRoute>("SELECT * FROM claw_routes WHERE id = ?", job.routeId)
-          .toArray()[0];
-        if (!route) throw new AppError("claw_route_gone", "会话已重置或断开", 409);
-        this.hooks.validateRoute(route);
+        this.requireRoute(job.routeId);
         if (job.state === "claimed") return { claimed: false };
         this.sql.exec(
           "UPDATE claw_jobs SET state = 'claimed', runnerId = ? WHERE id = ?",

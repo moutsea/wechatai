@@ -6,8 +6,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/moutsea/wechatai/backend/internal/rpc"
 )
@@ -53,7 +55,12 @@ func TestSignedDispatch(t *testing.T) {
 				local.Header = r.Header
 				return http.DefaultTransport.RoundTrip(local)
 			})
-			srv := httptest.NewServer(handler(signer, transport))
+			store, err := openReceipts(t.Context(), filepath.Join(t.TempDir(), "wakes.sqlite"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.db.Close()
+			srv := httptest.NewServer(handler(signer, transport, store))
 			defer srv.Close()
 			payload, _ := json.Marshal(map[string]string{"webhookUrl": tt.url, "webhookKey": "test-key", "taskId": ref})
 			req, _ := http.NewRequest("POST", srv.URL+Path, bytes.NewReader(payload))
@@ -72,5 +79,109 @@ func TestSignedDispatch(t *testing.T) {
 				t.Fatalf("status=%d calls=%d", res.StatusCode, calls.Load())
 			}
 		})
+	}
+}
+
+func signedWake(t *testing.T, signer *rpc.Signer) *http.Request {
+	t.Helper()
+	body := []byte(`{"taskId":"e3f1fd44-65fb-41c5-a482-a59ee43c7245","webhookUrl":"https://api2.cursor.sh/automations/webhook/example","webhookKey":"key"}`)
+	req := httptest.NewRequest(http.MethodPost, Path, bytes.NewReader(body))
+	if err := signer.Sign(req, body, "test-request"); err != nil {
+		t.Fatal(err)
+	}
+	return req
+}
+
+func TestWakeReceiptAcrossRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name                                 string
+		providerStatus, first, replay, calls int
+	}{
+		{"accepted", 200, 204, 204, 1}, {"lost provider response", 0, 202, 202, 1},
+		{"gateway timeout", 504, 202, 202, 1}, {"rate limited", 429, 429, 204, 2}, {"invalid key", 401, 422, 422, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "wakes.sqlite")
+			signer, _ := rpc.NewSigner("test-only-grok-dispatch-key-32-characters")
+			calls := 0
+			transport := roundTrip(func(r *http.Request) (*http.Response, error) {
+				calls++
+				status := tc.providerStatus
+				if calls > 1 {
+					status = 200
+				}
+				if status == 0 {
+					return nil, io.ErrUnexpectedEOF
+				}
+				return &http.Response{StatusCode: status, Body: http.NoBody}, nil
+			})
+			for _, want := range []int{tc.first, tc.replay} {
+				store, err := openReceipts(t.Context(), path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out := httptest.NewRecorder()
+				handler(signer, transport, store)(out, signedWake(t, signer))
+				if err := store.db.Close(); err != nil {
+					t.Fatal(err)
+				}
+				if out.Code != want {
+					t.Fatalf("dispatch status = %d, want %d", out.Code, want)
+				}
+			}
+			if calls != tc.calls {
+				t.Fatalf("provider calls = %d, want %d", calls, tc.calls)
+			}
+		})
+	}
+}
+
+func TestConcurrentWakesReserveBeforeSending(t *testing.T) {
+	store, err := openReceipts(t.Context(), filepath.Join(t.TempDir(), "wakes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.db.Close()
+	signer, _ := rpc.NewSigner("test-only-grok-dispatch-key-32-characters")
+	started, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	h := handler(signer, roundTrip(func(r *http.Request) (*http.Response, error) {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+		}
+		return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
+	}), store)
+	req := signedWake(t, signer)
+	finished := make(chan int, 1)
+	go func() { out := httptest.NewRecorder(); h(out, req); finished <- out.Code }()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("first wake never reached provider")
+	}
+	second := httptest.NewRecorder()
+	h(second, signedWake(t, signer))
+	close(release)
+	if first := <-finished; first != 204 || second.Code != 202 || calls.Load() != 1 {
+		t.Fatalf("first=%d second=%d provider calls=%d", first, second.Code, calls.Load())
+	}
+}
+
+func TestUnavailableReceiptsNeverSend(t *testing.T) {
+	store, err := openReceipts(t.Context(), filepath.Join(t.TempDir(), "wakes.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.db.Close()
+	signer, _ := rpc.NewSigner("test-only-grok-dispatch-key-32-characters")
+	w := httptest.NewRecorder()
+	handler(signer, roundTrip(func(*http.Request) (*http.Response, error) {
+		t.Fatal("provider called without a durable reservation")
+		return nil, io.ErrUnexpectedEOF
+	}), store)(w, signedWake(t, signer))
+	if w.Code != http.StatusServiceUnavailable || w.Header().Get("X-Wechatai-Grok-Wake") != "not-sent" {
+		t.Fatalf("unavailable receipt store returned %d, %q", w.Code, w.Header().Get("X-Wechatai-Grok-Wake"))
 	}
 }

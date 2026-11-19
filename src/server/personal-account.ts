@@ -70,7 +70,7 @@ import {
 import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
 import { grokInputSchema, type GrokPlugin } from "../shared/grok-bot";
 import { GrokTasks } from "./grok/tasks";
-import { dispatchGrok, grokDispatcherReady, sealGrokWebhook } from "./grok/dispatch";
+import { prepareGrokWake, grokDispatcherReady, sealGrokWebhook } from "./grok/dispatch";
 import { museInputSchema, type MusePlugin } from "../shared/muse";
 import {
   signOpenClawToken,
@@ -458,7 +458,7 @@ export class PersonalAccount extends DurableObject<Env> {
         return this.publicPlugin(p) as GrokPlugin;
       },
       (id, ref) =>
-        dispatchGrok(env, this.plugin(id, true).encryptedKey, `${ctx.id}:grok:${id}`, ref),
+        prepareGrokWake(env, this.plugin(id, true).encryptedKey, `${ctx.id}:grok:${id}`, ref),
     );
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.transactionSync(() => this.personalRecords.init());
@@ -804,7 +804,7 @@ export class PersonalAccount extends DurableObject<Env> {
       );
     if (!text.trim()) return `请发送文字，或带微信转写文本的语音，再交给 ${agentName}。`;
     return this.ctx.storage.transactionSync(() => {
-      this.claw.enqueue(
+      const job = this.claw.enqueue(
         id,
         pluginId,
         {
@@ -836,7 +836,7 @@ export class PersonalAccount extends DurableObject<Env> {
         )
         .one();
       if (plugin.pluginId === "wechatai/grok") {
-        this.grok.enqueue(id, userMessage.id);
+        this.grok.enqueue(id, job.routeId, userMessage.id);
         this.wakeWechat();
       }
       this.sql.exec("UPDATE inbox SET sessionId = ? WHERE id = ?", session.id, id);
@@ -2880,6 +2880,7 @@ export class PersonalAccount extends DurableObject<Env> {
         generation: crypto.randomUUID(),
       });
       this.cloud.stopConnection(id);
+      this.grok.cancelConnection(id);
       this.attachments.clear(id);
       this.sql.exec(
         "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
@@ -4739,6 +4740,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.setLinkSetting(connectionId, "connection", { status: "waiting", generation });
       // Starting a new binding invalidates old work even if fetching the QR fails.
       this.cloud.stopConnection(connectionId);
+      this.grok.cancelConnection(connectionId);
       this.attachments.clear(connectionId);
       this.sql.exec(
         "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",

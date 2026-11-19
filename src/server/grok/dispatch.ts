@@ -43,21 +43,35 @@ export async function sealGrokWebhook(env: Env, input: unknown, binding: string)
     );
   return encrypt(env, JSON.stringify(parsed.data), binding);
 }
-export async function dispatchGrok(env: Env, sealed: string, binding: string, taskId: string) {
+export async function prepareGrokWake(env: Env, sealed: string, binding: string, taskId: string) {
   const auth = credentials.parse(JSON.parse(await decrypt(env, sealed, binding)));
   const body = JSON.stringify({ ...auth, taskId });
   const target = new URL(
     "/internal/v1/grok/wake",
     backendOrigin(secret(env, "GROK_DISPATCH_ORIGIN")),
   );
-  const request = await signedRequest(
+  return signedRequest(
     target,
     secret(env, "GROK_DISPATCH_SECRET"),
     createHash("sha256").update(body).digest("hex"),
     body,
     { signal: AbortSignal.timeout(12_000) },
   );
-  const response = await fetch(request);
-  await response.body?.cancel();
-  return response.status;
+}
+
+export async function sendGrokWake(request: Request) {
+  let response: Response;
+  try {
+    response = await fetch(request);
+  } catch {
+    return "waiting";
+  }
+  await response.body?.cancel().catch(() => {});
+  if (
+    response.status === 429 ||
+    (response.status === 503 && response.headers.get("X-Wechatai-Grok-Wake") === "not-sent")
+  )
+    return "retry";
+  if (response.status >= 400 && response.status < 500 && response.status !== 408) return "rejected";
+  return "waiting";
 }

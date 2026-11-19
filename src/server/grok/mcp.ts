@@ -10,7 +10,7 @@ const tools = [
   {
     name: "wechatai_claim",
     description:
-      "领取本次 Webhook 的微信任务。仅在 claimed 为 true 时执行。history 中 taskStatus 为 failed 的条目是之前未完成的请求。",
+      "领取本次 Webhook 的微信任务。仅在 claimed 为 true 时执行。history 中 taskStatus 为 failed 的条目是之前未完成的请求。truncated 为 true 表示内容不完整，重试依赖缺失要求时请先向用户确认。",
     inputSchema: {
       type: "object",
       properties: { taskId: uuid },
@@ -20,7 +20,8 @@ const tools = [
   },
   {
     name: "wechatai_finish",
-    description: "向原微信会话提交最终结果。重试必须沿用同一 taskId 与 receipt。",
+    description:
+      "向原微信会话提交最终结果。使用同一 taskId、receipt 和结算状态重试。以回执的 taskStatus 为准；已超时或结算冲突时结束本次回传。",
     inputSchema: {
       type: "object",
       properties: {

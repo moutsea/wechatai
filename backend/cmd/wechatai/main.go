@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -148,14 +149,20 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	accountDir, err := filepath.Abs(configuration.DataDir)
+	if err != nil {
+		return err
+	}
+	receiptPath := filepath.Join(filepath.Dir(accountDir), "grok-wakes.sqlite")
 	if configuration.Standby {
 		if err := checkStandbyDirectory(configuration.DataDir); err != nil {
 			return err
 		}
-		handler, err := grokwake.Mount(standbyHandler(), configuration.GrokDispatchSecret)
+		handler, closeWakes, err := grokwake.Mount(ctx, standbyHandler(), configuration.GrokDispatchSecret, receiptPath)
 		if err != nil {
 			return err
 		}
+		defer closeWakes()
 		return serveHTTP(ctx, configuration.Listen, handler, nil)
 	}
 	application, err := app.New(ctx, configuration)
@@ -166,10 +173,11 @@ func run() error {
 	background := make(chan error, 1)
 	go func() { defer close(background); background <- application.RunBackground(ctx) }()
 	defer func() { stop(); <-background }()
-	handler, err := grokwake.Mount(application.Handler(version), configuration.GrokDispatchSecret)
+	handler, closeWakes, err := grokwake.Mount(ctx, application.Handler(version), configuration.GrokDispatchSecret, receiptPath)
 	if err != nil {
 		return err
 	}
+	defer closeWakes()
 	return serveHTTP(ctx, configuration.Listen, handler, background)
 }
 
