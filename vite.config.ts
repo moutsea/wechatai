@@ -14,11 +14,19 @@ export default defineConfig(({ command, isPreview }) => ({
               ? "wrangler.production.local.jsonc"
               : "wrangler.jsonc")
           : "wrangler.jsonc",
-      // Development serves source routes; production uses the generated HTML files.
-      config:
-        command === "serve" && !isPreview
-          ? { assets: { not_found_handling: "single-page-application" } }
-          : {},
+      config: ({ assets }) => {
+        if (!assets) return;
+        // Development serves source routes; production uses the generated HTML files.
+        if (command === "serve" && !isPreview)
+          assets.not_found_handling = "single-page-application";
+        // Apply the index routes to the resolved config, including older private configs.
+        const rules = assets.run_worker_first;
+        if (rules !== true) {
+          assets.run_worker_first = [
+            ...new Set([...(Array.isArray(rules) ? rules : []), "/llms.txt", "/llms-full.txt"]),
+          ];
+        }
+      },
     }),
     {
       name: "page-seo",

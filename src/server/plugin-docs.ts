@@ -29,11 +29,12 @@ import { webResearchManifest } from "../shared/web-research";
 import {
   PLUGIN_API_PATH,
   PLUGIN_MARKDOWN_PATH,
-  llmsText,
+  LLMS_FULL_PATH,
   protocolExamples,
   protocolLinks,
   protocolMarkdown,
 } from "../shared/plugin-docs";
+import { llmsFullText, llmsText } from "../shared/llms-docs";
 
 const definitions = {
   Manifest: pluginManifestSchema,
@@ -224,6 +225,7 @@ for (const [path, content, contentType] of [
   [PLUGIN_MARKDOWN_PATH, protocolMarkdown, "text/markdown; charset=utf-8"],
   ["/developers/notifications.md", notificationGuide, "text/markdown; charset=utf-8"],
   ["/llms.txt", llmsText, "text/plain; charset=utf-8"],
+  [LLMS_FULL_PATH, llmsFullText, "text/plain; charset=utf-8"],
 ] as const) {
   publicPluginDocs.use(path, publicCors);
   publicPluginDocs.use(path, etag());
