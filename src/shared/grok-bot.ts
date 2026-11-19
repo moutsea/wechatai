@@ -5,6 +5,7 @@ import { pluginShortcutJsonSchema } from "./plugin-shortcut";
 import { pluginManifestSchema } from "./plugins";
 
 export const GROK_ID = "wechatai/grok" as const;
+export const GROK_DISPATCH_UNAVAILABLE = "Grok Bot 派发服务暂不可用，请在服务恢复后再发送新任务。";
 export type GrokPlugin = Omit<OpenClawPlugin, "pluginId"> & { pluginId: typeof GROK_ID };
 export const grokInputSchema = openClawInputSchema.safeExtend({
   agentId: z.literal("main").default("main"),

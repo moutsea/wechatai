@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { GROK_DISPATCH_UNAVAILABLE } from "../../shared/grok-bot";
 import { backendOrigin, signedRequest } from "../backend-signature";
 import { AppError, secret } from "../config";
 import { encrypt, decrypt } from "../security";
@@ -32,9 +33,12 @@ export function grokDispatcherReady(env: Env) {
     return false;
   }
 }
-export async function sealGrokWebhook(env: Env, input: unknown, binding: string) {
+export function requireGrokDispatcher(env: Env) {
   if (!grokDispatcherReady(env))
-    throw new AppError("grok_unavailable", "运营方尚未启用 Grok Bot 派发服务", 503);
+    throw new AppError("grok_unavailable", GROK_DISPATCH_UNAVAILABLE, 503);
+}
+export async function sealGrokWebhook(env: Env, input: unknown, binding: string) {
+  requireGrokDispatcher(env);
   const parsed = credentials.safeParse(input);
   if (!parsed.success)
     throw new AppError(
@@ -44,6 +48,7 @@ export async function sealGrokWebhook(env: Env, input: unknown, binding: string)
   return encrypt(env, JSON.stringify(parsed.data), binding);
 }
 export async function prepareGrokWake(env: Env, sealed: string, binding: string, taskId: string) {
+  requireGrokDispatcher(env);
   const auth = credentials.parse(JSON.parse(await decrypt(env, sealed, binding)));
   const body = JSON.stringify({ ...auth, taskId });
   const target = new URL(

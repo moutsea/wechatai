@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { accountForGrok } from "../account-route";
 import { parseOpenClawToken } from "../openclaw-token";
@@ -51,7 +52,8 @@ grokMcp.post("/", async (c) => {
   if (origin && !trustedAppOrigins(c.env).includes(origin)) return c.body(null, 403);
   const token = parseOpenClawToken(c.env, c.req.header("Authorization") ?? "", "grok");
   if (!token) return c.body(null, 401, { "WWW-Authenticate": "Bearer" });
-  if (!(await c.env.API_LIMIT.limit({ key: `grok:${token.accountId}:${token.pluginId}` })).success)
+  const digest = createHash("sha256").update(token.secret).digest("hex");
+  if (!(await c.env.API_LIMIT.limit({ key: `grok:token:${digest}` })).success)
     return c.body(null, 429);
   if (c.req.header("content-type")?.split(";")[0].trim() !== "application/json")
     return c.body(null, 415);
@@ -94,7 +96,8 @@ grokMcp.post("/", async (c) => {
     ),
   );
   if (!reply.ok) {
-    if (reply.status === 401 || reply.status === 403) return c.body(null, reply.status);
+    if (reply.status === 401 || reply.status === 403 || reply.status === 429)
+      return c.body(null, reply.status);
     if (call) return result({ isError: true, content: [{ type: "text", text: reply.message }] });
     return error(-32603, "连接不可用");
   }

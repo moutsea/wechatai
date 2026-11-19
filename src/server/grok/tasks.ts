@@ -38,6 +38,7 @@ type Task = {
   attempts: number;
   claimable: number;
   claimId: string | null;
+  claimedOutputLimit: number | null;
   due: number;
   expires: number;
 };
@@ -46,7 +47,7 @@ const active = "j.state IN ('pending','claimed') AND t.due IS NOT NULL";
 const firstOnRoute = `NOT EXISTS (SELECT 1 FROM grok_tasks earlier
   WHERE earlier.routeId=t.routeId AND earlier.userMessage<t.userMessage AND earlier.due IS NOT NULL)`;
 const fields =
-  "t.ref,t.jobId,j.routeId,j.pluginId,j.state,j.runnerId,j.outputLimit,t.userMessage,t.attempts,t.claimable,t.claimId,t.due,t.expires,t.outcome";
+  "t.ref,t.jobId,j.routeId,j.pluginId,j.state,j.runnerId,j.outputLimit,t.userMessage,t.attempts,t.claimable,t.claimId,t.claimedOutputLimit,t.due,t.expires,t.outcome";
 
 export class GrokTasks {
   // Start unknown after a restart. Once SQLite confirms an empty queue, unrelated
@@ -128,7 +129,7 @@ export class GrokTasks {
           receipt: row.runnerId,
           text: row.text,
           history,
-          maxOutputTokens: row.outputLimit,
+          maxOutputTokens: row.claimedOutputLimit ?? row.outputLimit,
         };
       const receipt = crypto.randomUUID();
       const maxOutputTokens = Math.min(plugin.maxOutputTokens, row.outputLimit);
@@ -140,14 +141,12 @@ export class GrokTasks {
           historyInputTokens: history.reduce((sum, entry) => sum + countTextTokens(entry.text), 0),
         },
       );
-      if (claimId || row.due !== row.expires)
-        this.db.exec(
-          "UPDATE grok_tasks SET due=expires,claimId=? WHERE ref=?",
-          claimId ?? null,
-          row.ref,
-        );
-      if (claimId && maxOutputTokens !== row.outputLimit)
-        this.db.exec("UPDATE claw_jobs SET outputLimit=? WHERE id=?", maxOutputTokens, row.jobId);
+      this.db.exec(
+        "UPDATE grok_tasks SET due=expires,claimId=?,claimedOutputLimit=? WHERE ref=?",
+        claimId ?? null,
+        maxOutputTokens,
+        row.ref,
+      );
       return {
         claimed: true,
         receipt,
@@ -187,6 +186,7 @@ export class GrokTasks {
     receipt: string,
     outcome: "completed" | "failed" | "expired",
     text: string,
+    dispatchFailure?: string,
   ) {
     const status = outcome === "completed" ? "completed" : "failed";
     const failureMessage =
@@ -194,12 +194,12 @@ export class GrokTasks {
         ? row.state === "claimed"
           ? "微伴等待 Grok Bot 回传结果超时，本次未扣平台 credits。原任务可能仍在运行，也可能已执行操作。请先到 Grok Bot 查看运行记录，再决定是否重发。"
           : "这条任务到期前未被 Grok Bot 领取，本次未扣平台 credits。如仍需处理，可以重新发送。"
-        : undefined;
+        : dispatchFailure;
     const result = this.relay.handleTask(
       plugin,
       "event",
       { eventId: row.ref, jobId: row.jobId, routeId: row.routeId, runnerId: receipt, status, text },
-      { failureMessage },
+      { failureMessage, claimedOutputLimit: row.claimedOutputLimit ?? undefined },
     );
     if (row.state === "claimed" || row.state === "pending") {
       this.db.exec(
@@ -214,13 +214,20 @@ export class GrokTasks {
     }
     return { ...result, taskStatus: outcome };
   }
-  private fail(row: Task) {
+  private fail(row: Task, dispatchFailure?: string) {
     this.storage.transactionSync(() => {
       const plugin = this.plugin(row.pluginId);
       const receipt = row.runnerId || crypto.randomUUID();
       if (row.state === "pending")
         this.relay.handleTask(plugin, "claim", { id: row.jobId, runnerId: receipt });
-      this.settle(plugin, row, receipt, row.expires <= Date.now() ? "expired" : "failed", "");
+      this.settle(
+        plugin,
+        row,
+        receipt,
+        row.expires <= Date.now() ? "expired" : "failed",
+        "",
+        dispatchFailure,
+      );
     });
   }
   async dispatchDue() {
@@ -292,7 +299,7 @@ export class GrokTasks {
       let request: Request;
       try {
         request = await this.prepareWake(row.pluginId, row.ref);
-      } catch {
+      } catch (error) {
         // No request left the Worker. Re-read after async preparation so a
         // concurrent cancellation or settlement cannot be overwritten.
         const current = this.row(row.pluginId, row.ref);
@@ -303,7 +310,13 @@ export class GrokTasks {
         ) {
           if (current.claimable)
             this.db.exec("UPDATE grok_tasks SET due=expires WHERE ref=?", row.ref);
-          else this.fail(current);
+          else
+            this.fail(
+              current,
+              error instanceof AppError && error.code === "grok_unavailable"
+                ? `${error.message}本次任务未发送，未扣平台 credits。`
+                : undefined,
+            );
         }
         return;
       }

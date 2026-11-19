@@ -4,7 +4,7 @@ export function initGrokTasks(storage: DurableObjectStorage) {
     sql.exec(`CREATE TABLE IF NOT EXISTS grok_tasks (
         ref TEXT PRIMARY KEY, jobId TEXT NOT NULL UNIQUE, userMessage INTEGER NOT NULL,
         answerMessage INTEGER, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER, expires INTEGER NOT NULL,
-        routeId TEXT, outcome TEXT, claimId TEXT, claimable INTEGER NOT NULL DEFAULT 0);
+        routeId TEXT, outcome TEXT, claimId TEXT, claimedOutputLimit INTEGER, claimable INTEGER NOT NULL DEFAULT 0);
         CREATE INDEX IF NOT EXISTS grok_tasks_due ON grok_tasks(due) WHERE due IS NOT NULL;
         CREATE INDEX IF NOT EXISTS grok_route_jobs ON claw_jobs(routeId,state);
         CREATE TRIGGER IF NOT EXISTS grok_task_cancelled AFTER UPDATE OF state ON claw_jobs
@@ -25,6 +25,13 @@ export function initGrokTasks(storage: DurableObjectStorage) {
           UPDATE grok_tasks SET due=expires WHERE attempts>0 AND due IS NOT NULL AND due<>expires`);
     }
     if (!columns.includes("claimId")) sql.exec("ALTER TABLE grok_tasks ADD COLUMN claimId TEXT");
+    if (!columns.includes("claimedOutputLimit")) {
+      // Previous keyed claims saved their exact limit on the relay job. For older
+      // unkeyed claims that value was never recorded, so retain their legacy cap.
+      sql.exec(`ALTER TABLE grok_tasks ADD COLUMN claimedOutputLimit INTEGER;
+        UPDATE grok_tasks SET claimedOutputLimit=(SELECT outputLimit FROM claw_jobs WHERE id=grok_tasks.jobId)
+        WHERE due IS NOT NULL AND claimId IS NOT NULL`);
+    }
     if (!columns.includes("claimable")) {
       // Preserve outstanding legacy wakes on their original deadlines.
       sql.exec(`ALTER TABLE grok_tasks ADD COLUMN claimable INTEGER NOT NULL DEFAULT 0;

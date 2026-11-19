@@ -12,6 +12,7 @@ import {
 } from "../../shared/plugin-access";
 import { PLUGIN_SHORTCUT_PATTERN, PLUGIN_SHORTCUT_HINT } from "../../shared/plugin-shortcut";
 import { useState } from "react";
+import { GROK_DISPATCH_UNAVAILABLE } from "../../shared/grok-bot";
 import type { PersonalAssistantPlugin } from "../../shared/personal-assistant";
 import { NotificationAccess } from "./notification-editor";
 import { isRemoteAgentId, isRemoteAgent, remoteAgentName } from "../../shared/remote-agent";
@@ -271,7 +272,7 @@ export function PluginLibrary({
                   )}
                   <span>
                     {(id === "wechatai/cloud-agent" && cloudAvailability?.message) ||
-                      (id === "wechatai/grok" && cloudUnavailable && "Grok Bot 派发服务尚未启用") ||
+                      (id === "wechatai/grok" && cloudUnavailable && GROK_DISPATCH_UNAVAILABLE) ||
                       (!allowed
                         ? "超出当前套餐的插件上限"
                         : !enabled
@@ -459,13 +460,13 @@ export function PluginConfiguration({
                 <h3>{selected.name}</h3>
               )}
               <span
-                className={`plugin-status ${allowed && !cloudIssue && selected.enabled && (!connection || connection.state === "online") ? "configured" : ""}`}
+                className={`plugin-status ${allowed && !cloudIssue && !grokUnavailable && selected.enabled && (!connection || connection.state === "online") ? "configured" : ""}`}
               >
                 {!allowed
                   ? "已暂停"
                   : !selected.enabled
                     ? "已停用"
-                    : cloudIssue
+                    : cloudIssue || grokUnavailable
                       ? "服务不可用"
                       : (connection?.label ?? "已启用")}
               </span>
@@ -552,7 +553,9 @@ export function PluginConfiguration({
                     <>
                       <div>
                         <dt>连接状态</dt>
-                        <dd>{connection?.description}</dd>
+                        <dd>
+                          {grokUnavailable ? GROK_DISPATCH_UNAVAILABLE : connection?.description}
+                        </dd>
                       </div>
                       <div>
                         <dt>主动推送</dt>
@@ -693,15 +696,17 @@ export function PluginConfiguration({
                     </div>
                   )}
                 </dl>
-                <div className="plugin-config-usage">
-                  <code>
-                    @{selected.shortcut}{" "}
-                    {kind === "wechatai/image-generation" ? "画面描述" : "问题"}
-                  </code>{" "}
-                  仅本次使用
-                  <br />
-                  <code>/use {selected.shortcut}</code> 设为默认，<code>/exit</code> 返回普通模型
-                </div>
+                {!grokUnavailable && (
+                  <div className="plugin-config-usage">
+                    <code>
+                      @{selected.shortcut}{" "}
+                      {kind === "wechatai/image-generation" ? "画面描述" : "问题"}
+                    </code>{" "}
+                    仅本次使用
+                    <br />
+                    <code>/use {selected.shortcut}</code> 设为默认，<code>/exit</code> 返回普通模型
+                  </div>
+                )}
               </>
             )}
             {!allowed && !cloud && (

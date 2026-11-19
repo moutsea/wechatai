@@ -288,7 +288,7 @@ export class OpenClawRelay {
       ...bindings,
     );
   }
-  authenticate(pluginId: string, secret: string) {
+  requireCredential(pluginId: string, secret: string) {
     const row = this.sql
       .exec<{ tokenHash: string }>(
         "SELECT tokenHash FROM claw_connectors WHERE pluginId = ?",
@@ -297,6 +297,9 @@ export class OpenClawRelay {
       .toArray()[0];
     if (!row || !timingSafeEqual(Buffer.from(row.tokenHash), Buffer.from(hash(secret))))
       throw new AppError("unauthorized", "连接凭证无效或已撤销", 401);
+  }
+  authenticate(pluginId: string, secret: string) {
+    this.requireCredential(pluginId, secret);
     return this.hooks.plugin(pluginId);
   }
   enqueue(id: string, pluginId: string, route: Omit<ClawRoute, "id" | "pluginId">, text: string) {
@@ -419,7 +422,12 @@ export class OpenClawRelay {
     plugin: RemoteAgentPlugin,
     action: string,
     raw: unknown,
-    options: { fromConnector?: boolean; failureMessage?: string; historyInputTokens?: number } = {},
+    options: {
+      fromConnector?: boolean;
+      failureMessage?: string;
+      historyInputTokens?: number;
+      claimedOutputLimit?: number;
+    } = {},
   ) {
     const pluginId = plugin.id;
     return this.storage.transactionSync(() => {
@@ -568,7 +576,7 @@ export class OpenClawRelay {
       const failed = event.status === "failed";
       if (!failed && !job && !event.text.trim()) throw new AppError("empty_result", "结果不能为空");
       const outputLimit = Math.min(
-        plugin.maxOutputTokens,
+        options.claimedOutputLimit ?? plugin.maxOutputTokens,
         job?.outputLimit ?? plugin.maxOutputTokens,
         job?.lane === "control" ? 256 : Infinity,
       );

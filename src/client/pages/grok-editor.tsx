@@ -2,7 +2,12 @@ import { useState, type FormEvent } from "react";
 import { json } from "../api";
 import { useApp } from "../context";
 import { Modal } from "../ui";
-import { GROK_ID, grokRoutineInstructions, type GrokPlugin } from "../../shared/grok-bot";
+import {
+  GROK_ID,
+  GROK_DISPATCH_UNAVAILABLE,
+  grokRoutineInstructions,
+  type GrokPlugin,
+} from "../../shared/grok-bot";
 import { PLUGIN_SHORTCUT_PATTERN, PLUGIN_SHORTCUT_HINT } from "../../shared/plugin-shortcut";
 
 export function GrokEditor({
@@ -14,7 +19,7 @@ export function GrokEditor({
   onClose: () => void;
   onSaved: (id: string) => void;
 }) {
-  const { request, refresh, notify } = useApp();
+  const { data, request, refresh, notify } = useApp();
   const [saved, setSaved] = useState(plugin === "new" ? null : plugin);
   const [name, setName] = useState(saved?.name ?? "Grok Bot");
   const [shortcut, setShortcut] = useState(saved?.shortcut ?? "grok");
@@ -204,8 +209,14 @@ export function GrokEditor({
             </button>
           )}
           <p>
-            保存连接器后，在微信发送 <code>@{saved.shortcut} 回复一句你好</code>{" "}
-            验证收发。需要审批时请在 Grok Bot 中处理。
+            {data?.grokBotReady ? (
+              <>
+                保存连接器后，在微信发送 <code>@{saved.shortcut} 回复一句你好</code>{" "}
+                验证收发。需要审批时请在 Grok Bot 中处理。
+              </>
+            ) : (
+              GROK_DISPATCH_UNAVAILABLE
+            )}
           </p>
         </section>
       )}
