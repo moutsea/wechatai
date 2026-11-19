@@ -5,7 +5,7 @@
  * intentionally empty in T1: adding a locale directory is not enough to publish
  * a URL, a module must explicitly register every translated path.
  */
-export const AVAILABLE_LOCALES = ["zh-CN", "en"] as const;
+export const AVAILABLE_LOCALES = ["zh-CN", "en", "ja", "ko", "es", "pt"] as const;
 export type Locale = (typeof AVAILABLE_LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "zh-CN";
 
@@ -23,6 +23,10 @@ export interface LocaleDefinition {
 export const LOCALE_DEFINITIONS: Readonly<Record<Locale, LocaleDefinition>> = {
   "zh-CN": { prefix: "", htmlLang: "zh-CN", ogLocale: "zh_CN", label: "中文" },
   en: { prefix: "en", htmlLang: "en", ogLocale: "en_US", label: "English" },
+  ja: { prefix: "ja", htmlLang: "ja", ogLocale: "ja_JP", label: "日本語" },
+  ko: { prefix: "ko", htmlLang: "ko", ogLocale: "ko_KR", label: "한국어" },
+  es: { prefix: "es", htmlLang: "es", ogLocale: "es_ES", label: "Español" },
+  pt: { prefix: "pt", htmlLang: "pt", ogLocale: "pt_BR", label: "Português" },
 };
 
 export interface TranslationPage {
