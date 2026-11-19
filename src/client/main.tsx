@@ -1,24 +1,8 @@
 import React, { lazy, Suspense, useLayoutEffect, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import {
-  BrowserRouter,
-  matchRoutes,
-  useLocation,
-  useRoutes,
-  type Location,
-  type RouteObject,
-} from "react-router-dom";
+import { BrowserRouter, matchRoutes, useLocation, useRoutes, type RouteObject } from "react-router-dom";
 import "../shared/i18n/load";
-import {
-  AVAILABLE_LOCALES,
-  DEFAULT_LOCALE,
-  hasRegisteredTranslation,
-  localePrefix,
-  normalizePath,
-  resolveLocalizedPath,
-  splitLocalePath,
-  type Locale,
-} from "../shared/i18n";
+import { hasRegisteredTranslation, splitLocalePath } from "../shared/i18n";
 import { LocaleProvider } from "./locale";
 import { AuthProvider } from "./auth";
 import { Landing } from "./public-pages";
@@ -78,28 +62,9 @@ const ComparePage = preloadable(async () => ({
   default: (await import("./pages/compare-page")).ComparePage,
 }));
 type AppRoute = RouteObject & { preload?: () => Promise<void> };
-function RoutedContent({ location }: { location: Location }) {
-  return useRoutes(routes, location);
-}
-function LocalizedRoute({ locale }: { locale: Locale }) {
-  const location = useLocation();
-  const split = splitLocalePath(location.pathname);
-  const path = split?.locale === locale ? split.path : "/";
-  if (!hasRegisteredTranslation(locale, path)) return <NotFound />;
-  return <RoutedContent location={{ ...location, pathname: path }} />;
-}
-const routes: AppRoute[] = [
-  ...AVAILABLE_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE).map((locale) => ({
-    path: `/${localePrefix(locale)}/*`,
-    element: <LocalizedRoute locale={locale} />,
-  })),
+const notFoundRoute: AppRoute = { path: "*", element: <NotFound /> };
+const publicRoutes: AppRoute[] = [
   { path: "/", element: <Landing /> },
-  { path: "/login", element: <AuthPage /> },
-  { path: "/register", element: <AuthPage register /> },
-  { path: "/verify-email", element: <VerifyEmailPage /> },
-  { path: "/forgot-password", element: <ForgotPasswordPage /> },
-  { path: "/reset-password", element: <ResetPasswordPage /> },
-  { path: "/guide", element: <Guide />, preload: Guide.preload },
   { path: "/compare/:pair", element: <ComparePage />, preload: ComparePage.preload },
   { path: "/:slug", element: <SeoLandingPage />, preload: SeoLandingPage.preload },
   { path: "/docs", element: <DocsIndex />, preload: DocsIndex.preload },
@@ -119,6 +84,16 @@ const routes: AppRoute[] = [
   },
   { path: "/developers/openclaw", element: <OpenClawGuide />, preload: OpenClawGuide.preload },
   { path: "/developers/plugins", element: <PluginProtocol />, preload: PluginProtocol.preload },
+];
+const localizedRoutes = [...publicRoutes, notFoundRoute];
+const routes: AppRoute[] = [
+  ...publicRoutes,
+  { path: "/login", element: <AuthPage /> },
+  { path: "/register", element: <AuthPage register /> },
+  { path: "/verify-email", element: <VerifyEmailPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
+  { path: "/guide", element: <Guide />, preload: Guide.preload },
   {
     path: "/app/*",
     element: (
@@ -127,10 +102,26 @@ const routes: AppRoute[] = [
       </Suspense>
     ),
   },
-  { path: "*", element: <NotFound /> },
+  notFoundRoute,
 ];
+const notFoundRoutes = [notFoundRoute];
+
+function appRouteTarget(pathname: string) {
+  const split = splitLocalePath(pathname);
+  if (!split) return { routes, pathname };
+  return hasRegisteredTranslation(split.locale, split.path)
+    ? { routes: localizedRoutes, pathname: split.path }
+    : { routes: notFoundRoutes, pathname };
+}
+
 function AppRoutes() {
-  return useRoutes(routes);
+  const location = useLocation();
+  const target = appRouteTarget(location.pathname);
+  // Match at the router root; a nested route cannot match outside its own prefix.
+  return useRoutes(
+    target.routes,
+    target.pathname === location.pathname ? undefined : { ...location, pathname: target.pathname },
+  );
 }
 function ScrollReset({ initialDocument }: { initialDocument?: DocumentState }) {
   const { pathname, hash, key } = useLocation();
@@ -203,10 +194,9 @@ function mountApp(initialDocument?: DocumentState, stopInitialTracking?: () => v
 }
 
 // Keep the usable static document until its route is ready. Other routes stay lazy.
-const initialLocalized = resolveLocalizedPath(window.location.pathname);
-const initialPath = initialLocalized?.path ?? normalizePath(window.location.pathname);
-const initialPreload = matchRoutes(routes, {
-  pathname: initialPath,
+const initialTarget = appRouteTarget(window.location.pathname);
+const initialPreload = matchRoutes(initialTarget.routes, {
+  pathname: initialTarget.pathname,
   search: window.location.search,
   hash: window.location.hash,
 })?.at(-1)?.route.preload;
@@ -238,7 +228,7 @@ if (
   // The homepage is already in the entry bundle, but its static reading state still needs handoff.
   const container = document.getElementById("root")!;
   const hasStaticHomepage =
-    !import.meta.hot?.data.root && initialPath === "/" && container.hasChildNodes();
+    !import.meta.hot?.data.root && initialTarget.pathname === "/" && container.hasChildNodes();
   if (hasStaticHomepage) {
     const stopInitialTracking = startInitialPageViewTracking();
     const mountHomepage = () => {
