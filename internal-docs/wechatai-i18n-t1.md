@@ -10,7 +10,7 @@
 ## 范围与实现约束
 
 1. 在 `src/shared/i18n/index.ts` 定义 `AVAILABLE_LOCALES`、类型、路径与译文登记接口。`zh-CN` 无前缀，另支持 `en`、`ja`、`ko`、`es`、`pt`。Vite 按 `src/shared/i18n/<locale>/<namespace>.ts` 发现登记模块，显式按路径确认译文完整；只存在一个语言目录不足以发布任何 URL。T1 的正式译文注册为空。
-2. 浏览器入口 `src/client/main.tsx` 与静态入口 `src/client/prerender.tsx` 共用 locale 判定与 `LocaleProvider`。仅在已登记公开页面解析语言前缀；空注册表时 `/en` 和 `/en/pricing` 走 404，不得显示中文首页或价格页。页头语言切换器用真实 `<a>`，仅链接当前页面已登记的替代语言；无替代语言时保持现有页面外观。
+2. 浏览器入口 `src/client/main.tsx` 与静态入口 `src/client/prerender.tsx` 共用 locale 判定与 `LocaleProvider`。仅在已登记公开页面解析语言前缀；空注册表时 `/en` 和 `/en/pricing` 走 404，不得显示中文首页或价格页。页头语言切换器用真实 `<a>`，仅在当前路径属于已发布页面组时提供其他语言；未登记的前缀路径即使存在其他语言版本，接管后的 404 也不显示切换器。
 3. `src/shared/seo.ts` 的 `renderSeoHead`、`renderSitemap` 与 `scripts/prerender.mjs` 的生成路径使用同一注册表。可索引译文使用自身 canonical；一组存在译文的页面互列自身和已发布语言，`x-default` 指向对应的无前缀中文 URL（首页为 `/`）。空注册表不输出 hreflang。通过 `index.html` 模板与现有 `src/client/seo.tsx` 导航更新保持 HTML `lang` 与 `og:locale` 同步。沿用现有公开路径、`lastmod` 和 404 资产规则。
 4. `scripts/verify-seo.mjs` 与 `test/browser/public-pages.spec.ts` 通过 Vite 加载同一份登记预期，按已发布路径校验预渲染、sitemap、语言元数据和切换链接；保留中文专属的内容与交互回归。登记样例仅在测试或隔离构建中注入；正式构建不包含样例。
 

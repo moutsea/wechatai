@@ -92,7 +92,11 @@ test("the application takes over a registered route and switches back to Chinese
   await expect(page.getByRole("link", { name: "English" })).toBeVisible();
 });
 
-test("the application does not take over an unregistered page as Chinese", async ({ page }) => {
-  await page.goto(`${origin}/en/docs`);
+test("an unregistered pricing locale shows 404 without the published language links", async ({
+  page,
+}) => {
+  // Only English pricing is registered; the page under the Japanese prefix is not published.
+  await page.goto(`${origin}/ja/pricing`);
   await expect(page.getByRole("heading", { name: "这个页面没有找到。" })).toBeVisible();
+  await expect(page.locator(".site-header a[hreflang]")).toHaveCount(0);
 });

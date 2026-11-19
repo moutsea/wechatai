@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import {
   DEFAULT_LOCALE,
   alternateLocales,
+  hasRegisteredTranslation,
   normalizePath,
   splitLocalePath,
   type Locale,
@@ -22,11 +23,8 @@ const LocaleContext = createContext<LocaleContextValue>({
   alternates: [],
 });
 
-/**
- * Browser and prerender entry points share this provider. It derives the locale
- * from a registered URL prefix; an unregistered prefix still yields that locale,
- * so the route guard cannot render the Chinese page under it.
- */
+// Keep the requested locale and path for 404 metadata, but offer alternates only
+// when the current URL belongs to the published page group.
 export function LocaleProvider({
   children,
   locale: fixedLocale,
@@ -42,7 +40,11 @@ export function LocaleProvider({
     const locale = fixedLocale ?? split?.locale ?? DEFAULT_LOCALE;
     const path =
       fixedPath ?? (split && split.locale === locale ? split.path : normalizePath(pathname));
-    return { locale, path, alternates: alternateLocales(path) };
+    const alternates =
+      locale === DEFAULT_LOCALE || hasRegisteredTranslation(locale, path)
+        ? alternateLocales(path)
+        : [];
+    return { locale, path, alternates };
   }, [fixedLocale, fixedPath, pathname]);
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }

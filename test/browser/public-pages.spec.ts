@@ -97,11 +97,13 @@ for (const group of localePageGroups) {
 // An unregistered prefix must not fall back to the Chinese homepage or pricing page.
 for (const path of locale404Probes) {
   test(`shows the built 404 page for the unregistered locale path ${path}`, async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
     const response = await page.goto(`${origin}${path}`);
     expect(response?.status()).toBe(404);
+    await mounted;
     await expect(page.getByRole("heading", { name: "这个页面没有找到。" })).toBeVisible();
     await expect(page.getByText("免费开始，按需升级 Plus")).toHaveCount(0);
-    await expect(page.locator(".site-language")).toHaveCount(0);
+    await expect(page.locator(".site-header a[hreflang]")).toHaveCount(0);
   });
 }
 
