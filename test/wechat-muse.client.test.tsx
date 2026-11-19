@@ -32,6 +32,19 @@ it("tells readers to generate the command with Connect Muse before using the cop
   expect(steps[copy]).toContain("主聊天");
 });
 
+it("links the technical guide, plugin library, pricing, and related topics", () => {
+  for (const href of [
+    "/developers/muse",
+    "/app/plugins",
+    "/pricing",
+    "/wechat-agent",
+    "/wechat-ai-options",
+    "/compare/wechatai-vs-openclaw",
+  ]) {
+    expect(page.querySelector(`.seopage-related a[href="${href}"]`), href).toBeTruthy();
+  }
+});
+
 it("orders connect, copy, send and keeps validity and online rules explicit", () => {
   const answer = page.querySelector(".seopage-answer")?.textContent ?? "";
   const connect = answer.indexOf("「连接 Muse」");
@@ -55,7 +68,7 @@ it("points the primary CTA at WeChat and the next setup step at plugins", () => 
   expect(page.querySelector('.seopage-actions a[href="/app/plugins"]')?.textContent).toContain(
     "添加 Muse 插件",
   );
-  expect(page.querySelector("#connect a[href=\"/app/plugins\"]")?.textContent).toContain("插件页");
+  expect(page.querySelector('#connect a[href="/app/plugins"]')?.textContent).toContain("插件页");
 });
 
 it("keeps the long step overview collapsible with copy buttons for example commands", () => {

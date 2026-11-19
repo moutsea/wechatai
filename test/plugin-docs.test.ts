@@ -63,6 +63,16 @@ describe("public plugin developer resources", () => {
     expect(protocolSections.map((s) => s.id)).toContain("quickstart");
   });
 
+  it.each(["/llms.txt", LLMS_FULL_PATH])("links both public Muse pages in %s", async (path) => {
+    const response = await request(path, undefined, {} as Env);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    const text = await response.text();
+    for (const target of ["/wechat-muse", "/developers/muse"]) {
+      expect(text, `${path} links ${target}`).toContain(`(${SITE_URL}${target})`);
+    }
+  });
+
   it.each(["/llms.txt", LLMS_FULL_PATH])(
     "explains the connection prerequisites in %s",
     async (path) => {

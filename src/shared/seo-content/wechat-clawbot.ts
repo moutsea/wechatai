@@ -128,6 +128,7 @@ export const wechatClawbotPage: SeoPage = {
     },
   ],
   related: [
+    { label: "微信接入 Muse 托管助理", href: "/wechat-muse" },
     { label: "ClawBot 支持哪些模型", href: "/wechat-clawbot-models" },
     { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },

@@ -6,6 +6,7 @@ import { ArrowRight, Check, ChevronDown, Copy, Sprout } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { SiteHeader } from "../site-header";
 import { PricingPage } from "./pricing-page";
+import { SeoRelated } from "./seo-related";
 import { SiteFooter } from "../site-footer";
 
 /** Markdown with router-aware links, the same treatment the documentation uses. */
@@ -145,23 +146,6 @@ function SeoFaq({ items }: { items: SeoPage["faq"] }) {
           <p>{item.answer}</p>
         </details>
       ))}
-    </section>
-  );
-}
-
-function SeoRelated({ links }: { links: SeoPage["related"] }) {
-  if (!links.length) return null;
-  return (
-    <section className="seopage-related" aria-labelledby="seopage-related-title">
-      <h2 id="seopage-related-title">继续了解</h2>
-      <div className="seopage-related-grid">
-        {links.map((link) => (
-          <Link to={link.href} key={link.href}>
-            <span>{link.label}</span>
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
-        ))}
-      </div>
     </section>
   );
 }

@@ -67,6 +67,6 @@ export const pricingPage: SeoPage = {
       guide: { label: "查看入门教程", href: "/docs/getting-started" },
     },
   ],
-  related: [],
-  updatedAt: "2026-11-14",
+  related: [{ label: "微信接入 Muse 托管助理", href: "/wechat-muse" }],
+  updatedAt: "2026-11-19",
 };
