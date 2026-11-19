@@ -5,14 +5,15 @@ import { museGuide } from "../src/shared/muse-docs.ts";
 // Verify the actual deployable output; metadata-only tests cannot catch an empty SPA shell.
 const dir = new URL("../dist/client/", import.meta.url);
 const read = (name) => readFile(new URL(name, dir), "utf8");
+const museIndexLinks = ["(https://wechatai.app/wechat-muse)", "(https://wechatai.app/developers/muse)"];
 const workerDocuments = [
   ["/developers/plugins.md", "text/markdown", "给 AI agent 的起点"],
   ["/developers/openclaw.md", "text/markdown", "# OpenClaw 接入指南"],
   ["/developers/muse.md", "text/markdown", "# Muse 接入指南"],
   ["/developers/hermes.md", "text/markdown", "# Hermes 接入指南"],
   ["/developers/notifications.md", "text/markdown", "# 消息提醒 HTTP 接入"],
-  ["/llms.txt", "text/plain", "# Wechatai"],
-  ["/llms-full.txt", "text/plain", "# Wechatai"],
+  ["/llms.txt", "text/plain", "# Wechatai", ...museIndexLinks],
+  ["/llms-full.txt", "text/plain", "# Wechatai", ...museIndexLinks],
 ];
 // These are dynamic responses. An asset-first navigation otherwise returns the
 // static 404 page even when a direct Worker unit test passes.
@@ -531,7 +532,7 @@ assert.equal(image.readUInt32BE(20), 630);
 // Optional deployment/preview smoke check: node scripts/verify-seo.mjs http://127.0.0.1:5174
 if (process.argv[2]) {
   const origin = new URL(process.argv[2]);
-  for (const [path, contentType, marker] of workerDocuments) {
+  for (const [path, contentType, ...markers] of workerDocuments) {
     for (const headers of [{}, { "sec-fetch-mode": "navigate" }]) {
       const response = await fetch(new URL(path, origin), { headers, redirect: "manual" });
       assert.equal(response.status, 200, `${path}: public document status`);
@@ -539,7 +540,10 @@ if (process.argv[2]) {
         response.headers.get("content-type")?.startsWith(contentType),
         `${path}: document content type`,
       );
-      assert((await response.text()).includes(marker), `${path}: document body`);
+      const body = await response.text();
+      for (const marker of markers) {
+        assert(body.includes(marker), `${path}: document body contains ${marker}`);
+      }
     }
   }
   for (const path of [

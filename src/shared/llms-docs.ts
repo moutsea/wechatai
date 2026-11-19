@@ -64,6 +64,7 @@ export const llmsText = `# Wechatai · 微伴
 - [在微信里使用 Claude](${SITE_URL}/wechat-claude): 不需要 Claude Code，直连 API。
 - [在微信里使用 GPT](${SITE_URL}/wechat-gpt): 不部署开源项目的接入方式。
 - [微信接入 Agent](${SITE_URL}/wechat-agent): OpenClaw、Hermes、定时任务与主动推送。
+- [微信接入 Muse](${SITE_URL}/wechat-muse): 连接 Muse 托管助理、切换插件与排查不回复。
 - [微信 AI 方案对比](${SITE_URL}/wechat-ai-options): 官方内置、商业平台、开源自建、自带 Key 中转。
 - [价格与免费额度](${SITE_URL}/pricing): 套餐、credits 算法与免费版边界。
 
