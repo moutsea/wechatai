@@ -92,7 +92,7 @@ func handler(signer *rpc.Signer, transport http.RoundTripper, store *receipts) h
 			}
 		}
 		// Only the receipt store can rule out an earlier accepted POST for this ID.
-		if err == nil && (status == http.StatusTooManyRequests || status == http.StatusUnprocessableEntity || status == http.StatusServiceUnavailable) {
+		if err == nil && (retryableWake(status) || status == http.StatusUnprocessableEntity) {
 			w.Header().Set("X-Wechatai-Grok-Receipt", "declined")
 		}
 		if status == http.StatusServiceUnavailable {
@@ -124,7 +124,8 @@ func sendRoutine(client *http.Client, req *http.Request) int {
 	case res.StatusCode == http.StatusTooManyRequests:
 		return http.StatusTooManyRequests
 	case res.StatusCode >= 500 || res.StatusCode == http.StatusRequestTimeout:
-		return http.StatusAccepted
+		// The Routine webhook reports a start only with HTTP 200.
+		return http.StatusBadGateway
 	default:
 		return http.StatusUnprocessableEntity
 	}

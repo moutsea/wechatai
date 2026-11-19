@@ -4,7 +4,7 @@ export function initGrokTasks(storage: DurableObjectStorage) {
     sql.exec(`CREATE TABLE IF NOT EXISTS grok_tasks (
         ref TEXT PRIMARY KEY, jobId TEXT NOT NULL UNIQUE, userMessage INTEGER NOT NULL,
         answerMessage INTEGER, attempts INTEGER NOT NULL DEFAULT 0, due INTEGER, expires INTEGER NOT NULL,
-        routeId TEXT, outcome TEXT, claimable INTEGER NOT NULL DEFAULT 0);
+        routeId TEXT, outcome TEXT, claimId TEXT, claimable INTEGER NOT NULL DEFAULT 0);
         CREATE INDEX IF NOT EXISTS grok_tasks_due ON grok_tasks(due) WHERE due IS NOT NULL;
         CREATE INDEX IF NOT EXISTS grok_route_jobs ON claw_jobs(routeId,state);
         CREATE TRIGGER IF NOT EXISTS grok_task_cancelled AFTER UPDATE OF state ON claw_jobs
@@ -24,6 +24,7 @@ export function initGrokTasks(storage: DurableObjectStorage) {
             FROM claw_jobs j WHERE j.id=t.jobId);
           UPDATE grok_tasks SET due=expires WHERE attempts>0 AND due IS NOT NULL AND due<>expires`);
     }
+    if (!columns.includes("claimId")) sql.exec("ALTER TABLE grok_tasks ADD COLUMN claimId TEXT");
     if (!columns.includes("claimable")) {
       // Preserve outstanding legacy wakes on their original deadlines.
       sql.exec(`ALTER TABLE grok_tasks ADD COLUMN claimable INTEGER NOT NULL DEFAULT 0;

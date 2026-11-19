@@ -283,7 +283,7 @@ type Link = Connection & {
 // Server-created metadata for remote replies awaiting their first send attempt.
 // Once prepared, the final delivery text replaces this metadata so retries and
 // multipart delivery retain identical content and offsets across restarts.
-type RemoteReplySource = { pluginId: string; proactive: boolean };
+type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: string };
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -388,7 +388,8 @@ export class PersonalAccount extends DurableObject<Env> {
         return this.wallet.balance();
       },
       deliver: (event) => {
-        const { id, route, text, units, inputTokens, outputTokens, failed, proactive } = event;
+        const { id, plugin, route, text, units, inputTokens, outputTokens, failed, proactive } =
+          event;
         this.refreshWallet();
         if (!failed) this.wallet.charge(id, units, units);
         else recordCallFailure(this.sql, id, new AppError("remote_agent_failed", ""));
@@ -416,14 +417,14 @@ export class PersonalAccount extends DurableObject<Env> {
               inputTokens,
               outputTokens,
               units / 1000,
-              remoteAgentName(this.plugin(route.pluginId).pluginId),
+              remoteAgentName(plugin.pluginId),
             );
           const boundary = ["new", "reset"].includes(event.command);
           if (boundary)
             this.sql.exec(
               "INSERT INTO messages (sessionId,role,content,createdAt) VALUES (?, 'system', ?,?)",
               route.sessionId,
-              `${remoteAgentName(this.plugin(route.pluginId).pluginId)} 原生命令 /${event.command} 已返回；微伴历史记录保留。`,
+              `${remoteAgentName(plugin.pluginId)} 原生命令 /${event.command} 已返回；微伴历史记录保留。`,
               Date.now(),
             );
           const session = this.session(route.sessionId);
@@ -438,7 +439,11 @@ export class PersonalAccount extends DurableObject<Env> {
             "INSERT INTO inbox (id,payload,state,reply,createdAt,sessionId,connectionId) VALUES (?, ?, 'reply', ?,?,?,?)",
             id,
             JSON.stringify({
-              remoteReply: { pluginId: route.pluginId, proactive } satisfies RemoteReplySource,
+              remoteReply: {
+                pluginId: route.pluginId,
+                proactive,
+                ...(plugin.pluginId === "wechatai/grok" ? { grokName: plugin.name } : {}),
+              } satisfies RemoteReplySource,
             }),
             text,
             Date.now(),
@@ -5874,7 +5879,11 @@ export class PersonalAccount extends DurableObject<Env> {
               if (pending.id.startsWith("claw:") && pending.part === 0 && message.remoteReply) {
                 const source = message.remoteReply;
                 const plugin = this.findPlugin(source.pluginId);
-                if (!plugin) {
+                if (
+                  !plugin &&
+                  !source.grokName &&
+                  !this.grok.ownsSettledReply(source.pluginId, pending.id)
+                ) {
                   this.sql.exec(
                     "UPDATE inbox SET state='done', payload='{}', reply='' WHERE id=?",
                     pending.id,
@@ -5887,11 +5896,13 @@ export class PersonalAccount extends DurableObject<Env> {
                   (s) => s.id === currentId,
                 )?.pluginInstanceId;
                 if (source.proactive || currentPluginId !== source.pluginId) {
-                  pending.reply = pluginNotificationText(
-                    remoteAgentManifest(plugin.pluginId),
-                    plugin,
-                    pending.reply,
-                  );
+                  pending.reply = plugin
+                    ? pluginNotificationText(
+                        remoteAgentManifest(plugin.pluginId),
+                        plugin,
+                        pending.reply,
+                      )
+                    : `消息来自已删除的 Grok Bot 配置${source.grokName ? `「${source.grokName}」` : ""}。\n\n${pending.reply}`;
                 }
                 // Freeze before network I/O: an ambiguous failure must retry the
                 // same client ID with exactly the same body, even after a switch.

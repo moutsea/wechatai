@@ -49,11 +49,15 @@ func (s *receipts) reserve(ctx context.Context, task string) (prior int, err err
 	return prior, err
 }
 
+func retryableWake(status int) bool {
+	return status == http.StatusBadGateway || status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable
+}
+
 func (s *receipts) finish(ctx context.Context, task string, status int) error {
-	switch status {
-	case http.StatusAccepted:
+	switch {
+	case status == http.StatusAccepted:
 		return nil // The reservation already covers an uncertain outcome.
-	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
+	case retryableWake(status):
 		// The Routine declined the attempt or the POST never left the transport.
 		_, err := s.db.ExecContext(ctx, "DELETE FROM wakes WHERE task=?", task)
 		return err

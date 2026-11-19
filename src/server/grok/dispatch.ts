@@ -75,6 +75,7 @@ export async function sendGrokWake(request: Request): Promise<GrokWakeResult> {
   const receiptDeclined = response.headers.get("X-Wechatai-Grok-Receipt") === "declined";
   if (
     response.status === 429 ||
+    (response.status === 502 && receiptDeclined) ||
     (response.status === 503 && response.headers.get("X-Wechatai-Grok-Wake") === "not-sent")
   )
     return { status: "retry", receiptDeclined };

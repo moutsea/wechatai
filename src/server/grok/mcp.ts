@@ -10,11 +10,11 @@ const tools = [
   {
     name: "wechatai_claim",
     description:
-      "领取本次 Webhook 的微信任务。仅在 claimed 为 true 时执行。history 中 failed 表示任务失败，expired 表示微伴等待超时，重做前先核对 Grok 运行记录。truncated 为 true 表示内容不完整，重试依赖缺失要求时请先向用户确认。",
+      "每次 Routine 运行独立生成随机 UUID 作为 claimId。领取响应丢失时，以同一 taskId 和 claimId 重试。仅在 claimed 为 true 时执行一次。history 中 failed 表示任务失败，expired 表示微伴等待超时，重做前先核对 Grok 运行记录。truncated 为 true 表示内容不完整，重试依赖缺失要求时请先向用户确认。",
     inputSchema: {
       type: "object",
-      properties: { taskId: uuid },
-      required: ["taskId"],
+      properties: { taskId: uuid, claimId: uuid },
+      required: ["taskId", "claimId"],
       additionalProperties: false,
     },
   },

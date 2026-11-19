@@ -37,6 +37,7 @@ type Hooks = {
   balance: () => number;
   selectAgent: (pluginId: string, agentId: string) => void;
   deliver: (event: {
+    plugin: RemoteAgentPlugin;
     id: string;
     route: ClawRoute;
     text: string;
@@ -588,6 +589,7 @@ export class OpenClawRelay {
       const units = job?.lane === "control" ? 0 : creditUnits(inputTokens, outputTokens);
       const id = `claw:${receiptId}`;
       this.hooks.deliver({
+        plugin,
         id,
         route,
         text: displayText,

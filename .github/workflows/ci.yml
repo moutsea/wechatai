@@ -95,8 +95,8 @@ jobs:
       VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
 
   deploy-edge:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [check, secrets, backend]
+    needs: deploy-backend
+    if: needs.deploy-backend.outputs.deployed == 'true'
     uses: ./.github/workflows/deploy-edge.yml
     secrets:
       WRANGLER_CONFIG: ${{ secrets.WRANGLER_CONFIG }}

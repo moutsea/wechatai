@@ -10,7 +10,13 @@ import { AppError } from "../config";
 const lifetime = 45 * 60_000;
 const maxWakeAttempts = 3;
 const id = z.string().uuid();
-const claimArgs = z.object({ taskId: id }).strict();
+const claimArgs = z
+  .object({ taskId: id, claimId: id.optional() })
+  .strict()
+  .refine(
+    ({ claimId, taskId }) => claimId?.toLowerCase() !== taskId.toLowerCase(),
+    "每次 Routine 运行须独立生成 claimId",
+  );
 const finishArgs = z
   .object({
     taskId: id,
@@ -31,6 +37,7 @@ type Task = {
   outputLimit: number;
   attempts: number;
   claimable: number;
+  claimId: string | null;
   due: number;
   expires: number;
 };
@@ -39,7 +46,7 @@ const active = "j.state IN ('pending','claimed') AND t.due IS NOT NULL";
 const firstOnRoute = `NOT EXISTS (SELECT 1 FROM grok_tasks earlier
   WHERE earlier.routeId=t.routeId AND earlier.userMessage<t.userMessage AND earlier.due IS NOT NULL)`;
 const fields =
-  "t.ref,t.jobId,j.routeId,j.pluginId,j.state,j.runnerId,j.outputLimit,t.userMessage,t.attempts,t.claimable,t.due,t.expires,t.outcome";
+  "t.ref,t.jobId,j.routeId,j.pluginId,j.state,j.runnerId,j.outputLimit,t.userMessage,t.attempts,t.claimable,t.claimId,t.due,t.expires,t.outcome";
 
 export class GrokTasks {
   // Start unknown after a restart. Once SQLite confirms an empty queue, unrelated
@@ -92,14 +99,39 @@ export class GrokTasks {
     if (!row) throw new AppError("grok_task_missing", "任务不存在或已清除", 404);
     return row;
   }
+  // Outboxes from before the source name was captured still have a settlement record.
+  ownsSettledReply(pluginId: string, deliveryId: string) {
+    const prefix = `claw:${pluginId}:`;
+    return (
+      deliveryId.startsWith(prefix) &&
+      this.db
+        .exec(
+          `SELECT 1 ${joined} WHERE t.ref=? AND j.pluginId=? AND j.state IN ('complete','failed')`,
+          deliveryId.slice(prefix.length),
+          pluginId,
+        )
+        .toArray().length > 0
+    );
+  }
   claim(plugin: GrokPlugin, raw: unknown) {
-    const { taskId } = claimArgs.parse(raw);
+    const { taskId, claimId } = claimArgs.parse(raw);
     return this.storage.transactionSync(() => {
       const row = this.row(plugin.id, taskId);
-      if (row.state !== "pending" || row.expires <= Date.now() || !row.claimable)
-        return { claimed: false };
+      if (row.expires <= Date.now() || !row.claimable) return { claimed: false };
+      const replay = row.state === "claimed" && !!claimId && claimId === row.claimId;
+      if (row.state !== "pending" && !replay) return { claimed: false };
+      if (replay) this.relay.requireRoute(row.routeId);
       const history = readGrokHistory(this.db, row.routeId, row.userMessage);
+      if (replay)
+        return {
+          claimed: true,
+          receipt: row.runnerId,
+          text: row.text,
+          history,
+          maxOutputTokens: row.outputLimit,
+        };
       const receipt = crypto.randomUUID();
+      const maxOutputTokens = Math.min(plugin.maxOutputTokens, row.outputLimit);
       this.relay.handleTask(
         plugin,
         "claim",
@@ -108,14 +140,20 @@ export class GrokTasks {
           historyInputTokens: history.reduce((sum, entry) => sum + countTextTokens(entry.text), 0),
         },
       );
-      if (row.due !== row.expires)
-        this.db.exec("UPDATE grok_tasks SET due=expires WHERE ref=?", row.ref);
+      if (claimId || row.due !== row.expires)
+        this.db.exec(
+          "UPDATE grok_tasks SET due=expires,claimId=? WHERE ref=?",
+          claimId ?? null,
+          row.ref,
+        );
+      if (claimId && maxOutputTokens !== row.outputLimit)
+        this.db.exec("UPDATE claw_jobs SET outputLimit=? WHERE id=?", maxOutputTokens, row.jobId);
       return {
         claimed: true,
         receipt,
         text: row.text,
         history,
-        maxOutputTokens: Math.min(plugin.maxOutputTokens, row.outputLimit),
+        maxOutputTokens,
       };
     });
   }

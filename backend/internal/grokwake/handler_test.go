@@ -118,7 +118,7 @@ func TestWakeReceiptAcrossRestart(t *testing.T) {
 		providerStatus, first, replay, calls int
 	}{
 		{"accepted", 200, 204, 204, 1}, {"lost provider response", 0, 202, 202, 1},
-		{"gateway timeout", 504, 202, 202, 1}, {"rate limited", 429, 429, 204, 2}, {"invalid key", 401, 422, 422, 1},
+		{"gateway timeout", 504, 502, 204, 2}, {"request timeout", 408, 502, 204, 2}, {"rate limited", 429, 429, 204, 2}, {"invalid key", 401, 422, 422, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "wakes.sqlite")
@@ -155,12 +155,16 @@ func TestTransportFailureAcrossRestart(t *testing.T) {
 	}{
 		{"dial refused", 503, 204},
 		{"TLS verification failed", 503, 204},
+		{"provider unavailable", 502, 204},
 		{"response lost after POST", 202, 202},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var posts atomic.Int32
 			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				posts.Add(1)
+				if posts.Add(1) == 1 && tc.name == "provider unavailable" {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
 				if tc.name == "response lost after POST" {
 					conn, _, err := w.(http.Hijacker).Hijack()
 					if err != nil {
@@ -196,15 +200,19 @@ func TestTransportFailureAcrossRestart(t *testing.T) {
 				if want == http.StatusServiceUnavailable {
 					wantHeader = "not-sent"
 				}
-				if (out.Header().Get("X-Wechatai-Grok-Receipt") == "declined") != (want == http.StatusServiceUnavailable) {
+				if (out.Header().Get("X-Wechatai-Grok-Receipt") == "declined") != (want == http.StatusServiceUnavailable || want == http.StatusBadGateway) {
 					t.Fatalf("unexpected receipt for HTTP %d", out.Code)
 				}
 				if out.Code != want || out.Header().Get("X-Wechatai-Grok-Wake") != wantHeader {
 					t.Fatalf("attempt %d: status=%d header=%q, want %d", i+1, out.Code, out.Header().Get("X-Wechatai-Grok-Wake"), want)
 				}
 			}
-			if posts.Load() != 1 {
-				t.Fatalf("provider received %d POSTs, want 1", posts.Load())
+			wantPosts := int32(1)
+			if tc.name == "provider unavailable" {
+				wantPosts = 2
+			}
+			if posts.Load() != wantPosts {
+				t.Fatalf("provider received %d POSTs, want %d", posts.Load(), wantPosts)
 			}
 		})
 	}
