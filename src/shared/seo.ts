@@ -250,8 +250,7 @@ export interface PageSeo {
  * breadcrumb trail and, when present, the FAQ block. Keeping it in one builder
  * stops the eight pages from drifting apart as they are edited.
  */
-function seoLandingPage(page: SeoPage): PageSeo {
-  const canonical = `${SITE_URL}${page.path}`;
+function seoLandingPage(page: SeoPage, canonical: string, htmlLang: string): PageSeo {
   const isArticle = page.kind === "article";
   const publisher = organizationNode();
   const webPage = isArticle
@@ -262,7 +261,7 @@ function seoLandingPage(page: SeoPage): PageSeo {
         mainEntityOfPage: canonical,
         headline: page.h1,
         description: page.description,
-        inLanguage: "zh-CN",
+        inLanguage: htmlLang,
         image: SOCIAL_IMAGE,
         dateModified: page.updatedAt,
         author: {
@@ -279,7 +278,7 @@ function seoLandingPage(page: SeoPage): PageSeo {
         url: canonical,
         name: page.h1,
         description: page.description,
-        inLanguage: "zh-CN",
+        inLanguage: htmlLang,
         about: softwareApplicationRef(),
         publisher,
       };
@@ -297,7 +296,7 @@ function seoLandingPage(page: SeoPage): PageSeo {
           ? [
               {
                 "@type": "Service",
-                "@id": `${canonical}#plans`,
+                "@id": `${SITE_URL}${page.path}#plans`,
                 name: `${SITE_NAME} 免费版与 Plus`,
                 serviceType: "微信 AI 接入服务",
                 provider: { "@id": ORGANIZATION_ID },
@@ -346,21 +345,21 @@ function faqPageNode(canonical: string) {
   };
 }
 
-function basePageSeo(pathname: string): PageSeo {
-  const path = normalizePath(pathname);
+function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   // Production redirects this route at the edge. The fallback HTML has the
   // destination canonical without a conflicting noindex instruction.
   if (path === "/guide") return getPageSeo("/docs/getting-started");
+  const canonical = `${SITE_URL}${locale === DEFAULT_LOCALE ? path : localizedPath(locale, path)}`;
+  const { htmlLang } = LOCALE_DEFINITIONS[locale];
   const landing = findSeoPage(path);
-  if (landing) return seoLandingPage(landing);
+  if (landing) return seoLandingPage(landing, canonical, htmlLang);
   const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
   if (path === "/docs" || article) {
-    const canonical = `${SITE_URL}${path}`;
     const title = article?.title ?? DOCS_TITLE;
     const description = article?.description ?? DOCS_DESCRIPTION;
     const breadcrumbs = [
       { name: "首页", item: `${SITE_URL}/` },
-      { name: "文档", item: `${SITE_URL}/docs` },
+      { name: "文档", item: article ? `${SITE_URL}/docs` : canonical },
       ...(article ? [{ name: title, item: canonical }] : []),
     ];
     return {
@@ -380,7 +379,7 @@ function basePageSeo(pathname: string): PageSeo {
                 mainEntityOfPage: canonical,
                 headline: article.seoTitle ?? title,
                 description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 image: SOCIAL_IMAGE,
                 dateModified: article.updatedAt,
                 author: {
@@ -399,7 +398,7 @@ function basePageSeo(pathname: string): PageSeo {
                 url: canonical,
                 name: title,
                 description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 mainEntity: {
                   "@type": "ItemList",
                   itemListElement: DOC_ARTICLES.map((item, index) => ({
@@ -418,7 +417,6 @@ function basePageSeo(pathname: string): PageSeo {
   }
   const info = Object.values(INFO_PAGES).find((page) => page.path === path);
   if (info) {
-    const canonical = `${SITE_URL}${path}`;
     return {
       title: `${info.title} | ${SITE_NAME}`,
       description: info.description,
@@ -430,7 +428,7 @@ function basePageSeo(pathname: string): PageSeo {
         name: info.title,
         description: info.description,
         url: canonical,
-        inLanguage: "zh-CN",
+        inLanguage: htmlLang,
         ...(path === "/contact"
           ? { about: softwareApplicationRef(), mainEntity: maintainerNode() }
           : {}),
@@ -439,7 +437,6 @@ function basePageSeo(pathname: string): PageSeo {
   }
   const developer = findDeveloperPage(path);
   if (developer) {
-    const canonical = `${SITE_URL}${path}`;
     const isArticle = "article" in developer && developer.article === true;
     const faq = "faq" in developer ? developer.faq : undefined;
     return {
@@ -459,7 +456,7 @@ function basePageSeo(pathname: string): PageSeo {
                 mainEntityOfPage: canonical,
                 headline: developer.name,
                 description: developer.description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 image: SOCIAL_IMAGE,
                 dateModified: developer.updatedAt,
                 author: {
@@ -476,7 +473,7 @@ function basePageSeo(pathname: string): PageSeo {
                 url: canonical,
                 name: developer.name,
                 description: developer.description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 dateModified: developer.updatedAt,
                 about: softwareApplicationRef(),
                 publisher: organizationNode(),
@@ -505,7 +502,6 @@ function basePageSeo(pathname: string): PageSeo {
     };
   }
   if (path === "/") {
-    const canonical = `${SITE_URL}/`;
     const title = `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
     const description =
       "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
@@ -531,7 +527,7 @@ function basePageSeo(pathname: string): PageSeo {
             url: canonical,
             name: title,
             description,
-            inLanguage: "zh-CN",
+            inLanguage: htmlLang,
             isPartOf: { "@id": `${SITE_URL}/#website` },
             about: { "@id": APPLICATION_ID },
           },
@@ -621,40 +617,18 @@ function withAlternates(seo: PageSeo, path: string): PageSeo {
   return alternates.length ? { ...seo, alternates } : seo;
 }
 
-function localizeStructuredData(value: unknown, htmlLang: string): unknown {
-  if (Array.isArray(value)) return value.map((item) => localizeStructuredData(item, htmlLang));
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      key === "inLanguage" && typeof entry === "string"
-        ? htmlLang
-        : localizeStructuredData(entry, htmlLang),
-    ]),
-  );
-}
-
-function translatedPageSeo(
-  base: PageSeo,
-  translation: RegisteredTranslation,
-  locale: Locale,
-  path: string,
-): PageSeo {
+function translatedPageSeo(path: string, translation: RegisteredTranslation): PageSeo {
+  const { locale, title, description } = translation;
+  const { htmlLang, ogLocale } = LOCALE_DEFINITIONS[locale];
+  const base = basePageSeo(path, locale);
   if (!base.indexable) return notFoundPageSeo();
   return {
     ...base,
-    title: translation.title,
-    description: translation.description,
-    canonical: `${SITE_URL}${localizedPath(locale, path)}`,
-    htmlLang: LOCALE_DEFINITIONS[locale].htmlLang,
-    ogLocale: LOCALE_DEFINITIONS[locale].ogLocale,
+    title,
+    description,
+    htmlLang,
+    ogLocale,
     alternates: pageAlternates(path),
-    structuredData: base.structuredData
-      ? (localizeStructuredData(base.structuredData, LOCALE_DEFINITIONS[locale].htmlLang) as Record<
-          string,
-          unknown
-        >)
-      : undefined,
   };
 }
 
@@ -669,12 +643,12 @@ export function getPageSeo(pathname: string, locale: Locale = DEFAULT_LOCALE): P
   if (split) {
     const translation = registeredTranslation(split.locale, split.path);
     if (!translation || !publicPathSet.has(split.path)) return notFoundPageSeo();
-    return translatedPageSeo(basePageSeo(split.path), translation, split.locale, split.path);
+    return translatedPageSeo(split.path, translation);
   }
   if (locale !== DEFAULT_LOCALE) {
     const translation = registeredTranslation(locale, normalized);
     if (!translation || !publicPathSet.has(normalized)) return notFoundPageSeo();
-    return translatedPageSeo(basePageSeo(normalized), translation, locale, normalized);
+    return translatedPageSeo(normalized, translation);
   }
   return withAlternates(basePageSeo(normalized), normalized);
 }

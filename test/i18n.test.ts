@@ -105,17 +105,63 @@ describe("registered localized pages", () => {
     expect(getPageSeo("/pricing").canonical).toBe("https://wechatai.app/pricing");
   });
 
-  it("synchronizes the HTML lang attribute and structured-data language", () => {
+  it("uses the localized canonical for page-owned JSON-LD without moving shared entities", () => {
     registerTranslations("en", [sample], "fixture");
-    const english = getPageSeo("/en/pricing");
-    expect(english.htmlLang).toBe("en");
     const html = replaceSeoHead(
       '<html lang="zh-CN"><head><!-- SEO:START --><!-- SEO:END --></head></html>',
-      english,
+      getPageSeo("/en/pricing"),
     );
     expect(html).toContain('<html lang="en">');
-    expect(html).not.toContain('"inLanguage":"zh-CN"');
-    expect(html).toContain('"inLanguage":"en"');
+    const json = html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)![1];
+    const graph = JSON.parse(json)["@graph"];
+    const canonical = "https://wechatai.app/en/pricing";
+    expect(graph).toContainEqual(
+      expect.objectContaining({
+        "@type": "WebPage",
+        "@id": `${canonical}#webpage`,
+        url: canonical,
+        inLanguage: "en",
+        about: expect.objectContaining({
+          "@id": "https://wechatai.app/#application",
+          url: "https://wechatai.app/",
+        }),
+        publisher: expect.objectContaining({
+          "@id": "https://wechatai.app/#organization",
+          url: "https://wechatai.app/",
+        }),
+      }),
+    );
+    expect(graph).toContainEqual(
+      expect.objectContaining({ "@type": "FAQPage", "@id": `${canonical}#faq` }),
+    );
+    expect(graph).toContainEqual({
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        expect.objectContaining({ item: "https://wechatai.app/" }),
+        expect.objectContaining({ item: canonical }),
+      ],
+    });
+  });
+
+  it("keeps the WebSite on its shared URL when the homepage has a translation", () => {
+    registerTranslations("en", [{ ...sample, path: "/" }], "fixture");
+    const seo = getPageSeo("/en");
+    expect(seo.structuredData?.["@graph"]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          "@type": "WebPage",
+          "@id": "https://wechatai.app/en#webpage",
+          url: "https://wechatai.app/en",
+          inLanguage: "en",
+          isPartOf: { "@id": "https://wechatai.app/#website" },
+        }),
+        expect.objectContaining({
+          "@type": "WebSite",
+          "@id": "https://wechatai.app/#website",
+          url: "https://wechatai.app/",
+        }),
+      ]),
+    );
   });
 
   it("never resolves an unregistered prefixed page to the Chinese page", () => {
