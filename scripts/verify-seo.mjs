@@ -5,7 +5,17 @@ import { museGuide } from "../src/shared/muse-docs.ts";
 // Verify the actual deployable output; metadata-only tests cannot catch an empty SPA shell.
 const dir = new URL("../dist/client/", import.meta.url);
 const read = (name) => readFile(new URL(name, dir), "utf8");
-const museIndexLinks = ["(https://wechatai.app/wechat-muse)", "(https://wechatai.app/developers/muse)"];
+// Locale expectations are derived from the URL prefix, not hardcoded for every page.
+const expectedLocaleForPath = (pathname) => {
+  const [, first] = pathname.split("/");
+  return first === "en"
+    ? { htmlLang: "en", ogLocale: "en_US" }
+    : { htmlLang: "zh-CN", ogLocale: "zh_CN" };
+};
+const museIndexLinks = [
+  "(https://wechatai.app/wechat-muse)",
+  "(https://wechatai.app/developers/muse)",
+];
 const workerDocuments = [
   ["/developers/plugins.md", "text/markdown", "给 AI agent 的起点"],
   ["/developers/openclaw.md", "text/markdown", "# OpenClaw 接入指南"],
@@ -111,7 +121,11 @@ const landingPages = [
   ],
   ["wechat-claude.html", "https://wechatai.app/wechat-claude", "微信接入 Claude：绕开桥接的那条路"],
   ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
-  ["wechat-kimi.html", "https://wechatai.app/wechat-kimi", "微信接入 Kimi：从 KimiSeek 一键导入开始"],
+  [
+    "wechat-kimi.html",
+    "https://wechatai.app/wechat-kimi",
+    "微信接入 Kimi：从 KimiSeek 一键导入开始",
+  ],
   ["wechat-qwen.html", "https://wechatai.app/wechat-qwen", "微信接入通义千问：用硅基流动渠道跑通"],
   ["wechat-glm.html", "https://wechatai.app/wechat-glm", "微信接入 GLM：用硅基流动渠道配置"],
   ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],
@@ -159,6 +173,12 @@ const publicTitles = new Set();
 const publicDescriptions = new Set();
 for (const [file, canonical, text] of publicPages) {
   const html = await read(file);
+  const expectedLocale = expectedLocaleForPath(new URL(canonical).pathname);
+  assert(html.includes(`<html lang="${expectedLocale.htmlLang}">`), `${file}: html lang`);
+  assert(
+    html.includes(`property="og:locale" content="${expectedLocale.ogLocale}"`),
+    `${file}: og locale`,
+  );
   assert.equal((html.match(/<title\b/g) || []).length, 1, `${file}: one title`);
   assert.equal((html.match(/<h1\b/g) || []).length, 1, `${file}: one primary heading`);
   const title = html.match(/<title[^>]*>(.*?)<\/title>/s)?.[1];
@@ -344,7 +364,8 @@ const museSections = museGuide
   .slice(1)
   .map((section) => section.split("\n")[0]);
 assert.equal(museSections.length, 8, "Muse guide has seven content sections and an FAQ section");
-for (const heading of museSections) assert(museHtml.includes(heading), `Muse guide HTML: ${heading}`);
+for (const heading of museSections)
+  assert(museHtml.includes(heading), `Muse guide HTML: ${heading}`);
 const museFaqQuestions = [...museGuide.split("## 8. 常见问题")[1].matchAll(/^### (.+)$/gm)].map(
   (match) => match[1],
 );
@@ -352,10 +373,7 @@ assert.equal(museFaqQuestions.length, 6, "Muse guide has six FAQs");
 for (const question of museFaqQuestions)
   assert(museHtml.includes(question), `Muse guide HTML: ${question}`);
 const pluginsIndex = await read("developers/plugins.html");
-assert(
-  pluginsIndex.includes('href="/developers/muse"'),
-  "plugins index links the Muse guide",
-);
+assert(pluginsIndex.includes('href="/developers/muse"'), "plugins index links the Muse guide");
 // Muse 承接页与指南必须双向可达；主题页、对比页、定价页和首页都要有明确入口。
 for (const [file, marker] of [
   ["index.html", "homepage"],
@@ -524,6 +542,17 @@ assert(
   "wildcard: protocol API allowed",
 );
 assert.equal(((await read("sitemap.xml")).match(/<loc>/g) || []).length, publicPages.length);
+// T1 registers no translations: no locale URL, hreflang or localized HTML may ship.
+assert(!(await read("sitemap.xml")).includes("https://wechatai.app/en"));
+for (const file of ["en.html", "en/pricing.html"]) {
+  await assert.rejects(access(new URL(file, dir)), `${file}: no unregistered locale page`);
+}
+for (const [file] of publicPages) {
+  assert(
+    !(await read(file)).includes('rel="alternate" hreflang='),
+    `${file}: no hreflang while the registry is empty`,
+  );
+}
 const image = await readFile(new URL("og-image.png", dir));
 assert.equal(image.subarray(1, 4).toString(), "PNG");
 assert.equal(image.readUInt32BE(16), 1200);
@@ -566,8 +595,16 @@ if (process.argv[2]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);
     const html = await response.text();
-    assert(html.includes('<html lang="zh-CN">'), `${path}: HTML`);
-    if (!publicPages.some(([, canonical]) => new URL(canonical).pathname === path)) {
+    const pathname = new URL(path, origin).pathname;
+    const expectedLocale = expectedLocaleForPath(pathname);
+    assert(html.includes(`<html lang="${expectedLocale.htmlLang}">`), `${path}: HTML lang`);
+    const isPublic = publicPages.some(([, canonical]) => new URL(canonical).pathname === pathname);
+    if (isPublic) {
+      assert(
+        html.includes(`property="og:locale" content="${expectedLocale.ogLocale}"`),
+        `${path}: og locale`,
+      );
+    } else {
       assert.match(response.headers.get("x-robots-tag") || "", /noindex/, `${path}: header`);
       assert(html.includes('content="noindex, follow"'), `${path}: noindex HTML`);
     }
@@ -593,10 +630,21 @@ if (process.argv[2]) {
     assert.equal(destination.hash, "", "Location must not replace historical section fragments");
     await response.body?.cancel();
   }
-  for (const path of ["/not-a-real-page", "/nested/not-a-real-page", "/docs/not-a-real-article"]) {
-    const response = await fetch(new URL(path, origin));
+  for (const path of [
+    "/not-a-real-page",
+    "/nested/not-a-real-page",
+    "/docs/not-a-real-article",
+    "/en",
+    "/en/pricing",
+  ]) {
+    const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 404, `${path}: real 404`);
-    assert((await response.text()).includes("这个页面没有找到。"));
+    assert.equal(response.headers.get("location"), null, `${path}: no redirect to Chinese`);
+    const body = await response.text();
+    assert(body.includes("这个页面没有找到。"), `${path}: 404 body`);
+    for (const marker of ["把你的 AI", "免费开始，按需升级 Plus"]) {
+      assert(!body.includes(marker), `${path}: does not render Chinese page ${marker}`);
+    }
   }
   for (const path of ["/sitemap.xml", "/robots.txt", "/og-image.png", "/favicon.svg"]) {
     const response = await fetch(new URL(path, origin));

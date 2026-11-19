@@ -2475,6 +2475,20 @@ code {
   color: var(--ink);
   font-weight: 600;
 }
+.site-language {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.site-language a {
+  color: var(--muted);
+  transition: color 0.15s;
+}
+.site-language a:hover {
+  color: var(--green);
+}
 .site-menu-toggle {
   display: none;
   align-items: center;
@@ -2508,6 +2522,9 @@ code {
   }
   .site-header-nav,
   .site-header-account:not(.is-authenticated) {
+    display: none;
+  }
+  .site-header-aside > .site-language {
     display: none;
   }
   .site-menu-toggle {

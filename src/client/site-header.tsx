@@ -4,6 +4,9 @@ import { ArrowUpRight, Menu, RefreshCw, X } from "lucide-react";
 import { Brand } from "./ui";
 import { useAuth } from "./auth";
 import { LoadErrorBoundary, reloadPage } from "./load-error-boundary";
+import { LanguageSwitcher } from "./language-switcher";
+import { useLocale } from "./locale";
+import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath } from "../shared/i18n";
 
 const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
@@ -35,9 +38,35 @@ type SiteHeaderProps = {
 export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { data: session } = useAuth();
   const { pathname, hash } = useLocation();
-  const current = active ?? (pathname === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
+  const { locale, path } = useLocale();
+  const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
+
+  // Prefer the translated target only when that exact page is published;
+  // otherwise keep the existing Chinese link instead of producing a 404 prefix.
+  const localeHref = (to: string) => {
+    if (locale === DEFAULT_LOCALE) return to;
+    const [targetPath, targetHash] = to.split("#");
+    const base = targetPath || "/";
+    if (!hasRegisteredTranslation(locale, base)) return to;
+    return `${localizedPath(locale, base)}${targetHash ? `#${targetHash}` : ""}`;
+  };
+
+  const links = (
+    <>
+      {NAV.map((item) => (
+        <Link
+          key={item.to}
+          to={localeHref(item.to)}
+          aria-current={current === item.match ? "page" : undefined}
+        >
+          {item.label}
+        </Link>
+      ))}
+      {extra}
+    </>
+  );
 
   // 路由变化后收起抽屉，避免导航到新页面时菜单还盖在上面。
   useEffect(() => setOpen(false), [pathname, hash]);
@@ -50,17 +79,6 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
-
-  const links = (
-    <>
-      {NAV.map((item) => (
-        <Link key={item.to} to={item.to} aria-current={current === item.match ? "page" : undefined}>
-          {item.label}
-        </Link>
-      ))}
-      {extra}
-    </>
-  );
 
   const account = session ? (
     <LoadErrorBoundary
@@ -106,13 +124,14 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link to="/" aria-label="微伴首页">
+        <Link to={localeHref("/")} aria-label="微伴首页">
           <Brand />
         </Link>
         <nav aria-label="顶部导航" className="site-header-nav">
           {links}
         </nav>
         <div className="site-header-aside">
+          <LanguageSwitcher />
           <nav
             aria-label="账户"
             className={`site-header-account${session ? " is-authenticated" : ""}`}
@@ -142,13 +161,14 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
         {NAV.map((item) => (
           <Link
             key={item.to}
-            to={item.to}
+            to={localeHref(item.to)}
             aria-current={current === item.match ? "page" : undefined}
           >
             {item.label}
           </Link>
         ))}
         {extra}
+        <LanguageSwitcher mobile />
         {!session && (
           <>
             <Link to="/login">登录</Link>

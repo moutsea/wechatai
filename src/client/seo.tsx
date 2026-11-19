@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
 import { reloadPage } from "./load-error-boundary";
+import { useLocale } from "./locale";
+import { localizedPath } from "../shared/i18n";
 
 function showPendingMetadata() {
   document.head.querySelectorAll("[data-seo]").forEach((node) => node.remove());
@@ -16,25 +17,26 @@ function showPendingMetadata() {
 }
 
 export function PageMetadata() {
-  const { pathname } = useLocation();
-  const path = pathname.replace(/\/+$/, "") || "/";
+  const { locale, path } = useLocale();
   const [failedPath, setFailedPath] = useState<string | null>(null);
   useEffect(() => {
     setFailedPath(null);
     const canonical = document.head.querySelector<HTMLLinkElement>(
       'link[data-seo][rel="canonical"]',
     );
-    if (canonical && new URL(canonical.href).pathname === path) return;
+    if (canonical && new URL(canonical.href).pathname === localizedPath(locale, path)) return;
     let active = true;
     // Until the current route's metadata is available, never retain another page's canonical.
     showPendingMetadata();
     void import("../shared/seo")
       .then(({ getPageSeo, renderSeoHead }) => {
         if (!active) return;
+        const seo = getPageSeo(path, locale);
         const template = document.createElement("template");
-        template.innerHTML = renderSeoHead(getPageSeo(pathname));
+        template.innerHTML = renderSeoHead(seo);
         document.head.querySelectorAll("[data-seo]").forEach((node) => node.remove());
         document.head.appendChild(template.content);
+        document.documentElement.lang = seo.htmlLang ?? "zh-CN";
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -44,7 +46,7 @@ export function PageMetadata() {
     return () => {
       active = false;
     };
-  }, [pathname, path]);
+  }, [path, locale]);
   if (failedPath !== path) return null;
   return (
     <aside className="form-error" role="alert">

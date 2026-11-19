@@ -5,8 +5,21 @@ import {
   matchRoutes,
   useLocation,
   useRoutes,
+  type Location,
   type RouteObject,
 } from "react-router-dom";
+import "../shared/i18n/load";
+import {
+  AVAILABLE_LOCALES,
+  DEFAULT_LOCALE,
+  hasRegisteredTranslation,
+  localePrefix,
+  normalizePath,
+  resolveLocalizedPath,
+  splitLocalePath,
+  type Locale,
+} from "../shared/i18n";
+import { LocaleProvider } from "./locale";
 import { AuthProvider } from "./auth";
 import { Landing } from "./public-pages";
 import { PageMetadata } from "./seo";
@@ -65,7 +78,21 @@ const ComparePage = preloadable(async () => ({
   default: (await import("./pages/compare-page")).ComparePage,
 }));
 type AppRoute = RouteObject & { preload?: () => Promise<void> };
+function RoutedContent({ location }: { location: Location }) {
+  return useRoutes(routes, location);
+}
+function LocalizedRoute({ locale }: { locale: Locale }) {
+  const location = useLocation();
+  const split = splitLocalePath(location.pathname);
+  const path = split?.locale === locale ? split.path : "/";
+  if (!hasRegisteredTranslation(locale, path)) return <NotFound />;
+  return <RoutedContent location={{ ...location, pathname: path }} />;
+}
 const routes: AppRoute[] = [
+  ...AVAILABLE_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE).map((locale) => ({
+    path: `/${localePrefix(locale)}/*`,
+    element: <LocalizedRoute locale={locale} />,
+  })),
   { path: "/", element: <Landing /> },
   { path: "/login", element: <AuthPage /> },
   { path: "/register", element: <AuthPage register /> },
@@ -150,31 +177,39 @@ function mountApp(initialDocument?: DocumentState, stopInitialTracking?: () => v
   root.render(
     <React.StrictMode>
       <BrowserRouter>
-        <AuthProvider>
-          <PageMetadata />
-          <PageViewTracker onReady={stopInitialTracking} />
-          <DocumentInputProvider initialDocument={initialDocument}>
-            <RouteLoadErrorBoundary>
-              <Suspense
-                fallback={
-                  <div className="full-state" role="status">
-                    正在加载页面…
-                  </div>
-                }
-              >
-                <ScrollReset initialDocument={initialDocument} />
-                <AppRoutes />
-              </Suspense>
-            </RouteLoadErrorBoundary>
-          </DocumentInputProvider>
-        </AuthProvider>
+        <LocaleProvider>
+          <AuthProvider>
+            <PageMetadata />
+            <PageViewTracker onReady={stopInitialTracking} />
+            <DocumentInputProvider initialDocument={initialDocument}>
+              <RouteLoadErrorBoundary>
+                <Suspense
+                  fallback={
+                    <div className="full-state" role="status">
+                      正在加载页面…
+                    </div>
+                  }
+                >
+                  <ScrollReset initialDocument={initialDocument} />
+                  <AppRoutes />
+                </Suspense>
+              </RouteLoadErrorBoundary>
+            </DocumentInputProvider>
+          </AuthProvider>
+        </LocaleProvider>
       </BrowserRouter>
     </React.StrictMode>,
   );
 }
 
 // Keep the usable static document until its route is ready. Other routes stay lazy.
-const initialPreload = matchRoutes(routes, window.location)?.at(-1)?.route.preload;
+const initialLocalized = resolveLocalizedPath(window.location.pathname);
+const initialPath = initialLocalized?.path ?? normalizePath(window.location.pathname);
+const initialPreload = matchRoutes(routes, {
+  pathname: initialPath,
+  search: window.location.search,
+  hash: window.location.hash,
+})?.at(-1)?.route.preload;
 if (
   !import.meta.hot?.data.root &&
   document.getElementById("root")!.hasChildNodes() &&
@@ -203,7 +238,7 @@ if (
   // The homepage is already in the entry bundle, but its static reading state still needs handoff.
   const container = document.getElementById("root")!;
   const hasStaticHomepage =
-    !import.meta.hot?.data.root && window.location.pathname === "/" && container.hasChildNodes();
+    !import.meta.hot?.data.root && initialPath === "/" && container.hasChildNodes();
   if (hasStaticHomepage) {
     const stopInitialTracking = startInitialPageViewTracking();
     const mountHomepage = () => {

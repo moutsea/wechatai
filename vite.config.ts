@@ -53,6 +53,7 @@ export default defineConfig(({ command, isPreview }) => ({
                   test: /node_modules[\\/](?:react|react-dom|react-router|react-router-dom|scheduler|nanostores)[\\/]/,
                 },
                 { name: "auth", test: /node_modules[\\/](?:better-auth|@better-auth)[\\/]/ },
+                { name: "i18n", test: /src[\\/]shared[\\/]i18n[\\/]/ },
               ],
             },
           },

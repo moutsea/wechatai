@@ -37,10 +37,59 @@ test.beforeEach(async ({ page }) => {
         }[extname(filename)] ?? "application/octet-stream";
       return route.fulfill({ body, contentType });
     } catch {
-      return route.fulfill({ status: 404, body: "Not found" });
+      try {
+        const body = await readFile(new URL("404.html", assets));
+        return route.fulfill({ status: 404, body, contentType: "text/html" });
+      } catch {
+        return route.fulfill({ status: 404, body: "Not found" });
+      }
     }
   });
 });
+
+// Locale assertions are parameterized by path: the empty T1 registry keeps both
+// pages Chinese and publishes no switcher or hreflang.
+for (const expected of [
+  {
+    path: "/",
+    htmlLang: "zh-CN",
+    ogLocale: "zh_CN",
+    canonical: "https://wechatai.app/",
+  },
+  {
+    path: "/pricing",
+    htmlLang: "zh-CN",
+    ogLocale: "zh_CN",
+    canonical: "https://wechatai.app/pricing",
+  },
+]) {
+  test(`serves ${expected.path} with ${expected.htmlLang} metadata and no unpublished locale`, async ({
+    page,
+  }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}${expected.path}`);
+    await mounted;
+    await expect(page.locator("html")).toHaveAttribute("lang", expected.htmlLang);
+    await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute(
+      "content",
+      expected.ogLocale,
+    );
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", expected.canonical);
+    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+    await expect(page.locator(".site-language")).toHaveCount(0);
+  });
+}
+
+// An unregistered prefix must not fall back to the Chinese homepage or pricing page.
+for (const path of ["/en", "/en/pricing"]) {
+  test(`returns a real 404 for the unregistered locale path ${path}`, async ({ page }) => {
+    const response = await page.goto(`${origin}${path}`);
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole("heading", { name: "这个页面没有找到。" })).toBeVisible();
+    await expect(page.getByText("免费开始，按需升级 Plus")).toHaveCount(0);
+    await expect(page.locator(".site-language")).toHaveCount(0);
+  });
+}
 
 for (const width of [390, 1280]) {
   for (const path of ["/", "/#how"]) {
