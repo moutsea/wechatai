@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"regexp"
+	"sync/atomic"
 	"time"
 
 	"github.com/moutsea/wechatai/backend/internal/rpc"
@@ -79,35 +81,47 @@ func handler(signer *rpc.Signer, transport http.RoundTripper, store *receipts) h
 		}
 		req.Header.Set("Authorization", "Bearer "+input.WebhookKey)
 		req.Header.Set("Content-Type", "application/json")
-		prior, err := store.reserve(r.Context(), input.TaskID)
+		status, err := store.reserve(r.Context(), input.TaskID)
 		if err != nil {
+			status = http.StatusServiceUnavailable
+		} else if status == 0 {
+			status = sendRoutine(client, req)
+			if err := store.finish(context.WithoutCancel(r.Context()), input.TaskID, status); err != nil {
+				// Only advertise a retry after the reservation is durably released.
+				status = http.StatusAccepted
+			}
+		}
+		if status == http.StatusServiceUnavailable {
 			w.Header().Set("X-Wechatai-Grok-Wake", "not-sent")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		if prior != 0 {
-			w.WriteHeader(prior)
-			return
-		}
-		res, err := client.Do(req)
-		if err != nil {
-			w.WriteHeader(http.StatusAccepted)
-			return
-		}
-		defer res.Body.Close()
-		status := http.StatusUnprocessableEntity
-		switch {
-		case res.StatusCode == http.StatusOK:
-			status = http.StatusNoContent
-		case res.StatusCode == http.StatusTooManyRequests:
-			status = http.StatusTooManyRequests
-		case res.StatusCode >= 500 || res.StatusCode == http.StatusRequestTimeout:
-			status = http.StatusAccepted
-		}
-		if err := store.finish(context.WithoutCancel(r.Context()), input.TaskID, status); err != nil {
-			// The durable reservation still suppresses a duplicate.
-			status = http.StatusAccepted
 		}
 		w.WriteHeader(status)
+	}
+}
+
+func sendRoutine(client *http.Client, req *http.Request) int {
+	// A dial or TLS failure before GotConn cannot have delivered the POST.
+	// Once any connection was acquired, keep the reservation even on an error.
+	var gettingConn, gotConn atomic.Bool
+	trace := &httptrace.ClientTrace{
+		GetConn: func(string) { gettingConn.Store(true) },
+		GotConn: func(httptrace.GotConnInfo) { gotConn.Store(true) },
+	}
+	res, err := client.Do(req.WithContext(httptrace.WithClientTrace(req.Context(), trace)))
+	if err != nil {
+		if gettingConn.Load() && !gotConn.Load() {
+			return http.StatusServiceUnavailable
+		}
+		return http.StatusAccepted
+	}
+	defer res.Body.Close()
+	switch {
+	case res.StatusCode == http.StatusOK:
+		return http.StatusNoContent
+	case res.StatusCode == http.StatusTooManyRequests:
+		return http.StatusTooManyRequests
+	case res.StatusCode >= 500 || res.StatusCode == http.StatusRequestTimeout:
+		return http.StatusAccepted
+	default:
+		return http.StatusUnprocessableEntity
 	}
 }

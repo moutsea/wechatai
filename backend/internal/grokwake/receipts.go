@@ -50,8 +50,11 @@ func (s *receipts) reserve(ctx context.Context, task string) (prior int, err err
 }
 
 func (s *receipts) finish(ctx context.Context, task string, status int) error {
-	if status == http.StatusTooManyRequests {
-		// The provider explicitly declined this attempt. The account can retry.
+	switch status {
+	case http.StatusAccepted:
+		return nil // The reservation already covers an uncertain outcome.
+	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		// The Routine declined the attempt or the POST never left the transport.
 		_, err := s.db.ExecContext(ctx, "DELETE FROM wakes WHERE task=?", task)
 		return err
 	}

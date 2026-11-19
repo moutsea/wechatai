@@ -405,16 +405,21 @@ export class OpenClawRelay {
   }
   handle(pluginId: string, secret: string, action: string, raw: unknown) {
     const plugin = this.authenticate(pluginId, secret);
-    return this.handleTask(plugin, action, raw, true);
+    return this.handleTask(plugin, action, raw, { fromConnector: true });
   }
   markSeen(pluginId: string) {
     this.sql.exec("UPDATE claw_connectors SET lastSeen=? WHERE pluginId=?", Date.now(), pluginId);
   }
   // Internal callers already checked the plugin and task scope.
-  handleTask(plugin: RemoteAgentPlugin, action: string, raw: unknown, fromConnector = false) {
+  handleTask(
+    plugin: RemoteAgentPlugin,
+    action: string,
+    raw: unknown,
+    options: { fromConnector?: boolean; failureMessage?: string } = {},
+  ) {
     const pluginId = plugin.id;
     return this.storage.transactionSync(() => {
-      if (fromConnector) this.markSeen(pluginId);
+      if (options.fromConnector) this.markSeen(pluginId);
       if (action === "poll") {
         const { runnerId, waitMs, nativeCommands, lane } = pollSchema.parse(raw);
         // Expired jobs cannot execute later, but retain the tombstone for dedupe.
@@ -563,7 +568,8 @@ export class OpenClawRelay {
         job?.lane === "control" ? 256 : Infinity,
       );
       const text = failed
-        ? `${remoteAgentName(plugin.pluginId)} 未完成这次任务，本次未扣费。请检查 Agent 运行状态后重新发送；为避免重复执行工具，中断的任务不会自动重跑。`
+        ? (options.failureMessage ??
+          `${remoteAgentName(plugin.pluginId)} 未完成这次任务，本次未扣费。请检查 Agent 运行状态后重新发送；为避免重复执行工具，中断的任务不会自动重跑。`)
         : limitTextTokens(event.text.trim(), outputLimit);
       const truncated = !failed && text !== event.text.trim();
       // Platform guidance is displayed and recorded, but is not model output to bill.

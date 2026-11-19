@@ -2,8 +2,10 @@ package grokwake
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -92,6 +94,20 @@ func signedWake(t *testing.T, signer *rpc.Signer) *http.Request {
 	return req
 }
 
+func dispatchWithFreshStore(t *testing.T, path string, signer *rpc.Signer, transport http.RoundTripper) *httptest.ResponseRecorder {
+	t.Helper()
+	store, err := openReceipts(t.Context(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := httptest.NewRecorder()
+	handler(signer, transport, store)(out, signedWake(t, signer))
+	if err := store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
 func TestWakeReceiptAcrossRestart(t *testing.T) {
 	for _, tc := range []struct {
 		name                                 string
@@ -116,21 +132,72 @@ func TestWakeReceiptAcrossRestart(t *testing.T) {
 				return &http.Response{StatusCode: status, Body: http.NoBody}, nil
 			})
 			for _, want := range []int{tc.first, tc.replay} {
-				store, err := openReceipts(t.Context(), path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				out := httptest.NewRecorder()
-				handler(signer, transport, store)(out, signedWake(t, signer))
-				if err := store.db.Close(); err != nil {
-					t.Fatal(err)
-				}
+				out := dispatchWithFreshStore(t, path, signer, transport)
 				if out.Code != want {
 					t.Fatalf("dispatch status = %d, want %d", out.Code, want)
 				}
 			}
 			if calls != tc.calls {
 				t.Fatalf("provider calls = %d, want %d", calls, tc.calls)
+			}
+		})
+	}
+}
+
+func TestTransportFailureAcrossRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		first, retry int
+	}{
+		{"dial refused", 503, 204},
+		{"TLS verification failed", 503, 204},
+		{"response lost after POST", 202, 202},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var posts atomic.Int32
+			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				posts.Add(1)
+				if tc.name == "response lost after POST" {
+					conn, _, err := w.(http.Hijacker).Hijack()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					conn.Close()
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer upstream.Close()
+			offline := httptest.NewServer(nil)
+			offline.Close()
+			path := filepath.Join(t.TempDir(), "wakes.sqlite")
+			signer, _ := rpc.NewSigner("test-only-grok-dispatch-key-32-characters")
+			for i, want := range []int{tc.first, tc.retry, tc.retry} {
+				tr := upstream.Client().Transport.(*http.Transport).Clone()
+				peer := upstream.Listener.Addr().String()
+				tr.TLSClientConfig.ServerName = upstream.Listener.Addr().(*net.TCPAddr).IP.String()
+				if i == 0 && tc.name == "dial refused" {
+					peer = offline.Listener.Addr().String()
+				}
+				if i == 0 && tc.name == "TLS verification failed" {
+					tr.TLSClientConfig.ServerName = "wrong.example.test"
+				}
+				tr.DialContext = func(ctx context.Context, network, _ string) (net.Conn, error) {
+					return (&net.Dialer{}).DialContext(ctx, network, peer)
+				}
+				out := dispatchWithFreshStore(t, path, signer, tr)
+				tr.CloseIdleConnections()
+				wantHeader := ""
+				if want == http.StatusServiceUnavailable {
+					wantHeader = "not-sent"
+				}
+				if out.Code != want || out.Header().Get("X-Wechatai-Grok-Wake") != wantHeader {
+					t.Fatalf("attempt %d: status=%d header=%q, want %d", i+1, out.Code, out.Header().Get("X-Wechatai-Grok-Wake"), want)
+				}
+			}
+			if posts.Load() != 1 {
+				t.Fatalf("provider received %d POSTs, want 1", posts.Load())
 			}
 		})
 	}

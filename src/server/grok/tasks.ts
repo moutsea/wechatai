@@ -140,18 +140,22 @@ export class GrokTasks {
     plugin: GrokPlugin,
     row: Task,
     receipt: string,
-    status: "completed" | "failed",
+    outcome: "completed" | "failed" | "expired",
     text: string,
-    outcome: "completed" | "failed" | "expired" = status,
   ) {
-    const result = this.relay.handleTask(plugin, "event", {
-      eventId: row.ref,
-      jobId: row.jobId,
-      routeId: row.routeId,
-      runnerId: receipt,
-      status,
-      text,
-    });
+    const status = outcome === "completed" ? "completed" : "failed";
+    const failureMessage =
+      outcome === "expired"
+        ? row.state === "claimed"
+          ? "微伴等待 Grok Bot 回传结果超时，本次未扣平台 credits。原任务可能仍在运行，也可能已执行操作。请先到 Grok Bot 查看运行记录，再决定是否重发。"
+          : "这条任务到期前未被 Grok Bot 领取，本次未扣平台 credits。如仍需处理，可以重新发送。"
+        : undefined;
+    const result = this.relay.handleTask(
+      plugin,
+      "event",
+      { eventId: row.ref, jobId: row.jobId, routeId: row.routeId, runnerId: receipt, status, text },
+      { failureMessage },
+    );
     if (row.state === "claimed" || row.state === "pending") {
       this.db.exec(
         `UPDATE grok_tasks SET due=NULL,outcome=?,answerMessage=(SELECT MAX(m.id) FROM messages m
@@ -171,14 +175,7 @@ export class GrokTasks {
       const receipt = row.runnerId || crypto.randomUUID();
       if (row.state === "pending")
         this.relay.handleTask(plugin, "claim", { id: row.jobId, runnerId: receipt });
-      this.settle(
-        plugin,
-        row,
-        receipt,
-        "failed",
-        "",
-        row.expires <= Date.now() ? "expired" : "failed",
-      );
+      this.settle(plugin, row, receipt, row.expires <= Date.now() ? "expired" : "failed", "");
     });
   }
   async dispatchDue() {

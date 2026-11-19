@@ -865,7 +865,8 @@ export class PersonalAccount extends DurableObject<Env> {
         const plugin = this.claw.authenticate(pluginId, secret);
         if (plugin.pluginId !== "wechatai/grok")
           throw new AppError("plugin_type", "连接类型不匹配", 403);
-        this.claw.markSeen(pluginId);
+        // The Grok status shows whether this credential has ever connected.
+        if (!plugin.lastSeen) this.claw.markSeen(pluginId);
         if (action === "grok.claim") data = this.grok.claim(plugin, payload);
         else if (action === "grok.finish") data = this.grok.finish(plugin, payload);
         else if (action === "grok.auth") data = { ok: true };
