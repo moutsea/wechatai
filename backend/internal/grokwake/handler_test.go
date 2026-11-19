@@ -77,6 +77,10 @@ func TestSignedDispatch(t *testing.T) {
 			}
 			defer res.Body.Close()
 			body, _ := io.ReadAll(res.Body)
+			declined := tt.want == 422 || tt.want == 429
+			if (res.Header.Get("X-Wechatai-Grok-Receipt") == "declined") != declined {
+				t.Errorf("unexpected receipt for HTTP %d", res.StatusCode)
+			}
 			if res.StatusCode != tt.want || int(calls.Load()) != tt.calls || len(body) != 0 {
 				t.Fatalf("status=%d calls=%d", res.StatusCode, calls.Load())
 			}
@@ -192,6 +196,9 @@ func TestTransportFailureAcrossRestart(t *testing.T) {
 				if want == http.StatusServiceUnavailable {
 					wantHeader = "not-sent"
 				}
+				if (out.Header().Get("X-Wechatai-Grok-Receipt") == "declined") != (want == http.StatusServiceUnavailable) {
+					t.Fatalf("unexpected receipt for HTTP %d", out.Code)
+				}
 				if out.Code != want || out.Header().Get("X-Wechatai-Grok-Wake") != wantHeader {
 					t.Fatalf("attempt %d: status=%d header=%q, want %d", i+1, out.Code, out.Header().Get("X-Wechatai-Grok-Wake"), want)
 				}
@@ -248,7 +255,7 @@ func TestUnavailableReceiptsNeverSend(t *testing.T) {
 		t.Fatal("provider called without a durable reservation")
 		return nil, io.ErrUnexpectedEOF
 	}), store)(w, signedWake(t, signer))
-	if w.Code != http.StatusServiceUnavailable || w.Header().Get("X-Wechatai-Grok-Wake") != "not-sent" {
+	if w.Code != http.StatusServiceUnavailable || w.Header().Get("X-Wechatai-Grok-Wake") != "not-sent" || w.Header().Get("X-Wechatai-Grok-Receipt") != "" {
 		t.Fatalf("unavailable receipt store returned %d, %q", w.Code, w.Header().Get("X-Wechatai-Grok-Wake"))
 	}
 }

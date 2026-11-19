@@ -245,6 +245,9 @@ export class OpenClawRelay {
         `claw:${pluginId}:%`,
       );
     this.sql.exec("DELETE FROM claw_routes WHERE pluginId = ?", pluginId);
+    this.cancelPluginJobs(pluginId);
+  }
+  cancelPluginJobs(pluginId: string) {
     this.sql.exec(
       "UPDATE claw_jobs SET state = 'cancelled', text = '' WHERE pluginId = ? AND state IN ('pending','claimed')",
       pluginId,
@@ -415,7 +418,7 @@ export class OpenClawRelay {
     plugin: RemoteAgentPlugin,
     action: string,
     raw: unknown,
-    options: { fromConnector?: boolean; failureMessage?: string } = {},
+    options: { fromConnector?: boolean; failureMessage?: string; historyInputTokens?: number } = {},
   ) {
     const pluginId = plugin.id;
     return this.storage.transactionSync(() => {
@@ -485,8 +488,9 @@ export class OpenClawRelay {
         this.requireRoute(job.routeId);
         if (job.state === "claimed") return { claimed: false };
         this.sql.exec(
-          "UPDATE claw_jobs SET state = 'claimed', runnerId = ? WHERE id = ?",
+          "UPDATE claw_jobs SET state = 'claimed', runnerId = ?, inputTokens = inputTokens + ? WHERE id = ?",
           runnerId,
+          options.historyInputTokens ?? 0,
           id,
         );
         console.info(

@@ -1245,7 +1245,7 @@ export class PersonalAccount extends DurableObject<Env> {
       // Every save path must invalidate old work before a quick re-enable.
       if (!plugin.enabled) {
         this.stopCloudPlugin(plugin.id);
-        if (plugin.pluginId === "wechatai/grok") this.claw.clearRoutes(plugin.id, "preserve");
+        if (plugin.pluginId === "wechatai/grok") this.claw.cancelPluginJobs(plugin.id);
       }
     });
   }
@@ -3173,8 +3173,8 @@ export class PersonalAccount extends DurableObject<Env> {
         data = await this.savePlugin(typeof p.id === "string" ? p.id : undefined, p);
       else if (action === "plugin.delete") {
         this.busy();
-        this.plugin(String(p.id));
-        this.claw.revoke(String(p.id), "discard");
+        const plugin = this.plugin(String(p.id));
+        this.claw.revoke(plugin.id, plugin.pluginId === "wechatai/grok" ? "preserve" : "discard");
         this.notifications.revoke(String(p.id));
         this.personalRuns.cancelPlugin(String(p.id));
         this.personalRecords.deletePlugin(String(p.id));

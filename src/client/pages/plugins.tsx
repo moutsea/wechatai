@@ -741,7 +741,9 @@ export function Plugins() {
           description={
             deleting.pluginId === "wechatai/personal-assistant"
               ? "将永久删除这份助理的全部笔记、账目和提醒，并取消提醒。已有聊天记录保留。建议先导出需要保留的数据。"
-              : "将删除插件配置，已有会话记录保留，但无法继续调用此插件。"
+              : deleting.pluginId === "wechatai/grok"
+                ? "删除后会撤销 MCP 凭据并关闭未完成的任务。已结算的回复会继续发往原微信，已有聊天记录保留。"
+                : "将删除插件配置，已有会话记录保留，但无法继续调用此插件。"
           }
           onClose={() => {
             if (!busy) setDeleting(null);

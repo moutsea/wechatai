@@ -1,10 +1,11 @@
-import { env, SELF, runInDurableObject } from "cloudflare:test";
+import { abortAllDurableObjects, env, SELF, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { createHash, createHmac } from "node:crypto";
 import routes from "../migrations/0019_account_backend_routes.sql?raw";
-import type { PersonalAccount } from "../src/server/personal-account";
 import type { WxMessage } from "../src/server/wechat";
 import { readGrokHistory } from "../src/server/grok/history";
+import { countTextTokens } from "../src/server/tokenizer";
+import { creditUnits } from "../src/server/wallet";
 import type { GrokTasks } from "../src/server/grok/tasks";
 import {
   connectForManualDelivery,
@@ -15,18 +16,18 @@ import {
 const endpoint = "https://wechatai.app/api/grok/mcp";
 const webhookUrl = "https://api2.cursor.sh/automations/webhook/test-routine";
 const webhookKey = "test-routine-secret";
-const stubs: DurableObjectStub<PersonalAccount>[] = [];
+const accounts: DurableObjectId[] = [];
 beforeAll(async () => {
   for (const sql of routes.split(";").filter((s) => s.trim())) await env.DB.prepare(sql).run();
 });
 afterEach(async () => {
-  for (const stub of stubs.splice(0))
-    await runInDurableObject(stub, (_, s) => s.storage.deleteAlarm());
+  for (const id of accounts.splice(0))
+    await runInDurableObject(env.ACCOUNTS.get(id), (_, s) => s.storage.deleteAlarm());
   vi.restoreAllMocks();
 });
 async function setup() {
-  const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
-  stubs.push(stub);
+  let stub = env.ACCOUNTS.getByName(crypto.randomUUID());
+  accounts.push(stub.id);
   await runInDurableObject(stub, (_, s) => useManualAlarms(s));
   const api = async (action: string, input: unknown = {}) =>
     JSON.parse(await stub.api(action, input));
@@ -60,8 +61,8 @@ async function setup() {
       },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     });
-  const tool = async (name: string, args: unknown) => {
-    const res = await rpc("tools/call", { name, arguments: args });
+  const tool = async (name: string, args: unknown, auth = token) => {
+    const res = await rpc("tools/call", { name, arguments: args }, auth);
     expect(res.status).toBe(200);
     const reply = await res.json<{ result: { content: { text: string }[]; isError?: boolean } }>();
     if (reply.result.isError) throw Error(reply.result.content[0].text);
@@ -110,7 +111,24 @@ async function setup() {
       }
       return taskId;
     });
-  return { stub, api, id, rpc, tool, send, wake, token };
+  const restart = async () => {
+    await abortAllDurableObjects();
+    stub = env.ACCOUNTS.get(stub.id);
+    await runInDurableObject(stub, (_, s) => useManualAlarms(s));
+  };
+  return {
+    get stub() {
+      return stub;
+    },
+    api,
+    id,
+    rpc,
+    tool,
+    send,
+    wake,
+    token,
+    restart,
+  };
 }
 it("runs a text round trip, reuses only the route history, and settles one result once", async () => {
   const c = await setup();
@@ -142,17 +160,74 @@ it("runs a text round trip, reuses only the route history, and settles one resul
   expect((await deliverQueuedReplies(c.stub)).map((x) => x.text)).toContain(input.text);
   await c.send("展开第二条");
   const next = await c.wake();
-  expect(await c.tool("wechatai_claim", { taskId: next })).toMatchObject({
+  const followUp = await c.tool("wechatai_claim", { taskId: next });
+  expect(followUp).toMatchObject({
     text: "展开第二条",
     history: [
       { role: "user", text: "列两条计划" },
       { role: "assistant", text: input.text },
     ],
   });
+  const billedInput = [a.text, input.text, followUp.text].reduce(
+    (n, text) => n + countTextTokens(text),
+    0,
+  );
+  const reply = await c.tool("wechatai_finish", {
+    taskId: next,
+    receipt: followUp.receipt,
+    status: "completed",
+    text: "好",
+  });
+  expect(reply.cost).toBe(creditUnits(billedInput, countTextTokens("好")) / 1000);
+  await runInDurableObject(c.stub, (_, s) => {
+    expect(
+      s.storage.sql
+        .exec("SELECT inputTokens FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 1")
+        .one().inputTokens,
+    ).toBe(billedInput);
+    expect(s.storage.sql.exec("SELECT tokens FROM usage WHERE id=?", reply.id).one().tokens).toBe(
+      billedInput + countTextTokens("好"),
+    );
+  });
   expect((await c.rpc("tools/list", {}, "bad")).status).toBe(401);
   await c.api("plugin.grokRevoke", { id: c.id });
   expect((await c.rpc("tools/list")).status).toBe(401);
 });
+it("keeps platform truncation notices in WeChat and bills only the accepted history text", async () => {
+  const c = await setup();
+  expect((await c.api("plugin.save", { id: c.id, maxOutputTokens: 256 })).ok).toBe(true);
+  await c.send("/use grok");
+  await c.send("写一篇长文");
+  const taskId = await c.wake();
+  const { receipt } = await c.tool("wechatai_claim", { taskId });
+  const text = " 好".repeat(800).trim();
+  const settled = await c.tool("wechatai_finish", { taskId, receipt, status: "completed", text });
+  expect(settled.truncated).toBe(true);
+  const [delivery] = await deliverQueuedReplies(c.stub);
+  expect(delivery.text).toContain("此提示不计 credits。");
+  const accepted = delivery.text.split("\n\n")[1];
+  expect(accepted.length).toBeGreaterThan(0);
+  await c.send("继续");
+  const ref = await c.wake();
+  const next = await c.tool("wechatai_claim", { taskId: ref });
+  expect(next.history).toEqual([
+    { role: "user", text: "写一篇长文" },
+    { role: "assistant", text: accepted, truncated: true },
+  ]);
+  const answer = await c.tool("wechatai_finish", {
+    taskId: ref,
+    receipt: next.receipt,
+    status: "completed",
+    text: "好",
+  });
+  expect(answer.cost).toBe(
+    creditUnits(
+      countTextTokens("写一篇长文") + countTextTokens(accepted) + countTextTokens("继续"),
+      countTextTokens("好"),
+    ) / 1000,
+  );
+});
+
 it("records just the first authenticated MCP contact for each credential", async () => {
   const c = await setup();
   await runInDurableObject(c.stub, (_, s) => {
@@ -330,14 +405,51 @@ it("revokes the original token and pending work on rebinding and honors an accou
   expect((await c.rpc("tools/list", {}, token)).status).toBe(503);
 });
 
+it.each(["rotate", "rebind"])(
+  "starts a fresh Grok history for a new credential after %s",
+  async (operation) => {
+    const c = await setup();
+    await c.send("/use grok");
+    await c.send("旧凭据的任务");
+    const taskId = await c.wake();
+    const { receipt } = await c.tool("wechatai_claim", { taskId });
+    await c.tool("wechatai_finish", { taskId, receipt, status: "completed", text: "旧回答" });
+    const session = (await c.stub.snapshot()).currentSession?.id;
+    if (operation === "rebind")
+      expect((await c.api("plugin.save", { id: c.id, webhookUrl, webhookKey })).ok).toBe(true);
+    const {
+      data: { token },
+    } = await c.api("plugin.grokToken", { id: c.id });
+    expect((await c.rpc("ping")).status).toBe(401);
+    await c.send("重新开始");
+    expect((await c.stub.snapshot()).currentSession?.id).toBe(session);
+    expect(await c.tool("wechatai_claim", { taskId: await c.wake() }, token)).toMatchObject({
+      text: "重新开始",
+      history: [],
+    });
+  },
+);
+
 it("dispatches through the normal account alarm and cancels outstanding work across disable and re-enable", async () => {
   const c = await setup();
   await connectForManualDelivery(c.stub);
-  await c.send("@grok 一条待取消任务");
+  await c.send("/use grok");
+  await c.send("已有问题");
+  const first = await c.wake();
+  const { receipt } = await c.tool("wechatai_claim", { taskId: first });
+  await c.tool("wechatai_finish", {
+    taskId: first,
+    receipt,
+    status: "completed",
+    text: "已有回答",
+  });
+  await deliverQueuedReplies(c.stub);
+  await c.send("一条待取消任务");
   const taskId = await c.wake(204, true);
   expect(taskId).toBeTruthy();
   const claimed = await c.tool("wechatai_claim", { taskId });
   expect(claimed.claimed).toBe(true);
+  await c.send("排队中的任务");
   expect((await c.api("plugin.save", { id: c.id, enabled: false })).ok).toBe(true);
   expect((await c.api("plugin.save", { id: c.id, enabled: true })).ok).toBe(true);
   await expect(
@@ -350,6 +462,14 @@ it("dispatches through the normal account alarm and cancels outstanding work acr
   ).rejects.toThrow();
   expect(await c.tool("wechatai_claim", { taskId })).toEqual({ claimed: false });
   expect(await c.wake()).toBe("");
+  await c.send("继续");
+  expect(await c.tool("wechatai_claim", { taskId: await c.wake() })).toMatchObject({
+    text: "继续",
+    history: [
+      { role: "user", text: "已有问题" },
+      { role: "assistant", text: "已有回答" },
+    ],
+  });
 });
 
 it.each([
@@ -384,24 +504,62 @@ it.each([
   },
 );
 
-it("resumes a partially delivered Grok reply at the next part after disabling and re-enabling", async () => {
-  const c = await setup();
-  await c.send("/use grok");
-  await c.send("回复一篇长文");
-  const taskId = await c.wake();
-  const { receipt } = await c.tool("wechatai_claim", { taskId });
-  const first = "a".repeat(1500);
-  const result = await c.tool("wechatai_finish", {
-    taskId,
-    receipt,
-    status: "completed",
-    text: first + "第二段",
-  });
-  expect(await deliverQueuedReplies(c.stub)).toEqual([{ id: result.id + ":0", text: first }]);
-  expect((await c.api("plugin.save", { id: c.id, enabled: false })).ok).toBe(true);
-  expect((await c.api("plugin.save", { id: c.id, enabled: true })).ok).toBe(true);
-  expect(await deliverQueuedReplies(c.stub, 2)).toEqual([{ id: result.id + ":1", text: "第二段" }]);
-});
+it.each(["disable", "delete"])(
+  "resumes a partially delivered Grok reply at the next part after %s",
+  async (operation) => {
+    const c = await setup();
+    await c.send("/use grok");
+    await c.send("回复一篇长文");
+    const taskId = await c.wake();
+    const { receipt } = await c.tool("wechatai_claim", { taskId });
+    const first = "a".repeat(1500);
+    const result = await c.tool("wechatai_finish", {
+      taskId,
+      receipt,
+      status: "completed",
+      text: first + "第二段",
+    });
+    expect(await deliverQueuedReplies(c.stub)).toEqual([{ id: result.id + ":0", text: first }]);
+    const balance = (await c.stub.snapshot()).wallet.balance;
+    await c.send("在途任务");
+    const pending = await c.wake();
+    const live = await c.tool("wechatai_claim", { taskId: pending });
+    if (operation === "delete") {
+      expect((await c.api("plugin.delete", { id: c.id })).ok).toBe(true);
+      await runInDurableObject(c.stub, (_, s) => {
+        expect(
+          s.storage.sql.exec("SELECT 1 FROM claw_connectors WHERE pluginId=?", c.id).toArray(),
+        ).toEqual([]);
+        expect(
+          s.storage.sql
+            .exec(
+              "SELECT j.state FROM claw_jobs j JOIN grok_tasks t ON t.jobId=j.id WHERE ref=?",
+              pending,
+            )
+            .one().state,
+        ).toBe("cancelled");
+        expect(
+          s.storage.sql.exec("SELECT content FROM messages WHERE role='assistant'").one().content,
+        ).toBe(first + "第二段");
+      });
+    } else {
+      expect((await c.api("plugin.save", { id: c.id, enabled: false })).ok).toBe(true);
+      expect((await c.api("plugin.save", { id: c.id, enabled: true })).ok).toBe(true);
+    }
+    await expect(
+      c.tool("wechatai_finish", {
+        taskId: pending,
+        receipt: live.receipt,
+        status: "completed",
+        text: "旧回复",
+      }),
+    ).rejects.toThrow();
+    expect(await deliverQueuedReplies(c.stub, 2)).toEqual([
+      { id: result.id + ":1", text: "第二段" },
+    ]);
+    expect((await c.stub.snapshot()).wallet.balance).toBe(balance);
+  },
+);
 
 it.each([false, true])(
   "respects history clearing for a parked Grok reply after token rotation (clear=%s)",
@@ -484,7 +642,7 @@ it("remembers an unsuccessful request as failed only within its conversation unt
   });
 });
 
-it.each(["lost", 202, 504] as const)(
+it.each(["lost", 202, 504, 521] as const)(
   "waits for the original claim after an uncertain wake (%s)",
   async (status) => {
     const c = await setup();
@@ -495,7 +653,8 @@ it.each(["lost", 202, 504] as const)(
       const timing = s.storage.sql
         .exec("SELECT due,expires,attempts FROM grok_tasks WHERE ref=?", ref)
         .one();
-      expect(timing.due).toBe(timing.expires);
+      if (status === 202) expect(timing.due).toBe(timing.expires);
+      else expect(timing.due).toBeLessThan(Number(timing.expires));
       expect(timing.attempts).toBe(1);
     });
     expect(await c.wake()).toBe("");
@@ -564,7 +723,8 @@ it.each([3100, 31000])(
       c.tool("wechatai_finish", { ...input, status: "completed", text: "迟到的结果" }),
     ).rejects.toThrow("已按失败结算");
     await c.send("按原要求再来一次");
-    const next = await c.tool("wechatai_claim", { taskId: await c.wake() });
+    const nextId = await c.wake();
+    const next = await c.tool("wechatai_claim", { taskId: nextId });
     expect(next.history).toEqual([
       {
         role: "user",
@@ -573,6 +733,13 @@ it.each([3100, 31000])(
         ...(size > 30000 ? { truncated: true } : {}),
       },
     ]);
+    const billedInput = countTextTokens(next.text) + countTextTokens(text.slice(0, 30000));
+    const before = (await c.stub.snapshot()).wallet.balance;
+    const finish = { taskId: nextId, receipt: next.receipt, status: "completed", text: "好" };
+    const settled = await c.tool("wechatai_finish", finish);
+    expect(settled.cost).toBe(creditUnits(billedInput, countTextTokens("好")) / 1000);
+    expect(await c.tool("wechatai_finish", finish)).toEqual(settled);
+    expect((await c.stub.snapshot()).wallet.balance).toBeCloseTo(before - settled.cost, 3);
   },
 );
 
@@ -612,7 +779,7 @@ it("keeps newer successful turns before spending the remaining history budget on
     { role: "user", text: question },
     { role: "assistant", text: answer },
   ]);
-});
+}, 30_000);
 
 it("reads a bounded number of real SQLite rows at 10, 100 and 1000 turns", async () => {
   const c = await setup();
@@ -701,7 +868,7 @@ it.each([1, 3])(
   },
 );
 
-it("retries a dispatcher failure only when the dispatcher confirms that nothing was sent", async () => {
+it("keeps confirmed unsent wakes closed and allows a claim during an uncertain replay", async () => {
   const c = await setup();
   await c.send("@grok 明确未发送后重试");
   const ref = await c.wake(503, false, { "X-Wechatai-Grok-Wake": "not-sent" });
@@ -712,6 +879,81 @@ it("retries a dispatcher failure only when the dispatcher confirms that nothing 
   expect(await c.wake(503)).toBe(ref);
   expect(await c.wake()).toBe("");
   expect(await c.tool("wechatai_claim", { taskId: ref })).toMatchObject({ claimed: true });
+});
+
+it.each([204, 503] as const)(
+  "reconciles the same task after a Worker restart and preserves the original claim (last HTTP %i)",
+  async (lastStatus) => {
+    const c = await setup();
+    await c.send("/use grok");
+    await c.send("第一条");
+    await c.send("第二条");
+    const before = (await c.stub.snapshot()).wallet.balance;
+    const start = Date.now();
+    const ref = await c.wake("lost");
+    expect(ref).toBeTruthy();
+    await c.restart();
+    for (const [attempt, status] of [
+      [1, 521],
+      [2, lastStatus],
+    ] as const) {
+      await runInDurableObject(c.stub, (instance, s) => {
+        const task = s.storage.sql
+          .exec<{ attempts: number; due: number; expires: number }>(
+            "SELECT attempts,due,expires FROM grok_tasks WHERE ref=?",
+            ref,
+          )
+          .one();
+        expect(task.attempts).toBe(attempt);
+        expect(task.due).toBeGreaterThanOrEqual(start + attempt * 60_000);
+        expect(task.due).toBeLessThan(task.expires);
+        expect((instance as unknown as { grok: GrokTasks }).grok.nextAt()).toBe(task.due);
+        s.storage.sql.exec("UPDATE grok_tasks SET due=0 WHERE ref=?", ref);
+      });
+      expect(await c.wake(status, false, { "X-Wechatai-Grok-Wake": "not-sent" })).toBe(ref);
+    }
+    expect(await c.wake()).toBe("");
+    await runInDurableObject(c.stub, (_, s) => {
+      expect(
+        s.storage.sql
+          .exec("SELECT attempts,due=expires AS waiting FROM grok_tasks WHERE ref=?", ref)
+          .one(),
+      ).toEqual({ attempts: 3, waiting: 1 });
+    });
+    const { receipt } = await c.tool("wechatai_claim", { taskId: ref });
+    const finish = { taskId: ref, receipt, status: "completed", text: "已处理" };
+    const paid = await c.tool("wechatai_finish", finish);
+    expect(await c.tool("wechatai_finish", finish)).toEqual(paid);
+    expect((await c.stub.snapshot()).wallet.balance).toBeCloseTo(before - paid.cost, 3);
+    expect(await c.tool("wechatai_claim", { taskId: await c.wake() })).toMatchObject({
+      text: "第二条",
+      history: [
+        { role: "user", text: "第一条" },
+        { role: "assistant", text: "已处理" },
+      ],
+    });
+  },
+);
+
+it("closes an uncertain wake when Go's receipt confirms the Routine declined it", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  await c.send("被拒任务");
+  await c.send("下一条");
+  const ref = await c.wake(504);
+  const before = (await c.stub.snapshot()).wallet.balance;
+  for (const status of [429, 422]) {
+    await runInDurableObject(c.stub, (_, s) =>
+      s.storage.sql.exec("UPDATE grok_tasks SET due=0 WHERE ref=?", ref),
+    );
+    expect(await c.wake(status, false, { "X-Wechatai-Grok-Receipt": "declined" })).toBe(ref);
+    expect(await c.tool("wechatai_claim", { taskId: ref })).toEqual({ claimed: false });
+  }
+  expect(await c.wake()).toBe("");
+  expect((await c.stub.snapshot()).wallet.balance).toBe(before);
+  expect(await c.tool("wechatai_claim", { taskId: await c.wake() })).toMatchObject({
+    text: "下一条",
+  });
 });
 
 it("releases the route without charging after three confirmed unsent attempts", async () => {

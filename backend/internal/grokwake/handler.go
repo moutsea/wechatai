@@ -91,6 +91,10 @@ func handler(signer *rpc.Signer, transport http.RoundTripper, store *receipts) h
 				status = http.StatusAccepted
 			}
 		}
+		// Only the receipt store can rule out an earlier accepted POST for this ID.
+		if err == nil && (status == http.StatusTooManyRequests || status == http.StatusUnprocessableEntity || status == http.StatusServiceUnavailable) {
+			w.Header().Set("X-Wechatai-Grok-Receipt", "declined")
+		}
 		if status == http.StatusServiceUnavailable {
 			w.Header().Set("X-Wechatai-Grok-Wake", "not-sent")
 		}

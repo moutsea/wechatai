@@ -1,16 +1,28 @@
 // Bound the ordered turn lookup before expanding each turn into one or two
 // messages. Text is read from the owning conversation so clearing it takes effect.
 const recentMessages = `WITH recent AS MATERIALIZED (
-  SELECT userMessage,answerMessage,outcome FROM grok_tasks
+  SELECT ref,jobId,userMessage,answerMessage,outcome FROM grok_tasks
   WHERE routeId=? AND userMessage<? AND outcome IS NOT NULL
-  ORDER BY userMessage DESC LIMIT 10)
-  SELECT m.id,m.role,substr(m.content,1,3001) AS text,r.outcome
-  FROM recent r JOIN messages m ON m.id IN (r.userMessage,r.answerMessage)
-  ORDER BY r.userMessage DESC,m.id DESC LIMIT 10`;
+  ORDER BY userMessage DESC LIMIT 10),
+  transcript AS (
+    SELECT m.id,m.role,m.content,r.userMessage,r.outcome,
+      CASE WHEN m.id=r.answerMessage AND m.content LIKE '【回复已截断】%' AND EXISTS (
+        SELECT 1 FROM claw_jobs j JOIN claw_events e ON e.id=j.pluginId || ':' || r.ref
+        WHERE j.id=r.jobId AND json_extract(e.receipt,'$.truncated')=1
+      ) THEN instr(m.content,char(10)||char(10))+2 ELSE 1 END AS bodyStart
+    FROM recent r JOIN messages m ON m.id IN (r.userMessage,r.answerMessage))
+  SELECT id,role,substr(content,bodyStart,3001) AS text,bodyStart>1 AS outputTruncated,outcome
+  FROM transcript ORDER BY userMessage DESC,id DESC LIMIT 10`;
 
 const historyBudget = 30_000;
 type Outcome = "completed" | "failed" | "expired";
-type Message = { id: number; role: string; text: string; outcome: Outcome };
+type Message = {
+  id: number;
+  role: string;
+  text: string;
+  outcome: Outcome;
+  outputTruncated: number;
+};
 type HistoryEntry = {
   role: string;
   text: string;
@@ -43,7 +55,7 @@ export function readGrokHistory(sql: SqlStorage, routeId: string, before: number
       role: row.role,
       text: chars.slice(0, limit).join(""),
       ...(row.outcome !== "completed" ? { taskStatus: row.outcome } : {}),
-      ...(chars.length > limit ? { truncated: true } : {}),
+      ...(chars.length > limit || row.outputTruncated ? { truncated: true } : {}),
     });
     remaining -= Math.min(chars.length, limit);
   }

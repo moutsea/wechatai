@@ -59,19 +59,26 @@ export async function prepareGrokWake(env: Env, sealed: string, binding: string,
   );
 }
 
-export async function sendGrokWake(request: Request) {
+export type GrokWakeResult = {
+  status: "waiting" | "reconcile" | "retry" | "rejected";
+  receiptDeclined?: boolean;
+};
+export async function sendGrokWake(request: Request): Promise<GrokWakeResult> {
   let response: Response;
   try {
     response = await fetch(request);
   } catch {
-    return "waiting";
+    return { status: "reconcile" };
   }
   await response.body?.cancel().catch(() => {});
+  if (response.status === 202 || response.status === 204) return { status: "waiting" };
+  const receiptDeclined = response.headers.get("X-Wechatai-Grok-Receipt") === "declined";
   if (
     response.status === 429 ||
     (response.status === 503 && response.headers.get("X-Wechatai-Grok-Wake") === "not-sent")
   )
-    return "retry";
-  if (response.status >= 400 && response.status < 500 && response.status !== 408) return "rejected";
-  return "waiting";
+    return { status: "retry", receiptDeclined };
+  if (response.status >= 400 && response.status < 500 && response.status !== 408)
+    return { status: "rejected", receiptDeclined };
+  return { status: "reconcile" };
 }

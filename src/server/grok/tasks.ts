@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type { GrokPlugin } from "../../shared/grok-bot";
 import type { OpenClawRelay } from "../openclaw-relay";
-import { sendGrokWake } from "./dispatch";
+import { sendGrokWake, type GrokWakeResult } from "./dispatch";
 import { initGrokTasks } from "./schema";
 import { readGrokHistory } from "./history";
+import { countTextTokens } from "../tokenizer";
 import { AppError } from "../config";
 
 const lifetime = 45 * 60_000;
@@ -29,6 +30,7 @@ type Task = {
   outcome: string | null;
   outputLimit: number;
   attempts: number;
+  claimable: number;
   due: number;
   expires: number;
 };
@@ -37,7 +39,7 @@ const active = "j.state IN ('pending','claimed') AND t.due IS NOT NULL";
 const firstOnRoute = `NOT EXISTS (SELECT 1 FROM grok_tasks earlier
   WHERE earlier.routeId=t.routeId AND earlier.userMessage<t.userMessage AND earlier.due IS NOT NULL)`;
 const fields =
-  "t.ref,t.jobId,j.routeId,j.pluginId,j.state,j.runnerId,j.outputLimit,t.userMessage,t.attempts,t.due,t.expires,t.outcome";
+  "t.ref,t.jobId,j.routeId,j.pluginId,j.state,j.runnerId,j.outputLimit,t.userMessage,t.attempts,t.claimable,t.due,t.expires,t.outcome";
 
 export class GrokTasks {
   // Start unknown after a restart. Once SQLite confirms an empty queue, unrelated
@@ -94,20 +96,25 @@ export class GrokTasks {
     const { taskId } = claimArgs.parse(raw);
     return this.storage.transactionSync(() => {
       const row = this.row(plugin.id, taskId);
-      if (
-        row.state !== "pending" ||
-        row.expires <= Date.now() ||
-        row.due !== row.expires ||
-        !row.attempts
-      )
+      if (row.state !== "pending" || row.expires <= Date.now() || !row.claimable)
         return { claimed: false };
+      const history = readGrokHistory(this.db, row.routeId, row.userMessage);
       const receipt = crypto.randomUUID();
-      this.relay.handleTask(plugin, "claim", { id: row.jobId, runnerId: receipt });
+      this.relay.handleTask(
+        plugin,
+        "claim",
+        { id: row.jobId, runnerId: receipt },
+        {
+          historyInputTokens: history.reduce((sum, entry) => sum + countTextTokens(entry.text), 0),
+        },
+      );
+      if (row.due !== row.expires)
+        this.db.exec("UPDATE grok_tasks SET due=expires WHERE ref=?", row.ref);
       return {
         claimed: true,
         receipt,
         text: row.text,
-        history: readGrokHistory(this.db, row.routeId, row.userMessage),
+        history,
         maxOutputTokens: Math.min(plugin.maxOutputTokens, row.outputLimit),
       };
     });
@@ -197,6 +204,47 @@ export class GrokTasks {
       connectionId,
     );
   }
+  private reserveWake(row: Task, attempt: number, retryAt: number) {
+    // Leave a retry scheduled before sending. A fresh Worker can reconcile with
+    // Go's receipt store even if the original Worker never recorded the response.
+    return (
+      this.db
+        .exec(
+          `UPDATE grok_tasks SET due=?,claimable=1,attempts=?
+       WHERE ref=? AND attempts=? AND due=? AND EXISTS (
+         SELECT 1 FROM claw_jobs WHERE id=grok_tasks.jobId AND state='pending') RETURNING ref`,
+          retryAt,
+          attempt,
+          row.ref,
+          row.attempts,
+          row.due,
+        )
+        .toArray().length > 0
+    );
+  }
+  private recordWake(
+    row: Task,
+    attempt: number,
+    retryAt: number,
+    { status, receiptDeclined }: GrokWakeResult,
+  ) {
+    if (status === "reconcile") return;
+    const attempts = status === "rejected" ? maxWakeAttempts : attempt;
+    // Proxy errors and an unavailable store cannot speak for an earlier send.
+    const claimable = Number(status === "waiting" || (row.claimable && !receiptDeclined));
+    let due = retryAt;
+    if (status === "waiting") due = row.expires;
+    else if (attempts >= maxWakeAttempts) due = claimable ? row.expires : Date.now();
+    this.db.exec(
+      `UPDATE grok_tasks SET due=?,claimable=?,attempts=? WHERE ref=? AND attempts=?
+       AND EXISTS (SELECT 1 FROM claw_jobs WHERE id=grok_tasks.jobId AND state='pending')`,
+      due,
+      claimable,
+      attempts,
+      row.ref,
+      attempt,
+    );
+  }
   private async wake(row: Task) {
     try {
       if (row.expires <= Date.now() || row.attempts >= maxWakeAttempts) {
@@ -210,41 +258,27 @@ export class GrokTasks {
         // No request left the Worker. Re-read after async preparation so a
         // concurrent cancellation or settlement cannot be overwritten.
         const current = this.row(row.pluginId, row.ref);
-        if (current.state === "pending") this.fail(current);
+        if (
+          current.state === "pending" &&
+          current.attempts === row.attempts &&
+          current.due === row.due
+        ) {
+          if (current.claimable)
+            this.db.exec("UPDATE grok_tasks SET due=expires WHERE ref=?", row.ref);
+          else this.fail(current);
+        }
         return;
       }
       // Key decryption and signing yield. Check the route and reservation again
       // immediately before fetch so a disconnect or credential change wins.
       this.relay.requireRoute(row.routeId);
-      if (row.expires <= Date.now()) return;
-      const reserved = this.db
-        .exec(
-          `UPDATE grok_tasks SET due=expires,attempts=attempts+1
-        WHERE ref=? AND due=? AND attempts=? AND EXISTS (
-          SELECT 1 FROM claw_jobs WHERE id=grok_tasks.jobId AND state='pending') RETURNING ref`,
-          row.ref,
-          row.due,
-          row.attempts,
-        )
-        .toArray();
-      if (!reserved.length) return;
-      // Persist the deadline before sending. After a lost response or a restart
-      // the Bot can still claim the task, without starting another Routine.
-      const disposition = await sendGrokWake(request);
-      if (disposition === "waiting") return;
-      const attempts = disposition === "retry" ? row.attempts + 1 : maxWakeAttempts;
-      const next =
-        attempts >= maxWakeAttempts
-          ? Date.now()
-          : Math.min(row.expires, Date.now() + 60_000 * attempts);
-      this.db.exec(
-        `UPDATE grok_tasks SET due=?,attempts=? WHERE ref=? AND attempts=? AND due=expires
-        AND EXISTS (SELECT 1 FROM claw_jobs WHERE id=grok_tasks.jobId AND state='pending')`,
-        next,
-        attempts,
-        row.ref,
-        row.attempts + 1,
-      );
+      const now = Date.now();
+      if (row.expires <= now) return;
+      const attempt = row.attempts + 1;
+      const retryAt =
+        attempt < maxWakeAttempts ? Math.min(row.expires, now + 60_000 * attempt) : row.expires;
+      if (this.reserveWake(row, attempt, retryAt))
+        this.recordWake(row, attempt, retryAt, await sendGrokWake(request));
     } catch (error) {
       if (!(error instanceof AppError)) throw error;
       this.db.exec(

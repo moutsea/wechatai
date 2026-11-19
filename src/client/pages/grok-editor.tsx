@@ -142,6 +142,10 @@ export function GrokEditor({
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           启用此配置
         </label>
+        <p>
+          成功回复按本条消息、随任务发送的历史文字和平台保留的最终回复计收平台
+          credits。失败或超时不扣费。
+        </p>
         <button className="button" disabled={busy}>
           保存配置
         </button>
