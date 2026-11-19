@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/server/index";
 import { protocolIndex, protocolJsonSchema } from "../src/server/plugin-docs";
 import {
+  LLMS_FULL_PATH,
   PLUGIN_API_PATH,
   PLUGIN_MARKDOWN_PATH,
   PLUGIN_SCHEMA_PATH,
@@ -14,7 +15,11 @@ import {
   protocolMarkdown,
   protocolSections,
 } from "../src/shared/plugin-docs";
+import { llmsFullText } from "../src/shared/llms-docs";
 import { PLUGIN_PROTOCOL_VERSION, pluginResultSchema } from "../src/shared/plugins";
+import { SEO_PAGES } from "../src/shared/seo-pages";
+import { DOC_ARTICLES, docPath } from "../src/shared/docs";
+import { SITE_URL } from "../src/shared/seo";
 
 const request = (path: string, init?: RequestInit, bindings: Env = env) =>
   worker.fetch(
@@ -58,8 +63,63 @@ describe("public plugin developer resources", () => {
     expect(protocolSections.map((s) => s.id)).toContain("quickstart");
   });
 
+  it.each(["/llms.txt", LLMS_FULL_PATH])(
+    "explains the connection prerequisites in %s",
+    async (path) => {
+      const response = await request(path, undefined, {} as Env);
+      const facts = (await response.text()).split("## 产品事实")[1].split("\n## ")[0];
+      expect(facts).toMatch(/^- 绑定微信：.*二维码.*\/wx help/m);
+      expect(facts).toMatch(/^- 普通模型聊天：.*API Key.*测试连接.*计费/m);
+      expect(facts).toMatch(/^- 已有 Agent：.*Muse.*OpenClaw.*Hermes.*无需在微伴另配模型/m);
+      expect(facts).toMatch(/^- 只收通知：.*Token.*无需模型 API Key/m);
+    },
+  );
+
+  it("serves the full index with every landing page, document summary and protocol entry", async () => {
+    const discovery = await request("/llms.txt", undefined, {} as Env);
+    expect(await discovery.text()).toContain(protocolLinks.fullDiscovery);
+    const response = await request(LLMS_FULL_PATH, undefined, {} as Env);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    const text = await response.text();
+    expect(text).toBe(llmsFullText);
+    for (const page of SEO_PAGES) {
+      expect(text, page.path).toContain(`${SITE_URL}${page.path}`);
+      expect(text, page.path).toContain(page.description);
+    }
+    for (const article of DOC_ARTICLES) {
+      expect(text, article.slug).toContain(`${SITE_URL}${docPath(article.slug)}`);
+      expect(text, article.slug).toContain(article.description);
+    }
+    for (const link of [
+      protocolLinks.markdown,
+      protocolLinks.documentation,
+      protocolLinks.api,
+      protocolLinks.schema,
+    ]) {
+      expect(text).toContain(link);
+    }
+    expect(text).toContain("## 价格事实");
+    expect(text).toContain("AI 生图每张");
+  });
+
+  it("distinguishes new purchases from existing auto-renewals in the full index pricing facts", async () => {
+    const response = await request(LLMS_FULL_PATH, undefined, {} as Env);
+    const pricingFacts = (await response.text())
+      .split(/^## /m)
+      .find((section) => section.startsWith("价格事实\n"));
+    expect(pricingFacts).toContain("新购买的会员为单次付费，不自动续费");
+    expect(pricingFacts).toContain("已有自动续费订阅可在「管理订阅」中取消");
+  });
+
   it("supports HEAD, CORS preflight and conditional reads", async () => {
-    for (const path of [PLUGIN_API_PATH, PLUGIN_MARKDOWN_PATH, PLUGIN_SCHEMA_PATH, "/llms.txt"]) {
+    for (const path of [
+      PLUGIN_API_PATH,
+      PLUGIN_MARKDOWN_PATH,
+      PLUGIN_SCHEMA_PATH,
+      "/llms.txt",
+      LLMS_FULL_PATH,
+    ]) {
       const first = await request(path);
       const tag = first.headers.get("etag");
       expect(tag).toBeTruthy();
@@ -92,7 +152,13 @@ describe("public plugin developer resources", () => {
         supportedVersions: [PLUGIN_PROTOCOL_VERSION],
       });
     }
-    for (const path of [PLUGIN_API_PATH, PLUGIN_SCHEMA_PATH, PLUGIN_MARKDOWN_PATH, "/llms.txt"]) {
+    for (const path of [
+      PLUGIN_API_PATH,
+      PLUGIN_SCHEMA_PATH,
+      PLUGIN_MARKDOWN_PATH,
+      "/llms.txt",
+      LLMS_FULL_PATH,
+    ]) {
       const response = await request(path, { method: "POST" });
       expect(response.status).toBe(405);
       expect(response.headers.get("allow")).toBe("GET, HEAD, OPTIONS");

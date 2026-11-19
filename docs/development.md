@@ -29,6 +29,7 @@ pnpm dev
 | `pnpm exec vitest run test/billing.test.ts` | 运行指定测试文件 |
 | `pnpm build` | 本地配置构建；不会部署 |
 | `pnpm build:production` | 使用生产配置构建；不会部署 |
+| `pnpm test:seo` | 校验构建产物，包括 `robots.txt` 的具名爬虫组（不能由 `*` 替代） |
 | `pnpm check:public` | 扫描 Git 索引；发布前先暂存修改 |
 
 `env.d.ts` 为生成文件，不提交。全新克隆后先运行 `setup:local`，再执行类型检查。
@@ -61,6 +62,7 @@ pnpm test:hermes             # 需要官方 Hermes CLI 和其运行环境
 - `public/downloads` 中当前连接器和安装器由 `prebuild` 生成；修改 `integrations` 源码后重新构建。历史下载包保留以兼容旧安装器，已发布版本不要随意替换。
 - 生成素材的高分辨率原稿不提交；运行时图片、来源说明和示例截图保留。
 - 公开文档的内容日期在 `src/shared/docs.ts` 每篇的 `updatedAt` 中维护；`DOCS_INDEX_UPDATED_AT` 仅用于文档索引，不得用它刷新所有文章。首次发布日期缺少可核实记录时省略 `datePublished`，不要用修改日或构建时间代替。
+- `/llms.txt` 与 `/llms-full.txt` 的价格事实由 `BILLING_OFFERS` 和额度常量生成；完整版直接引用公开页面的标题、摘要和直答。
 - 品牌统一使用「微伴 Wechatai」；维护者公开资料在 `src/shared/site-info.ts` 的 `SITE_MAINTAINER` 中维护，页面、结构化数据与 AI 文本入口共用。不要把个人账号当成产品的 `sameAs`，也不要编造运营主体、审计或供应商实测。
 - 公开页面按路由懒加载，`public-pages.tsx` 只保留首页，登录注册表单位于 `pages/auth-page.tsx`。初次打开预渲染页面时，先加载当前路由模块再挂载 React；失败时保留正文并提供重新加载入口。等待期间已可见的静态页通过同一个 reporter 记录首次访问，React 接管时去重并接替监听；仍遵守 DNT/GPC、后台标签页延迟上报规则。首页入口同样记录静态首访并交接预渲染状态：在 DOMContentLoaded 时捕获阅读状态，下一帧挂载，让浏览器完成初始锚点定位后再恢复；尚未交互的页面采用原生锚点位置，避免延迟脚本在 React 接管后再次抢走焦点和滚动。接管前保存原生 details 的展开状态、焦点和滚动位置，在首次布局时恢复（包括带锚点的页面）。公开页受控输入使用稳定 ID：接管前采集值，由 DocumentInputProvider 提供给组件的首次状态初始化，保证搜索过滤与估算结果同步；文本输入同时恢复光标选区，后续挂载不得重放旧快照。可过滤导航的链接也须使用稳定 ID（桌面与移动端各自唯一），不要按 DOM 位置恢复焦点；导航用 `data-handoff-focus-fallback` 指向对应搜索框，原链接被过滤时退回搜索框。接管同时恢复侧栏、表格等容器的滚动位置；只有原焦点仍可见时，才在恢复后将移出视野的目标带回可见区域，避免打断用户已移开的阅读位置。后续导航的锚点定位统一由路由层处理，文章组件不要重复滚动。生产初次访问沿用预渲染 head，客户端导航再加载共享 SEO 生成器，并丢弃过时导航结果；不要重新把整套文档或专题内容导入首页入口。各页 CSS（包括开发者指南和价格卡）仍进入首屏样式以保留无 JavaScript 的预渲染阅读。
 

@@ -1,3 +1,27 @@
+# Search and answer-engine crawlers: allowed.
+User-agent: OAI-SearchBot
+User-agent: Claude-SearchBot
+User-agent: PerplexityBot
+User-agent: Bingbot
+User-agent: Googlebot
+Allow: /
+Disallow: /api/
+Allow: /api/plugins/protocol
+
+# AI training crawlers: not allowed.
+User-agent: GPTBot
+User-agent: ClaudeBot
+User-agent: Google-Extended
+User-agent: CCBot
+User-agent: Applebot-Extended
+User-agent: Bytespider
+User-agent: Amazonbot
+User-agent: Meta-ExternalAgent
+User-agent: cohere-ai
+User-agent: Diffbot
+Disallow: /
+
+# Other crawlers keep the public site rules.
 User-agent: *
 Allow: /
 Disallow: /api/

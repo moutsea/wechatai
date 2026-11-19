@@ -19,9 +19,15 @@ import { SEO_PAGES } from "../src/shared/seo-pages";
 import { FAQ_DOC_SECTIONS, faqAnswerText } from "../src/shared/faq-doc";
 import { BILLING_OFFERS, BILLING_PRICE_CHECKED_AT } from "../src/shared/billing";
 import { FREE_PLAN_AMOUNT_CENTS } from "../src/shared/billing-offers";
+import {
+  DAILY_CREDIT_DEFAULTS,
+  IMAGE_CREDITS,
+  OUTPUT_TOKEN_WEIGHT,
+  TOKENS_PER_CREDIT,
+} from "../src/shared/credits";
 import { PLUGIN_LIMITS } from "../src/shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../src/shared/wechat-links";
-import { llmsText } from "../src/shared/plugin-docs";
+import { llmsFullText, llmsText } from "../src/shared/llms-docs";
 import { MUSE_FAQ } from "../src/shared/muse-faq";
 import { museGuide } from "../src/shared/muse-docs";
 
@@ -442,13 +448,26 @@ describe("published prices stay in sync with billing", () => {
     }
   });
 
-  it("keeps the llms.txt summary consistent with billing", () => {
-    const monthly = offers.find((offer) => offer.id === "plus_monthly")!;
-    const yearly = offers.find((offer) => offer.id === "plus_yearly")!;
-    expect(llmsText).toContain(`¥${yuan(monthly.amount)}/月`);
-    expect(llmsText).toContain(`¥${yuan(yearly.amount)}/年`);
-    expect(llmsText).toContain(`${PLUGIN_LIMITS.free} 个插件`);
-    expect(llmsText).toContain(`${WECHAT_LINK_LIMITS.plus} 个微信链接`);
+  it("quotes every Plus offer and the credit limits in each index billing section", () => {
+    const offersByInterval = offers.filter((offer) => offer.kind === "plus");
+    const quotes = offersByInterval.map(
+      (offer) => `¥${offer.amount / 100}/${offer.interval === "month" ? "月" : "年"}`,
+    );
+    const shortBilling = llmsText.split("\n").find((line) => line.startsWith("- 计费："));
+    const fullBilling = llmsFullText.split("\n").find((line) => line.startsWith("- 计费："));
+    const [, fullPriceFacts] = /## 价格事实\n([\s\S]*?)\n## /.exec(llmsFullText) ?? [];
+    for (const [section, text] of Object.entries({ shortBilling, fullBilling, fullPriceFacts })) {
+      expect(text?.match(/¥[\d.]+\/[月年]/g), section).toEqual(quotes);
+      expect(text, section).toContain(
+        `每天 ${DAILY_CREDIT_DEFAULTS.free} credits、${PLUGIN_LIMITS.free} 个插件、${WECHAT_LINK_LIMITS.free} 个微信链接`,
+      );
+      expect(text, section).toContain(`每天 ${DAILY_CREDIT_DEFAULTS.plus} credits`);
+      expect(text, section).toContain(`${WECHAT_LINK_LIMITS.plus} 个微信链接`);
+      expect(text, section).toContain(
+        `输出 token × ${OUTPUT_TOKEN_WEIGHT}）÷ ${TOKENS_PER_CREDIT}`,
+      );
+      expect(text, section).toContain(`AI 生图每张 ${IMAGE_CREDITS} credits`);
+    }
   });
 
   it("exposes a valid price check date from the billing source", () => {
