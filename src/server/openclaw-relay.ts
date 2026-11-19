@@ -29,6 +29,7 @@ type Job = {
   command: string;
   lane: "message" | "control";
 };
+type QueuedReplies = "preserve" | "discard";
 type Hooks = {
   wake?: (pluginId: string) => void;
   plugin: (id: string) => RemoteAgentPlugin;
@@ -144,11 +145,11 @@ export class OpenClawRelay {
       agents: agents ? (JSON.parse(agents.agents) as OpenClawAgent[]) : [],
     };
   }
-  rotate(pluginId: string, accountId: string) {
+  rotate(pluginId: string, accountId: string, queuedReplies: QueuedReplies) {
     this.hooks.plugin(pluginId);
     const secret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
     this.storage.transactionSync(() => {
-      this.revoke(pluginId);
+      this.revoke(pluginId, queuedReplies);
       this.sql.exec(
         "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0)",
         pluginId,
@@ -196,7 +197,7 @@ export class OpenClawRelay {
       const selected =
         this.status(pluginId).agents.length && agents.find((a) => a.id === plugin.agentId);
       const agentId = (selected || agents.find((a) => a.isDefault) || agents[0]).id;
-      this.clearRoutes(pluginId);
+      this.clearRoutes(pluginId, "discard");
       this.sql.exec(
         "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0) ON CONFLICT(pluginId) DO UPDATE SET tokenHash=excluded.tokenHash,lastSeen=0,nativeCommands=0,connectorVersion='',versionSeenAt=0",
         pluginId,
@@ -227,17 +228,22 @@ export class OpenClawRelay {
       JSON.stringify(agents),
     );
   }
-  revoke(pluginId: string) {
-    this.sql.exec("DELETE FROM claw_pairings WHERE pluginId = ?", pluginId);
-    this.sql.exec("DELETE FROM claw_agents WHERE pluginId = ?", pluginId);
-    this.sql.exec("DELETE FROM claw_connectors WHERE pluginId = ?", pluginId);
-    this.clearRoutes(pluginId);
+  revoke(pluginId: string, queuedReplies: QueuedReplies) {
+    this.storage.transactionSync(() => {
+      this.sql.exec("DELETE FROM claw_pairings WHERE pluginId = ?", pluginId);
+      this.sql.exec("DELETE FROM claw_agents WHERE pluginId = ?", pluginId);
+      this.sql.exec("DELETE FROM claw_connectors WHERE pluginId = ?", pluginId);
+      this.clearRoutes(pluginId, queuedReplies);
+    });
   }
-  clearRoutes(pluginId: string) {
-    this.sql.exec(
-      "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id LIKE ?",
-      `claw:${pluginId}:%`,
-    );
+  clearRoutes(pluginId: string, queuedReplies: QueuedReplies) {
+    // Grok hands settled replies to the WeChat outbox. Credential changes only
+    // invalidate future work, so leave its delivery state and part cursor intact.
+    if (queuedReplies === "discard")
+      this.sql.exec(
+        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id LIKE ?",
+        `claw:${pluginId}:%`,
+      );
     this.sql.exec("DELETE FROM claw_routes WHERE pluginId = ?", pluginId);
     this.sql.exec(
       "UPDATE claw_jobs SET state = 'cancelled', text = '' WHERE pluginId = ? AND state IN ('pending','claimed')",

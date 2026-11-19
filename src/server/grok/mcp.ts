@@ -9,7 +9,8 @@ const uuid = { type: "string", format: "uuid" };
 const tools = [
   {
     name: "wechatai_claim",
-    description: "领取本次 Webhook 的微信任务。仅在 claimed 为 true 时执行。",
+    description:
+      "领取本次 Webhook 的微信任务。仅在 claimed 为 true 时执行。history 中 taskStatus 为 failed 的条目是之前未完成的请求。",
     inputSchema: {
       type: "object",
       properties: { taskId: uuid },

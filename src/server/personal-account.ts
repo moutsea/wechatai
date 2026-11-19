@@ -1244,7 +1244,7 @@ export class PersonalAccount extends DurableObject<Env> {
       // Every save path must invalidate old work before a quick re-enable.
       if (!plugin.enabled) {
         this.stopCloudPlugin(plugin.id);
-        if (plugin.pluginId === "wechatai/grok") this.claw.clearRoutes(plugin.id);
+        if (plugin.pluginId === "wechatai/grok") this.claw.clearRoutes(plugin.id, "preserve");
       }
     });
   }
@@ -1398,7 +1398,7 @@ export class PersonalAccount extends DurableObject<Env> {
           throw new AppError("plugin_changed", "配置已更新，请重新打开后再保存", 409);
         if (!previous || previous.shortcut !== input.shortcut)
           this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
-        if (previous && replace) this.claw.revoke(id);
+        if (previous && replace) this.claw.revoke(id, "preserve");
         this.persistPlugin(p);
       });
       return this.publicPlugin(p);
@@ -1422,7 +1422,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (!previous || input.shortcut !== previous.shortcut)
         this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       if (isRemoteAgent(previous) && previous.agentId !== input.agentId)
-        this.claw.clearRoutes(previous.id);
+        this.claw.clearRoutes(previous.id, "discard");
       const p: StoredPlugin = {
         ...input,
         id: id ?? crypto.randomUUID(),
@@ -3069,6 +3069,7 @@ export class PersonalAccount extends DurableObject<Env> {
         action,
       );
       const remoteKind = remoteAgentKind(`wechatai/${remoteAction?.[1] ?? "openclaw"}`);
+      const queuedReplies = remoteKind === "grok" ? "preserve" : "discard";
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
         throw new AppError("plugin_type", "插件类型不匹配", 403);
       if (action === "snapshot") data = this.snapshot();
@@ -3171,7 +3172,7 @@ export class PersonalAccount extends DurableObject<Env> {
       else if (action === "plugin.delete") {
         this.busy();
         this.plugin(String(p.id));
-        this.claw.revoke(String(p.id));
+        this.claw.revoke(String(p.id), "discard");
         this.notifications.revoke(String(p.id));
         this.personalRuns.cancelPlugin(String(p.id));
         this.personalRecords.deletePlugin(String(p.id));
@@ -3207,7 +3208,7 @@ export class PersonalAccount extends DurableObject<Env> {
         data = {
           token: signOpenClawToken(
             this.env,
-            this.claw.rotate(String(p.id), this.ctx.id.toString()),
+            this.claw.rotate(String(p.id), this.ctx.id.toString(), queuedReplies),
             remoteKind,
           ),
           endpoint:
@@ -3222,7 +3223,7 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.grokRevoke"
       ) {
         this.plugin(String(p.id));
-        this.claw.revoke(String(p.id));
+        this.claw.revoke(String(p.id), queuedReplies);
         data = { ok: true };
       } else if (
         action === "plugin.clawStatus" ||

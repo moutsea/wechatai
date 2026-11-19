@@ -100,16 +100,20 @@ export class GrokTasks {
       this.relay.handleTask(plugin, "claim", { id: row.jobId, runnerId: receipt });
       this.db.exec("UPDATE grok_tasks SET due=expires WHERE ref=?", taskId);
       const history = this.db
-        .exec<{ role: string; text: string }>(
-          `SELECT m.role,substr(m.content,1,3000) AS text FROM grok_tasks t
+        .exec<{ role: string; text: string; state: string }>(
+          `SELECT m.role,substr(m.content,1,3000) AS text,j.state FROM grok_tasks t
         JOIN claw_jobs j ON j.id=t.jobId JOIN messages m ON m.id IN (t.userMessage,t.answerMessage)
-        WHERE j.routeId=? AND j.state='complete' AND t.userMessage<? AND t.answerMessage IS NOT NULL
+        WHERE j.routeId=? AND t.userMessage<?
+          AND (j.state='failed' OR (j.state='complete' AND t.answerMessage IS NOT NULL))
         ORDER BY t.userMessage DESC, m.id DESC LIMIT 10`,
           row.routeId,
           row.userMessage,
         )
         .toArray()
-        .reverse();
+        .reverse()
+        .map(({ role, text, state }) =>
+          state === "failed" ? { role, text, taskStatus: "failed" } : { role, text },
+        );
       return {
         claimed: true,
         receipt,
