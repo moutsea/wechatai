@@ -107,6 +107,12 @@ it("leaves unverified device requirements unknown and separates local and cloud 
   expect(relayCost).toMatch(/中转费.*使用云 API[^；]*模型费[^；]*另付服务商/);
 });
 
+it("renders the WeChat bot guide with its full link label on the options page", async () => {
+  await renderAt("/wechat-ai-options");
+  const link = container.querySelector('.seopage-related a[href="/wechat-bot"]');
+  expect(link?.textContent).toBe("微信机器人怎么弄：先选对路线");
+});
+
 it("distinguishes text usage from per-image credits in the commercial comparison", async () => {
   await renderAt("/compare/wechatai-vs-commercial-wechat-ai");
   for (const selector of [".seopage-answer", "#two-models"]) {
