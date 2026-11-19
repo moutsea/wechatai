@@ -187,9 +187,10 @@ export const wechatBanRiskPage: SeoPage = {
     { label: "微信 ClawBot 插件：入口、绑定与排查", href: "/wechat-clawbot" },
     { label: "ClawBot 支持哪些模型", href: "/wechat-clawbot-models" },
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },
+    { label: "微信机器人怎么弄", href: "/wechat-bot" },
     { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },
     { label: "连接微信（文档）", href: "/docs/wechat-connection" },
     { label: "常见问题排查", href: "/docs/faq" },
   ],
-  updatedAt: "2026-11-18",
+  updatedAt: "2026-11-19",
 };
