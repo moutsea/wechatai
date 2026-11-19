@@ -119,7 +119,7 @@ pnpm db:migrate:remote
 
 其他发布先查看待执行迁移的兼容要求；增加表或字段的迁移通常先执行，删除字段则需要先发布不再依赖它的代码。不要把迁移顺序固定为一律先迁移。
 
-升级到含 `/llms-full.txt` 的版本前，须将 `"/llms-full.txt"` 追加到实际用于生产构建的私有 Wrangler 配置的 `assets.run_worker_first` 列表，保留 `/llms.txt` 和其他现有规则。GitHub Actions 使用 `edge-production` 环境的 `WRANGLER_CONFIG`（secret 优先于变量）；本地使用 `wrangler.production.local.jsonc` 或 `WECHATAI_WRANGLER_CONFIG` 指定的文件。发布工作流原样加载私有配置，不会合并仓库里的 `wrangler.jsonc`，不要用公共模板覆盖已有生产配置。
+生产构建会在所选 Wrangler 配置的 `assets.run_worker_first` 清单中补齐 `/llms.txt` 和 `/llms-full.txt`，保留已有路由。若设为 `true`，所有请求已优先进入 Worker。GitHub Actions 和本地发布使用相同的构建逻辑，无需为这两条路由更新 `edge-production` 的 `WRANGLER_CONFIG`。
 
 发布前可用不含密钥的私有配置副本验证，只构建、不部署：
 
@@ -127,7 +127,7 @@ pnpm db:migrate:remote
 WECHATAI_WRANGLER_CONFIG=./wrangler.actions.local.jsonc pnpm build:edge
 ```
 
-将路径替换为副本路径。构建后的 SEO 校验会检查 `dist/wechatai/wrangler.json`；若报 `/llms-full.txt: Worker route in build`，先更新实际使用的配置，再重新构建。
+将路径替换为副本路径。构建后的 SEO 校验会检查实际发布产物 `dist/wechatai/wrangler.json` 中的文档路由。
 
 仅调度服务自身发生变化时运行 `pnpm deploy:reminders`。新增调度 RPC 时先发布调度器，再发布调用它的网站代码。普通部署保留已有 Secrets。
 

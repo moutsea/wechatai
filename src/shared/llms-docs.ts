@@ -27,27 +27,28 @@ const imageCost = `AI 生图每张 ${IMAGE_CREDITS} credits，描述文字另计
 // pulling every landing page and price table into the public protocol page chunk.
 export const llmsText = `# Wechatai · 微伴
 
-> 把自选的大模型接进微信的独立产品。用户填入自己的模型 API Key（OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 协议），绑定微信后即可在聊天窗口里对话、联网问答、生图、接 Agent。自备模型的费用由用户自己的 API 服务商收取；可选 Plus 云端助手小薇在运营方开放后使用用户配置的文本模型，API 费用另付服务商，执行次数受限。微伴文字部分按加权 token 计 credits，${imageCost}。
+> 微伴把自选模型、已有 Agent 和服务通知接进微信单聊。扫码绑定微信无需模型或 API Key。普通模型聊天使用你自己的模型 API Key，支持 OpenAI Chat Completions、OpenAI Responses 和 Anthropic Messages 协议。自备模型费用由你的 API 服务商收取。可选 Plus 云端助手小薇在运营方开放后使用你配置的文本模型，执行次数受限。微伴文字部分按加权 token 计 credits，${imageCost}。
 
 产品身份：微伴 Wechatai，官网 ${SITE_URL}，公开仓库 https://github.com/moutsea/wechatai，维护者 ${SITE_MAINTAINER.name}（${SITE_MAINTAINER.profile}）。这是微信 ClawBot 单聊接入服务，不是腾讯微信官方 AI，不是同名桌面客户端，不支持群聊机器人；项目来源与维护者见 ${SITE_URL}/contact#maintainer。
 
 ## 产品事实（可直接引用）
 
 - 定位：微信 AI 中转与插件平台，不是模型供应商，不卖 token，不承诺模型免费。
-- 接入方式：添加渠道时选择服务商并填写 API Key，预设会填好协议和地址；第三方地址使用「自定义」入口。新建预设渠道会尝试自动导入模型，自定义渠道可点击「获取可用模型」；获取失败或缺少所需模型时可手动添加。确认文本模型后，点击模型行的「测试连接」，系统发送固定请求并正常计费。配置完整后生成二维码，从微信「设置」中的「功能」分组 →「插件 → 微信 ClawBot → 扫一扫」绑定。普通模型聊天无需安装额外客户端；微伴没有绕过 ClawBot 的独立绑定方式。
+- 绑定微信：在微伴「微信连接」页生成二维码，从手机微信「设置」中的「功能」分组 →「插件 → 微信 ClawBot → 扫一扫」绑定，再在对应的微信对话发送 \`/wx help\` 确认可以收发。
+- 普通模型聊天：在「渠道与模型」选择服务商，填写 API Key 并选定文本模型。预设会填好协议和地址并尝试导入模型；自定义渠道可点击「获取可用模型」，也可手动添加。需要验证模型时，点击模型行的「测试连接」会发送一次正常计费的模型请求。
 - 微信范围：目前只支持与微信 ClawBot 单聊，不支持群聊，也没有群聊开关。@插件别名是在单聊中调用插件的语法。
 - 模型范围：取决于用户填入的 Key；协议适配不等于所有模型、工具或附件均可用，应按具体服务商与模型 ID 验证。\`/wx status\` 查看当前模型或插件，\`/wx models\` 列出当前渠道的模型，\`/wx model 编号\` 切换；跨渠道先用 \`/wx channels\` 查看编号，再用 \`/wx channel 编号\` 切换渠道。
 - 兼容性：三种协议有适配与模拟接口测试，具体供应商账号、工具和附件能力需单独验证，不承诺全部兼容。功能矩阵见 ${SITE_URL}/wechat-clawbot-models#compatibility。
 - 接入条件：先在手机微信检查 ClawBot 入口；没有入口时本站无法开通。主动提醒受最近互动后的 24 小时回复窗口影响，过期任务不保证补发。
 - 功能与费用：${SITE_URL}/docs/getting-started 提供配置步骤与界面截图；${SITE_URL}/pricing#estimate 可按自填模型单价估算两笔费用。
 - 会话与插件：切换普通模型会进入目标模型最近的活动会话，没有则新建，并退出当前插件模式。旧记录保留，上下文不会自动交给新模型。\`/wx plugins\` 查看插件别名，\`/use 别名\` 进入插件，\`/exit\` 返回普通模型会话。
-- 内置插件：DS Chat（联网问答）、AI 生图、OpenClaw、Hermes、角色扮演、个人助理、消息提醒，以及运营方开放的 Plus 云端助手小薇。
+- 内置插件：DS Chat（联网问答）、AI 生图、Muse、OpenClaw、Hermes、角色扮演、个人助理、消息提醒，以及运营方开放的 Plus 云端助手小薇。
 - DS Chat：使用用户配置的回答模型与搜索 API，由模型判断是否需要搜索或阅读网页，也可直接回答；进入插件不代表每条回复都经过联网核验。
 - 小薇：需要 Plus 且运营方已开放，使用用户在微伴配置的文本模型。支持文字、附件处理与账号记忆，可生成文件并回传微信和提供下载，后台任务可查询、请求停止；输入与最终回复文字计 credits，返回图片每张另计 ${IMAGE_CREDITS} credits，非图片文件不另收费，内部消耗不另计。使用说明：${SITE_URL}/docs/cloud-agent。
-- Agent 接入：OpenClaw 与 Hermes 由用户在自己的电脑或服务器上运行，设备和 Agent 进程需保持在线；微伴提供消息中转，不托管这两个 Agent。请求原文与最终回复经过微信和微伴，并非只转发摘要；使用云端模型或外部工具时，相关内容还会发送给用户配置的服务商。
+- 已有 Agent：绑定微信后，到「插件」添加 Muse、OpenClaw 或 Hermes 并生成连接指令，无需在微伴另配模型。Muse 的指令发给自己的 Muse 主聊天，由 Muse 在托管环境按 SETUP.md 启用 hook；OpenClaw 和 Hermes 的指令在运行 Agent 的设备终端执行，设备与进程需保持在线。请求原文与最终回复经过微信和微伴，使用云端模型或外部工具时相关内容还会发送给你配置的服务商。
 - 计费：自备模型费用归用户的 API 服务商，小薇同样使用自备模型并另付 API 费用；微伴文字部分 ${textCredits}，${imageCost}。免费版${freeAllowance}；Plus ${plusPrices}，${plusAllowance}。
 - 会员购买：新购买的会员为单次付费，不自动续费，到期手动续费；退款申请需联系支持，按实际订单、使用情况及适用法律处理。
-- 消息提醒 Webhook 推送不扣 credits。
+- 只收通知：绑定微信后，在「插件」添加「消息提醒」，选择接收微信并生成专属 Token，即可用 Webhook 推送。无需模型 API Key，推送不扣 credits。
 - 开源：插件协议与站点代码公开（MIT）。与微信、腾讯及模型供应商无官方关联。
 
 完整索引（全部着陆页、文档摘要与价格事实）：[llms-full.txt](${protocolLinks.fullDiscovery})。

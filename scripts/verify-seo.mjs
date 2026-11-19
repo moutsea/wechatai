@@ -19,8 +19,12 @@ const workerDocuments = [
 const builtConfig = JSON.parse(
   await readFile(new URL("../dist/wechatai/wrangler.json", import.meta.url), "utf8"),
 );
+const workerFirst = builtConfig.assets.run_worker_first;
 for (const [path] of workerDocuments) {
-  assert(builtConfig.assets.run_worker_first.includes(path), `${path}: Worker route in build`);
+  assert(
+    workerFirst === true || (Array.isArray(workerFirst) && workerFirst.includes(path)),
+    `${path}: Worker route in build`,
+  );
 }
 const publicPages = [
   ["index.html", "https://wechatai.app/", "把你的 AI"],

@@ -63,6 +63,18 @@ describe("public plugin developer resources", () => {
     expect(protocolSections.map((s) => s.id)).toContain("quickstart");
   });
 
+  it.each(["/llms.txt", LLMS_FULL_PATH])(
+    "explains the connection prerequisites in %s",
+    async (path) => {
+      const response = await request(path, undefined, {} as Env);
+      const facts = (await response.text()).split("## 产品事实")[1].split("\n## ")[0];
+      expect(facts).toMatch(/^- 绑定微信：.*二维码.*\/wx help/m);
+      expect(facts).toMatch(/^- 普通模型聊天：.*API Key.*测试连接.*计费/m);
+      expect(facts).toMatch(/^- 已有 Agent：.*Muse.*OpenClaw.*Hermes.*无需在微伴另配模型/m);
+      expect(facts).toMatch(/^- 只收通知：.*Token.*无需模型 API Key/m);
+    },
+  );
+
   it("serves the full index with every landing page, document summary and protocol entry", async () => {
     const discovery = await request("/llms.txt", undefined, {} as Env);
     expect(await discovery.text()).toContain(protocolLinks.fullDiscovery);
