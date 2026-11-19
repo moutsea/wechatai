@@ -26,6 +26,7 @@ export function roleAvatarSource(id: string | undefined): string | undefined {
 }
 
 export function pluginIconSource(id: string): string | undefined {
+  if (id === "wechatai/grok") return "/images/plugins/grok-bot.svg";
   if (id === "wechatai/muse") return "/images/plugins/muse.svg";
   if (id === "wechatai/cloud-agent") return "/images/plugins/xiaowei-96.webp";
   if (id === "wechatai/notification") return "/images/plugins/notification.svg";

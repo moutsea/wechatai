@@ -27,6 +27,15 @@ AGT 回调先由 Worker 验证路由令牌并限制请求体，再由 Go 使用�
 
 `/readyz` 和 `wechatai check-ready` 检查整账户服务的 RPC、API 操作、流式接口和后台运行能力。当前仍有缺项，因此整账户切流须等待。按功能部署的接收器、巡检和耗时任务执行器分别使用自己的验收流程。
 
+### Grok Bot 的 Routine 派发
+
+Grok Bot 使用个人微信账户原有的任务队列、计量和回复投递。新任务由 VPS 上的 Go 服务向 Routine 发一次 Webhook，Grok 通过 Worker 的 `/api/grok/mcp` 领取任务并回传文字。空闲时没有连接器轮询。账户已冻结或已迁至 Go 时，Grok MCP 请求会被拒绝。
+
+1. 在 Go 服务环境配置独立的 `GROK_DISPATCH_SECRET` 或 `GROK_DISPATCH_SECRET_FILE`（至少 32 字节的随机密钥），发布 Go 程序并重启。待命模式也能独立提供这个签名校验接口。
+2. 在既有 TLS 反向代理上将 `POST /internal/v1/grok/wake` 转给 Go 监听地址。在 `edge-production` 的私有 `WRANGLER_CONFIG` 中将 `env.production.vars.GROK_DISPATCH_ORIGIN` 设为该 HTTPS 源，并配置同值的 Worker Secret `GROK_DISPATCH_SECRET`。两项齐备后插件页才开放配置。
+3. 在自己的 Grok Bot 桌面端创建 Webhook Routine，把 POST 地址和 key 填入微伴。支持 `https://api2.cursor.sh/automations/webhook/<id>`。微伴生成的 MCP 凭据仅供该插件配置使用，按页面说明通过自定义 Remote HTTPS 连接器传入。团队管理员需允许这个 MCP 服务。[Routine 官方说明](https://docs.x.ai/grok-bot/skills-routines-and-automations) · [自定义连接器官方说明](https://docs.x.ai/grok-bot/computer-and-apps)
+4. 从微信发一条任务和一条追问，核对回复进入原微信、上下文和扣费。Webhook 成功仅表示已受理。每个任务最多唤醒三次；工具只允许一次成功领取。45 分钟内未完成的任务按失败处理，不扣平台 credits。发布或模拟测试均不能替代真实 Bot 验收。
+
 ### 可独立灰度的 VPS 任务
 
 运行 `pnpm build:receiver` 独立打包接收器和 `receiver-watchdog`。巡检进程读取本机接收器会话，通过 Worker 核对 D1 登记并报告失联。发布时沿用当前账户数据和路由。接收器发布说明列出了灰度开关、版本兼容和回退延迟。[接收器发布说明](../integrations/wechat-receiver/README.md#按账户把空闲连接巡检迁到-vps)
@@ -84,7 +93,7 @@ pnpm deploy:backend
 
 发布步骤为：核对产物 → 私有临时目录上传 → 发布互斥锁 → 核对版本、功能和数据兼容性 → 停旧进程 → 再次检查数据 → 原子替换 `current` → 启动并按配置模式核对探针和提交版本。不会自动切换账户路由、删除旧 release、迁移 D1、清理 DO 或替换密钥。
 
-待命进程仅在回环地址提供探针。`/healthz` 返回提交版本和 `mode=standby`，`/readyz` 返回 503，业务路径返回 404。发布前和启动时校验账户目录为空。待命模式只启动探针，账户存储、业务路由和调度器均在账户模式初始化。账户模式须同时通过 `/healthz` 和 `/readyz`。发布器用当前模式的验收结果记录 `last-healthy`。接管旧安装时，先探测 `current` 所指的提交。候选启动失败时，先停服务并撤下 `current`，再由上次健康版本检查数据兼容性。兼容时恢复链接，清除 systemd 启动限流，重启并复验该模式的探针。首次启动失败、旧版本无法读取数据或回滚探针失败时，服务停用，发布目录保留供诊断。代码回退和迁移后数据回退是不同操作，不能用旧快照覆盖新写入。
+待命进程监听回环地址。`/healthz` 返回提交版本和 `mode=standby`，`/readyz` 返回 503，账户业务路径返回 404。设置 `GROK_DISPATCH_SECRET` 后，待命进程还提供签名验证的 Grok Routine 转发。发布前和启动时校验账户目录为空，账户存储、业务路由和调度器在账户模式初始化。账户模式须同时通过 `/healthz` 和 `/readyz`。发布器用当前模式的验收结果记录 `last-healthy`。接管旧安装时，先探测 `current` 所指的提交。候选启动失败时，先停服务并撤下 `current`，再由上次健康版本检查数据兼容性。兼容时恢复链接，清除 systemd 启动限流，重启并复验该模式的探针。首次启动失败、旧版本无法读取数据或回滚探针失败时，服务停用，发布目录保留供诊断。代码回退和迁移后数据回退是不同操作，不能用旧快照覆盖新写入。
 
 ## GitHub Actions
 

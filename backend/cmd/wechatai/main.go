@@ -16,6 +16,7 @@ import (
 	"github.com/moutsea/wechatai/backend/contract"
 	"github.com/moutsea/wechatai/backend/internal/accounts"
 	"github.com/moutsea/wechatai/backend/internal/app"
+	"github.com/moutsea/wechatai/backend/internal/grokwake"
 	"github.com/moutsea/wechatai/backend/internal/platform/config"
 	"github.com/moutsea/wechatai/backend/internal/receiverwatchdog"
 )
@@ -151,7 +152,11 @@ func run() error {
 		if err := checkStandbyDirectory(configuration.DataDir); err != nil {
 			return err
 		}
-		return serveHTTP(ctx, configuration.Listen, standbyHandler(), nil)
+		handler, err := grokwake.Mount(standbyHandler(), configuration.GrokDispatchSecret)
+		if err != nil {
+			return err
+		}
+		return serveHTTP(ctx, configuration.Listen, handler, nil)
 	}
 	application, err := app.New(ctx, configuration)
 	if err != nil {
@@ -161,7 +166,11 @@ func run() error {
 	background := make(chan error, 1)
 	go func() { defer close(background); background <- application.RunBackground(ctx) }()
 	defer func() { stop(); <-background }()
-	return serveHTTP(ctx, configuration.Listen, application.Handler(version), background)
+	handler, err := grokwake.Mount(application.Handler(version), configuration.GrokDispatchSecret)
+	if err != nil {
+		return err
+	}
+	return serveHTTP(ctx, configuration.Listen, handler, background)
 }
 
 func serveHTTP(ctx context.Context, address string, handler http.Handler, background <-chan error) error {

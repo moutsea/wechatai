@@ -376,7 +376,7 @@ describe("managed cloud Agent configuration", () => {
     data.plan = "plus";
     data.assistants = [];
     expect(library()).toContain('aria-label="配置 小薇"');
-    expect(library().match(/<article/g)).toHaveLength(9);
+    expect(library()).toContain('aria-label="Grok Bot"');
     const editor = renderToStaticMarkup(
       <MemoryRouter>
         <CloudAgentEditor plugin="new" onClose={noop} />

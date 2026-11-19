@@ -14,7 +14,7 @@ import { PLUGIN_SHORTCUT_PATTERN, PLUGIN_SHORTCUT_HINT } from "../../shared/plug
 import { useState } from "react";
 import type { PersonalAssistantPlugin } from "../../shared/personal-assistant";
 import { NotificationAccess } from "./notification-editor";
-import { isRemoteAgent, remoteAgentName } from "../../shared/remote-agent";
+import { isRemoteAgentId, isRemoteAgent, remoteAgentName } from "../../shared/remote-agent";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "../context";
@@ -99,6 +99,12 @@ const library = [
     tags: ["角色卡导入", "关键词世界书", "独立剧情记忆"],
   },
   {
+    id: "wechatai/grok",
+    name: "Grok Bot",
+    description: "把文字任务交给你已有的 Grok Bot，通过 Routine 唤醒，最终回复送回当前微信会话。",
+    tags: ["已有个人 Bot", "文字任务", "Webhook"],
+  },
+  {
     id: "wechatai/muse",
     name: "Muse",
     description:
@@ -164,7 +170,9 @@ export function PluginLibrary({
         const connectedBefore = available.some((p) => remoteAgentConnection(p).connectedBefore);
         const resume = configs.length === 1 && connection && !connection.connectedBefore;
         const notificationReady = usable.some((p) => p.enabled && p.hasKey);
-        const cloudUnavailable = id === "wechatai/cloud-agent" && !data.cloudAgent.ready;
+        const cloudUnavailable =
+          (id === "wechatai/cloud-agent" && !data.cloudAgent.ready) ||
+          (id === "wechatai/grok" && !data.grokBotReady);
         const cloudLabel = cloudUnavailable
           ? configs.length
             ? "服务未就绪"
@@ -190,13 +198,15 @@ export function PluginLibrary({
                 ? "已配置"
                 : !enabled
                   ? "已停用"
-                  : online.length
-                    ? "已连接"
-                    : connectedBefore
-                      ? "已离线"
-                      : available.some((p) => p.hasKey)
-                        ? "等待上线"
-                        : "待连接";
+                  : id === "wechatai/grok" && connection
+                    ? connection.label
+                    : online.length
+                      ? "已连接"
+                      : connectedBefore
+                        ? "已离线"
+                        : available.some((p) => p.hasKey)
+                          ? "等待上线"
+                          : "待连接";
         const statusLabel = cloudLabel ?? defaultStatusLabel;
         const positiveStatus =
           allowed &&
@@ -261,6 +271,7 @@ export function PluginLibrary({
                   )}
                   <span>
                     {(id === "wechatai/cloud-agent" && cloudAvailability?.message) ||
+                      (id === "wechatai/grok" && cloudUnavailable && "Grok Bot 派发服务尚未启用") ||
                       (!allowed
                         ? "超出当前套餐的插件上限"
                         : !enabled
@@ -311,10 +322,8 @@ export function PluginLibrary({
                   <Plus size={15} /> 配置插件
                 </button>
               ) : !data.assistants.length &&
-                id !== "wechatai/openclaw" &&
+                !isRemoteAgentId(id) &&
                 id !== "wechatai/notification" &&
-                id !== "wechatai/hermes" &&
-                id !== "wechatai/muse" &&
                 id !== "wechatai/cloud-agent" ? (
                 <Link className="button secondary small" to={`${base}/channels`}>
                   先添加模型 <ArrowRight size={15} />
@@ -391,14 +400,14 @@ export function PluginConfiguration({
   const cloudAvailability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
   const cloudIssue = cloud ? (cloudAvailability?.message ?? cloud.access?.message) : null;
   const needsUpgrade = data.plan === "free" && (kind === "wechatai/cloud-agent" || !canAdd);
+  const grokUnavailable = kind === "wechatai/grok" && !data.grokBotReady;
   const canConfigure =
+    !grokUnavailable &&
     (canAdd || needsUpgrade) &&
     (kind === "wechatai/cloud-agent"
       ? !cloudAvailability || cloudAvailability.code === "cloud_plus_required"
-      : kind === "wechatai/openclaw" ||
+      : isRemoteAgentId(kind) ||
         kind === "wechatai/notification" ||
-        kind === "wechatai/hermes" ||
-        kind === "wechatai/muse" ||
         needsUpgrade ||
         data.assistants.length > 0);
   const incomplete = connection && !connection.connectedBefore;
@@ -494,9 +503,7 @@ export function PluginConfiguration({
                   </div>
                   <div>
                     <dt>
-                      {kind === "wechatai/openclaw" ||
-                      kind === "wechatai/hermes" ||
-                      kind === "wechatai/muse"
+                      {isRemoteAgentId(kind)
                         ? `${remoteAgentName(kind)} 助手`
                         : kind === "wechatai/image-generation"
                           ? "生图模型"
@@ -505,7 +512,11 @@ export function PluginConfiguration({
                     <dd>
                       {isRemoteAgent(selected) ? (
                         (selected.agents?.find((a) => a.id === selected.agentId)?.name ??
-                        (selected.hasKey ? selected.agentId : "连接后自动识别"))
+                        (kind === "wechatai/grok"
+                          ? "拥有该 Routine 的 Grok Bot"
+                          : selected.hasKey
+                            ? selected.agentId
+                            : "连接后自动识别"))
                       ) : model ? (
                         <>
                           {isCloudAgent(selected) && !selected.modelId && "默认模型："}
@@ -765,7 +776,7 @@ export function PluginConfiguration({
           </>
         ) : (
           <div className="plugin-config-empty">
-            <p>还没有配置此插件。</p>
+            <p>{grokUnavailable ? "Grok Bot 派发服务暂未开放。" : "还没有配置此插件。"}</p>
             {kind === "wechatai/cloud-agent" && cloudAvailability && (
               <p>{cloudAvailability.message}</p>
             )}

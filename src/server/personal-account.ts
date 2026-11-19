@@ -61,12 +61,16 @@ import {
 } from "./plugins/personal-assistant";
 import {
   isRemoteAgent,
+  remoteAgentKind,
   remoteAgentName,
   remoteAgentManifest,
   type RemoteAgentPlugin,
   type RemoteAgentKind,
 } from "../shared/remote-agent";
 import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
+import { grokInputSchema, type GrokPlugin } from "../shared/grok-bot";
+import { GrokTasks } from "./grok/tasks";
+import { dispatchGrok, grokDispatcherReady, sealGrokWebhook } from "./grok/dispatch";
 import { museInputSchema, type MusePlugin } from "../shared/muse";
 import {
   signOpenClawToken,
@@ -245,6 +249,7 @@ type StoredPlugin = (
   | Omit<ImageGenerationPlugin, "hasKey">
   | Omit<OpenClawPlugin, "hasKey">
   | Omit<HermesPlugin, "hasKey">
+  | Omit<GrokPlugin, "hasKey">
   | Omit<MusePlugin, "hasKey">
 ) & {
   encryptedKey: string;
@@ -288,6 +293,7 @@ export class PersonalAccount extends DurableObject<Env> {
   private attachments: AttachmentQueue;
   private media: MediaStore;
   private claw: OpenClawRelay;
+  private grok: GrokTasks;
   private cloud: CloudAgentStore;
   private cloudDelivery: CloudAgentDelivery;
   private cloudRuntime: CloudAgentRuntime;
@@ -442,6 +448,18 @@ export class PersonalAccount extends DurableObject<Env> {
         }
       },
     });
+    this.grok = new GrokTasks(
+      ctx.storage,
+      this.claw,
+      (id) => {
+        const p = this.plugin(id, true);
+        if (p.pluginId !== "wechatai/grok")
+          throw new AppError("plugin_type", "需要 Grok Bot 配置", 403);
+        return this.publicPlugin(p) as GrokPlugin;
+      },
+      (id, ref) =>
+        dispatchGrok(env, this.plugin(id, true).encryptedKey, `${ctx.id}:grok:${id}`, ref),
+    );
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.transactionSync(() => this.personalRecords.init());
       this.attachments.init();
@@ -502,6 +520,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.cloud.init();
       this.membershipReminders.init();
       this.claw.init();
+      this.grok.init();
       ctx.storage.transactionSync(() => initCallFailures(this.sql));
       if (
         !ctx.storage.sql
@@ -807,13 +826,19 @@ export class PersonalAccount extends DurableObject<Env> {
         JSON.stringify({ text: reply, cost: 0 }),
         Date.now(),
       );
-      this.sql.exec(
-        "INSERT INTO messages (sessionId,role,content,createdAt,model) VALUES (?,'user',?,?, ?)",
-        session.id,
-        text,
-        Date.now(),
-        agentName,
-      );
+      const userMessage = this.sql
+        .exec<{ id: number }>(
+          "INSERT INTO messages (sessionId,role,content,createdAt,model) VALUES (?,'user',?,?, ?) RETURNING id",
+          session.id,
+          text,
+          Date.now(),
+          agentName,
+        )
+        .one();
+      if (plugin.pluginId === "wechatai/grok") {
+        this.grok.enqueue(id, userMessage.id);
+        this.wakeWechat();
+      }
       this.sql.exec("UPDATE inbox SET sessionId = ? WHERE id = ?", session.id, id);
       const updatedSession = {
         ...session,
@@ -836,7 +861,16 @@ export class PersonalAccount extends DurableObject<Env> {
       let data: unknown;
       if (this.plugin(pluginId).pluginId !== `wechatai/${kind}`)
         throw new AppError("plugin_type", "连接类型不匹配", 403);
-      if (action === "pair") {
+      if (kind === "grok") {
+        const plugin = this.claw.authenticate(pluginId, secret);
+        if (plugin.pluginId !== "wechatai/grok")
+          throw new AppError("plugin_type", "连接类型不匹配", 403);
+        this.claw.markSeen(pluginId);
+        if (action === "grok.claim") data = this.grok.claim(plugin, payload);
+        else if (action === "grok.finish") data = this.grok.finish(plugin, payload);
+        else if (action === "grok.auth") data = { ok: true };
+        else throw new AppError("not_found", "未知工具", 404);
+      } else if (action === "pair") {
         const input = clawPairExchangeSchema.parse(payload);
         const connectorSecret = deriveOpenClawSecret(this.env, pluginId, secret, input.proof, kind);
         const result = this.claw.pair(pluginId, secret, input, connectorSecret);
@@ -847,13 +881,13 @@ export class PersonalAccount extends DurableObject<Env> {
         };
       } else if (action === "poll") data = await this.claw.poll(pluginId, secret, payload);
       else data = this.claw.handle(pluginId, secret, action, payload);
-      if (action === "event") {
+      if (action === "event" || action === "grok.finish") {
         // Alarms cannot overlap. Release idle receive requests so the active alarm
         // can finish and the persisted reply can be delivered without a 35s wait.
         this.wakeWechat();
         await this.scheduleWechat();
       }
-      if (action === "claim")
+      if (action === "claim" || action === "grok.claim")
         await this.receiver
           .sync()
           .catch(() => console.warn(JSON.stringify({ event: "wechat.typing_sync_retry" })));
@@ -1208,7 +1242,10 @@ export class PersonalAccount extends DurableObject<Env> {
         JSON.stringify(plugin),
       );
       // Every save path must invalidate old work before a quick re-enable.
-      if (!plugin.enabled) this.stopCloudPlugin(plugin.id);
+      if (!plugin.enabled) {
+        this.stopCloudPlugin(plugin.id);
+        if (plugin.pluginId === "wechatai/grok") this.claw.clearRoutes(plugin.id);
+      }
     });
   }
   private async savePlugin(id: string | undefined, raw: unknown) {
@@ -1334,6 +1371,37 @@ export class PersonalAccount extends DurableObject<Env> {
       });
       await this.scheduleWechat();
       return this.publicPlugin(plugin);
+    }
+    if ((kind ?? previous?.pluginId) === "wechatai/grok") {
+      const id = previous?.id ?? crypto.randomUUID();
+      const values = raw as Record<string, unknown>;
+      const input = grokInputSchema
+        .safeExtend({ shortcut: editableShortcut })
+        .parse({ ...previous, ...values });
+      const replace = !!(values.webhookKey || values.webhookUrl);
+      const encryptedKey = replace
+        ? await sealGrokWebhook(this.env, values, `${this.ctx.id}:grok:${id}`)
+        : previous?.encryptedKey;
+      if (!encryptedKey)
+        throw new AppError("grok_webhook_required", "请填写 Routine 的 Webhook URL 和 key");
+      const p: StoredPlugin = {
+        ...input,
+        pluginId: "wechatai/grok",
+        version: "1.0.0",
+        id,
+        createdAt: previous?.createdAt ?? Date.now(),
+        encryptedKey,
+      };
+      this.ctx.storage.transactionSync(() => {
+        this.requirePluginSlot(previous?.id);
+        if (previous && JSON.stringify(this.findPlugin(id)) !== JSON.stringify(previous))
+          throw new AppError("plugin_changed", "配置已更新，请重新打开后再保存", 409);
+        if (!previous || previous.shortcut !== input.shortcut)
+          this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
+        if (previous && replace) this.claw.revoke(id);
+        this.persistPlugin(p);
+      });
+      return this.publicPlugin(p);
     }
     if (
       ["wechatai/openclaw", "wechatai/hermes", "wechatai/muse"].includes(kind ?? previous?.pluginId)
@@ -2772,6 +2840,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.execution.dirty() ? Date.now() + 1000 : null,
       // Recovery and cancellation continue without an active WeChat connection.
       this.cloudNextAt(),
+      this.grok.nextAt(),
     ].filter((v): v is number => v !== null);
     if (links.length) {
       const activeIds = new Set(links.map((l) => l.id));
@@ -2905,6 +2974,7 @@ export class PersonalAccount extends DurableObject<Env> {
       plan: this.plan(),
       onboardingDismissedAt: this.getSetting("dashboardOnboardingDismissedAt", 0),
       plugins: this.plugins().map((p) => this.publicPlugin(p)),
+      grokBotReady: grokDispatcherReady(this.env),
       cloudAgent: this.cloudStatus(),
       planUntil: this.getSetting("planUntil", 0),
       channels: this.channels().map((c) => this.publicChannel(c)),
@@ -2995,13 +3065,10 @@ export class PersonalAccount extends DurableObject<Env> {
         p.maxInputTokens === undefined
       )
         p.maxInputTokens = this.assistant(p.id).maxInputTokens;
-      const remoteAction = /^plugin\.(claw|hermes|muse)(Pair|Token|Revoke|Status)$/.exec(action);
-      const remoteKind: RemoteAgentKind =
-        remoteAction?.[1] === "muse"
-          ? "muse"
-          : remoteAction?.[1] === "hermes"
-            ? "hermes"
-            : "openclaw";
+      const remoteAction = /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status)$/.exec(
+        action,
+      );
+      const remoteKind = remoteAgentKind(`wechatai/${remoteAction?.[1] ?? "openclaw"}`);
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
         throw new AppError("plugin_type", "插件类型不匹配", 403);
       if (action === "snapshot") data = this.snapshot();
@@ -3134,7 +3201,8 @@ export class PersonalAccount extends DurableObject<Env> {
       } else if (
         action === "plugin.clawToken" ||
         action === "plugin.hermesToken" ||
-        action === "plugin.museToken"
+        action === "plugin.museToken" ||
+        action === "plugin.grokToken"
       ) {
         data = {
           token: signOpenClawToken(
@@ -3142,12 +3210,16 @@ export class PersonalAccount extends DurableObject<Env> {
             this.claw.rotate(String(p.id), this.ctx.id.toString()),
             remoteKind,
           ),
-          endpoint: this.env.APP_URL,
+          endpoint:
+            remoteKind === "grok"
+              ? new URL("/api/grok/mcp", this.env.APP_URL).href
+              : this.env.APP_URL,
         };
       } else if (
         action === "plugin.clawRevoke" ||
         action === "plugin.hermesRevoke" ||
-        action === "plugin.museRevoke"
+        action === "plugin.museRevoke" ||
+        action === "plugin.grokRevoke"
       ) {
         this.plugin(String(p.id));
         this.claw.revoke(String(p.id));
@@ -3196,9 +3268,11 @@ export class PersonalAccount extends DurableObject<Env> {
             ok: true,
             data: {
               text:
-                this.claw.status(plugin.id).lastSeen > Date.now() - 60000
-                  ? `${remoteAgentName(plugin.pluginId)} 渠道在线，请在微信发送消息测试 Agent。`
-                  : `尚未连接，请在 ${remoteAgentName(plugin.pluginId)} 执行网页生成的连接命令。`,
+                plugin.pluginId === "wechatai/grok"
+                  ? "Webhook 按任务触发，请在微信发送 @快捷名 加文字验证 Grok Bot 收发。"
+                  : this.claw.status(plugin.id).lastSeen > Date.now() - 60000
+                    ? `${remoteAgentName(plugin.pluginId)} 渠道在线，请在微信发送消息测试 Agent。`
+                    : `尚未连接，请在 ${remoteAgentName(plugin.pluginId)} 执行网页生成的连接命令。`,
               cost: 0,
             },
           });
@@ -4930,9 +5004,11 @@ export class PersonalAccount extends DurableObject<Env> {
               p.pluginId === "wechatai/image-generation"
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
-                  ? p.pluginId === "wechatai/muse"
-                    ? "之后的文字消息会交给你的 Muse 托管助理。微伴命令使用 /wx 前缀；Muse 原生命令暂不支持。"
-                    : `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
+                  ? p.pluginId === "wechatai/grok"
+                    ? "之后的文字任务会交给你的 Grok Bot。审批请回到 Grok Bot 完成；微伴命令使用 /wx 前缀。"
+                    : p.pluginId === "wechatai/muse"
+                      ? "之后的文字消息会交给你的 Muse 托管助理。微伴命令使用 /wx 前缀；Muse 原生命令暂不支持。"
+                      : `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
                   : isCloudAgent(p)
                     ? "之后直接发送文字即可提交云端任务；结果会回复微信，也可在云端任务页查看。/wx stop 请求停止，/wx new 开始新对话。"
                     : p.pluginId === "wechatai/roleplay"
@@ -5419,6 +5495,7 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.refreshCloudAccess();
       await this.flushReminderSchedule();
       await this.flushNotificationSchedule();
+      await this.grok.dispatchDue();
       if (this.referralPending()) await this.retryReferral();
       // Recover AGT before idle WeChat long polls can consume this pass's budget.
       await this.cloudRuntime.process(Date.now() + 20_000);

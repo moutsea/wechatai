@@ -177,6 +177,14 @@ export async function receiveAccountCallback(
     );
 }
 
+// Grok tasks share the existing WeChat relay in the owning DO. A new
+// connector must never write to the old account after a routing change.
+export async function accountForGrok(env: Env, accountId: string) {
+  if (await lookupRoute(env, "account_id", accountId))
+    throw new AppError("grok_account_unavailable", "当前账户的任务队列暂不可用", 503);
+  return env.ACCOUNTS.get(env.ACCOUNTS.idFromString(accountId));
+}
+
 // Only call this after verifying the signature on the notification token.
 export async function accountForNotification(env: Env, accountId: string) {
   const route = await lookupRoute(env, "account_id", accountId);

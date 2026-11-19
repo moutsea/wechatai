@@ -2,7 +2,12 @@ import { compareConnectorVersions } from "../shared/openclaw-release";
 import type { OpenClawStatus } from "../shared/openclaw";
 import type { PluginAccessIssue } from "../shared/plugin-access";
 
-type Connection = { hasKey: boolean; lastSeen?: number; access?: PluginAccessIssue | null };
+type Connection = {
+  pluginId?: string;
+  hasKey: boolean;
+  lastSeen?: number;
+  access?: PluginAccessIssue | null;
+};
 
 const labels = {
   pending: "待连接",
@@ -20,6 +25,19 @@ const descriptions = {
 } as const;
 
 export function remoteAgentConnection(connection: Connection, now = Date.now()) {
+  if (connection.pluginId === "wechatai/grok" && !connection.access)
+    return {
+      state: connection.hasKey ? ("waiting" as const) : ("pending" as const),
+      label: connection.lastSeen
+        ? "MCP 已接通"
+        : connection.hasKey
+          ? "已生成 MCP 凭据"
+          : "待配置 MCP",
+      description: connection.hasKey
+        ? "在微信发送文字验证收发；Webhook 按消息触发。"
+        : "请在 Grok Bot 配置中生成 MCP 凭据。",
+      connectedBefore: connection.hasKey,
+    };
   const lastSeen = connection.lastSeen ?? 0;
   const state = connection.access
     ? "paused"

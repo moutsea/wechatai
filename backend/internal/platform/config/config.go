@@ -17,6 +17,7 @@ import (
 type Config struct {
 	Standby                                             bool
 	CloudOrigin, CloudAppID, CloudTenantID, CloudAppKey string
+	GrokDispatchSecret                                  string
 	AppURL                                              string
 	PublicSiteURL                                       string
 	Listen                                              string
@@ -80,6 +81,14 @@ func Load() (Config, error) {
 	host, _, err := net.SplitHostPort(c.Listen)
 	if err != nil {
 		return c, errors.New("invalid WECHATAI_LISTEN")
+	}
+	c.GrokDispatchSecret, err = secretValue("GROK_DISPATCH_SECRET")
+	if err != nil {
+		return c, err
+	}
+	c.GrokDispatchSecret = strings.TrimSpace(c.GrokDispatchSecret)
+	if c.GrokDispatchSecret != "" && len(c.GrokDispatchSecret) < 32 {
+		return c, errors.New("GROK_DISPATCH_SECRET must contain at least 32 bytes")
 	}
 	switch os.Getenv("WECHATAI_DEPLOY_MODE") {
 	case "", "accounts":

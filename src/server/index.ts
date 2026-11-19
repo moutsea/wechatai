@@ -40,6 +40,7 @@ import {
 } from "./wechat-receiver";
 import { watchdogHeader, fallbackWatchdogs } from "./receiver-watchdog";
 import { watchdogRoutes } from "./receiver-watchdog-routes";
+import { grokMcp } from "./grok/mcp";
 import { connectorPoll } from "./connector-poll";
 import { executionCompletionSchema } from "../shared/executor-protocol";
 import { executionAuthorized, EXECUTION_MAX_BYTES } from "./execution-store";
@@ -435,6 +436,7 @@ for (const method of ["POST", "GET"] as const) {
     );
   });
 }
+app.route("/api/grok/mcp", grokMcp);
 // Connector-only bearer scope. Browser session routes below retain Origin checks.
 for (const kind of ["openclaw", "hermes", "muse"] as const)
   app.post(`/api/${kind}/:action`, async (c) => {
@@ -687,6 +689,14 @@ app.get("/api/assets/:id", async (c) =>
 app.get("/api/dashboard", invoke("snapshot"));
 app.post("/api/onboarding/dismiss", invoke("onboarding.dismiss"));
 app.get("/api/plugins", invoke("plugin.list"));
+app.post(
+  "/api/plugins/:id/grok/token",
+  invoke("plugin.grokToken", (c) => ({ id: c.req.param("id") })),
+);
+app.delete(
+  "/api/plugins/:id/grok/token",
+  invoke("plugin.grokRevoke", (c) => ({ id: c.req.param("id") })),
+);
 app.get(
   "/api/plugins/:id/notification",
   invoke("notification.status", (c) => ({ id: c.req.param("id") })),

@@ -287,15 +287,19 @@ export class OpenClawRelay {
     if (!this.status(pluginId).hasKey)
       throw new AppError(
         "claw_unpaired",
-        `请先在网页的 ${remoteAgentName(plugin.pluginId)} 插件中生成并执行连接命令`,
+        plugin.pluginId === "wechatai/grok"
+          ? "请先在 Grok Bot 配置中生成 MCP 凭据并添加到 Bot。"
+          : `请先在网页的 ${remoteAgentName(plugin.pluginId)} 插件中生成并执行连接命令`,
       );
     const previous = this.sql.exec<Job>("SELECT * FROM claw_jobs WHERE id = ?", id).toArray()[0];
     if (previous) return previous;
     const command = nativeCommand(text) ?? "";
-    if (command && plugin.pluginId === "wechatai/muse")
+    if (command && (plugin.pluginId === "wechatai/muse" || plugin.pluginId === "wechatai/grok"))
       throw new AppError(
-        "muse_command_unsupported",
-        "Muse 暂不支持通过微信执行原生命令。请用文字描述要求；微伴命令使用 /wx 前缀。",
+        plugin.pluginId === "wechatai/grok"
+          ? "grok_command_unsupported"
+          : "muse_command_unsupported",
+        `${remoteAgentName(plugin.pluginId)} 暂不支持通过微信执行原生命令。请用文字描述要求；微伴命令使用 /wx 前缀。`,
         422,
       );
     if (command && !this.status(pluginId).nativeCommands)
@@ -388,12 +392,16 @@ export class OpenClawRelay {
   }
   handle(pluginId: string, secret: string, action: string, raw: unknown) {
     const plugin = this.authenticate(pluginId, secret);
+    return this.handleTask(plugin, action, raw, true);
+  }
+  markSeen(pluginId: string) {
+    this.sql.exec("UPDATE claw_connectors SET lastSeen=? WHERE pluginId=?", Date.now(), pluginId);
+  }
+  // Internal callers already checked the plugin and task scope.
+  handleTask(plugin: RemoteAgentPlugin, action: string, raw: unknown, fromConnector = false) {
+    const pluginId = plugin.id;
     return this.storage.transactionSync(() => {
-      this.sql.exec(
-        "UPDATE claw_connectors SET lastSeen = ? WHERE pluginId = ?",
-        Date.now(),
-        pluginId,
-      );
+      if (fromConnector) this.markSeen(pluginId);
       if (action === "poll") {
         const { runnerId, waitMs, nativeCommands, lane } = pollSchema.parse(raw);
         // Expired jobs cannot execute later, but retain the tombstone for dedupe.
@@ -476,7 +484,7 @@ export class OpenClawRelay {
         );
         return {
           claimed: true,
-          ...(plugin.pluginId === "wechatai/muse"
+          ...(plugin.pluginId === "wechatai/muse" || plugin.pluginId === "wechatai/grok"
             ? { maxOutputTokens: Math.min(plugin.maxOutputTokens, job.outputLimit) }
             : {}),
         };
@@ -553,7 +561,9 @@ export class OpenClawRelay {
       const displayText =
         plugin.pluginId === "wechatai/muse" && truncated
           ? `【回复已截断】以下仅为部分结果，已达到此任务的 ${outputLimit} tokens 回复上限。请让 Muse 每次只回复一部分，或在网页 Muse 配置的「更多设置」中调高「回复上限」后重新请求。此提示不计 credits。\n\n${text}`
-          : text;
+          : plugin.pluginId === "wechatai/grok" && truncated
+            ? `【回复已截断】已达到此任务的 ${outputLimit} tokens 回复上限。请让 Grok Bot 分段回复。此提示不计 credits。\n\n${text}`
+            : text;
       const inputTokens = failed ? 0 : (job?.inputTokens ?? 0);
       const outputTokens = failed ? 0 : countTextTokens(text);
       const units = job?.lane === "control" ? 0 : creditUnits(inputTokens, outputTokens);
