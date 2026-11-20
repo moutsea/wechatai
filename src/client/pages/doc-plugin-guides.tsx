@@ -1,4 +1,5 @@
 import { ArrowRight, BookOpen, Check, FileText } from "lucide-react";
+import { CLOUD_AGENT_SHORTCUT } from "../../shared/cloud-agent";
 import { pluginIconSource } from "../../shared/plugin-visuals";
 import { useLocale } from "../locale";
 
@@ -20,13 +21,13 @@ function pluginExamples(en: boolean): Record<string, PluginExample> {
       fields: en
         ? [
             ["Model", "Follows the current WeChat text model"],
-            ["WeChat shortcut", "Xiaowei"],
+            ["WeChat shortcut", CLOUD_AGENT_SHORTCUT],
           ]
         : [
             ["使用模型", "跟随微信当前文本模型"],
-            ["微信快捷名称", "小薇"],
+            ["微信快捷名称", CLOUD_AGENT_SHORTCUT],
           ],
-      command: "/use 小薇",
+      command: `/use ${CLOUD_AGENT_SHORTCUT}`,
       request: en
         ? "Convert the staged Markdown to Word and keep the heading levels."
         : "把刚才暂存的 Markdown 转成 Word，保留标题层级。",

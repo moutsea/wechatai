@@ -808,6 +808,16 @@ test("English docs keep navigation, search, table of contents and pagination in 
   );
 });
 
+for (const slug of ["cloud-agent", "wechat-ai-assistant"]) {
+  test(`shows the working Xiaowei shortcut and command on ${slug}`, async ({ page }) => {
+    await page.goto(`${origin}/en/docs/${slug}`);
+    const figure = page.getByRole("figure", { name: "Xiaowei configuration and usage example" });
+    await expect(figure.locator(".docs-plugin-heading")).toHaveText("Xiaowei");
+    await expect(figure.locator('dt:text-is("WeChat shortcut") + dd')).toHaveText("小薇");
+    await expect(figure.getByText("/use 小薇", { exact: true })).toBeVisible();
+  });
+}
+
 test("renders both notification diagrams under the correct English headings", async ({ page }) => {
   const mounted = page.waitForRequest("**/api/auth/get-session");
   await page.goto(`${origin}/en/docs/notifications`);
