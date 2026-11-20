@@ -26,7 +26,7 @@ export function LanguageSwitcher({ mobile = false }: { mobile?: boolean }) {
   return mobile ? (
     <>{links}</>
   ) : (
-    <nav className="site-language" aria-label="语言">
+    <nav className="site-language" aria-label={locale === "en" ? "Language" : "语言"}>
       {links}
     </nav>
   );

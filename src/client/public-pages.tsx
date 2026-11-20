@@ -241,7 +241,7 @@ function LandingPlanCard({
       <LandingPlanFeatures plus={plan.id !== "free"} />
       {plan.id === "free" ? (
         <StartLink className="button secondary landing-plan-action">
-          {session ? "进入工作台" : plan.action}
+          {session ? (locale === "en" ? homeCopy.hero.ctaWorkspace : "进入工作台") : plan.action}
           <ArrowRight size={17} aria-hidden="true" />
         </StartLink>
       ) : (

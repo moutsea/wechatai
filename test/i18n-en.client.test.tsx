@@ -15,9 +15,9 @@ function parse(path: string) {
   );
 }
 
-/** Chinese is allowed only for the switcher's own labels, never page copy. */
+/** The switcher's Chinese endonym is allowed in link text, not in attributes. */
 function hanResidue(document: Document) {
-  const text = document.body.textContent?.replaceAll("中文", "").replaceAll("语言", "") ?? "";
+  const text = document.body.textContent?.replaceAll("中文", "") ?? "";
   const attributes = [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
     .flatMap((element) =>
       ["alt", "aria-label", "title", "placeholder"].map(
@@ -25,9 +25,7 @@ function hanResidue(document: Document) {
       ),
     )
     .join(" ");
-  return `${text} ${attributes}`.replaceAll("中文", "").replaceAll("语言", "").match(
-    /\p{Script=Han}+/gu,
-  ) ?? [];
+  return `${text} ${attributes}`.match(/\p{Script=Han}+/gu) ?? [];
 }
 
 describe("published English pages", () => {

@@ -1264,10 +1264,33 @@ for (const width of [320, 390]) {
   });
 }
 
+test("keeps signed-in account controls English on both marketing pages", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({ json: { plan: "free", planUntil: 0, wallet: { balance: 100 } } }),
+  );
+  for (const [path, freeCard] of [
+    ["/en", ".landing-plan-free"],
+    ["/en/pricing", ".plan-free"],
+  ]) {
+    await page.goto(`${origin}${path}`);
+    await expect(page.locator(freeCard).getByRole("link", { name: "Open workspace" }))
+      .toHaveAttribute("href", "/app");
+    await expect(page.getByRole("navigation", { name: "Language", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "User menu", exact: true }).click();
+    const menu = page.getByRole("dialog", { name: "Account menu", exact: true });
+    await expect(menu.getByRole("link", { name: "Open workspace" })).toHaveAttribute("href", "/app");
+    await expect(menu.getByRole("link", { name: "Upgrade membership" }))
+      .toHaveAttribute("href", "/app/billing");
+    await expect(menu.getByRole("button", { name: "Log out" })).toBeVisible();
+    await expect(menu).not.toContainText(/\p{Script=Han}/u);
+  }
+});
+
 test("serves the English homepage and pricing page without Chinese page copy", async ({
   page,
 }) => {
-  const stripSwitcherLabels = (value: string) => value.replaceAll("中文", "").replaceAll("语言", "");
   const mounted = page.waitForRequest("**/api/auth/get-session");
   await page.goto(`${origin}/en`);
   await mounted;
@@ -1283,7 +1306,7 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   await faq.locator("summary").click();
   await expect(faq).toHaveAttribute("open", "");
   await expect(faq).toContainText("Do I need my own API key?");
-  expect(stripSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
+  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
     /\p{Script=Han}/u,
   );
 
@@ -1300,7 +1323,7 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   await estimate.locator("summary").click();
   await expect(estimate).toHaveAttribute("open", "");
   await expect(estimate.locator(".cost-results")).toContainText("credits");
-  expect(stripSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
+  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
     /\p{Script=Han}/u,
   );
   const readableAttributes = await page.evaluate(() =>
@@ -1312,5 +1335,5 @@ test("serves the English homepage and pricing page without Chinese page copy", a
       )
       .join(" "),
   );
-  expect(stripSwitcherLabels(readableAttributes)).not.toMatch(/\p{Script=Han}/u);
+  expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
 });

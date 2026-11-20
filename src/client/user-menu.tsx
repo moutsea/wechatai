@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
+import { useLocale } from "./locale";
 import { membershipExpiry } from "./membership";
 import { formatCredits, type Snapshot } from "../shared/types";
 import "./user-menu.css";
@@ -20,6 +21,9 @@ type AccountSummary = Pick<Snapshot, "plan" | "planUntil"> & { balance: number }
 
 export function UserMenu({ user }: { user: MenuUser }) {
   const { refetch } = useAuth();
+  const { locale } = useLocale();
+  const english = locale === "en";
+  const loadFailed = english ? "Could not load account details" : "账户信息暂时未能加载";
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [summary, setSummary] = useState<AccountSummary | null>(null);
@@ -52,13 +56,13 @@ export function UserMenu({ user }: { user: MenuUser }) {
           setSummary({ plan: data.plan, planUntil: data.planUntil, balance: data.wallet.balance });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError("账户信息暂时未能加载");
+        if (!controller.signal.aborted) setError(loadFailed);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [open, retry, user.id]);
+  }, [open, retry, user.id, loadFailed]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,7 +93,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           onError={() => setImageFailed(true)}
         />
       ) : (
-        Array.from(user.name.trim() || user.email || "你")[0].toLocaleUpperCase()
+        Array.from(user.name.trim() || user.email || (english ? "?" : "你"))[0].toLocaleUpperCase()
       )}
     </span>
   );
@@ -107,7 +111,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
         type="button"
         className="account-menu-trigger"
         ref={trigger}
-        aria-label="用户菜单"
+        aria-label={english ? "User menu" : "用户菜单"}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-haspopup="dialog"
@@ -124,11 +128,16 @@ export function UserMenu({ user }: { user: MenuUser }) {
         <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
-        <div className="account-dropdown" id={menuId} role="dialog" aria-label="账户菜单">
+        <div
+          className="account-dropdown"
+          id={menuId}
+          role="dialog"
+          aria-label={english ? "Account menu" : "账户菜单"}
+        >
           <div className="account-dropdown-profile">
             {avatar}
             <div>
-              <strong>{user.name || "我的账户"}</strong>
+              <strong>{user.name || (english ? "My account" : "我的账户")}</strong>
               <span title={user.email}>{user.email}</span>
             </div>
           </div>
@@ -139,12 +148,14 @@ export function UserMenu({ user }: { user: MenuUser }) {
             onClick={() => setOpen(false)}
           >
             <LayoutDashboard size={17} aria-hidden="true" />
-            进入工作台
+            {english ? "Open workspace" : "进入工作台"}
             <ArrowUpRight size={15} className="account-menu-arrow" aria-hidden="true" />
           </Link>
           <div className="account-dropdown-summary" aria-busy={loading} aria-live="polite">
             {loading ? (
-              <p className="account-menu-loading">正在加载会员与 credits…</p>
+              <p className="account-menu-loading">
+                {english ? "Loading membership and credits…" : "正在加载会员与 credits…"}
+              </p>
             ) : error ? (
               <div className="account-menu-error">
                 <span>{error}</span>
@@ -153,7 +164,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                   className="text-link"
                   onClick={() => setRetry((value) => value + 1)}
                 >
-                  重新加载
+                  {english ? "Reload" : "重新加载"}
                 </button>
               </div>
             ) : summary ? (
@@ -165,7 +176,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                 >
                   <span>
                     <Coins size={16} aria-hidden="true" />
-                    Credits 余额
+                    {english ? "Credit balance" : "Credits 余额"}
                   </span>
                   <strong>
                     {formatCredits(summary.balance)}
@@ -176,23 +187,29 @@ export function UserMenu({ user }: { user: MenuUser }) {
                   <div className="account-membership-heading">
                     <span>
                       <Crown size={17} aria-hidden="true" />
-                      {plus ? "Plus 会员" : "Free 免费账户"}
+                      {english
+                        ? plus ? "Plus membership" : "Free account"
+                        : plus ? "Plus 会员" : "Free 免费账户"}
                     </span>
                     <span className="account-plan-badge">{plus ? "PLUS" : "FREE"}</span>
                   </div>
                   <p>
                     {plus ? (
                       <>
-                        有效期至{" "}
+                        {english ? "Expires on" : "有效期至"}{" "}
                         <time dateTime={new Date(summary.planUntil).toISOString()}>
                           {membershipExpiry(summary.planUntil, true)}
                         </time>
-                        <small>（北京时间）</small>
+                        <small>{english ? " (Beijing time)" : "（北京时间）"}</small>
                       </>
                     ) : summary.planUntil > 0 ? (
-                      "会员已到期，升级后继续使用 Plus 权益。"
+                      english
+                        ? "Your membership has expired. Upgrade to regain Plus benefits."
+                        : "会员已到期，升级后继续使用 Plus 权益。"
                     ) : (
-                      "升级后使用全部插件与更多微信链接。"
+                      english
+                        ? "Upgrade to use all plugins and more WeChat connections."
+                        : "升级后使用全部插件与更多微信链接。"
                     )}
                   </p>
                   <Link
@@ -200,7 +217,9 @@ export function UserMenu({ user }: { user: MenuUser }) {
                     to="/app/billing"
                     onClick={() => setOpen(false)}
                   >
-                    {plus ? "续费会员" : "升级会员"}
+                    {english
+                      ? plus ? "Renew membership" : "Upgrade membership"
+                      : plus ? "续费会员" : "升级会员"}
                     <ArrowUpRight size={15} aria-hidden="true" />
                   </Link>
                 </div>
@@ -210,7 +229,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           {isAdmin && (
             <Link className="account-menu-item" to="/app/admin" onClick={() => setOpen(false)}>
               <ShieldCheck size={17} />
-              管理后台
+              {english ? "Admin console" : "管理后台"}
               <ArrowUpRight size={15} className="account-menu-arrow" />
             </Link>
           )}
@@ -225,14 +244,16 @@ export function UserMenu({ user }: { user: MenuUser }) {
                 if (result.error) throw new Error("Sign out failed");
                 await refetch();
               } catch {
-                setError("退出登录失败，请重试");
+                setError(english ? "Could not log out. Please try again." : "退出登录失败，请重试");
               } finally {
                 setSigningOut(false);
               }
             }}
           >
             <LogOut size={16} aria-hidden="true" />
-            {signingOut ? "正在退出…" : "退出登录"}
+            {english
+              ? signingOut ? "Logging out…" : "Log out"
+              : signingOut ? "正在退出…" : "退出登录"}
           </button>
         </div>
       )}
