@@ -49,8 +49,10 @@ Complete scanning following [Connect WeChat](/en/docs/wechat-connection); an alr
 3. Tell it what file to produce, for example:
 
 \`\`\`text
-Convert the staged Markdown into Word (.docx), keep the heading hierarchy and lists, reflow the body, and send me the generated file.
+请把刚才暂存的 Markdown 转成 Word（.docx），保留标题层级和列表，按正文重新排版，并把生成的文件发给我。
 \`\`\`
+
+The prompt asks Xiaowei to convert the staged Markdown into Word (.docx), keep the heading hierarchy and lists, reflow the body, and send back the generated file.
 
 Staging an attachment does not submit a task or charge credits; the task is created only after you send processing instructions. Xiaowei reflows the extracted text and **does not preserve the original layout**. For images and scans, see the [attachment guide](/en/docs/attachments).`,
         afterIllustration: `The illustration shows configuration and chat; actual output depends on the file and selected model. You can also replace the request with “Turn this text into a PDF” or “Extract decisions and action items from the meeting and generate a Word document.”`,

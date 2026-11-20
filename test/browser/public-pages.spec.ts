@@ -808,6 +808,15 @@ test("English docs keep navigation, search, table of contents and pagination in 
   );
 });
 
+test("keeps the original Xiaowei prompt in the English tutorial", async ({ page }) => {
+  await page.goto(`${origin}/docs/wechat-ai-assistant`);
+  const example = page.locator("#first-task pre code");
+  const original = await example.textContent();
+  expect(original).toContain("Markdown 转成 Word");
+  await page.goto(`${origin}/en/docs/wechat-ai-assistant`);
+  expect(await example.textContent()).toBe(original);
+});
+
 for (const slug of ["cloud-agent", "wechat-ai-assistant"]) {
   test(`shows the working Xiaowei shortcut and command on ${slug}`, async ({ page }) => {
     await page.goto(`${origin}/en/docs/${slug}`);
