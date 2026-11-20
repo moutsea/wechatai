@@ -5,7 +5,8 @@ export function authReturnPath(value: string | null): string {
     const url = new URL(value, "https://wechatai.app");
     return url.pathname === "/app" ||
       url.pathname.startsWith("/app/") ||
-      url.pathname === "/pricing"
+      url.pathname === "/pricing" ||
+      url.pathname === "/en/pricing"
       ? `${url.pathname}${url.search}${url.hash}`
       : "/app";
   } catch {

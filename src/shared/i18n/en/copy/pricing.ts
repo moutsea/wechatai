@@ -109,6 +109,17 @@ export const pricingCopy = {
     ctaBusy: "Redirecting to payment…",
     ctaSubscribe: (name: string, price: string) => `Get ${name} · ${price}`,
     ctaChoose: (name: string) => `Choose ${name}`,
+    loginAgain: "Log in again",
+    checkoutFailed: "Could not start checkout. Please try again.",
+    checkoutErrors: {
+      unauthorized: "Your session has expired. Log in again to continue.",
+      rate_limited: "Too many attempts. Please wait a moment and try again.",
+      billing_unavailable: "This plan is not available for purchase right now. Try again later.",
+      already_subscribed:
+        "You already have a recurring or pending subscription. Turn off auto-renewal under Manage subscription before buying a one-time membership. Your remaining time will be kept.",
+      payment_processing: "Your payment is being confirmed. Please refresh in a moment.",
+      checkout_in_progress: "An order is already being created. Please try again shortly.",
+    },
     offerName: (interval: "month" | "year") => (interval === "year" ? "Plus Yearly" : "Plus Monthly"),
     features: [
       {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ArrowRight, Check, Loader2, Minus } from "lucide-react";
-import { api, json } from "../api";
+import { ApiError, api, json } from "../api";
 import { useAuth } from "../auth";
 import { trackFunnel } from "../analytics-client";
 import {
@@ -99,14 +99,18 @@ function PlanFeatures({ plus }: { plus: boolean }) {
 }
 
 export function PricingPlans() {
-  const { data: session, isPending } = useAuth();
+  const { data: session, isPending, requireSignIn } = useAuth();
   const { locale } = useLocale();
   const english = locale === "en";
   const copy = pricingCopy.plans;
   const [params] = useSearchParams();
   const requestedInterval = params.get("interval");
   const [busyOffer, setBusyOffer] = useState<string | null>(null);
-  const [error, setError] = useState<{ offerId: string; message: string } | null>(null);
+  const [error, setError] = useState<{
+    offerId: string;
+    message: string;
+    loginRequired: boolean;
+  } | null>(null);
 
   async function startCheckout(offer: typeof monthly | typeof yearly) {
     setError(null);
@@ -116,7 +120,18 @@ export function PricingPlans() {
       const result = await api<{ url: string }>("/billing/checkout", json({ offerId: offer.id }));
       window.location.assign(result.url);
     } catch (e) {
-      setError({ offerId: offer.id, message: (e as Error).message });
+      const code = e instanceof ApiError ? e.code : undefined;
+      const loginRequired = english && code === "unauthorized";
+      if (loginRequired) requireSignIn();
+      setError({
+        offerId: offer.id,
+        message: english
+          ? code && Object.hasOwn(copy.checkoutErrors, code)
+            ? copy.checkoutErrors[code as keyof typeof copy.checkoutErrors]
+            : copy.checkoutFailed
+          : (e as Error).message,
+        loginRequired,
+      });
     } finally {
       setBusyOffer(null);
     }
@@ -165,6 +180,7 @@ export function PricingPlans() {
         {[monthly, yearly].map((offer) => {
           const annual = offer.interval === "year";
           const name = english ? copy.offerName(annual ? "year" : "month") : offer.name;
+          const planError = error?.offerId === offer.id ? error : null;
           return (
             <article
               id={`plan-${offer.interval}`}
@@ -244,17 +260,21 @@ export function PricingPlans() {
               ) : (
                 <Link
                   className="button plan-cta"
-                  to={`/register?returnTo=${encodeURIComponent(
+                  to={`${planError?.loginRequired ? "/login" : "/register"}?returnTo=${encodeURIComponent(
                     `${english ? "/en/pricing" : "/pricing"}?interval=${offer.interval}#plan-${offer.interval}`,
                   )}`}
                 >
-                  {english ? copy.ctaChoose(name) : `选择${offer.name}`}
+                  {planError?.loginRequired
+                    ? copy.loginAgain
+                    : english
+                      ? copy.ctaChoose(name)
+                      : `选择${offer.name}`}
                   <ArrowRight size={17} aria-hidden="true" />
                 </Link>
               )}
-              {error?.offerId === offer.id && (
+              {planError && (
                 <p className="plan-error" role="alert">
-                  {error.message}
+                  {planError.message}
                 </p>
               )}
               <PlanHighlights plus />
