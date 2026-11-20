@@ -32,6 +32,8 @@ import {
   receiverStatus,
 } from "./account-route";
 import { Hono } from "hono";
+import { html } from "hono/html";
+import { kimiseekEmailError } from "../shared/kimiseek-errors";
 import {
   receiverAuthorized,
   receiverEnabled,
@@ -643,7 +645,63 @@ app.get("/api/kimiseek/callback", async (c) => {
     return c.redirect(target.toString(), 303);
   } catch (e) {
     const message = e instanceof AppError ? e.message : "关联未完成，请返回微伴重新尝试";
-    await callKimiseek(account, { action: "fail", id, message });
+    const policy = kimiseekEmailError(e instanceof AppError ? e.code : undefined);
+    await callKimiseek(account, { action: "fail", id, message, errorCode: policy?.code });
+    if (policy) {
+      deleteCookie(c, "wx_kimiseek_flow", { path: "/api/kimiseek" });
+      return c.html(
+        html`<!doctype html>
+          <html lang="zh-CN">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width,initial-scale=1" />
+              <title>完成邮箱设置 · 微伴</title>
+              <style>
+                body {
+                  margin: 0;
+                  padding: 24px;
+                  background: #f7f8f5;
+                  color: #26382d;
+                  font:
+                    16px/1.8 system-ui,
+                    sans-serif;
+                }
+                main {
+                  max-width: 520px;
+                  margin: 8vh auto;
+                  padding: 28px;
+                  background: white;
+                  border: 1px solid #dce3da;
+                  border-radius: 16px;
+                }
+                h1 {
+                  font-size: 24px;
+                  line-height: 1.4;
+                }
+                a {
+                  display: inline-block;
+                  padding: 10px 0;
+                  color: #315f46;
+                  text-underline-offset: 4px;
+                }
+                a:focus-visible {
+                  outline: 2px solid currentColor;
+                  outline-offset: 4px;
+                }
+              </style>
+            </head>
+            <body>
+              <main>
+                <h1>KimiSeek 关联未完成</h1>
+                <p>${message}</p>
+                <a href="${policy.href}">${policy.label}</a><br />
+                <a href="/app/channels?new=1">返回渠道与模型</a>
+              </main>
+            </body>
+          </html>`,
+        403,
+      );
+    }
     return c.text(`${message}。你可以关闭此页面，回微伴重新操作。`, 400);
   }
 });

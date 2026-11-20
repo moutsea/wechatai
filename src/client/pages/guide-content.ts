@@ -168,7 +168,15 @@ Plus 到期或新任务暂停后，仍可查看保留的任务和请求停止。
         illustration: "kimiseek-import",
         body: `打开[渠道与模型](/app/channels)，点击「添加渠道」，再点击「服务商」旁的 **kimiseek 一键导入**，按新页面提示完成关联。
 
-关联完成后，微伴会自动导入渠道并尝试同步模型，无需手动填写 API Key。回到渠道页确认所需模型已导入，即可继续[连接微信](/docs/getting-started#start)。`,
+关联完成后，微伴会自动导入渠道并尝试同步模型，无需手动填写 API Key。回到渠道页确认所需模型已导入，即可继续[连接微信](/docs/getting-started#start)。
+
+**邮箱未验证？** 先[验证微伴邮箱](/verify-email?returnTo=%2Fapp%2Fchannels%3Fnew%3D1)，完成后回到渠道页重新点击一键导入。
+
+**邮箱不受支持？** KimiSeek 新注册仅接受受支持的主流邮箱，完整域名列表见其注册页。你可以保留当前微伴账号，改用手动接入：
+
+1. 用 QQ、163/126、Gmail、Outlook 等受支持邮箱[注册 KimiSeek](https://kimiseek.app/zh-CN/register)，在其控制台创建 API Key。
+2. 回到[添加渠道](/app/channels?new=1)，选择「自定义（第三方渠道 / 其他协议）」，名称填 KimiSeek，协议选 OpenAI Chat Completions，Base URL 填 \`https://api.kimiseek.app/v1\`，粘贴自己的 API Key。
+3. 点击「保存并获取模型」。手动渠道的密钥和充值在 KimiSeek 控制台管理；微伴内不会显示一键关联渠道的余额与充值入口。`,
       },
       {
         id: "custom",

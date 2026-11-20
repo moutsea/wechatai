@@ -23,7 +23,7 @@ import {
   preferredRemoteAgent,
   readyCloudAgents,
 } from "../../shared/wechat-readiness";
-import { useKimiseekConnect } from "./kimiseek-connect";
+import { KimiseekConnectError, useKimiseekConnect } from "./kimiseek-connect";
 import "./dashboard-onboarding.css";
 
 const steps = ["选择用途", "准备服务", "连接微信"];
@@ -441,11 +441,13 @@ export function DashboardOnboarding({ data }: { data: Snapshot }) {
                 </a>
               </p>
             )}
-            {(error || kimiseek.error) && (
+            {error ? (
               <p className="form-error" role="alert">
-                {error || kimiseek.error}
+                {error}
               </p>
-            )}
+            ) : kimiseek.error ? (
+              <KimiseekConnectError message={kimiseek.error} code={kimiseek.errorCode} />
+            ) : null}
           </div>
           <div className="onboarding-footer">
             <button

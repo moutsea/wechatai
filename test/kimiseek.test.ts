@@ -4,6 +4,7 @@ import { env, runInDurableObject, createExecutionContext } from "cloudflare:test
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHmac } from "node:crypto";
 import { secret } from "../src/server/config";
+import { kimiseekEmailError } from "../src/shared/kimiseek-errors";
 import { callKimiseek, type KimiseekFlow } from "../src/server/kimiseek";
 import { integrationNonce, kimiseekRequest, type KimiseekResponse } from "../src/server/kimiseek";
 import { validateModelBaseUrl, validateModelDNS } from "../src/server/security";
@@ -29,6 +30,51 @@ const result: KimiseekResponse = {
 };
 afterEach(() => vi.unstubAllGlobals());
 describe("KimiSeek import", () => {
+  it.each(["EMAIL_DOMAIN_BLOCKED", "EMAIL_VERIFICATION_REQUIRED"])(
+    "preserves %s as a recoverable policy error",
+    async (code) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Response.json({ code, message: "untrusted upstream text" }, { status: 403 }),
+        ),
+      );
+      const policy = kimiseekEmailError(code)!;
+      await expect(
+        kimiseekRequest(
+          env,
+          { id: "new-user", email: "test@example.com", emailVerified: true, name: "Test" },
+          "connect",
+        ),
+      ).rejects.toMatchObject({ code, status: 403, message: policy.message });
+      expect(policy.message).not.toContain("稍后重试");
+      expect(policy.message).not.toContain("untrusted");
+    },
+  );
+  it("keeps unknown, malformed and oversized errors generic without trusting upstream messages", async () => {
+    for (const [status, body] of [
+      [403, '{"code":"OTHER_ERROR","message":"secret-upstream-detail"}'],
+      [403, "<html>Gateway error</html>"],
+      [403, '{"code":"EMAIL_DOMAIN_BLOCKED","padding":"' + "x".repeat(4096) + '"}'],
+      [503, '{"code":"EMAIL_DOMAIN_BLOCKED"}'],
+    ] as const) {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(body, { status })),
+      );
+      await expect(
+        kimiseekRequest(
+          env,
+          { id: "new-user", email: "test@example.com", emailVerified: true, name: "Test" },
+          "connect",
+        ),
+      ).rejects.toMatchObject({
+        code: "kimiseek_unavailable",
+        status: 502,
+        message: "KimiSeek 关联服务暂不可用，请稍后重试",
+      });
+    }
+  });
   it("imports once, selects text before images, encrypts the key and preserves model settings on reconnect", async () => {
     const account = env.ACCOUNTS.getByName(crypto.randomUUID());
     const flow = await callKimiseek<KimiseekFlow>(account, {
@@ -209,6 +255,68 @@ describe("browser flow boundary", () => {
   });
   const request = (path: string, init?: RequestInit) =>
     worker.fetch(new Request(`${env.APP_URL}${path}`, init), env, createExecutionContext());
+  it.each(["EMAIL_DOMAIN_BLOCKED", "EMAIL_VERIFICATION_REQUIRED"])(
+    "shows recovery for %s in the callback and polling flow, then permits a new attempt",
+    async (code) => {
+      const headers = { origin: env.APP_URL, "content-type": "application/json" };
+      const registered = await request("/api/auth/sign-up/email", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          email: `policy-${crypto.randomUUID()}@example.com`,
+          password: "test-password-long",
+          name: "Test",
+        }),
+      });
+      expect(registered.status).toBe(200);
+      const { user } = await registered.json<{ user: { id: string } }>();
+      const cookie = await verifiedFixtureCookie(user.id, "test-password-long");
+      const start = () =>
+        request("/api/kimiseek/start", {
+          method: "POST",
+          headers: { ...headers, cookie },
+          body: '{"operation":"connect"}',
+        });
+      const first = await start();
+      expect(first.status).toBe(200);
+      const flow = await first.json<{ flowId: string }>();
+      const flowCookie = first.headers
+        .getSetCookie()
+        .map((c) => c.split(";")[0])
+        .join("; ");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json({ code }, { status: 403 })),
+      );
+      const callback = await request(
+        `/api/kimiseek/callback?flow=${flow.flowId}&state=${integrationNonce()}&challenge=${integrationNonce()}`,
+        { headers: { cookie: `${cookie}; ${flowCookie}` } },
+      );
+      expect(callback.status).toBe(403);
+      expect(callback.headers.get("content-type")).toContain("text/html");
+      const policy = kimiseekEmailError(code)!;
+      const html = await callback.text();
+      expect(html).toContain(policy.message);
+      expect(html).toContain(`href="${policy.href}"`);
+      expect(html).toContain(policy.label);
+      expect(html).not.toContain("稍后重试");
+      expect(html).not.toContain(result.apiKey);
+      const status = await request(`/api/kimiseek/status/${flow.flowId}`, { headers: { cookie } });
+      expect(await status.json()).toMatchObject({
+        status: "failed",
+        errorCode: code,
+        message: policy.message,
+      });
+      const next = await start();
+      expect(next.status).toBe(200);
+      const nextFlow = await next.json<{ flowId: string }>();
+      expect(nextFlow.flowId).not.toBe(flow.flowId);
+      const nextStatus = await request(`/api/kimiseek/status/${nextFlow.flowId}`, {
+        headers: { cookie },
+      });
+      expect(await nextStatus.json()).not.toHaveProperty("errorCode");
+    },
+  );
   it("requires login, Origin and a browser-bound flow before issuing a KimiSeek assertion", async () => {
     vi.stubGlobal(
       "fetch",

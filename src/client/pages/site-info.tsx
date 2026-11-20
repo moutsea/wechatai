@@ -194,8 +194,8 @@ function Privacy() {
         </p>
         <p>
           仅在你主动使用 KimiSeek 联通时，我们向 KimiSeek 发送站点来源、微伴用户
-          ID；首次关联还发送邮箱、验证状态和昵称，用于关联或创建账户。已验证邮箱可匹配已有账户，未验证邮箱使用独立关联账户。KimiSeek
-          将专用 API
+          ID；首次关联还发送邮箱、验证状态和昵称，用于关联或创建账户。首次关联需要已验证邮箱；已验证邮箱可匹配已有账户，新建
+          KimiSeek 账户还需符合其邮箱注册规则。历史已关联账户仍可使用。KimiSeek 将专用 API
           Key、可用模型与余额返回微伴；密钥仅在服务端传输并加密保存，不放入浏览器跳转地址。其独立处理规则见
           <a href="https://kimiseek.app/privacy" target="_blank" rel="noopener noreferrer">
             KimiSeek 隐私政策

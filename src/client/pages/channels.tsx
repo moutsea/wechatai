@@ -45,7 +45,7 @@ import {
 import { TOKENS_PER_CREDIT, OUTPUT_TOKEN_WEIGHT } from "../../shared/credits";
 import { modelKind, modelKindLabels, type ModelKind } from "../../shared/model-kind";
 import { isChatModel, modelProtocolIssue } from "../../shared/model-compatibility";
-import { KimiseekBalance, useKimiseekConnect } from "./kimiseek-connect";
+import { KimiseekBalance, KimiseekConnectError, useKimiseekConnect } from "./kimiseek-connect";
 import { conflictingShortcuts } from "../../shared/shortcut-conflicts";
 
 const newChannel = selectChannelProvider(
@@ -569,9 +569,7 @@ export function Channels() {
                       </small>
                     )}
                     {kimiseek.error && (
-                      <small className="form-error" role="alert">
-                        {kimiseek.error}
-                      </small>
+                      <KimiseekConnectError message={kimiseek.error} code={kimiseek.errorCode} />
                     )}
                   </>
                 }

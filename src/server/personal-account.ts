@@ -1632,7 +1632,7 @@ export class PersonalAccount extends DurableObject<Env> {
               : command.action === "complete"
                 ? await this.completeKimiseek(command.id, command.result)
                 : command.action === "fail"
-                  ? this.failKimiseek(command.id, command.message)
+                  ? this.failKimiseek(command.id, command.message, command.errorCode)
                   : await this.kimiseekBalance(command.identity);
       return JSON.stringify({ ok: true, data: data ?? null });
     } catch (e) {
@@ -1679,10 +1679,10 @@ export class PersonalAccount extends DurableObject<Env> {
     this.setSetting("kimiseekFlow", { ...flow, status: "working" });
     return flow;
   }
-  private failKimiseek(id: string, message: string) {
+  private failKimiseek(id: string, message: string, errorCode?: KimiseekFlow["errorCode"]) {
     const flow = this.getSetting<KimiseekFlow | null>("kimiseekFlow", null);
     if (flow?.id === id && flow.status === "working")
-      this.setSetting("kimiseekFlow", { ...flow, status: "failed", message });
+      this.setSetting("kimiseekFlow", { ...flow, status: "failed", message, errorCode });
   }
   private async completeKimiseek(id: string, raw: KimiseekResponse) {
     const flow = this.kimiseekFlow(id);
