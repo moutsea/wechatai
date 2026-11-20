@@ -5,6 +5,11 @@ import authMigration from "../migrations/0001_auth.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
 import emailMigration from "../migrations/0007_auth_email_limits.sql?raw";
 import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
+import {
+  challengeHeaders,
+  mockSiteverify,
+  testChallengeKeys,
+} from "./helpers/auth-email-challenge";
 import worker from "../src/server/index";
 import {
   authEmailContent,
@@ -22,6 +27,7 @@ const send = vi.fn(async (message: EmailMessage | EmailMessageBuilder) => {
 });
 const bindings = {
   ...env,
+  ...testChallengeKeys,
   AUTH_EMAIL_MODE: "cloudflare",
   AUTH_EMAIL_FROM: "verify@example.test",
   AUTH_EMAIL: { send },
@@ -58,6 +64,7 @@ async function request(
       method: body ? "POST" : "GET",
       headers: {
         "content-type": "application/json",
+        ...challengeHeaders(path),
         ...extra,
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -109,10 +116,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM funnel_events").run();
   messages = [];
   send.mockClear();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() => Promise.reject(new Error("Unexpected external request"))),
-  );
+  vi.stubGlobal("fetch", vi.fn(mockSiteverify(env.APP_URL)));
 });
 
 const verificationEvents = async () =>
@@ -240,7 +244,7 @@ describe("verified email registration and recovery", () => {
     const replay = await request(registered.link);
     expect(cookie(replay)).not.toContain("session_token=");
     expect((await login()).status).toBe(200);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1); // Only registration calls Siteverify.
   });
   it.each(["short", "p".repeat(129)])("enforces password length on the server", async (value) => {
     const response = await request("/api/auth/sign-up/email", {
@@ -747,6 +751,89 @@ describe("verified email registration and recovery", () => {
     expect(JSON.stringify(logs.mock.calls)).not.toMatch(
       /private-recipient|private-token|auth-.*example/,
     );
+  });
+});
+
+describe("email challenge", () => {
+  const limits = () =>
+    env.DB.prepare("SELECT SUM(day_count) AS used FROM auth_email_limit").first();
+  const registration = () => ({ name: "Test", email: email(), password });
+
+  it.each(["sign-up/email", "send-verification-email", "request-password-reset"])(
+    "requires a challenge before any side effects on %s",
+    async (path) => {
+      const body = registration();
+      const before = await limits();
+      for (const token of [undefined, "x".repeat(2049)]) {
+        const headers = new Headers({ "content-type": "application/json" });
+        if (token) headers.set("X-Turnstile-Token", token);
+        const res = await rawRequest("/api/auth/" + path, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({ code: "EMAIL_CHALLENGE_INVALID" });
+      }
+      expect(fetch).not.toHaveBeenCalled();
+      expect(await limits()).toEqual(before);
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare("SELECT id FROM user WHERE email=?").bind(body.email).first(),
+      ).toBeNull();
+    },
+  );
+  it.each([
+    [{ success: true, hostname: "unrelated.example", action: "email_signup" }, 403],
+    [{ success: true, hostname: new URL(env.APP_URL).hostname, action: "email_reset" }, 403],
+    [{ success: false, "error-codes": ["invalid-input-response"] }, 403],
+    [{ success: false, "error-codes": ["internal-error"] }, 503],
+    [{ success: false, "error-codes": ["invalid-input-secret"] }, 503],
+  ] as const)("rejects an unverified result %# before reserving quota", async (result, status) => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json(result));
+    const before = await limits();
+    expect((await request("/api/auth/sign-up/email", registration())).status).toBe(status);
+    expect(await limits()).toEqual(before);
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("fails closed for provider outages and missing or test keys", async () => {
+    const path = "/api/auth/request-password-reset";
+    const body = { email: email() };
+    const before = await limits();
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new Error("Timed out"))
+      .mockResolvedValueOnce(new Response(null, { status: 502 }));
+    for (let i = 0; i < 2; i++) expect((await request(path, body)).status).toBe(503);
+    for (const keys of [
+      { TURNSTILE_SITE_KEY: "" },
+      { TURNSTILE_SECRET_KEY: "" },
+      { TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" },
+    ]) {
+      const config = { ...bindings, ...keys };
+      expect((await request(path, body, {}, config)).status).toBe(503);
+      expect(await (await request("/api/auth/email-config", undefined, {}, config)).json()).toEqual(
+        { delivery: "unavailable" },
+      );
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(await limits()).toEqual(before);
+    expect(send).not.toHaveBeenCalled();
+    expect(await (await request("/api/auth/email-config")).json()).toEqual({
+      delivery: "email",
+      siteKey: testChallengeKeys.TURNSTILE_SITE_KEY,
+    });
+  });
+  it("consumes a valid token once across recipients, without reserving the second address", async () => {
+    const path = "/api/auth/sign-up/email";
+    const headers = challengeHeaders(path);
+    expect((await request(path, registration(), headers)).status).toBe(200);
+    const second = registration();
+    const before = await limits();
+    expect((await request(path, second, headers)).status).toBe(403);
+    expect(await limits()).toEqual(before);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((await request(path, second)).status).toBe(200);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });
 
