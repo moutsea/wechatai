@@ -8,6 +8,11 @@ import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
 import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import billingNoticesMigration from "../migrations/0006_billing_notifications.sql?raw";
+import {
+  challengeHeaders,
+  mockSiteverify,
+  testChallengeKeys,
+} from "./helpers/auth-email-challenge";
 import worker from "../src/server/index";
 import { createPageViewReporter } from "../src/client/analytics-client";
 import { ANALYTICS_SESSION_HEADER } from "../src/shared/analytics";
@@ -17,6 +22,7 @@ import { pauseAnalyticsWrites } from "./helpers/analytics-write";
 const send = vi.fn(async () => ({ messageId: "test-message" }));
 const bindings = {
   ...env,
+  ...testChallengeKeys,
   AUTH_EMAIL_MODE: "cloudflare",
   AUTH_EMAIL_FROM: "verify@example.test",
   AUTH_EMAIL: { send },
@@ -47,6 +53,7 @@ async function request(
         origin: env.APP_URL,
         "cf-connecting-ip": `198.18.1.${++ip}`,
         "user-agent": "Mozilla/5.0",
+        ...challengeHeaders(path),
         ...headers,
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -97,10 +104,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM page_views").run();
   await env.DB.prepare("DELETE FROM signup_attributions").run();
   await env.DB.prepare("DELETE FROM funnel_events").run();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() => Promise.reject(new Error("Unexpected network request"))),
-  );
+  vi.stubGlobal("fetch", vi.fn(mockSiteverify(env.APP_URL)));
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -123,12 +127,12 @@ async function landing(pathname = "/wechat-ai") {
   return reporter.signupAttribution().analyticsSessionId!;
 }
 
-function mockOAuth(address: string) {
+function mockOAuth(address: string, emailVerified = true) {
   const providerId = crypto.randomUUID();
   vi.mocked(fetch).mockImplementation(async (url) => {
     const target = String(url);
     if (target.includes("oauth2.googleapis.com/token")) {
-      const jwt = `${btoa(JSON.stringify({ alg: "none" }))}.${btoa(JSON.stringify({ sub: providerId, email: address, name: "Google Test", email_verified: true }))}.test-signature`;
+      const jwt = `${btoa(JSON.stringify({ alg: "none" }))}.${btoa(JSON.stringify({ sub: providerId, email: address, name: "Google Test", email_verified: emailVerified }))}.test-signature`;
       return Response.json({
         access_token: "test-token",
         token_type: "Bearer",
@@ -143,7 +147,7 @@ function mockOAuth(address: string) {
         scope: "read:user,user:email",
       });
     if (target.endsWith("/user/emails"))
-      return Response.json([{ email: address, primary: true, verified: true }]);
+      return Response.json([{ email: address, primary: true, verified: emailVerified }]);
     if (target.endsWith("/user"))
       return Response.json({ id: providerId, login: "test", name: "GitHub Test", email: address });
     throw new Error(`Unexpected OAuth endpoint: ${new URL(target).hostname}`);
@@ -305,6 +309,25 @@ describe("signup analytics follows actual account creation", () => {
       });
       await oauth(provider, "returning-session");
       expect(await attributions()).toEqual(first);
+    },
+  );
+
+  it.each(["google", "github"])(
+    "does not send mail on a %s callback with an unverified address",
+    async (provider) => {
+      const address = email();
+      const sentBefore = send.mock.calls.length;
+      mockOAuth(address, false);
+      await oauth(provider);
+      expect(
+        await env.DB.prepare("SELECT emailVerified FROM user WHERE email=?").bind(address).first(),
+      ).toEqual({ emailVerified: 0 });
+      expect(send).toHaveBeenCalledTimes(sentBefore);
+      vi.mocked(fetch).mockImplementation(mockSiteverify(env.APP_URL));
+      expect((await request("/api/auth/send-verification-email", { email: address })).status).toBe(
+        200,
+      );
+      expect(send).toHaveBeenCalledTimes(sentBefore + 1);
     },
   );
 

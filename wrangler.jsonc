@@ -99,6 +99,7 @@
         "APP_URL": "https://example.com",
         "AUTH_EMAIL_MODE": "cloudflare",
         "AUTH_EMAIL_FROM": "",
+        // "TURNSTILE_SITE_KEY": "your-public-site-key",
         "PUBLIC_SITE_URL": "https://example.com",
         "FREE_DAILY_CREDITS": "100",
         "PLUS_DAILY_CREDITS": "1000",

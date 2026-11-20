@@ -14,7 +14,27 @@ export default defineConfig(({ command, isPreview }) => ({
               ? "wrangler.production.local.jsonc"
               : "wrangler.jsonc")
           : "wrangler.jsonc",
-      config: ({ assets }) => {
+      config: (config) => {
+        const { assets, vars } = config;
+        if (
+          command === "build" &&
+          process.env.CLOUDFLARE_ENV === "production" &&
+          vars?.AUTH_EMAIL_MODE === "cloudflare"
+        ) {
+          // Apply the guard to private deployment configs created before Turnstile as well.
+          const required = new Set(config.secrets?.required);
+          required.add("TURNSTILE_SECRET_KEY");
+          if (vars.TURNSTILE_SITE_KEY === undefined) required.add("TURNSTILE_SITE_KEY");
+          else if (
+            typeof vars.TURNSTILE_SITE_KEY !== "string" ||
+            !vars.TURNSTILE_SITE_KEY.trim() ||
+            /^[1-3]x0{8}/.test(vars.TURNSTILE_SITE_KEY.trim())
+          )
+            throw new Error(
+              "Configure a live TURNSTILE_SITE_KEY before deploying email authentication.",
+            );
+          config.secrets = { required: [...required] };
+        }
         if (!assets) return;
         // Development serves source routes; production uses the generated HTML files.
         if (command === "serve" && !isPreview)

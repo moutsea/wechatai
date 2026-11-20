@@ -125,7 +125,8 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      // Email/password registration sends its first message through requireEmailVerification.
+      // Opting in here would also send from OAuth callbacks without a mail challenge.
       sendOnSignIn: false,
       autoSignInAfterVerification: true,
       expiresIn: 60 * 60,
