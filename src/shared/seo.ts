@@ -680,9 +680,14 @@ function withAlternates(seo: PageSeo, path: string): PageSeo {
 }
 
 function translatedPageSeo(path: string, translation: RegisteredTranslation): PageSeo {
-  const { locale, title, description } = translation;
+  const { locale, title, description, content } = translation;
   const { htmlLang, ogLocale } = LOCALE_DEFINITIONS[locale];
-  const base = basePageSeo(path, locale);
+  const canonical = `${SITE_URL}${localizedPath(locale, path)}`;
+  // A complete translation feeds the same builder as the Chinese page, so the
+  // visible body and page-owned JSON-LD cannot drift apart.
+  const base = content
+    ? seoLandingPage(content, canonical, htmlLang, locale)
+    : basePageSeo(path, locale);
   if (!base.indexable) return notFoundPageSeo();
   return {
     ...base,
