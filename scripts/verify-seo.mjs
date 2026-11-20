@@ -351,6 +351,41 @@ for (const [file] of publicPages.filter(([file]) => file.startsWith("docs/"))) {
     `${file}: discoverable from docs index`,
   );
 }
+// Every registered English article is prerendered with its own English body, not
+// a shell that resolves client-side, and the English index links all of them.
+const englishIndex = await read("en/docs.html");
+assert(englishIndex.includes("Put your AI to work in WeChat."), "en/docs: English index heading");
+for (const [slug, marker] of [
+  ["getting-started", "1. How Wechatai works"],
+  ["channels-models", "1. Add a model channel"],
+  ["model-providers", "KimiSeek one-click import"],
+  ["wechat-connection", "1. Connect WeChat by QR code"],
+  ["commands", "Command list"],
+  ["sessions", "Create, switch and clean up"],
+  ["attachments", "1. Send the attachment first"],
+  ["credits", "1. Free or Plus?"],
+  ["faq", "It connects, but why do I get no reply?"],
+  ["cloud-agent", "1. Enable Xiaowei"],
+  ["ds-chat", "1. Configure the model and search service"],
+  ["image-generation", "1. Configure an image service"],
+  ["roleplay", "How can I play?"],
+  ["personal-assistant", "1. Configure and start"],
+  ["notifications", "1. Connect WeChat and generate a dedicated token"],
+  ["wechat-ai-assistant", "What can an AI assistant in WeChat do for you?"],
+  ["deepseek-in-wechat", "Before starting, confirm two things"],
+  ["multiple-openclaw-in-wechat", "First decide where the two assistants come from"],
+  ["hermes-in-wechat", "Step 1: prepare Hermes"],
+]) {
+  const file = `en/docs/${slug}.html`;
+  const html = await read(file);
+  assert(html.includes('<html lang="en">'), `${file}: English document language`);
+  assert(html.includes(marker), `${file}: English article body before JavaScript`);
+  assert(
+    html.includes(`rel="canonical" href="https://wechatai.app/en/docs/${slug}"`),
+    `${file}: English canonical`,
+  );
+  assert(englishIndex.includes(`href="/en/docs/${slug}"`), `${file}: listed in English index`);
+}
 // 文档导航与开发者索引都要直达同一份 Muse 指南，且正文包含全部章节与 FAQ；
 // `/developers/muse.md` 由同一份 museGuide 提供，Worker 测试按同一清单断言。
 assert(docsIndex.includes('href="/developers/muse"'), "docs navigation links the Muse guide");

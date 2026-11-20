@@ -72,7 +72,7 @@ try {
     `${staticRules.join("\n").trimEnd()}\n\n# Generated canonical public URLs\n${canonicalRedirects.join("\n")}\n\n# Dynamic rules go last: Cloudflare treats each rule after the first splat or\n# placeholder as dynamic and keeps only the first 100 of them.\n${dynamicRules.join("\n").trimEnd()}\n`,
   );
   console.log(
-    `Prerendered ${PUBLIC_PATHS.length} public pages, private route shells and a 404 page.`,
+    `Prerendered ${renderedPublicPaths.length} public pages, private route shells and a 404 page.`,
   );
 } finally {
   await server.close();

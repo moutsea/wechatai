@@ -1,18 +1,20 @@
 import { ArrowRight, Check, ChevronDown, Download, Pencil, Plus, Zap } from "lucide-react";
 import { protocolLabels } from "../../shared/types";
+import { useLocale } from "../locale";
 
 /** A static, responsive example: credentials are entered only in the workspace. */
 export function DocChannelExample() {
+  const en = useLocale().locale === "en";
   return (
     <figure className="docs-channel-example">
       <div className="docs-channel-example-card">
         <div className="docs-channel-example-header">
-          <strong>添加渠道</strong>
-          <span>配置示意</span>
+          <strong>{en ? "Add channel" : "添加渠道"}</strong>
+          <span>{en ? "Configuration example" : "配置示意"}</span>
         </div>
         <div className="docs-channel-example-fields">
           <div>
-            <div className="docs-channel-example-label">服务商</div>
+            <div className="docs-channel-example-label">{en ? "Provider" : "服务商"}</div>
             <div className="docs-channel-example-control docs-channel-example-provider">
               <img
                 src="/images/channels/deepseek.png"
@@ -28,46 +30,66 @@ export function DocChannelExample() {
           <div>
             <div className="docs-channel-example-label">API Key</div>
             <div className="docs-channel-example-control docs-channel-example-key">
-              粘贴你的 DeepSeek API Key
+              {en ? "Paste your DeepSeek API key" : "粘贴你的 DeepSeek API Key"}
             </div>
           </div>
           <div className="docs-channel-example-automatic">
             <Check size={16} aria-hidden="true" />
-            地址与协议已自动填写
+            {en ? "Address and protocol filled in" : "地址与协议已自动填写"}
           </div>
           <div className="docs-channel-example-submit">
-            保存并获取模型
+            {en ? "Save and fetch models" : "保存并获取模型"}
             <ArrowRight size={17} aria-hidden="true" />
           </div>
         </div>
       </div>
-      <figcaption>以 DeepSeek 为例。请在「渠道与模型」页填写自己的 API Key 并保存。</figcaption>
+      <figcaption>
+        {en
+          ? "Using DeepSeek as an example. Enter your own API key on the Channels & models page and save."
+          : "以 DeepSeek 为例。请在「渠道与模型」页填写自己的 API Key 并保存。"}
+      </figcaption>
     </figure>
   );
 }
 
 export function DocCustomChannelExample() {
+  const en = useLocale().locale === "en";
   return (
-    <figure className="docs-channel-example" aria-label="第三方服务商自定义接口配置示意">
+    <figure
+      className="docs-channel-example"
+      aria-label={
+        en
+          ? "Custom third-party provider endpoint configuration example"
+          : "第三方服务商自定义接口配置示意"
+      }
+    >
       <div className="docs-channel-example-card">
         <div className="docs-channel-example-header">
-          <strong>添加渠道</strong>
-          <span>自定义示意</span>
+          <strong>{en ? "Add channel" : "添加渠道"}</strong>
+          <span>{en ? "Custom example" : "自定义示意"}</span>
         </div>
         <div className="docs-channel-example-fields">
           <div>
-            <div className="docs-channel-example-label">服务商</div>
+            <div className="docs-channel-example-label">{en ? "Provider" : "服务商"}</div>
             <div className="docs-channel-example-control docs-channel-example-provider">
-              <span>自定义（第三方渠道 / 其他协议）</span>
+              <span>
+                {en
+                  ? "Custom (third-party channel / other protocol)"
+                  : "自定义（第三方渠道 / 其他协议）"}
+              </span>
               <ChevronDown size={16} aria-hidden="true" />
             </div>
           </div>
           <div>
-            <div className="docs-channel-example-label">渠道名称</div>
-            <div className="docs-channel-example-control">我的模型服务</div>
+            <div className="docs-channel-example-label">{en ? "Channel name" : "渠道名称"}</div>
+            <div className="docs-channel-example-control">
+              {en ? "My model service" : "我的模型服务"}
+            </div>
           </div>
           <div>
-            <div className="docs-channel-example-label">接口协议</div>
+            <div className="docs-channel-example-label">
+              {en ? "Endpoint protocol" : "接口协议"}
+            </div>
             <div className="docs-channel-example-control docs-channel-example-provider">
               <span>{protocolLabels["chat-completions"]}</span>
               <ChevronDown size={16} aria-hidden="true" />
@@ -77,52 +99,63 @@ export function DocCustomChannelExample() {
             <div className="docs-channel-example-label">Base URL</div>
             <div className="docs-channel-example-control">https://api.example.com/v1</div>
             <p className="docs-custom-channel-hint">
-              示例地址，请替换为服务商提供的 Base URL，无需手动添加 /chat/completions 等请求后缀。
+              {en
+                ? "Example address. Replace it with the provider's Base URL; do not append request suffixes such as /chat/completions manually."
+                : "示例地址，请替换为服务商提供的 Base URL，无需手动添加 /chat/completions 等请求后缀。"}
             </p>
           </div>
           <div>
             <div className="docs-channel-example-label">API Key</div>
             <div className="docs-channel-example-control docs-channel-example-key">
-              填写该服务商的 API Key
+              {en ? "Enter this provider's API key" : "填写该服务商的 API Key"}
             </div>
           </div>
           <div className="docs-channel-example-submit">
-            保存渠道
+            {en ? "Save channel" : "保存渠道"}
             <ArrowRight size={17} aria-hidden="true" />
           </div>
         </div>
       </div>
       <figcaption>
-        此图为配置示意。请在工作台填写真实地址和密钥，保存后点击「获取可用模型」。
+        {en
+          ? "Configuration example. Enter the real address and key in the workspace, save, then click “Fetch available models” (“获取可用模型”)."
+          : "此图为配置示意。请在工作台填写真实地址和密钥，保存后点击「获取可用模型」。"}
       </figcaption>
     </figure>
   );
 }
 
 export function DocModelSyncExample({ showTools = false }: { showTools?: boolean }) {
+  const en = useLocale().locale === "en";
   return (
-    <figure className="docs-channel-example" aria-label="模型同步完成后的界面示意">
+    <figure
+      className="docs-channel-example"
+      aria-label={en ? "Interface example after models finish syncing" : "模型同步完成后的界面示意"}
+    >
       <div className="docs-channel-example-card">
         <div className="docs-channel-example-header">
           <div className="docs-model-sync-brand">
             <img src="/images/channels/deepseek.png" alt="" width="28" height="28" loading="lazy" />
             <strong>DeepSeek</strong>
           </div>
-          <span>同步完成</span>
+          <span>{en ? "Sync complete" : "同步完成"}</span>
         </div>
         <div className="docs-channel-example-fields">
           <div className="docs-model-sync-meta">
             <span>OpenAI Chat Completions</span>
-            <span>2 个模型</span>
+            <span>{en ? "2 models" : "2 个模型"}</span>
           </div>
           <div>
-            <div className="docs-channel-example-label">文本模型</div>
-            <ul className="docs-model-sync-list" aria-label="DeepSeek 已导入的示例模型">
+            <div className="docs-channel-example-label">{en ? "Text models" : "文本模型"}</div>
+            <ul
+              className="docs-model-sync-list"
+              aria-label={en ? "Imported DeepSeek example models" : "DeepSeek 已导入的示例模型"}
+            >
               {["deepseek-chat", "deepseek-reasoner"].map((model) => (
                 <li key={model}>
                   <span className="docs-model-sync-dot" aria-hidden="true" />
                   <strong>{model}</strong>
-                  <span className="docs-model-sync-use">使用</span>
+                  <span className="docs-model-sync-use">{en ? "Use" : "使用"}</span>
                   {showTools && (
                     <span className="docs-model-sync-tools" aria-hidden="true">
                       <Zap size={16} />
@@ -135,32 +168,36 @@ export function DocModelSyncExample({ showTools = false }: { showTools?: boolean
           </div>
           <div className="docs-model-sync-status">
             <Check size={17} aria-hidden="true" />
-            已导入 2 个模型
+            {en ? "2 models imported" : "已导入 2 个模型"}
           </div>
           {showTools && (
             <div className="docs-model-sync-actions">
               <span>
-                <Zap size={15} aria-hidden="true" /> 测试连接
+                <Zap size={15} aria-hidden="true" /> {en ? "Test connection" : "测试连接"}
               </span>
               <span>
-                <Pencil size={15} aria-hidden="true" /> 编辑模型
+                <Pencil size={15} aria-hidden="true" /> {en ? "Edit model" : "编辑模型"}
               </span>
             </div>
           )}
           <div className="docs-model-sync-actions" aria-hidden="true">
             <span>
-              <Download size={15} /> 获取可用模型
+              <Download size={15} /> {en ? "Fetch available models" : "获取可用模型"}
             </span>
             <span>
-              <Plus size={15} /> 手动添加
+              <Plus size={15} /> {en ? "Add manually" : "手动添加"}
             </span>
           </div>
         </div>
       </div>
       <figcaption>
-        {showTools
-          ? "模型列表示意，实际模型以服务商返回为准。请在工作台测试连接或编辑模型。"
-          : "同步完成后的界面示意，模型以服务商实际返回为准。看到文本模型后，即可继续连接微信。"}
+        {en
+          ? showTools
+            ? "Model list example; the provider's actual response is authoritative. Test the connection or edit the model in the workspace."
+            : "Interface example after syncing; the provider's actual response is authoritative. Once you see a text model, continue connecting WeChat."
+          : showTools
+            ? "模型列表示意，实际模型以服务商返回为准。请在工作台测试连接或编辑模型。"
+            : "同步完成后的界面示意，模型以服务商实际返回为准。看到文本模型后，即可继续连接微信。"}
       </figcaption>
     </figure>
   );

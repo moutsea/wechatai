@@ -1,4 +1,4 @@
-import type { DocScreenshot } from "./docs-content";
+import type { DocScreenshot } from "../../shared/docs";
 
 // Captured from the real workspace UI. Values are illustrative, never account credentials.
 export const DOC_SCREENSHOTS = {

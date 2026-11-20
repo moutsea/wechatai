@@ -107,6 +107,16 @@ for (const path of locale404Probes) {
   });
 }
 
+test("returns a real 404 for an unregistered English document", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  const response = await page.goto(`${origin}/en/docs/not-registered`);
+  expect(response?.status()).toBe(404);
+  await mounted;
+  await expect(page.getByRole("heading", { name: "这个页面没有找到。" })).toBeVisible();
+  await expect(page.locator(".site-header a[hreflang]")).toHaveCount(0);
+  await expect(page.getByText("Put your AI to work in WeChat.")).toHaveCount(0);
+});
+
 for (const width of [390, 1280]) {
   for (const path of ["/", "/#how"]) {
     test(`preserves homepage reading state while the entry script loads: ${path} at ${width}px`, async ({
@@ -745,6 +755,50 @@ for (const privacy of ["none", "dnt", "gpc", "hidden"] as const) {
     expect(views).toHaveLength(privacy === "dnt" || privacy === "gpc" ? 0 : 1);
   });
 }
+
+test("English docs keep navigation, search, table of contents and pagination in English", async ({
+  page,
+}) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/en/docs`);
+  await mounted;
+  await expect(page.locator("h1")).toHaveText("Put your AI to work in WeChat.");
+  await expect(
+    page.locator('.docs-tutorial-list a[href="/en/docs/wechat-ai-assistant"]'),
+  ).toBeVisible();
+  await page.locator('.docs-sidebar a[href="/en/docs/getting-started"]').click();
+  await expect(page).toHaveURL(`${origin}/en/docs/getting-started`);
+  await expect(page.locator("h1")).toHaveText(
+    "WeChat AI guide: configure a model and connect by QR code",
+  );
+  await expect(page.locator(".docs-sidebar a[href='/en/docs/roleplay']")).toBeVisible();
+  await expect(page.locator('.docs-sidebar a[href="/docs/getting-started"]')).toHaveCount(0);
+
+  const toc = page.locator("#docs-toc-desktop");
+  await toc.locator('a[href="#prepare"]').click();
+  await expect(page.locator("#prepare")).toBeFocused();
+
+  const search = page.locator("#docs-search-desktop");
+  await search.fill("roleplay");
+  await expect(
+    page.locator('.docs-sidebar .docs-nav-group a[href="/en/docs/roleplay"]'),
+  ).toBeVisible();
+  await expect(
+    page.locator('.docs-sidebar .docs-nav-group a[href="/en/docs/channels-models"]'),
+  ).toHaveCount(0);
+  await search.fill("zzzz");
+  await expect(page.locator(".docs-search-empty")).toHaveText(
+    "No documents match “zzzz”. Try “channel” or “plugin” instead.",
+  );
+
+  const next = page.locator(".docs-pagination a").last();
+  await expect(next).toHaveAttribute("href", "/en/docs/channels-models");
+  await expect(next).toContainText("Next");
+  await expect(page.locator(".site-language a", { hasText: "中文" })).toHaveAttribute(
+    "href",
+    "/docs/getting-started",
+  );
+});
 
 test("positions article anchors after navigating between lazy routes", async ({ page }) => {
   const mounted = page.waitForRequest("**/api/auth/get-session");
