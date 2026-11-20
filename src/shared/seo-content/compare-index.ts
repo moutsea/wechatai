@@ -8,9 +8,9 @@ export const compareIndexPage: SeoPage = {
     "微伴与微信官方内置 AI、开源自建 OpenClaw、其他商业微信 AI 平台三类方案对比：价格、自备 Key、群聊、设备在线与部署要求。",
   eyebrow: "微信 AI × 三类方案",
   h1: "微信 AI 对比：先看三类方案再选",
-  lede: "微信 AI 有三类做法：微信官方内置 AI、自建 OpenClaw 等 Agent、其他商业微信 AI 平台。微伴是把自选模型接入微信单聊的第三方服务，普通聊天和小薇需自备模型 API Key，接入已有 OpenClaw 沿用 Agent 的模型配置。",
+  lede: "这里对比微伴与另外三类微信 AI 方案：微信官方内置 AI、自建 OpenClaw 等 Agent、其他商业微信 AI 平台。微伴是把自选模型接入微信单聊的第三方服务，普通聊天和小薇需自备模型 API Key，接入已有 OpenClaw 沿用 Agent 的模型配置。",
   answer:
-    "微信 AI 有三类做法：微信官方内置 AI、自建 OpenClaw 等 Agent、其他商业微信 AI 平台。微伴是其中把自选模型接进微信单聊的一类：普通聊天和小薇需自备模型 API Key，接入已有 OpenClaw 沿用 Agent 的模型配置，只支持 ClawBot 单聊。",
+    "微伴与另外三类微信 AI 方案对比：微信官方内置 AI、自建 OpenClaw 等 Agent、其他商业微信 AI 平台。微伴是把自选模型接入微信的中转服务，只支持 ClawBot 单聊。普通聊天和小薇需自备模型 API Key，接入已有 OpenClaw 沿用 Agent 的模型配置。",
   primaryKeyword: "微信 AI 对比",
   secondaryKeywords: ["微信 AI 助手哪个好", "微伴对比"],
   highlights: ["三对比较各自独立成页", "缺失字段明确标注", "不把运维成本算成零"],
@@ -33,7 +33,7 @@ export const compareIndexPage: SeoPage = {
   ],
   faq: [
     {
-      question: "这三类微信 AI 方案怎么选？",
+      question: "微伴与另外三类微信 AI 方案怎么选？",
       answer:
         "只要微信自带的基础问答，选官方内置；需要指定模型、插件或接入自己的 Agent，选微伴这类第三方接入；需要访问本机文件、运行本机命令或接入自定义工具，再自建 OpenClaw；不想接触 Key 且接受平台给定的模型列表，可选商业平台。",
     },

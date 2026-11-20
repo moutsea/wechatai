@@ -78,6 +78,14 @@ it("renders the comparison index with links to every pair", async () => {
   expect(container.querySelectorAll(".seopage-compare-table")).toHaveLength(0);
 });
 
+it("presents Wechatai separately from the three alternatives in the comparison index", async () => {
+  await renderAt("/compare");
+  const scope = /微伴[与和]另外三类微信 AI 方案/;
+  expect.soft(container.querySelector(".seopage-lede")?.textContent, "intro").toMatch(scope);
+  expect.soft(container.querySelector(".seopage-answer")?.textContent, "direct answer").toMatch(scope);
+  expect.soft(container.querySelector("#faq summary")?.textContent, "first FAQ question").toMatch(scope);
+});
+
 it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-openclaw", "wechatai-vs-commercial-wechat-ai"])(
   "distinguishes Wechatai model requirements from an existing OpenClaw connection for %s",
   async (pair) => {
