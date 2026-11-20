@@ -27,7 +27,7 @@ curl --fail-with-body 'https://wechatai.app/api/notify' \\
   -H "Authorization: Bearer $WECHATAI_NOTIFY_TOKEN" \\
   -H 'Content-Type: application/json' \\
   -H 'Idempotency-Key: order-001' \\
-  -d '{"title":"Payment received","text":"Order paid, amount ¥9.90"}'
+  -d '{"title":"收款成功","text":"订单已支付，金额 ¥9.90"}'
 \`\`\`
 
 \`text\` is the required body; \`title\` is optional. \`Idempotency-Key\` prevents duplicate notifications on retries: **use a new value for each new event and keep the same key and content when retrying the same event.**
@@ -41,7 +41,7 @@ HTTP **202 only means the request entered the queue**; confirm separately whethe
 The Feishu text-message structure is also accepted, still authenticated with the Wechatai token:
 
 \`\`\`json
-{"msg_type":"text","content":{"text":"Payment received\\nOrder: order-001\\nAmount: ¥9.90"}}
+{"msg_type":"text","content":{"text":"收款成功\\n订单：order-001\\n金额：¥9.90"}}
 \`\`\`
 
 This is text-format compatibility only. It cannot replace a Feishu SDK endpoint that requires signature verification, and you must not include \`timestamp\` or \`sign\` fields.`,
@@ -62,7 +62,7 @@ curl --fail-with-body 'https://wechatai.app/api/notify' \\
   -H "Authorization: Bearer $WECHATAI_NOTIFY_TOKEN" \\
   -H 'Content-Type: application/json' \\
   -H "Idempotency-Key: build-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \\
-  -d '{"title":"Build complete","text":"CI passed. Check the artifact in the repository."}'
+  -d '{"title":"构建完成","text":"CI 构建已通过，请到代码仓库检查产物。"}'
 \`\`\`
 
 Keep the same key for retries of the same build event. A successful script only means the request was accepted; query the final delivery status, and the WeChat reply window must still be valid. Pushes call no model and cost no credits.`,
