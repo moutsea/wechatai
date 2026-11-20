@@ -24,7 +24,7 @@ pnpm exec wrangler r2 bucket create wechatai-media
 - 将 `routes`、`APP_URL`、`PUBLIC_SITE_URL` 改成自己的 HTTPS 域名。
 - 保留账户对象的 `v1` 迁移；不要把顶层的本地 `v2-local-reminders` 迁移复制进生产环境。
 - 确认 `REMINDERS.script_name` 对应提醒 Worker 名称。
-- 配置 `AUTH_EMAIL` 发信绑定、`AUTH_EMAIL_MODE=cloudflare` 和 `AUTH_EMAIL_FROM`；先完成发信域名验证，见[邮箱注册配置](configuration.md#邮箱注册与找回密码)。不要将本地 `preview` 模式复制进生产。
+- 启用生产发信时，先验证发信域名，再配置 `AUTH_EMAIL` 绑定、`AUTH_EMAIL_MODE=cloudflare` 和 `AUTH_EMAIL_FROM`。在 Cloudflare 为站点创建 Turnstile 小组件并配置密钥。[邮箱注册配置](configuration.md#邮箱注册与找回密码)
 
 编辑 `wrangler.reminders.local.jsonc`：使用相同 Cloudflare 账户，确认 `ACCOUNTS.script_name` 是主 Worker 名称。若改名，两个配置须成对修改。通常保留 `wechatai` / `wechatai-reminders` 即可。
 
@@ -36,7 +36,7 @@ pnpm exec wrangler r2 bucket create wechatai-media
 
 ## 2. 密钥和数据库
 
-准备 `.production-secrets.local` JSON，至少包含不同的随机 `BETTER_AUTH_SECRET`、`ENCRYPTION_KEY`，每个不少于 32 字符。需要 OAuth 或 Stripe 时再加入对应配置，参考 `.dev.vars.example`。不要把生成的密钥粘贴到 README 或提交到 Git。
+准备 `.production-secrets.local` JSON，至少包含不同的随机 `BETTER_AUTH_SECRET`、`ENCRYPTION_KEY`，每个不少于 32 字符。启用生产发信时，加入 `TURNSTILE_SECRET_KEY`。如果公开的 `TURNSTILE_SITE_KEY` 未写入生产 `vars`，也将它加入此文件。需要 OAuth 或 Stripe 时再加入对应配置，参考 `.dev.vars.example`。不要把生成的密钥粘贴到 README 或提交到 Git。
 
 以下命令用于全新数据库；已有站点的迁移顺序见第 4 节。
 

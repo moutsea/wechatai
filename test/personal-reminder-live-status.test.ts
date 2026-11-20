@@ -4,9 +4,16 @@ import { PersonalRecordsStore } from "../src/server/personal-records";
 import { personalContext } from "../src/server/plugins/personal-context";
 import { personalReceipt } from "../src/server/plugins/personal-receipt";
 import { beijingDate, beijingTime } from "../src/shared/personal-assistant";
-import { connect, contextData, save, savePlugin, setup } from "./personal-assistant-helpers";
+import {
+  connect,
+  contextData,
+  reminderTestDate,
+  save,
+  savePlugin,
+  setup,
+} from "./personal-assistant-helpers";
 
-const at = Date.parse("2026-11-20T08:00:00+08:00");
+const at = Date.parse(`${reminderTestDate}T08:00:00+08:00`);
 const day = 86400000;
 const target = { connectionId: "default", generation: "g1" };
 async function reminder(repeat = "none") {
@@ -36,7 +43,7 @@ it.each(["sent", "expired", "scheduled", "waiting_context"])(
       const store = new PersonalRecordsStore(state.storage.sql);
       const draft = store.draft(plugin.id, target);
       draft.save(
-        { content: "新增备注", remindAt: "2026-11-20T08:00:00+08:00" },
+        { content: "新增备注", remindAt: `${reminderTestDate}T08:00:00+08:00` },
         record.id,
         record.revision,
       );

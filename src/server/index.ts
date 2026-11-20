@@ -57,7 +57,9 @@ import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { availableAuthProviders, createAuth } from "./auth";
-import { authEmailDelivery, reserveAuthEmail } from "./auth-email";
+import { reserveAuthEmail } from "./auth-email";
+import { authEmailConfig, checkAuthEmailChallenge } from "./auth-email-challenge";
+import { authEmailActions, authErrorMessage } from "../shared/auth";
 import { z } from "zod";
 import { AppError, trustedAppOrigins } from "./config";
 import { catalog, checkout, checkoutStatus, subscriptionInfo, portal, webhook } from "./billing";
@@ -305,6 +307,11 @@ app.get("/api/internal/wechat-receiver/connect/:accountId", async (c) => {
 });
 app.route("/", publicPluginDocs);
 app.get("/invite/:code", (c) => acceptReferral(c.env, c.req.param("code"), c.req.raw));
+const mailActions = new Map([
+  ["/api/auth/sign-up/email", authEmailActions.signup],
+  ["/api/auth/send-verification-email", authEmailActions.resend],
+  ["/api/auth/request-password-reset", authEmailActions.reset],
+]);
 app.use("/api/auth/*", async (c, next) => {
   c.header("Cache-Control", "no-store");
   c.header("Referrer-Policy", "no-referrer");
@@ -313,23 +320,14 @@ app.use("/api/auth/*", async (c, next) => {
     !(await c.env.AUTH_LIMIT.limit({ key: c.req.header("cf-connecting-ip") || "local" })).success
   )
     return c.json({ message: "尝试过于频繁，请稍后再试" }, 429);
-  const mailPaths = [
-    "/api/auth/sign-up/email",
-    "/api/auth/send-verification-email",
-    "/api/auth/request-password-reset",
-  ];
-  if (c.req.method === "POST" && mailPaths.includes(c.req.path.replace(/\/+$/, ""))) {
+  const action = mailActions.get(c.req.path.replace(/\/+$/, ""));
+  if (c.req.method === "POST" && action) {
     if (!trustedAppOrigins(c.env).includes(c.req.header("origin") || ""))
       return c.json({ code: "INVALID_ORIGIN", message: "请求来源无效" }, 403);
     // Match the format parsed below so Better Auth cannot accept a body that bypasses the limit.
     const mediaType = c.req.header("content-type")?.split(";", 1)[0].trim().toLowerCase();
     if (mediaType !== "application/json")
       return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "请使用 JSON 格式提交请求。" }, 415);
-    if (authEmailDelivery(c.env) === "unavailable")
-      return c.json(
-        { code: "EMAIL_SERVICE_UNAVAILABLE", message: "邮件服务暂时不可用，请稍后再试。" },
-        503,
-      );
     const body = z.object({ email: z.string() }).safeParse(
       await c.req.raw
         .clone()
@@ -339,6 +337,12 @@ app.use("/api/auth/*", async (c, next) => {
     const email = body.success ? body.data.email.trim().toLowerCase() : "";
     if (!z.email().safeParse(email).success)
       return c.json({ code: "INVALID_EMAIL", message: "请填写有效的邮箱地址。" }, 400);
+    const code = await checkAuthEmailChallenge(c.env, c.req.raw, action);
+    if (code)
+      return c.json(
+        { code, message: authErrorMessage({ code }) },
+        code === "EMAIL_CHALLENGE_INVALID" ? 403 : 503,
+      );
     // Applied before looking up an account: unknown and registered emails have the same limits.
     if (!(await reserveAuthEmail(c.env, email))) {
       c.header("Retry-After", "60");
@@ -350,7 +354,7 @@ app.use("/api/auth/*", async (c, next) => {
   }
   return next();
 });
-app.get("/api/auth/email-config", (c) => c.json({ delivery: authEmailDelivery(c.env) }));
+app.get("/api/auth/email-config", (c) => c.json(authEmailConfig(c.env)));
 app.get("/api/auth/providers", (c) => {
   c.header("Cache-Control", "no-store");
   return c.json({ providers: availableAuthProviders(c.env) });

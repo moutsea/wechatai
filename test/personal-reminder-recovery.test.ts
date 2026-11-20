@@ -17,13 +17,14 @@ import {
   list,
   reminders,
   save,
+  reminderTestDate,
   savePlugin,
   scheduler,
   setup,
 } from "./personal-assistant-helpers";
 
 const day = 86400000;
-const morning = Date.parse("2026-11-20T08:00:00+08:00");
+const morning = Date.parse(`${reminderTestDate}T08:00:00+08:00`);
 async function prepare(at = morning, repeat = "daily", dailyTasks = false) {
   const clock = vi.spyOn(Date, "now").mockReturnValue(at - 60000);
   const { stub, model } = await setup();
@@ -181,7 +182,7 @@ describe("daily digest expiry independent of delivery prerequisites", () => {
   it.each(["context", "login", "plugin"])(
     "settles midnight expiry with an unavailable %s and preserves the original send failure",
     async (condition) => {
-      const at = Date.parse("2026-11-20T23:59:00+08:00");
+      const at = Date.parse(`${reminderTestDate}T23:59:00+08:00`);
       const { stub, plugin, clock } = await prepare(at, "daily", true);
       expect(
         (await save(stub, plugin.id, { kind: "task", title: "昨天的任务", date: beijingDate(at) }))
@@ -246,7 +247,7 @@ describe("daily digest expiry independent of delivery prerequisites", () => {
   it.each(["daily", "weekly"])(
     "keeps an ordinary %s reminder retryable after midnight within its 24-hour window",
     async (repeat) => {
-      const at = Date.parse("2026-11-20T23:59:00+08:00");
+      const at = Date.parse(`${reminderTestDate}T23:59:00+08:00`);
       const { stub, clock } = await prepare(at, repeat);
       await connect(stub, { contextToken: "" });
       clock.mockReturnValue(at + 1000);
@@ -268,7 +269,7 @@ describe("daily digest expiry independent of delivery prerequisites", () => {
   );
 
   it("rechecks midnight expiry before recording a connection change during decryption", async () => {
-    const at = Date.parse("2026-11-20T23:59:00+08:00");
+    const at = Date.parse(`${reminderTestDate}T23:59:00+08:00`);
     const { stub, clock } = await prepare(at, "daily", true);
     clock.mockReturnValue(at + 59999);
     await runInDurableObject(stub, async (instance, state) => {
