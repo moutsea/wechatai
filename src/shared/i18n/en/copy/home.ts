@@ -97,8 +97,8 @@ export const homeCopy = {
         body: "API keys and WeChat connection credentials are encrypted at rest on the server. Saved keys are never sent back to the browser.",
       },
       inspection: {
-        title: "We do not read your data",
-        body: "We do not manually inspect your chats or attachments. Messages are processed automatically and delivered to connected services. Necessary conversation and task records are retained under the privacy policy.",
+        title: "No proactive review",
+        body: "We do not proactively review your chats or attachments. Messages are processed automatically and delivered to connected services. Necessary conversation and task records are retained under the privacy policy.",
       },
       deletion: {
         title: "Delete conversation records",

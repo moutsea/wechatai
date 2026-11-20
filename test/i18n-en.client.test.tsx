@@ -64,6 +64,16 @@ describe("published English pages", () => {
     expect(hanResidue(document)).toEqual([]);
   });
 
+  it("limits the English homepage privacy statement to proactive review", () => {
+    const document = parse("/en");
+    const statements = [...document.querySelectorAll(".landing-privacy-item p")];
+    const inspection = statements.find((p) => p.textContent?.includes("chats or attachments"));
+    expect(inspection?.textContent).toContain(
+      "We do not proactively review your chats or attachments.",
+    );
+    expect(inspection?.previousElementSibling?.textContent).toBe("No proactive review");
+  });
+
   it("renders English pricing copy, plans, FAQ, estimator and related links", () => {
     const document = parse("/en/pricing");
     expect(document.querySelector("h1")?.textContent).toBe(
