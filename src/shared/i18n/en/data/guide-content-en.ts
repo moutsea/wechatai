@@ -1017,6 +1017,13 @@ Returned images support PNG, JPEG, WebP, GIF and SVG; corrupt or unsupported res
   notifications: {
     intro:
       "Wechatai's notification plugin sends order statuses, monitoring alerts and script results to your WeChat through a webhook. One HTTP request is enough, with no model API; Free can use it, and pushes cost no credits.",
-    sections: EN_NOTIFICATION_SECTIONS,
+    sections: EN_NOTIFICATION_SECTIONS.map((section) => ({
+      ...section,
+      ...(section.id === "setup"
+        ? { illustration: "plugin-notification" as const }
+        : section.id === "receipt"
+          ? { illustration: "notification-delivery" as const }
+          : {}),
+    })),
   },
 };

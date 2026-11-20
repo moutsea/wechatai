@@ -808,6 +808,22 @@ test("English docs keep navigation, search, table of contents and pagination in 
   );
 });
 
+test("renders both notification diagrams under the correct English headings", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/en/docs/notifications`);
+  await mounted;
+  await expect.soft(
+    page.locator("#setup").getByRole("figure", {
+      name: "Notifications configuration and usage example",
+    }),
+  ).toBeVisible();
+  await expect.soft(
+    page.locator("#receipt").getByRole("figure", {
+      name: "Notification flow from submission to confirmed delivery",
+    }),
+  ).toBeVisible();
+});
+
 test("positions article anchors after navigating between lazy routes", async ({ page }) => {
   const mounted = page.waitForRequest("**/api/auth/get-session");
   await page.goto(`${origin}/wechat-clawbot-models`);
