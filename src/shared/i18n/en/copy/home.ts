@@ -244,7 +244,7 @@ export const homeCopy = {
         lead: "Xiaowei, your cloud assistant",
         title: "Handle files, create documents",
         description:
-          "Assign tasks and receive files in WeChat. No installation or deployment; just configure a model.",
+          "Assign tasks and receive files in WeChat. No installation or deployment; just configure a model. In the example, replace <shortcut> with your configured WeChat shortcut.",
         note: "Plus members only",
         action: "Meet Xiaowei and get started",
       },
@@ -271,7 +271,7 @@ export const homeCopy = {
         subtitle: "A task assistant that lives in the Wechatai cloud",
         task: "Hand to Xiaowei",
         done: "Done",
-        prompt: "@Xiaowei convert this Markdown to Word",
+        prompt: "@<shortcut> convert this Markdown to Word",
         fileName: "Project notes.docx",
         fileNote: "Generated file, sent back to WeChat",
       },

@@ -21,3 +21,4 @@
 3. `/` 与 `/en`、`/pricing` 与 `/en/pricing` 分别自指并互指，中英文 canonical 各指自身，`x-default` 指向各自中文原路径，`lang` 和 `og:locale` 沿用 T1 定义。sitemap 对照基线只增加 `/en` 和 `/en/pricing` 两条 URL，其他项不变，无 `/en/docs`、`/en/wechat-ai` 等英文入口。以生产资产 404 规则的本地预览验证上述未登记路径实际 HTTP 404。
 4. `pnpm check` 包含全量校验及构建，另用现有 `pnpm test:browser` 跑相关浏览器回归。全量测试和构建串行，先查负载、正在运行的重活和 `MemAvailable`；有重活或可用内存低于 2 GiB 时等待。附检查结果、sitemap diff、页面证据及改动文件清单。
 5. 本需求文档仅留仓库根 `internal-docs/`，不导入 `src/`，不复制到 `public/`，不登记文档内容或 `/api/docs`。构建后按文件路径和独有标题核对公开资产及 Worker bundle 没有收录，生产规则预览下该文档直链不可访问且 `/api/docs` 不返回本文。
+6. 英文首页的小薇示例用 `@<shortcut>`，并说明须替换为已配置的微信快捷名；`Xiaowei` 是英文展示名，不是默认快捷名。示例不改变既有配置或命令解析。

@@ -1337,3 +1337,13 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   );
   expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
 });
+
+test("labels the Xiaowei mention with the configured shortcut placeholder", async ({ page }) => {
+  await page.goto(`${origin}/en`);
+  const example = page.locator(".use-case-cloud .scene-task-prompt");
+  await expect(example).toBeVisible();
+  await expect(example).toContainText("@<shortcut> convert this Markdown to Word");
+  await expect(page.locator(".use-case-cloud .use-case-copy")).toContainText(
+    "replace <shortcut> with your configured WeChat shortcut.",
+  );
+});
