@@ -2,6 +2,10 @@ name: Deploy Go backend
 on:
   workflow_call:
     secrets:
+      VPS_HOST:
+        required: false
+      VPS_USER:
+        required: false
       VPS_SSH_PRIVATE_KEY:
         required: true
       VPS_KNOWN_HOSTS:
@@ -14,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.VPS_DEPLOY_PAUSED != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: backend-production
@@ -72,8 +76,8 @@ jobs:
       - name: Publish Go backend
         if: steps.release-head.outputs.current == 'true'
         env:
-          WECHATAI_VPS_HOST: ${{ vars.VPS_HOST }}
-          WECHATAI_VPS_USER: ${{ vars.VPS_USER }}
+          WECHATAI_VPS_HOST: ${{ secrets.VPS_HOST }}
+          WECHATAI_VPS_USER: ${{ secrets.VPS_USER }}
         run: node scripts/deploy-backend.mjs
       - name: Remove temporary credentials
         if: always()

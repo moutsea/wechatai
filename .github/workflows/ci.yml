@@ -74,6 +74,9 @@ jobs:
         with:
           go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
+      - name: Verify backend release log privacy
+        working-directory: .
+        run: node --test scripts/deploy-backend-privacy.node-test.mjs
       - name: Check formatting
         run: test -z "$(gofmt -l .)"
       - run: go vet ./...
@@ -93,6 +96,8 @@ jobs:
     secrets:
       VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
       VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_HOST: ${{ secrets.VPS_HOST }}
 
   deploy-edge:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -101,3 +106,4 @@ jobs:
     secrets:
       WRANGLER_CONFIG: ${{ secrets.WRANGLER_CONFIG }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

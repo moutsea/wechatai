@@ -5,13 +5,13 @@ import { fileURLToPath } from "node:url";
 import { inspectArtifact } from "./backend-artifact.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const run = (command, args, capture = false) => {
+const run = (stage, command, args, capture = false) => {
   const result = spawnSync(command, args, {
-    stdio: capture ? ["ignore", "pipe", "inherit"] : "inherit",
+    // Transport errors and remote output can contain hostnames or account data.
+    stdio: ["ignore", capture ? "pipe" : "ignore", "ignore"],
     encoding: "utf8",
   });
-  if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`${command} failed (${result.status})`);
+  if (result.error || result.status !== 0) throw new Error(`${stage} failed`);
   return result.stdout?.trim();
 };
 
@@ -40,7 +40,7 @@ try {
     ["WECHATAI_SSH_KEY_FILE", key],
     ["WECHATAI_SSH_KNOWN_HOSTS_FILE", known],
   ]) {
-    if (!path || !(await stat(path)).isFile())
+    if (!path || !(await stat(path).catch(() => null))?.isFile())
       throw new Error(`${name} must name an existing file`);
   }
   if ((await stat(key)).mode & 0o077) throw new Error("SSH key file permissions must be 0600");
@@ -64,7 +64,6 @@ try {
       JSON.stringify(
         {
           commit: manifest.commit,
-          target,
           actions: [
             "Upload binary and manifest to a private temporary directory",
             "Run installed /usr/local/libexec/wechatai-release",
@@ -78,6 +77,7 @@ try {
     );
   } else {
     const incoming = run(
+      "Create remote staging directory",
       "ssh",
       [...options, target, "mktemp -d /tmp/wechatai-release.XXXXXXXXXX"],
       true,
@@ -85,16 +85,21 @@ try {
     if (!/^\/tmp\/wechatai-release\.[a-zA-Z0-9]{10}$/.test(incoming))
       throw new Error("Unexpected remote staging directory");
     try {
-      run("scp", [
+      run("Upload backend artifact", "scp", [
         ...options,
         resolve(directory, "wechatai"),
         resolve(directory, "manifest.json"),
         `${target}:${incoming}/`,
       ]);
-      run("ssh", [...options, target, `sudo -n /usr/local/libexec/wechatai-release ${incoming}`]);
+      run("Activate backend release", "ssh", [
+        ...options,
+        target,
+        `sudo -n /usr/local/libexec/wechatai-release ${incoming}`,
+      ]);
+      console.log(`Backend release activated: ${manifest.commit}`);
     } finally {
       try {
-        run("ssh", [
+        run("Clean remote staging directory", "ssh", [
           ...options,
           target,
           `rm -f ${incoming}/wechatai ${incoming}/manifest.json && rmdir ${incoming}`,
