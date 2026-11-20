@@ -623,6 +623,17 @@ for (const group of localePageGroups) {
       [...switchTargets, ...switchTargets], // Desktop header and mobile menu.
       `${path}: switcher links exactly the other published languages`,
     );
+    if (path.startsWith("/en/wechat-")) {
+      const graph = JSON.parse(
+        html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+      )["@graph"];
+      const { publisher } = graph.find(
+        (item) => item["@type"] === "WebPage" || item["@type"] === "Article",
+      );
+      assert.equal(publisher["@id"], "https://wechatai.app/#organization", `${path}: publisher ID`);
+      assert.match(publisher.description, /WeChat ClawBot/, `${path}: publisher description`);
+      assert.doesNotMatch(publisher.description, /\p{Script=Han}/u, `${path}: English publisher`);
+    }
     if (lastmod) {
       assert(
         sitemap.includes(`<loc>${canonical}</loc><lastmod>${lastmod}</lastmod>`),
