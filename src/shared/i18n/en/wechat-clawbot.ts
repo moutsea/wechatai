@@ -22,7 +22,7 @@ const content: SeoPage = {
   ],
   highlights: [
     "Separate the channel from the model",
-    "Binding links last 30 seconds",
+    "Binding takes about 30 seconds",
     "Five no-reply causes you can check yourself",
   ],
   steps: [

@@ -289,6 +289,13 @@ for (const [file, , marker] of landingPages) {
     assert(target.includes(`id="${match[2]}"`), `${file}: cross-page anchor ${match[0]}`);
   }
 }
+const englishClawbot = await read("en/wechat-clawbot.html");
+assert.match(
+  englishClawbot.match(/<ul class="seopage-highlights">.*?<\/ul>/s)?.[0] ?? "",
+  /Binding takes about 30 seconds/,
+  "ClawBot: binding duration, not link expiry",
+);
+
 // /pricing must ship plan offers and a machine-readable price check date in the
 // static HTML, not only after client JavaScript runs.
 const pricingHtml = await read("pricing.html");
