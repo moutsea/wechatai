@@ -5,6 +5,7 @@ import { beforeAll, expect, it, vi } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
 import { SeoLandingPage } from "../src/client/pages/seo-landing";
 import { AnonymousAuthProvider } from "../src/client/auth";
+import { LocaleProvider } from "../src/client/locale";
 
 let page: Document;
 
@@ -102,11 +103,13 @@ it("copies an example command and shows visible feedback", async () => {
     await act(async () =>
       root.render(
         <MemoryRouter initialEntries={["/wechat-muse"]}>
-          <AnonymousAuthProvider>
-            <Routes>
-              <Route path="/:slug" element={<SeoLandingPage />} />
-            </Routes>
-          </AnonymousAuthProvider>
+          <LocaleProvider>
+            <AnonymousAuthProvider>
+              <Routes>
+                <Route path="/:slug" element={<SeoLandingPage />} />
+              </Routes>
+            </AnonymousAuthProvider>
+          </LocaleProvider>
         </MemoryRouter>,
       ),
     );
