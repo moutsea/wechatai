@@ -111,7 +111,7 @@ export function DocModelProviders() {
           <h3>KimiSeek</h3>
           <p>
             {en
-              ? "An official Wechatai partner: a Chinese model aggregation platform from 50% off."
+              ? "An official Wechatai partner: a Chinese model aggregation platform with discounts of up to 50% off."
               : "微伴官方合作伙伴，国产模型聚合平台，5 折起。"}
           </p>
           <a href="#kimiseek">

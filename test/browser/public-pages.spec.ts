@@ -756,6 +756,14 @@ for (const privacy of ["none", "dnt", "gpc", "hidden"] as const) {
   });
 }
 
+test("describes the maximum KimiSeek discount in English docs", async ({ page }) => {
+  await page.goto(`${origin}/en/docs/model-providers`);
+  const card = page.getByRole("listitem").filter({
+    has: page.getByRole("heading", { name: "KimiSeek", exact: true }),
+  });
+  await expect(card).toContainText("up to 50% off");
+});
+
 test("English docs keep navigation, search, table of contents and pagination in English", async ({
   page,
 }) => {
