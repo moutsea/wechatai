@@ -147,6 +147,7 @@ describe("search indexing boundaries", () => {
       "https://wechatai.app/wechat-glm",
       "https://wechatai.app/wechat-agent",
       "https://wechatai.app/wechat-ai-options",
+      "https://wechatai.app/compare",
       "https://wechatai.app/compare/wechatai-vs-wechat-official-ai",
       "https://wechatai.app/compare/wechatai-vs-openclaw",
       "https://wechatai.app/compare/wechatai-vs-commercial-wechat-ai",
@@ -297,6 +298,19 @@ describe("comparison landing pages", () => {
     const options = SEO_PAGES.find((page) => page.path === "/wechat-ai-options");
     const hrefs = options?.related.map((link) => link.href) ?? [];
     for (const page of pages) expect(hrefs).toContain(page.path);
+  });
+
+  it("collects every pair on the index and links each pair back", () => {
+    const index = SEO_PAGES.find((page) => page.path === "/compare");
+    expect(index?.kind, "/compare").toBe("comparison");
+    expect(index?.related.map((link) => link.href)).toContain("/wechat-ai-options");
+    const sectionHrefs = index?.sections.flatMap((section) =>
+      [...section.body.matchAll(/\]\((\/compare\/[^)#\s]+)\)/g)].map((match) => match[1]),
+    );
+    expect(sectionHrefs).toEqual(pages.map((page) => page.path));
+    for (const page of pages) {
+      expect(page.related.map((link) => link.href), page.path).toContain("/compare");
+    }
   });
 });
 

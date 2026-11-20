@@ -137,6 +137,11 @@ const landingPages = [
     "微信 AI 怎么选：四类方案的真实取舍",
   ],
   [
+    "compare.html",
+    "https://wechatai.app/compare",
+    "微信 AI 对比：先看三类方案再选",
+  ],
+  [
     "compare/wechatai-vs-wechat-official-ai.html",
     "https://wechatai.app/compare/wechatai-vs-wechat-official-ai",
     "微伴 vs 微信官方内置 AI：先分清你要的是哪一类能力",

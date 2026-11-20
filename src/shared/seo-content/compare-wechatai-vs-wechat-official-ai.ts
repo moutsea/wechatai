@@ -148,6 +148,7 @@ export const wechataiVsWechatAiPage: SeoPage = {
   related: [
     { label: "微信接入 Muse 托管助理", href: "/wechat-muse" },
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },
+    { label: "全部对比", href: "/compare" },
     { label: "微伴 vs 自建 OpenClaw", href: "/compare/wechatai-vs-openclaw" },
     { label: "微伴 vs 商业微信 AI 平台", href: "/compare/wechatai-vs-commercial-wechat-ai" },
     { label: "自带 API Key 的微信 AI", href: "/bring-your-own-api-key" },

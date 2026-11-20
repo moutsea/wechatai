@@ -60,6 +60,24 @@ it("falls back to not found for an unknown pair", async () => {
   expect(container.querySelector(".seopage-compare-table")).toBeNull();
 });
 
+it("renders the comparison index with links to every pair", async () => {
+  await renderAt("/compare");
+  expect(container.querySelector("h1")?.textContent).toBe("微信 AI 对比：先看三类方案再选");
+  const hrefs = [...container.querySelectorAll("a")]
+    .map((link) => link.getAttribute("href"))
+    .filter((href): href is string => Boolean(href));
+  for (const pair of [
+    "/compare/wechatai-vs-wechat-official-ai",
+    "/compare/wechatai-vs-openclaw",
+    "/compare/wechatai-vs-commercial-wechat-ai",
+  ]) {
+    expect(hrefs, pair).toContain(pair);
+  }
+  expect(hrefs).toContain("/wechat-ai-options");
+  expect(hrefs).toContain("/wechat-ai-ban-risk");
+  expect(container.querySelectorAll(".seopage-compare-table")).toHaveLength(0);
+});
+
 it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-openclaw", "wechatai-vs-commercial-wechat-ai"])(
   "distinguishes Wechatai model requirements from an existing OpenClaw connection for %s",
   async (pair) => {
