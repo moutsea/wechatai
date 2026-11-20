@@ -1194,3 +1194,54 @@ for (const width of [320, 390]) {
     for (const step of steps) await expect(step).toBeHidden();
   });
 }
+
+test("serves the English homepage and pricing page without Chinese page copy", async ({
+  page,
+}) => {
+  const stripSwitcherLabels = (value: string) => value.replaceAll("中文", "").replaceAll("语言", "");
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/en`);
+  await mounted;
+
+  await expect(page.locator("h1")).toContainText("Bring your AI");
+  await expect(page.locator("h1")).toContainText("into WeChat");
+  await expect(page.locator('.site-header-nav a[href="/en/pricing"]')).toHaveText("Pricing");
+  await expect(page.locator('.site-header-nav a[href="/docs"]')).toHaveText("Docs");
+  await expect(
+    page.locator('.landing-plan-year a[href="/en/pricing?interval=year#plan-year"]').first(),
+  ).toBeVisible();
+  const faq = page.locator(".landing-faq details").first();
+  await faq.locator("summary").click();
+  await expect(faq).toHaveAttribute("open", "");
+  await expect(faq).toContainText("Do I need my own API key?");
+  expect(stripSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
+    /\p{Script=Han}/u,
+  );
+
+  await page.goto(`${origin}/en/pricing`);
+  await expect(page.locator("h1")).toHaveText(
+    "Start free, upgrade to Plus when you need more",
+  );
+  await expect(page.locator(".plan h3")).toHaveText(["Free", "Plus Monthly", "Plus Yearly"]);
+  await expect(page.locator(".plan-year .plan-price-unit")).toHaveText("/ year");
+  await expect(page.locator('.seopage-related a[href="/wechat-muse"]')).toContainText(
+    "Muse managed assistant for WeChat",
+  );
+  const estimate = page.locator(".pricing-estimate");
+  await estimate.locator("summary").click();
+  await expect(estimate).toHaveAttribute("open", "");
+  await expect(estimate.locator(".cost-results")).toContainText("credits");
+  expect(stripSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
+    /\p{Script=Han}/u,
+  );
+  const readableAttributes = await page.evaluate(() =>
+    [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
+      .flatMap((element) =>
+        ["alt", "aria-label", "title", "placeholder"].map(
+          (name) => element.getAttribute(name) ?? "",
+        ),
+      )
+      .join(" "),
+  );
+  expect(stripSwitcherLabels(readableAttributes)).not.toMatch(/\p{Script=Han}/u);
+});

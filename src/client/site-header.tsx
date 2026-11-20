@@ -22,11 +22,24 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", match: "/" },
-  { to: "/pricing", label: "价格", match: "/pricing" },
-  { to: "/docs", label: "文档", match: "/docs" },
-  { to: "/#how", label: "如何使用", match: "/#how" },
+  { to: "/", label: "首页", en: "Home", match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", match: "/#how" },
 ] as const;
+
+const headerCopyEn = {
+  homeAria: "Wechatai home",
+  topNav: "Main navigation",
+  account: "Account",
+  login: "Log in",
+  start: "Get started",
+  workspace: "Open workspace",
+  openMenu: "Open menu",
+  closeMenu: "Close menu",
+  menuFailed: "The account menu could not load",
+  reloadMenu: "Reload the account menu",
+} as const;
 
 type SiteHeaderProps = {
   /** 当前页面路径，用于给对应导航项加 aria-current。 */
@@ -35,10 +48,32 @@ type SiteHeaderProps = {
   extra?: ReactNode;
 };
 
+/**
+ * The wordmark is part of the brand, but the Chinese glyphs are page copy on
+ * English routes. Keep the same mark and typography with an English wordmark.
+ */
+export function SiteBrand({ light = false, english }: { light?: boolean; english: boolean }) {
+  if (!english) return <Brand light={light} />;
+  return (
+    <span className={`brand ${light ? "light" : ""}`}>
+      <span className="brand-mark">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M4 7h6l5 18H9zm10 0h6l5 18h-6zm12 0h5l-6 18h-6z" fill="currentColor" />
+        </svg>
+      </span>
+      <span>
+        Wechatai<small>AI IN WECHAT</small>
+      </span>
+    </span>
+  );
+}
+
 export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { data: session } = useAuth();
   const { pathname, hash } = useLocation();
   const { locale, path } = useLocale();
+  const english = locale === "en";
+  const copy = headerCopyEn;
   const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -61,7 +96,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           to={localeHref(item.to)}
           aria-current={current === item.match ? "page" : undefined}
         >
-          {item.label}
+          {english ? item.en : item.label}
         </Link>
       ))}
       {extra}
@@ -86,14 +121,14 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
       fallback={
         <>
           <span className="visually-hidden" role="alert">
-            账户菜单未能加载
+            {english ? copy.menuFailed : "账户菜单未能加载"}
           </span>
-          <a href="/app">工作台</a>
+          <a href="/app">{english ? copy.workspace : "工作台"}</a>
           <button
             type="button"
             className="icon-button"
-            aria-label="重新加载账户菜单"
-            title="重新加载账户菜单"
+            aria-label={english ? copy.reloadMenu : "重新加载账户菜单"}
+            title={english ? copy.reloadMenu : "重新加载账户菜单"}
             onClick={reloadPage}
           >
             <RefreshCw size={16} aria-hidden="true" />
@@ -104,7 +139,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
       <Suspense
         fallback={
           <Link className="button small" to="/app">
-            进入工作台
+            {english ? copy.workspace : "进入工作台"}
           </Link>
         }
       >
@@ -113,9 +148,9 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     </LoadErrorBoundary>
   ) : (
     <>
-      <Link to="/login">登录</Link>
+      <Link to="/login">{english ? copy.login : "登录"}</Link>
       <Link className="button small" to="/register">
-        免费开始
+        {english ? copy.start : "免费开始"}
         <ArrowUpRight size={15} aria-hidden="true" />
       </Link>
     </>
@@ -124,16 +159,16 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link to={localeHref("/")} aria-label="微伴首页">
-          <Brand />
+        <Link to={localeHref("/")} aria-label={english ? copy.homeAria : "微伴首页"}>
+          <SiteBrand english={english} />
         </Link>
-        <nav aria-label="顶部导航" className="site-header-nav">
+        <nav aria-label={english ? copy.topNav : "顶部导航"} className="site-header-nav">
           {links}
         </nav>
         <div className="site-header-aside">
           <LanguageSwitcher />
           <nav
-            aria-label="账户"
+            aria-label={english ? copy.account : "账户"}
             className={`site-header-account${session ? " is-authenticated" : ""}`}
           >
             {account}
@@ -143,7 +178,15 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
             className="site-menu-toggle"
             aria-expanded={open}
             aria-controls={menuId}
-            aria-label={open ? "关闭菜单" : "打开菜单"}
+            aria-label={
+              open
+                ? english
+                  ? copy.closeMenu
+                  : "关闭菜单"
+                : english
+                  ? copy.openMenu
+                  : "打开菜单"
+            }
             onClick={() => setOpen((value) => !value)}
           >
             {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
@@ -164,16 +207,16 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
             to={localeHref(item.to)}
             aria-current={current === item.match ? "page" : undefined}
           >
-            {item.label}
+            {english ? item.en : item.label}
           </Link>
         ))}
         {extra}
         <LanguageSwitcher mobile />
         {!session && (
           <>
-            <Link to="/login">登录</Link>
+            <Link to="/login">{english ? copy.login : "登录"}</Link>
             <Link className="button site-mobile-cta" to="/register">
-              免费开始
+              {english ? copy.start : "免费开始"}
               <ArrowUpRight size={16} aria-hidden="true" />
             </Link>
           </>

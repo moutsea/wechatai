@@ -2,6 +2,8 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, QrCode } from "lucide-react";
 import { CHANNEL_PROVIDERS } from "../shared/channel-providers";
+import { homeCopy } from "../shared/i18n/en/copy/home";
+import { useLocale } from "./locale";
 import "./landing-steps.css";
 
 const steps = [
@@ -39,6 +41,17 @@ const providerLabels: Record<string, string> = {
   xai: "Grok / xAI",
 };
 
+const providerLabelsEn: Record<string, string> = {
+  kimi: "Kimi",
+  zhipu: "Zhipu GLM",
+  qwen: "Alibaba Cloud Model Studio",
+  volcengine: "Volcengine Ark",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+  xai: "Grok / xAI",
+  siliconflow: "SiliconFlow",
+};
+
 const providerLogos: Record<string, string> = {
   deepseek: "/images/channels/deepseek.png",
   kimi: "/images/channels/kimi.png",
@@ -55,11 +68,14 @@ const providerLogos: Record<string, string> = {
 };
 
 function StepPreview({ step }: { step: number }) {
+  const { locale } = useLocale();
+  const english = locale === "en";
+  const copy = homeCopy.steps.preview;
   if (step === 0)
     return (
       <div className="steps-preview">
         <div className="steps-providers">
-          <strong>支持的模型渠道</strong>
+          <strong>{english ? copy.providersTitle : "支持的模型渠道"}</strong>
           <ul className="steps-provider-grid">
             {CHANNEL_PROVIDERS.filter((provider) => !provider.codingPlan).map((provider) => (
               <li key={provider.id}>
@@ -70,11 +86,15 @@ function StepPreview({ step }: { step: number }) {
                   alt=""
                   loading="lazy"
                 />
-                <span>{providerLabels[provider.id] ?? provider.name}</span>
+                <span>
+                  {english
+                    ? (providerLabelsEn[provider.id] ?? provider.name)
+                    : (providerLabels[provider.id] ?? provider.name)}
+                </span>
               </li>
             ))}
           </ul>
-          <p>也支持 Coding Plan 与自定义兼容渠道</p>
+          <p>{english ? copy.providersNote : "也支持 Coding Plan 与自定义兼容渠道"}</p>
         </div>
       </div>
     );
@@ -82,15 +102,21 @@ function StepPreview({ step }: { step: number }) {
     return (
       <div className="steps-preview" aria-hidden="true">
         <div className="steps-connect">
-          <span className="steps-preview-label">连接示意</span>
-          <strong>扫码连接你的微信</strong>
+          <span className="steps-preview-label">
+            {english ? copy.connectLabel : "连接示意"}
+          </span>
+          <strong>{english ? copy.connectTitle : "扫码连接你的微信"}</strong>
           <div className="steps-qr">
             <QrCode size={116} strokeWidth={1.3} />
           </div>
-          <span>微信 ClawBot 扫一扫 · 在手机上确认</span>
-          <p className="steps-qr-note">示意图，请在工作台获取二维码</p>
+          <span>
+            {english ? copy.connectHint : "微信 ClawBot 扫一扫 · 在手机上确认"}
+          </span>
+          <p className="steps-qr-note">
+            {english ? copy.connectNote : "示意图，请在工作台获取二维码"}
+          </p>
           <div className="steps-preview-success">
-            <Check size={15} /> 个人专属连接
+            <Check size={15} /> {english ? copy.connectSuccess : "个人专属连接"}
           </div>
         </div>
       </div>
@@ -99,13 +125,20 @@ function StepPreview({ step }: { step: number }) {
     <div className="steps-preview" aria-hidden="true">
       <div className="steps-chat">
         <div className="steps-chat-heading">
-          <img src="/favicon.svg" width={22} height={22} alt="" /> 微伴 <span>DeepSeek</span>
+          <img src="/favicon.svg" width={22} height={22} alt="" />{" "}
+          {english ? "Wechatai" : "微伴"} <span>DeepSeek</span>
         </div>
         <div className="steps-chat-body">
-          <div className="steps-chat-sent">帮我想三个周末出游的点子。</div>
-          <div className="steps-chat-received">当然。你想去户外走走，还是在城市里慢慢逛？</div>
+          <div className="steps-chat-sent">
+            {english ? copy.chatSent : "帮我想三个周末出游的点子。"}
+          </div>
+          <div className="steps-chat-received">
+            {english ? copy.chatReceived : "当然。你想去户外走走，还是在城市里慢慢逛？"}
+          </div>
           <div className="steps-chat-command">/wx new</div>
-          <div className="steps-chat-note">已开始新会话，原会话已保留。</div>
+          <div className="steps-chat-note">
+            {english ? copy.chatNote : "已开始新会话，原会话已保留。"}
+          </div>
         </div>
       </div>
     </div>
@@ -113,24 +146,30 @@ function StepPreview({ step }: { step: number }) {
 }
 
 export function LandingSteps({ startAction }: { startAction: ReactNode }) {
+  const { locale } = useLocale();
+  const english = locale === "en";
+  const copy = homeCopy.steps;
+  const localizedSteps = english
+    ? steps.map((step, index) => ({ ...step, ...copy.items[index]! }))
+    : steps;
   const [activeStep, setActiveStep] = useState(0);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const move = (offset: number) =>
-    setActiveStep((current) => (current + offset + steps.length) % steps.length);
+    setActiveStep((current) => (current + offset + localizedSteps.length) % localizedSteps.length);
   const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let next: number;
     switch (event.key) {
       case "ArrowRight":
-        next = (index + 1) % steps.length;
+        next = (index + 1) % localizedSteps.length;
         break;
       case "ArrowLeft":
-        next = (index + steps.length - 1) % steps.length;
+        next = (index + localizedSteps.length - 1) % localizedSteps.length;
         break;
       case "Home":
         next = 0;
         break;
       case "End":
-        next = steps.length - 1;
+        next = localizedSteps.length - 1;
         break;
       default:
         return;
@@ -143,22 +182,32 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
   return (
     <section className="landing-steps" id="how" aria-labelledby="how-title">
       <div className="steps-heading">
-        <div className="eyebrow">轻松开始</div>
-        <h2 id="how-title">2 分钟配置，免费开始</h2>
+        <div className="eyebrow">{english ? copy.eyebrow : "轻松开始"}</div>
+        <h2 id="how-title">{english ? copy.title : "2 分钟配置，免费开始"}</h2>
         <div className="steps-actions">
           {startAction}
           <Link className="button secondary" to="/docs/getting-started">
-            查看入门教程
+            {english ? copy.guide : "查看入门教程"}
             <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
         <p className="steps-requirements">
-          请先确认微信已有<Link to="/docs/getting-started#clawbot-entry">ClawBot 入口</Link>；
-          普通聊天需自备模型 API Key。手机扫码请用电脑或另一台设备展示二维码。
+          {english ? (
+            <>
+              {copy.requirementsPrefix}
+              <Link to="/docs/getting-started#clawbot-entry">{copy.requirementsLink}</Link>
+              {copy.requirementsSuffix}
+            </>
+          ) : (
+            <>
+              请先确认微信已有<Link to="/docs/getting-started#clawbot-entry">ClawBot 入口</Link>；
+              普通聊天需自备模型 API Key。手机扫码请用电脑或另一台设备展示二维码。
+            </>
+          )}
         </p>
       </div>
-      <div className="steps-tabs" role="tablist" aria-label="使用步骤">
-        {steps.map((step, index) => (
+      <div className="steps-tabs" role="tablist" aria-label={english ? copy.tabsLabel : "使用步骤"}>
+        {localizedSteps.map((step, index) => (
           <button
             key={step.title}
             ref={(element) => {
@@ -179,7 +228,7 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
         ))}
       </div>
       <div className="steps-pages">
-        {steps.map((step, index) => (
+        {localizedSteps.map((step, index) => (
           <div
             key={step.title}
             className="steps-slide"
@@ -205,24 +254,45 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
       <div className="steps-controls">
         <span role="status" aria-live="polite" aria-atomic="true">
           <span className="steps-screen-reader">
-            第 {activeStep + 1} 步，共 {steps.length} 步：{steps[activeStep].title}
+            {english
+              ? copy.status(activeStep + 1, localizedSteps.length, localizedSteps[activeStep].title)
+              : `第 ${activeStep + 1} 步，共 ${localizedSteps.length} 步：${localizedSteps[activeStep].title}`}
           </span>
           <span aria-hidden="true">
             <b>{String(activeStep + 1).padStart(2, "0")}</b> / 03
           </span>
         </span>
         <div>
-          <button type="button" aria-label="上一步" onClick={() => move(-1)}>
+          <button
+            type="button"
+            aria-label={english ? copy.previous : "上一步"}
+            onClick={() => move(-1)}
+          >
             <ArrowLeft size={19} aria-hidden="true" />
           </button>
-          <button type="button" aria-label="下一步" onClick={() => move(1)}>
+          <button
+            type="button"
+            aria-label={english ? copy.next : "下一步"}
+            onClick={() => move(1)}
+          >
             <ArrowRight size={19} aria-hidden="true" />
           </button>
         </div>
       </div>
       <p className="steps-alternatives">
-        配置模型、连接微信、开始聊天。也可以<Link to="/wechat-agent">连接已有 Agent</Link>或
-        <Link to="/docs/notifications">接收服务通知</Link>。
+        {english ? (
+          <>
+            {copy.alternativesPrefix}
+            <Link to="/wechat-agent">{copy.alternativesAgent}</Link>
+            {copy.alternativesMiddle}
+            <Link to="/docs/notifications">{copy.alternativesNotifications}</Link>.
+          </>
+        ) : (
+          <>
+            配置模型、连接微信、开始聊天。也可以<Link to="/wechat-agent">连接已有 Agent</Link>或
+            <Link to="/docs/notifications">接收服务通知</Link>。
+          </>
+        )}
       </p>
     </section>
   );

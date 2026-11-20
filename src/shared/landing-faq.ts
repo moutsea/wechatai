@@ -3,6 +3,8 @@
  * 价格与额度来自共享常量，教程链接在可见回答后展示。
  */
 import { DAILY_CREDIT_DEFAULTS } from "./credits";
+import { homeCopy } from "./i18n/en/copy/home";
+import type { Locale } from "./i18n";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN } from "./pricing-copy";
@@ -57,3 +59,11 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
     guide: { href: "/privacy", label: "查看隐私政策与数据处理范围" },
   },
 ] as const;
+
+/** English questions and answers; links stay identical to the Chinese source. */
+export const LANDING_FAQ_EN: readonly LandingFaqItem[] = homeCopy.faq;
+
+/** Selects the FAQ copy used by both the rendered page and its FAQPage JSON-LD. */
+export function landingFaq(locale: Locale): readonly LandingFaqItem[] {
+  return locale === "en" ? LANDING_FAQ_EN : LANDING_FAQ;
+}
