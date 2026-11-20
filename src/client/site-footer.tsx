@@ -131,25 +131,38 @@ function FooterLinks({ links, english }: { links: FooterLink[]; english: boolean
   );
 }
 
+const footerCopyZh = {
+  homeAria: "微伴首页",
+  intro: "在微信里，与自选的大模型对话。",
+  tagline: "连接你的模型与 Agent，让灵感随时有回应。",
+  navigation: "页脚导航",
+  brand: "微伴 Wechatai",
+  disclaimer: "独立开发产品，与微信、腾讯及模型供应商无官方关联。",
+};
+
+const footerCopyEn = {
+  homeAria: "Wechatai home",
+  intro: "Chat with the models you choose, right inside WeChat.",
+  tagline: "Connect your models and agents so ideas always get an answer.",
+  navigation: "Footer navigation",
+  brand: "Wechatai",
+  disclaimer: "Independently built; not affiliated with WeChat, Tencent, or model providers.",
+};
+
 export function SiteFooter() {
   const { locale } = useLocale();
   const english = locale === "en";
+  const copy = english ? footerCopyEn : footerCopyZh;
   return (
     <footer className="landing-footer">
       <div className="landing-footer-main">
         <div className="landing-footer-brand">
-          <Link to={localizedHref(locale, "/")} aria-label={english ? "Wechatai home" : "微伴首页"}>
+          <Link to={localizedHref(locale, "/")} aria-label={copy.homeAria}>
             <SiteBrand light english={english} />
           </Link>
           <p>
-            {english
-              ? "Chat with the models you choose, right inside WeChat."
-              : "在微信里，与自选的大模型对话。"}
-            <span>
-              {english
-                ? "Connect your models and agents so ideas always get an answer."
-                : "连接你的模型与 Agent，让灵感随时有回应。"}
-            </span>
+            {copy.intro}
+            <span>{copy.tagline}</span>
           </p>
         </div>
         <div className="landing-footer-desktop">
@@ -163,7 +176,7 @@ export function SiteFooter() {
             );
           })}
         </div>
-        <nav className="landing-footer-mobile" aria-label={english ? "Footer navigation" : "页脚导航"}>
+        <nav className="landing-footer-mobile" aria-label={copy.navigation}>
           <div className="landing-footer-quick">
             <FooterLinks links={quickLinks} english={english} />
           </div>
@@ -185,13 +198,9 @@ export function SiteFooter() {
       </div>
       <div className="landing-footer-bottom">
         <span>
-          © {new Date().getFullYear()} {english ? "Wechatai" : "微伴 Wechatai"}
+          © {new Date().getFullYear()} {copy.brand}
         </span>
-        <p>
-          {english
-            ? "Independently built; not affiliated with WeChat, Tencent, or model providers."
-            : "独立开发产品，与微信、腾讯及模型供应商无官方关联。"}
-        </p>
+        <p>{copy.disclaimer}</p>
       </div>
     </footer>
   );

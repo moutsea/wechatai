@@ -39,19 +39,47 @@ const features = [
   { label: "小薇 AI 云端助手", free: false, plus: true, href: "/docs/cloud-agent" },
 ];
 
+const plansCopyZh = {
+  title: "免费版与 Plus 对比",
+  free: {
+    name: "免费版",
+    badge: "轻松体验",
+    description: "从日常问答开始",
+    unit: "永久免费",
+    note: "无需购买会员，即可开始使用",
+    workspace: "进入工作台",
+    start: "免费开始",
+  },
+  badgeFlexible: "灵活选择",
+  badgeSave: (saving: string) => `省 ${saving}`,
+  descriptionAnnual: "长期使用，年付更划算",
+  descriptionMonthly: "更多额度，解锁小薇 AI",
+  unitYear: "/ 年",
+  unitMonth: "/ 月",
+  noteAnnual: (monthlyPrice: string, saving: string) =>
+    `折合 ${monthlyPrice} / 月，比按月买省 ${saving}`,
+  noteMonthly: "按月购买，按需续费",
+  ctaBusy: "正在跳转支付…",
+  ctaSubscribe: (name: string, price: string) => `开通${name} · ${price}`,
+  ctaChoose: (name: string) => `选择${name}`,
+  features,
+  highlights: ["每天 credits", "微信连接", "插件配置"],
+  supported: "支持",
+  unsupported: "不支持",
+  comparisonCaption: "权益对比 · Plus 月付与年付权益相同",
+  comparisonHeaders: ["功能与额度", "免费版", "Plus"],
+  common: "所有方案均支持模型聊天、AI 生图、角色扮演与免费服务通知推送。",
+  fineprint: "Plus 单次购买，不自动续费；月付与年付权益相同。每日赠额当天有效、不累积。",
+  checked: "价格核查于",
+};
+
 function PlanValue({ value }: { value: string | number | boolean }) {
   const { locale } = useLocale();
-  const english = locale === "en";
+  const copy = locale === "en" ? pricingCopy.plans : plansCopyZh;
   return typeof value === "boolean" ? (
     <strong className={value ? "plan-supported" : "plan-unavailable"}>
       {value ? <Check size={16} aria-hidden="true" /> : <Minus size={16} aria-hidden="true" />}
-      {english
-        ? value
-          ? pricingCopy.plans.supported
-          : pricingCopy.plans.unsupported
-        : value
-          ? "支持"
-          : "不支持"}
+      {value ? copy.supported : copy.unsupported}
     </strong>
   ) : (
     <strong className={typeof value === "number" ? "plan-credit-value" : undefined}>{value}</strong>
@@ -60,11 +88,7 @@ function PlanValue({ value }: { value: string | number | boolean }) {
 
 function PlanHighlights({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const rows = english ? pricingCopy.plans.features : features;
-  const labels = english
-    ? pricingCopy.plans.highlights
-    : (["每天 credits", "微信连接", "插件配置"] as const);
+  const { features: rows, highlights: labels } = locale === "en" ? pricingCopy.plans : plansCopyZh;
   return (
     <dl className="plan-highlights">
       {labels.map((label, index) => (
@@ -79,8 +103,7 @@ function PlanHighlights({ plus }: { plus: boolean }) {
 
 function PlanFeatures({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const rows = english ? pricingCopy.plans.features : features;
+  const { features: rows } = locale === "en" ? pricingCopy.plans : plansCopyZh;
   return (
     <ul className="plan-features">
       {rows.map((feature) => {
@@ -102,7 +125,7 @@ export function PricingPlans() {
   const { data: session, isPending, requireSignIn } = useAuth();
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = pricingCopy.plans;
+  const copy = english ? pricingCopy.plans : plansCopyZh;
   const [params] = useSearchParams();
   const requestedInterval = params.get("interval");
   const [busyOffer, setBusyOffer] = useState<string | null>(null);
@@ -126,9 +149,9 @@ export function PricingPlans() {
       setError({
         offerId: offer.id,
         message: english
-          ? code && Object.hasOwn(copy.checkoutErrors, code)
-            ? copy.checkoutErrors[code as keyof typeof copy.checkoutErrors]
-            : copy.checkoutFailed
+          ? code && Object.hasOwn(pricingCopy.plans.checkoutErrors, code)
+            ? pricingCopy.plans.checkoutErrors[code as keyof typeof pricingCopy.plans.checkoutErrors]
+            : pricingCopy.plans.checkoutFailed
           : (e as Error).message,
         loginRequired,
       });
@@ -141,35 +164,31 @@ export function PricingPlans() {
     <section className="plans" aria-labelledby="plans-title">
       <div className="plans-head">
         <h2 id="plans-title" className="visually-hidden">
-          {english ? copy.title : "免费版与 Plus 对比"}
+          {copy.title}
         </h2>
       </div>
       <div className="plans-grid">
         <article className="plan plan-free">
           <header>
             <div className="plan-top">
-              <h3>{english ? copy.free.name : "免费版"}</h3>
-              <span className="plan-badge">{english ? copy.free.badge : "轻松体验"}</span>
+              <h3>{copy.free.name}</h3>
+              <span className="plan-badge">{copy.free.badge}</span>
             </div>
-            <p className="plan-description">
-              {english ? copy.free.description : "从日常问答开始"}
-            </p>
+            <p className="plan-description">{copy.free.description}</p>
             <p className="plan-price">
               <strong>{yuan(FREE_PLAN_AMOUNT_CENTS)}</strong>
-              <span className="plan-price-unit">
-                {english ? copy.free.unit : "永久免费"}
-              </span>
+              <span className="plan-price-unit">{copy.free.unit}</span>
             </p>
-            <p className="plan-note">{english ? copy.free.note : "无需购买会员，即可开始使用"}</p>
+            <p className="plan-note">{copy.free.note}</p>
           </header>
           {isPending ? null : session ? (
             <Link className="button secondary plan-cta" to="/app">
-              {english ? copy.free.workspace : "进入工作台"}
+              {copy.free.workspace}
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           ) : (
             <Link className="button secondary plan-cta" to="/register">
-              {english ? copy.free.start : "免费开始"}
+              {copy.free.start}
               <ArrowRight size={17} aria-hidden="true" />
             </Link>
           )}
@@ -179,7 +198,7 @@ export function PricingPlans() {
 
         {[monthly, yearly].map((offer) => {
           const annual = offer.interval === "year";
-          const name = english ? copy.offerName(annual ? "year" : "month") : offer.name;
+          const name = english ? pricingCopy.plans.offerName(annual ? "year" : "month") : offer.name;
           const planError = error?.offerId === offer.id ? error : null;
           return (
             <article
@@ -193,47 +212,22 @@ export function PricingPlans() {
                 <div className="plan-top">
                   <h3 id={`plan-${offer.interval}-title`}>{name}</h3>
                   <span className="plan-badge">
-                    {annual
-                      ? english
-                        ? copy.badgeSave(yuan(yearlySaving * 100))
-                        : `省 ${yuan(yearlySaving * 100)}`
-                      : english
-                        ? copy.badgeFlexible
-                        : "灵活选择"}
+                    {annual ? copy.badgeSave(yuan(yearlySaving * 100)) : copy.badgeFlexible}
                   </span>
                 </div>
                 <p className="plan-description">
-                  {annual
-                    ? english
-                      ? copy.descriptionAnnual
-                      : "长期使用，年付更划算"
-                    : english
-                      ? copy.descriptionMonthly
-                      : "更多额度，解锁小薇 AI"}
+                  {annual ? copy.descriptionAnnual : copy.descriptionMonthly}
                 </p>
                 <p className="plan-price">
                   <strong>{yuan(offer.amount)}</strong>
                   <span className="plan-price-unit">
-                    {annual
-                      ? english
-                        ? copy.unitYear
-                        : "/ 年"
-                      : english
-                        ? copy.unitMonth
-                        : "/ 月"}
+                    {annual ? copy.unitYear : copy.unitMonth}
                   </span>
                 </p>
                 <p className="plan-note">
                   {annual
-                    ? english
-                      ? copy.noteAnnual(
-                          approx(yearly.amount / 12),
-                          yuan(yearlySaving * 100),
-                        )
-                      : `折合 ${approx(yearly.amount / 12)} / 月，比按月买省 ${yuan(yearlySaving * 100)}`
-                    : english
-                      ? copy.noteMonthly
-                      : "按月购买，按需续费"}
+                    ? copy.noteAnnual(approx(yearly.amount / 12), yuan(yearlySaving * 100))
+                    : copy.noteMonthly}
                 </p>
               </header>
               {isPending ? null : session ? (
@@ -246,13 +240,11 @@ export function PricingPlans() {
                   {busyOffer === offer.id ? (
                     <>
                       <Loader2 size={17} className="spin" aria-hidden="true" />
-                      {english ? copy.ctaBusy : "正在跳转支付…"}
+                      {copy.ctaBusy}
                     </>
                   ) : (
                     <>
-                      {english
-                        ? copy.ctaSubscribe(name, yuan(offer.amount))
-                        : `开通${offer.name} · ${yuan(offer.amount)}`}
+                      {copy.ctaSubscribe(name, yuan(offer.amount))}
                       <ArrowRight size={17} aria-hidden="true" />
                     </>
                   )}
@@ -264,11 +256,7 @@ export function PricingPlans() {
                     `${english ? "/en/pricing" : "/pricing"}?interval=${offer.interval}#plan-${offer.interval}`,
                   )}`}
                 >
-                  {planError?.loginRequired
-                    ? copy.loginAgain
-                    : english
-                      ? copy.ctaChoose(name)
-                      : `选择${offer.name}`}
+                  {planError?.loginRequired ? pricingCopy.plans.loginAgain : copy.ctaChoose(name)}
                   <ArrowRight size={17} aria-hidden="true" />
                 </Link>
               )}
@@ -285,18 +273,16 @@ export function PricingPlans() {
       </div>
       <div className="plans-comparison">
         <table>
-          <caption>
-            {english ? copy.comparisonCaption : "权益对比 · Plus 月付与年付权益相同"}
-          </caption>
+          <caption>{copy.comparisonCaption}</caption>
           <thead>
             <tr>
-              <th scope="col">{english ? copy.comparisonHeaders[0] : "功能与额度"}</th>
-              <th scope="col">{english ? copy.comparisonHeaders[1] : "免费版"}</th>
-              <th scope="col">Plus</th>
+              {copy.comparisonHeaders.map((label) => (
+                <th key={label} scope="col">{label}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {(english ? pricingCopy.plans.features : features).map((feature) => (
+            {copy.features.map((feature) => (
               <tr key={feature.label}>
                 <th scope="row">
                   {feature.href ? <Link to={feature.href}>{feature.label}</Link> : feature.label}
@@ -312,18 +298,10 @@ export function PricingPlans() {
           </tbody>
         </table>
       </div>
-      <p className="plans-common">
-        {english
-          ? copy.common
-          : "所有方案均支持模型聊天、AI 生图、角色扮演与免费服务通知推送。"}
-      </p>
-      <p className="plans-fineprint">
-        {english
-          ? copy.fineprint
-          : "Plus 单次购买，不自动续费；月付与年付权益相同。每日赠额当天有效、不累积。"}
-      </p>
+      <p className="plans-common">{copy.common}</p>
+      <p className="plans-fineprint">{copy.fineprint}</p>
       <p className="plans-checked">
-        {english ? copy.checked : "价格核查于"}{" "}
+        {copy.checked}{" "}
         <time dateTime={BILLING_PRICE_CHECKED_AT}>{BILLING_PRICE_CHECKED_AT}</time>
       </p>
     </section>

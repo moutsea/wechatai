@@ -4,21 +4,51 @@ import { homeCopy } from "../shared/i18n/en/copy/home";
 import { useLocale } from "./locale";
 import "./landing-use-cases.css";
 
+const useCasesCopyZh = {
+  title: "多种 AI，更多选择",
+  intro: "从聊一句，到做完一件事。",
+  caption: "以上对话、模型选择与任务结果为功能示意。",
+  scenes: {
+    creative: {
+      title: "AI 生图",
+      chat: "微信对话",
+      prompt: "@draw 画一张城市街头人像，3:4",
+      done: "图片已生成",
+      resultLead: "你的灵感，",
+      resultAccent: "在微信里成画。",
+      resultNote: "生成图片直接回到对话",
+      roleplay: "角色扮演",
+      roleplayNote: "自定义人设与剧情",
+    },
+    modelsAria: "在微信里使用 DeepSeek：查看模型接入教程",
+    currentModel: "当前模型",
+    agentGuide: (name: string) => `${name} 接入指南`,
+    wechat: "微信",
+    bridge: "发任务 · 收结果",
+    cloud: {
+      title: "小薇",
+      subtitle: "住在微伴云端的做事助手",
+      task: "交给小薇",
+      done: "已完成",
+      prompt: "@小薇 把这份 Markdown 转成 Word",
+      fileName: "项目说明.docx",
+      fileNote: "生成文件，发回微信",
+    },
+  },
+};
+
 function CreativeScene() {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = homeCopy.useCases.scenes.creative;
+  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes.creative;
   return (
     <div className="scene-creative">
       <div className="scene-image-chat">
         <div className="scene-window-bar">
           <Sparkles size={18} />
-          <strong>{english ? copy.title : "AI 生图"}</strong>
-          <span>{english ? copy.chat : "微信对话"}</span>
+          <strong>{copy.title}</strong>
+          <span>{copy.chat}</span>
         </div>
-        <div className="scene-chat-bubble scene-chat-user">
-          {english ? copy.prompt : "@draw 画一张城市街头人像，3:4"}
-        </div>
+        <div className="scene-chat-bubble scene-chat-user">{copy.prompt}</div>
         <div className="scene-image-result">
           <img
             src="/images/landing/ai-image-example.webp"
@@ -30,21 +60,21 @@ function CreativeScene() {
           <div>
             <span className="scene-image-status">
               <Check size={13} />
-              {english ? copy.done : "图片已生成"}
+              {copy.done}
             </span>
             <strong>
-              {english ? copy.resultLead : "你的灵感，"}
+              {copy.resultLead}
               <br />
-              {english ? copy.resultAccent : "在微信里成画。"}
+              {copy.resultAccent}
             </strong>
-            <small>{english ? copy.resultNote : "生成图片直接回到对话"}</small>
+            <small>{copy.resultNote}</small>
           </div>
         </div>
       </div>
       <div className="scene-roleplay-tag">
         <Drama size={16} />
-        {english ? copy.roleplay : "角色扮演"}
-        <span>{english ? copy.roleplayNote : "自定义人设与剧情"}</span>
+        {copy.roleplay}
+        <span>{copy.roleplayNote}</span>
       </div>
     </div>
   );
@@ -52,21 +82,17 @@ function CreativeScene() {
 
 function ModelsScene() {
   const { locale } = useLocale();
-  const english = locale === "en";
+  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes;
   return (
     <Link
       className="scene-model-stack"
       to="/docs/deepseek-in-wechat"
-      aria-label={
-        english
-          ? homeCopy.useCases.scenes.modelsAria
-          : "在微信里使用 DeepSeek：查看模型接入教程"
-      }
+      aria-label={copy.modelsAria}
     >
       <div className="scene-model scene-model-selected">
         <img src="/images/channels/deepseek.png" width={28} height={28} alt="" loading="lazy" />
         <strong>DeepSeek</strong>
-        <span>{english ? homeCopy.useCases.scenes.currentModel : "当前模型"}</span>
+        <span>{copy.currentModel}</span>
         <Check size={16} />
       </div>
       <div className="scene-model">
@@ -85,7 +111,7 @@ function ModelsScene() {
 
 function AgentsScene() {
   const { locale } = useLocale();
-  const english = locale === "en";
+  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes;
   return (
     <div className="scene-bridge">
       <div className="scene-agent-names">
@@ -105,9 +131,7 @@ function AgentsScene() {
           <Link
             key={name}
             to={href}
-            aria-label={
-              english ? homeCopy.useCases.scenes.agentGuide(name) : `${name} 接入指南`
-            }
+            aria-label={copy.agentGuide(name)}
           >
             <img src={logo} width={56} height={56} alt="" loading="lazy" />
             {name}
@@ -125,10 +149,10 @@ function AgentsScene() {
       </svg>
       <div className="scene-wechat">
         <img src="/images/landing/wechat-logo.svg" width={28} height={23} alt="" loading="lazy" />
-        <strong>{english ? homeCopy.useCases.scenes.wechat : "微信"}</strong>
+        <strong>{copy.wechat}</strong>
         <span>
           <ArrowDownUp size={14} aria-hidden="true" />
-          {english ? homeCopy.useCases.scenes.bridge : "发任务 · 收结果"}
+          {copy.bridge}
         </span>
       </div>
     </div>
@@ -137,38 +161,35 @@ function AgentsScene() {
 
 function CloudScene() {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = homeCopy.useCases.scenes.cloud;
+  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes.cloud;
   return (
     <div className="scene-xiaowei">
       <div className="scene-xiaowei-intro">
         <img src="/images/plugins/xiaowei.webp" width={384} height={384} alt="" loading="lazy" />
         <div>
-          <strong>{english ? copy.title : "小薇"}</strong>
-          <span>{english ? copy.subtitle : "住在微伴云端的做事助手"}</span>
+          <strong>{copy.title}</strong>
+          <span>{copy.subtitle}</span>
         </div>
       </div>
       <div className="scene-task">
         <div className="scene-task-header">
           <span>
             <Sparkles size={18} />
-            {english ? copy.task : "交给小薇"}
+            {copy.task}
           </span>
           <span>
             <Check size={14} />
-            {english ? copy.done : "已完成"}
+            {copy.done}
           </span>
         </div>
-        <p className="scene-task-prompt">
-          {english ? copy.prompt : "@小薇 把这份 Markdown 转成 Word"}
-        </p>
+        <p className="scene-task-prompt">{copy.prompt}</p>
         <div className="scene-task-result">
           <span className="scene-file-icon">
             <FileText size={25} />
           </span>
           <span className="scene-file-details">
-            <strong>{english ? copy.fileName : "项目说明.docx"}</strong>
-            <small>{english ? copy.fileNote : "生成文件，发回微信"}</small>
+            <strong>{copy.fileName}</strong>
+            <small>{copy.fileNote}</small>
           </span>
           <Check size={18} />
         </div>
@@ -227,13 +248,13 @@ const useCasesEn = useCases.map((item, index) => ({
 export function LandingUseCases() {
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = homeCopy.useCases;
+  const copy = english ? homeCopy.useCases : useCasesCopyZh;
   const cases = english ? useCasesEn : useCases;
   return (
     <section className="landing-use-cases" aria-labelledby="use-cases-title">
       <div className="use-cases-heading">
-        <h2 id="use-cases-title">{english ? copy.title : "多种 AI，更多选择"}</h2>
-        <p>{english ? copy.intro : "从聊一句，到做完一件事。"}</p>
+        <h2 id="use-cases-title">{copy.title}</h2>
+        <p>{copy.intro}</p>
       </div>
       <div className="use-cases-grid">
         {cases.map(({ kind, lead, title, description, note, href, action, scene: Scene }) => {
@@ -289,9 +310,7 @@ export function LandingUseCases() {
           );
         })}
       </div>
-      <p className="use-cases-caption">
-        {english ? copy.caption : "以上对话、模型选择与任务结果为功能示意。"}
-      </p>
+      <p className="use-cases-caption">{copy.caption}</p>
     </section>
   );
 }

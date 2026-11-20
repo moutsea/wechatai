@@ -35,10 +35,25 @@ const headerCopyEn = {
   login: "Log in",
   start: "Get started",
   workspace: "Open workspace",
+  workspaceFallback: "Open workspace",
   openMenu: "Open menu",
   closeMenu: "Close menu",
   menuFailed: "The account menu could not load",
   reloadMenu: "Reload the account menu",
+} as const;
+
+const headerCopyZh = {
+  homeAria: "微伴首页",
+  topNav: "顶部导航",
+  account: "账户",
+  login: "登录",
+  start: "免费开始",
+  workspace: "进入工作台",
+  workspaceFallback: "工作台",
+  openMenu: "打开菜单",
+  closeMenu: "关闭菜单",
+  menuFailed: "账户菜单未能加载",
+  reloadMenu: "重新加载账户菜单",
 } as const;
 
 type SiteHeaderProps = {
@@ -73,7 +88,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { pathname, hash } = useLocation();
   const { locale, path } = useLocale();
   const english = locale === "en";
-  const copy = headerCopyEn;
+  const copy = english ? headerCopyEn : headerCopyZh;
   const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -121,14 +136,14 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
       fallback={
         <>
           <span className="visually-hidden" role="alert">
-            {english ? copy.menuFailed : "账户菜单未能加载"}
+            {copy.menuFailed}
           </span>
-          <a href="/app">{english ? copy.workspace : "工作台"}</a>
+          <a href="/app">{copy.workspaceFallback}</a>
           <button
             type="button"
             className="icon-button"
-            aria-label={english ? copy.reloadMenu : "重新加载账户菜单"}
-            title={english ? copy.reloadMenu : "重新加载账户菜单"}
+            aria-label={copy.reloadMenu}
+            title={copy.reloadMenu}
             onClick={reloadPage}
           >
             <RefreshCw size={16} aria-hidden="true" />
@@ -139,7 +154,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
       <Suspense
         fallback={
           <Link className="button small" to="/app">
-            {english ? copy.workspace : "进入工作台"}
+            {copy.workspace}
           </Link>
         }
       >
@@ -148,9 +163,9 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     </LoadErrorBoundary>
   ) : (
     <>
-      <Link to="/login">{english ? copy.login : "登录"}</Link>
+      <Link to="/login">{copy.login}</Link>
       <Link className="button small" to="/register">
-        {english ? copy.start : "免费开始"}
+        {copy.start}
         <ArrowUpRight size={15} aria-hidden="true" />
       </Link>
     </>
@@ -159,16 +174,16 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link to={localeHref("/")} aria-label={english ? copy.homeAria : "微伴首页"}>
+        <Link to={localeHref("/")} aria-label={copy.homeAria}>
           <SiteBrand english={english} />
         </Link>
-        <nav aria-label={english ? copy.topNav : "顶部导航"} className="site-header-nav">
+        <nav aria-label={copy.topNav} className="site-header-nav">
           {links}
         </nav>
         <div className="site-header-aside">
           <LanguageSwitcher />
           <nav
-            aria-label={english ? copy.account : "账户"}
+            aria-label={copy.account}
             className={`site-header-account${session ? " is-authenticated" : ""}`}
           >
             {account}
@@ -178,15 +193,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
             className="site-menu-toggle"
             aria-expanded={open}
             aria-controls={menuId}
-            aria-label={
-              open
-                ? english
-                  ? copy.closeMenu
-                  : "关闭菜单"
-                : english
-                  ? copy.openMenu
-                  : "打开菜单"
-            }
+            aria-label={open ? copy.closeMenu : copy.openMenu}
             onClick={() => setOpen((value) => !value)}
           >
             {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
@@ -214,9 +221,9 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
         <LanguageSwitcher mobile />
         {!session && (
           <>
-            <Link to="/login">{english ? copy.login : "登录"}</Link>
+            <Link to="/login">{copy.login}</Link>
             <Link className="button site-mobile-cta" to="/register">
-              {english ? copy.start : "免费开始"}
+              {copy.start}
               <ArrowUpRight size={16} aria-hidden="true" />
             </Link>
           </>

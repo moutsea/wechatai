@@ -84,6 +84,12 @@ describe("published English pages", () => {
     );
   });
 
+  it("preserves the Chinese homepage hero sentence boundary", () => {
+    expect(parse("/").querySelector(".landing-copy > p")?.textContent).toBe(
+      "微伴将模型与 Agent 接入微信，支持聊天、生图，以及云端助手小薇的文件与任务处理。 DeepSeek、Claude、GPT、Muse、Hermes、OpenClaw，一个账号按需连接。",
+    );
+  });
+
   it("renders English pricing copy, plans, FAQ, estimator and related links", () => {
     const document = parse("/en/pricing");
     expect(document.querySelector("h1")?.textContent).toBe(

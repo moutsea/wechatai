@@ -55,10 +55,12 @@ export const homeCopy = {
       wechatConnections: (count: number) =>
         count === 1 ? "WeChat connection" : "WeChat connections",
       unlimitedPlugins: "Unlimited plugin configurations",
+      unlimitedPluginsEmphasis: null,
       pluginConfigurations: (count: number) =>
         count === 1 ? "plugin configuration" : "plugin configurations",
       imageInput: "Image and file input",
       noImageInput: "Image and file input not included",
+      xiaoweiName: "Xiaowei AI",
       xiaoweiCloud: "cloud assistant",
       noXiaowei: "No Xiaowei AI",
     },
@@ -77,6 +79,7 @@ export const homeCopy = {
     imageAlt:
       "DeepSeek, Claude, GPT, Muse, Hermes, and OpenClaw above, connected by lines into WeChat below.",
   },
+  ctaSteps: "Get started",
   pricingSection: {
     title: "Start free, unlock more with Plus",
     intro:
@@ -198,6 +201,7 @@ export const homeCopy = {
       connectHint: "Scan with WeChat ClawBot · confirm on your phone",
       connectNote: "Illustration only; get your QR code in the workspace",
       connectSuccess: "Personal connection",
+      chatBrand: "Wechatai",
       chatSent: "Give me three ideas for a weekend outing.",
       chatReceived: "Sure. Would you rather get outdoors or wander around the city?",
       chatNote: "New conversation started. The previous one is still saved.",
@@ -211,6 +215,7 @@ export const homeCopy = {
     alternativesAgent: "connect an existing agent",
     alternativesMiddle: "or",
     alternativesNotifications: "receive service notifications",
+    alternativesEnd: ".",
   },
   useCases: {
     title: "Many AIs, more choices",
