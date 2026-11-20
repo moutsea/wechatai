@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
-import type { TranslationPage } from "../src/shared/i18n";
+import { hasRegisteredTranslation, type TranslationPage } from "../src/shared/i18n";
 import byok from "../src/shared/i18n/en/bring-your-own-api-key";
 import wechatAgent from "../src/shared/i18n/en/wechat-agent";
 import wechatOptions from "../src/shared/i18n/en/wechat-ai-options";
@@ -52,8 +52,11 @@ describe("prerendered English landing pages", () => {
         const cell = content.comparison.rows.flatMap((row) => row.values).find(Boolean);
         if (cell) expect(html).toContain(cell);
       }
-      // The pricing page belongs to T2, so its links must stay unprefixed here.
-      expect(html).toContain('href="/pricing#estimate"');
+      // The pricing page belongs to T2: link it in English only once it is registered.
+      const pricing = hasRegisteredTranslation("en", "/pricing")
+        ? "/en/pricing#estimate"
+        : "/pricing#estimate";
+      expect(html).toContain(`href="${pricing}"`);
     });
   }
 
