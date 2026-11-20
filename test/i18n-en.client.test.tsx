@@ -5,6 +5,7 @@ import {
   publishedLocalizedPaths,
   renderSeoHead,
   renderSitemap,
+  SITE_URL,
 } from "../src/shared/seo";
 
 function parse(path: string) {
@@ -102,6 +103,24 @@ describe("published English pages", () => {
     expect(document.querySelector('.pricing-breadcrumb a[href="/en"]')?.textContent).toBe("Home");
     expect(hanResidue(document)).toEqual([]);
   });
+
+  it.each(["/en/pricing", "/pricing"])(
+    "links the same breadcrumb home in HTML and JSON-LD on %s",
+    (path) => {
+      const document = parse(path);
+      const home = document.querySelector(".pricing-breadcrumb a[href]")!;
+      const json = document.querySelector('script[type="application/ld+json"]')!.textContent!;
+      const graph = JSON.parse(json)["@graph"] as Array<Record<string, unknown>>;
+      expect(graph.find((node) => node["@type"] === "BreadcrumbList")?.itemListElement).toMatchObject([
+        {
+          position: 1,
+          name: home.textContent,
+          item: new URL(home.getAttribute("href")!, SITE_URL).href,
+        },
+        { position: 2, item: `${SITE_URL}${path}` },
+      ]);
+    },
+  );
 
   it("keeps page-owned JSON-LD copy aligned with the visible English content", () => {
     const seo = getPageSeo("/en/pricing");

@@ -20,6 +20,7 @@ import { WECHAT_LINK_LIMITS } from "./wechat-links";
 import { MUSE_FAQ } from "./muse-faq";
 import {
   DEFAULT_LOCALE,
+  hasRegisteredTranslation,
   LOCALE_DEFINITIONS,
   localizedPath,
   normalizePath,
@@ -319,7 +320,10 @@ function seoLandingPage(
             ]
           : []),
         breadcrumbList([
-          { name: english ? "Home" : "首页", item: `${SITE_URL}/` },
+          {
+            name: english ? "Home" : "首页",
+            item: `${SITE_URL}${hasRegisteredTranslation(locale, "/") ? localizedPath(locale, "/") : "/"}`,
+          },
           { name: page.title, item: canonical },
         ]),
         ...(page.faq.length
