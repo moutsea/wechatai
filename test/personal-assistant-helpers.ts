@@ -3,7 +3,11 @@ import { beforeEach, afterEach, expect, vi } from "vitest";
 import type { ReminderScheduler } from "../src/server/reminder-scheduler";
 import { PersonalRunStore, type PersonalRun } from "../src/server/personal-runs";
 import type { PersonalAssistantProgress } from "../src/server/plugins/personal-assistant";
-import type { PersonalAssistantPlugin, PersonalRecord } from "../src/shared/personal-assistant";
+import {
+  beijingDate,
+  type PersonalAssistantPlugin,
+  type PersonalRecord,
+} from "../src/shared/personal-assistant";
 import type { Protocol } from "../src/shared/types";
 import type { WxMessage } from "../src/server/wechat";
 import { encrypt } from "../src/server/security";
@@ -42,6 +46,9 @@ const entry = {
   category: "餐饮",
   currency: "CNY",
 };
+// workerd's alarm clock keeps running when a test mocks Date.now(). Start far
+// enough in the future that only the test can trigger the reminder.
+export const reminderTestDate = beijingDate(Date.now() + 2 * 86400000);
 const future = () => new Date(Date.now() + 3600000).toISOString();
 async function setup(protocol: Protocol = "chat-completions", plus = true) {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());

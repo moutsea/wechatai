@@ -8,11 +8,12 @@ import {
   reminders,
   response,
   save,
+  reminderTestDate,
   savePlugin,
   setup,
 } from "./personal-assistant-helpers";
 
-const at = Date.parse("2026-11-20T08:00:00+08:00");
+const at = Date.parse(`${reminderTestDate}T08:00:00+08:00`);
 const day = 86400000;
 
 it.each(
@@ -53,7 +54,7 @@ it.each(
       plugin.id,
       {
         title: "每天拿两瓶牛奶",
-        remindAt: "2026-11-20T08:00:00+08:00",
+        remindAt: `${reminderTestDate}T08:00:00+08:00`,
       },
       created.data,
     );
@@ -138,7 +139,7 @@ it.each([false, true])(
   },
 );
 
-it.each(["2026-11-20T08:00:00+08:00", "2026-11-20T00:00:00Z"])(
+it.each([`${reminderTestDate}T08:00:00+08:00`, `${reminderTestDate}T00:00:00Z`])(
   "preserves a pending delivery and its retry progress when rewriting %s as canonical UTC",
   async (storedTime) => {
     const clock = vi.spyOn(Date, "now").mockReturnValue(at - 60000);
@@ -241,7 +242,7 @@ it("does not replay an elapsed one-off after rebind even if its timestamp repres
   const before = await reminders(stub);
   await connect(stub, { generation: "g2" });
   expect(
-    await save(stub, plugin.id, { remindAt: "2026-11-20T08:00:00+08:00" }, created.data),
+    await save(stub, plugin.id, { remindAt: `${reminderTestDate}T08:00:00+08:00` }, created.data),
   ).toMatchObject({ ok: false, error: "reminder_time" });
   expect(await reminders(stub)).toEqual(before);
 });

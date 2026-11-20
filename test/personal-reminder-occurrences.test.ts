@@ -6,20 +6,21 @@ import {
 } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import { PersonalRecordsStore } from "../src/server/personal-records";
-import { beijingDate } from "../src/shared/personal-assistant";
+import { beijingDate, beijingTime } from "../src/shared/personal-assistant";
 import {
   connect,
   deliver,
   list,
   reminders,
   save,
+  reminderTestDate,
   savePlugin,
   scheduler,
   setup,
 } from "./personal-assistant-helpers";
 
 const day = 86400000;
-const morning = Date.parse("2026-11-20T08:00:00+08:00");
+const morning = Date.parse(`${reminderTestDate}T08:00:00+08:00`);
 
 async function recurring(at = morning, dailyTasks = false, repeat = "daily") {
   const clock = vi.spyOn(Date, "now").mockReturnValue(at - 60000);
@@ -67,7 +68,7 @@ describe("reminder occurrence recovery", () => {
       await fresh.dispatchPersonalReminders();
       expect(sent).toHaveLength(2);
       expect(sent[1].client_id).not.toBe(sent[0].client_id);
-      expect(sent[1].item_list[0].text_item.text).toContain("2026年11月21日 08:00");
+      expect(sent[1].item_list[0].text_item.text).toContain(beijingTime(morning + day));
       expect((await list(fresh, plugin.id)).data.records[0]).toMatchObject({
         nextReminderAt: morning + 2 * day,
         reminderError: "",
@@ -117,7 +118,7 @@ describe("reminder occurrence recovery", () => {
   );
 
   it("preserves a failed digest as missed when its retry crosses Beijing midnight", async () => {
-    const at = Date.parse("2026-11-20T23:59:00+08:00");
+    const at = Date.parse(`${reminderTestDate}T23:59:00+08:00`);
     const { stub, plugin, clock } = await recurring(at, true);
     expect(
       (
@@ -150,7 +151,7 @@ describe("reminder occurrence recovery", () => {
   it.each(["context", "http"])(
     "does not resend a daily digest when %s recovers just after Beijing midnight",
     async (failure) => {
-      const at = Date.parse("2026-11-20T23:59:00+08:00");
+      const at = Date.parse(`${reminderTestDate}T23:59:00+08:00`);
       const { stub, plugin, clock } = await recurring(at, true);
       expect(
         (
