@@ -834,6 +834,15 @@ test("renders both notification diagrams under the correct English headings", as
   ).toBeVisible();
 });
 
+test("keeps the original notification receipt in the English guide", async ({ page }) => {
+  await page.goto(`${origin}/docs/notifications`);
+  const example = page.locator("#receipt pre code");
+  const original = await example.textContent();
+  expect(JSON.parse(original!)).toMatchObject({ id: "消息 ID" });
+  await page.goto(`${origin}/en/docs/notifications`);
+  expect(await example.textContent()).toBe(original);
+});
+
 test("positions article anchors after navigating between lazy routes", async ({ page }) => {
   const mounted = page.waitForRequest("**/api/auth/get-session");
   await page.goto(`${origin}/wechat-clawbot-models`);

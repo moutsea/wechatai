@@ -72,10 +72,10 @@ Keep the same key for retries of the same build event. A successful script only 
   {
     id: "receipt",
     title: "3. Confirm delivery",
-    body: `A successful acceptance returns a message ID:
+    body: `A successful acceptance returns a message ID (shown as “消息 ID” in the example):
 
 \`\`\`json
-{"id":"message ID","status":"pending","duplicate":false}
+{"id":"消息 ID","status":"pending","duplicate":false}
 \`\`\`
 
 Open “Recent deliveries” (“最近投递”) in the notification configuration and refresh, or request \`GET /api/notify/messageID\` with the same token. Only \`state: sent\` means **the WeChat API confirmed sending**; it does not mean the user read it.`,
