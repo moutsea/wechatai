@@ -13,6 +13,7 @@ import {
   list,
   reminders,
   save,
+  reminderTestDate,
   savePlugin,
   scheduler,
   setup,
@@ -22,7 +23,7 @@ import {
 } from "./personal-assistant-helpers";
 
 const day = 86400000;
-const morning = Date.parse("2026-11-20T08:00:00+08:00");
+const morning = Date.parse(`${reminderTestDate}T08:00:00+08:00`);
 async function prepare(state = "scheduled", repeat = "daily", scope = "shared") {
   const clock = vi.spyOn(Date, "now").mockReturnValue(morning - 60000);
   const { stub, model } = await setup();
@@ -198,7 +199,7 @@ describe("block reasons belong to their occurrence", () => {
   it.each([false, true])(
     "does not carry an old block into another missed daily digest (send failure: %s)",
     async (withSendFailure) => {
-      const at = Date.parse("2026-11-20T23:59:00+08:00");
+      const at = Date.parse(`${reminderTestDate}T23:59:00+08:00`);
       const clock = vi.spyOn(Date, "now").mockReturnValue(at - 60000);
       const { stub, model } = await setup();
       await connect(stub);

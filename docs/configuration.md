@@ -13,6 +13,7 @@
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | 可选 Google OAuth                                   |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | 可选 GitHub OAuth                                   |
 | `STRIPE_*`                                  | 可选会员和 credits 支付，详见[支付文档](billing.md) |
+| `TURNSTILE_SECRET_KEY`                       | 邮件注册、重发与密码找回的人机验证密钥               |
 | `KIMISEEK_CONNECT_SECRET`                   | 可选 KimiSeek 关联，须与对端共享配置一致            |
 | `BILLING_NOTIFY_TOKEN`                      | 可选管理员付款通知；来自消息提醒插件                |
 | `BILLING_NOTIFY_SCOPE`                      | `all`（默认）或 `first_payment`                     |
@@ -68,11 +69,16 @@ https://你的域名/api/auth/callback/github
 "send_email": [{ "name": "AUTH_EMAIL", "allowed_sender_addresses": ["noreply@mail.example.com"] }],
 "vars": {
   "AUTH_EMAIL_MODE": "cloudflare",
-  "AUTH_EMAIL_FROM": "noreply@mail.example.com"
+  "AUTH_EMAIL_FROM": "noreply@mail.example.com",
+  "TURNSTILE_SITE_KEY": "你的 Turnstile 公开站点密钥"
 }
 ```
 
 先在 Cloudflare Email Service 开通自己的发信域名并确认 SPF、DKIM、DMARC 已生效，再启用邮箱注册。只创建绑定或填写发件地址不能完成域名验证。缺少发信配置时，注册和发送邮件接口返回 503，不会跳过验证。
+
+在 Cloudflare Turnstile 创建 Managed 小组件，允许域名填 `APP_URL` 的主机名。将同一小组件的 Secret Key 存入生产 Worker 的 `TURNSTILE_SECRET_KEY`。Site Key 可以写入生产 `vars.TURNSTILE_SITE_KEY`（GitHub Actions 使用 `edge-production` 的 `WRANGLER_CONFIG`），也可以作为同名 Worker Secret 保存。首次更新前先配置这两个值，生产发布会检查所需 Secret 是否存在。密钥管理可用 `pnpm cf:production secret put <名称>`。使用真实发信配置时，缺少密钥或验证服务不可用会暂停发信。
+
+注册、重发验证邮件和申请密码重置各自使用独立的人机验证动作。网页通过验证码后随请求发送一次性凭证，Worker 向 Siteverify 验证凭证、站点域名和动作，验证通过才会使用邮箱配额并交给认证服务。普通登录和打开邮件中的链接无需再次完成人机验证。第三方登录返回未验证的邮箱时，用户可在 `/verify-email` 主动申请邮件。
 
 本地默认 `preview`：不向真实邮箱发送邮件，服务终端输出 `auth.email.preview`，其中 `url` 是可在本地打开的验证或重置链接。只有 `APP_URL` 为回环地址才允许此模式；不要将本地开发端口公开到互联网。测试捕获邮件内容而不实际发信。
 

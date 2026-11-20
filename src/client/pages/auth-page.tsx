@@ -5,6 +5,7 @@ import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { ANALYTICS_SESSION_HEADER } from "../../shared/analytics";
 import {
   authReturnPath,
+  authEmailActions,
   authErrorMessage,
   passwordValidationError,
   PASSWORD_MIN_LENGTH,
@@ -14,7 +15,8 @@ import { browserPageViewReporter, trackFunnel } from "../analytics-client";
 import { api } from "../api";
 import { authClient, useAuth } from "../auth";
 import { AuthLayout } from "../auth-layout";
-import { AuthEmailNotice, verificationCallback } from "./auth-recovery";
+import { useAuthEmailChallenge } from "./auth-email-challenge";
+import { verificationCallback } from "./auth-recovery";
 type LoginProvider = "google" | "github";
 const providerNames = { google: "Google", github: "GitHub" };
 function oauthError(code: string | null) {
@@ -84,6 +86,7 @@ export function AuthPage({ register = false }: { register?: boolean }) {
   return <AuthForm key={register ? "register" : "login"} register={register} />;
 }
 function AuthForm({ register }: { register: boolean }) {
+  const challenge = useAuthEmailChallenge(authEmailActions.signup, register);
   const { completeSignIn } = useAuth();
   const active = useRef(true);
   useEffect(() => {
@@ -155,6 +158,7 @@ function AuthForm({ register }: { register: boolean }) {
     event.preventDefault();
     if (busy || socialBusy) return;
     if (register) {
+      if (!challenge.ready) return;
       const message = passwordValidationError(password, confirmation);
       if (message) {
         setError(message);
@@ -177,9 +181,12 @@ function AuthForm({ register }: { register: boolean }) {
             password,
             callbackURL: verificationCallback(returnTo),
             fetchOptions: {
-              headers: attribution.analyticsSessionId
-                ? { [ANALYTICS_SESSION_HEADER]: attribution.analyticsSessionId }
-                : {},
+              headers: {
+                ...challenge.headers,
+                ...(attribution.analyticsSessionId
+                  ? { [ANALYTICS_SESSION_HEADER]: attribution.analyticsSessionId }
+                  : {}),
+              },
             },
           })
         : await authClient.signIn.email({
@@ -211,6 +218,7 @@ function AuthForm({ register }: { register: boolean }) {
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      if (register) challenge.reset();
       setBusy(false);
     }
   };
@@ -333,11 +341,14 @@ function AuthForm({ register }: { register: boolean }) {
             <Link to={`/forgot-password${returnQuery}`}>忘记密码？</Link>
           </div>
         )}
-        <button className="button full" disabled={busy || socialBusy !== null}>
+        {challenge.field}
+        <button
+          className="button full"
+          disabled={busy || socialBusy !== null || (register && !challenge.ready)}
+        >
           {busy ? "请稍候…" : register ? "注册并验证邮箱" : "登录工作台"}
           <ArrowRight size={17} />
         </button>
-        {register && <AuthEmailNotice />}
         <p className="auth-switch">
           {register ? "已经有账户了？" : "第一次来到微伴？"}
           <Link to={`${register ? "/login" : "/register"}${returnQuery}`}>
