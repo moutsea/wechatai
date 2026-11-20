@@ -105,7 +105,7 @@ export const pricingCopy = {
     unitMonth: "/ month",
     noteAnnual: (approx: string, saving: string) =>
       `About ${approx} / month, ${saving} less than monthly`,
-    noteMonthly: "Billed monthly; renew when needed",
+    noteMonthly: "One-time payment for one month. Renew when needed.",
     ctaBusy: "Redirecting to payment…",
     ctaSubscribe: (name: string, price: string) => `Get ${name} · ${price}`,
     ctaChoose: (name: string) => `Choose ${name}`,

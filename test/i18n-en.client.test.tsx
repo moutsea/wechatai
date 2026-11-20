@@ -75,6 +75,15 @@ describe("published English pages", () => {
     expect(inspection?.previousElementSibling?.textContent).toBe("No proactive review");
   });
 
+  it.each([
+    ["/en", ".landing-plan-month .landing-plan-note"],
+    ["/en/pricing", ".plan-month .plan-note"],
+  ])("describes Plus Monthly as a one-time purchase on %s", (path, selector) => {
+    expect(parse(path).querySelector(selector)?.textContent).toBe(
+      "One-time payment for one month. Renew when needed.",
+    );
+  });
+
   it("renders English pricing copy, plans, FAQ, estimator and related links", () => {
     const document = parse("/en/pricing");
     expect(document.querySelector("h1")?.textContent).toBe(

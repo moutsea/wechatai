@@ -37,7 +37,7 @@ export const homeCopy = {
       name: "Plus Monthly",
       description: "More credits, more possibilities",
       unit: "/ month",
-      note: "Billed monthly; renew when needed",
+      note: "One-time payment for one month. Renew when needed.",
       badge: "Flexible",
       action: "Choose monthly Plus",
     },
