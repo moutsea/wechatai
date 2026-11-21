@@ -40,6 +40,7 @@ import {
   receiverPoolHeader,
   receiverPoolMatches,
 } from "./wechat-receiver";
+import { senderAccount, senderAuthorized } from "./wechat-sender";
 import { watchdogHeader, fallbackWatchdogs } from "./receiver-watchdog";
 import { watchdogRoutes } from "./receiver-watchdog-routes";
 import { connectorPoll } from "./connector-poll";
@@ -240,6 +241,25 @@ app.post("/api/internal/server-status", async (c) => {
   if (!(await c.env.API_LIMIT.limit({ key: "server-monitor" })).success)
     return c.json({ error: "rate_limited" }, 429);
   return c.json(await saveServerStatus(c.env, await c.req.json().catch(() => null)));
+});
+app.get("/api/internal/wechat-sender/:action", async (c) => {
+  c.header("Cache-Control", "no-store");
+  if (!senderAuthorized(c.env, c.req.header("authorization") || "")) return c.body(null, 401);
+  const id = senderAccount(c.env);
+  if (!id || c.req.header("X-Wechatai-Account") !== id) return c.body(null, 403);
+  const account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id));
+  const action = c.req.param("action");
+  if (action === "status") return c.json(await account.senderStatus());
+  if (action !== "connect") return c.body(null, 404);
+  if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.body(null, 426);
+  const response = await account.fetch("https://internal/wechat-sender", {
+    headers: { Upgrade: "websocket" },
+  });
+  return new Response(response.body, {
+    status: response.status,
+    headers: response.headers,
+    ...(response.webSocket ? { webSocket: response.webSocket } : {}),
+  });
 });
 // Operator-only receiver discovery/transport; never authenticated by a user cookie.
 app.use("/api/internal/wechat-receiver/*", async (c, next) => {
