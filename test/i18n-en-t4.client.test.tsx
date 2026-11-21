@@ -142,4 +142,15 @@ describe("prerendered English landing pages", () => {
       expect.soft(copy?.textContent).toMatch(/Wechatai credits.*text sent into the plugin.*final reply/i);
     }
   });
+
+  it("explains which services receive the key even when Wechatai is self-hosted", () => {
+    const html = renderPublicPage("/en/bring-your-own-api-key");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const answer = [...doc.querySelectorAll("#faq details")]
+      .find(({ textContent }) => textContent?.startsWith("Is my API key safe on your servers?"))
+      ?.querySelector("p")?.textContent;
+    expect.soft(answer).toMatch(/Self-hosting .*control .*key is stored.*server sends requests/);
+    expect.soft(answer).toMatch(/cloud model requests still send .*configured model provider/);
+    expect.soft(answer).toMatch(/Xiaowei.*AGT service.*receives the selected model's key/);
+  });
 });

@@ -113,7 +113,7 @@ Having an API key or knowing your usage helps with setup and estimates, but it d
     {
       question: "Is my API key safe on your servers?",
       answer:
-        "Keys are stored encrypted and decrypted only with the account context; plaintext does not appear in logs or pages. The key is used only to make requests to your model provider on your behalf, and you can delete it at any time. If the key must never leave your device, self-host instead.",
+        "Keys are encrypted at rest and decrypted only with the account context. The plaintext key is not shown on pages or written to logs. Self-hosting lets you control where the key is stored and which server sends requests. It does not keep the key on your device: cloud model requests still send it to your configured model provider for authentication. If you use Xiaowei, the operator's AGT service also receives the selected model's key to run the task.",
     },
     {
       question: "Can I connect my own model service?",
