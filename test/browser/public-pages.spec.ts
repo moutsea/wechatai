@@ -251,6 +251,55 @@ for (const [path, heading] of Object.entries(portuguesePages)) {
   });
 }
 
+for (const [path, fragment] of [
+  ["", "how"],
+  ["/wechat-ai", "models"],
+  ["/wechat-bot", "routes"],
+  ["/wechat-deepseek", "config"],
+]) {
+  test(`keeps #${fragment} when switching ${path || "home"} from Portuguese to English`, async ({
+    page,
+  }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/pt${path}#${fragment}`);
+    await mounted;
+    const switcher = page.getByRole("navigation", { name: "Idioma" });
+    await switcher.getByRole("link", { name: "Inglês", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/en${path}#${fragment}`);
+    await expect(page.locator(`#${fragment}`)).toBeInViewport();
+  });
+}
+
+test("keeps the selected annual plan when switching Portuguese pricing to English", async ({
+  page,
+}) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  const suffix = "?interval=year#plan-year";
+  await page.goto(`${origin}/pt/pricing${suffix}`);
+  await mounted;
+  await expect(page.locator("#plan-year")).toHaveAttribute("aria-current", "true");
+
+  const switcher = page.getByRole("navigation", { name: "Idioma" });
+  await switcher.getByRole("link", { name: "Inglês", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/en/pricing${suffix}`);
+  await expect(page.locator("#plan-year")).toHaveAttribute("aria-current", "true");
+  await expect(page.locator("#plan-year h3")).toBeInViewport();
+});
+
+test("keeps the pricing estimator open when switching Portuguese to English on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 844 });
+  await page.goto(`${origin}/pt/pricing#estimate`);
+  await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
+
+  await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+  await page.locator(".site-mobile-menu").getByRole("link", { name: "Inglês" }).click();
+  await expect(page).toHaveURL(`${origin}/en/pricing#estimate`);
+  await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
+  await expect(page.locator("#estimate h2")).toBeInViewport();
+});
+
 const pricingUser = {
   id: "pricing-user",
   name: "Ana",
