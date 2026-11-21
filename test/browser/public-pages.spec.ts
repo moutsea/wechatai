@@ -1623,6 +1623,15 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
     "href",
     "/wechat-bot",
   );
+  const destination = page.waitForResponse(`${origin}${englishPath}`);
+  await english.click();
+  expect((await destination).status()).toBe(200);
+  await expect(page).toHaveURL(`${origin}${englishPath}`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(switcher.getByRole("link", { name: "日本語", exact: true })).toHaveAttribute(
+    "href",
+    "/ja/wechat-bot",
+  );
 });
 
 test("keeps the pricing query and fragment when the Japanese homepage links to a plan", async ({
