@@ -294,6 +294,9 @@ describe("Google and GitHub OAuth", () => {
     expect(authReturnPath("/app/billing?checkout=cancelled#plans")).toBe(
       "/app/billing?checkout=cancelled#plans",
     );
+    expect(authReturnPath("/ko/pricing?interval=year#plan-year")).toBe(
+      "/ko/pricing?interval=year#plan-year",
+    );
     for (const path of [
       null,
       "https://evil.example",
@@ -304,6 +307,9 @@ describe("Google and GitHub OAuth", () => {
       "/api/auth/sign-out",
       "/application",
       "/pricing-other",
+      "/ko/pricing-other",
+      "/ko/pricing/other",
+      "//evil.example/ko/pricing",
       "/pricing/../../api/auth/sign-out",
     ]) {
       expect(authReturnPath(path)).toBe("/app");

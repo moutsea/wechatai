@@ -7,7 +7,8 @@ export function authReturnPath(value: string | null): string {
       url.pathname.startsWith("/app/") ||
       url.pathname === "/pricing" ||
       url.pathname === "/en/pricing" ||
-      url.pathname === "/ja/pricing"
+      url.pathname === "/ja/pricing" ||
+      url.pathname === "/ko/pricing"
       ? `${url.pathname}${url.search}${url.hash}`
       : "/app";
   } catch {
