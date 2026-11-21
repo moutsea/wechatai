@@ -1533,10 +1533,21 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
   await page.goto(`${origin}/ja/wechat-bot`);
   await expect(page.locator("h1")).toHaveText("WeChat ボットの作り方：まず経路を選ぶ");
   const switcher = page.locator(".site-language");
-  await expect(switcher.getByRole("link", { name: "English", exact: true })).toHaveCount(0);
+  const englishPath = "/en/wechat-bot";
+  const english = switcher.getByRole("link", { name: "English", exact: true });
+  await expect(english).toHaveAttribute("href", englishPath);
   await expect(switcher.getByRole("link", { name: "中文", exact: true })).toHaveAttribute(
     "href",
     "/wechat-bot",
+  );
+  const destination = page.waitForResponse(`${origin}${englishPath}`);
+  await english.click();
+  expect((await destination).status()).toBe(200);
+  await expect(page).toHaveURL(`${origin}${englishPath}`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(switcher.getByRole("link", { name: "日本語", exact: true })).toHaveAttribute(
+    "href",
+    "/ja/wechat-bot",
   );
 });
 

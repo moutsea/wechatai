@@ -246,9 +246,10 @@ describe("published Japanese pages", () => {
       "/wechat-ai",
     );
 
-    // T4 delivers /en/wechat-bot; until it lands the group holds Chinese and Japanese only.
     const bot = parse("/ja/wechat-bot");
-    expect(bot.querySelector(".site-language a[hreflang='en']")).toBeNull();
+    expect(bot.querySelector(".site-language a[hreflang='en']")?.getAttribute("href")).toBe(
+      "/en/wechat-bot",
+    );
     expect(bot.querySelector(".site-language a[hreflang='zh-CN']")?.getAttribute("href")).toBe(
       "/wechat-bot",
     );
