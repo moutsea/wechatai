@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   clearRegisteredTranslations,
   registerTranslations,
-  translatedHref,
   type TranslationPage,
 } from "../src/shared/i18n";
+import { localizedHref } from "../src/client/locale";
 import { getPageSeo, renderSeoHead, renderSitemap } from "../src/shared/seo";
 import { SEO_PAGES } from "../src/shared/seo-pages";
 import byok from "../src/shared/i18n/en/bring-your-own-api-key";
@@ -193,6 +193,8 @@ describe("English remaining landing pages", () => {
     registerTranslations("en", translations, "T4 fixture");
     expect(getPageSeo("/en/terms").indexable).toBe(false);
     expect(getPageSeo("/en/pricing").indexable).toBe(false);
+    expect(getPageSeo("/compare").indexable).toBe(true);
+    expect(getPageSeo("/en/compare").indexable).toBe(false);
     for (const path of paths) {
       const seo = getPageSeo(path);
       expect(seo.canonical, path).toBe(`https://wechatai.app${path}`);
@@ -205,8 +207,9 @@ describe("English remaining landing pages", () => {
         href: `https://wechatai.app${path}`,
       });
     }
-    expect(translatedHref("en", "/pricing#estimate")).toBe("/pricing#estimate");
-    expect(translatedHref("en", "/docs/credits")).toBe("/docs/credits");
-    expect(translatedHref("zh-CN", "/wechat-muse")).toBe("/wechat-muse");
+    expect(localizedHref("en", "/pricing#estimate")).toBe("/pricing#estimate");
+    expect(localizedHref("en", "/compare")).toBe("/compare");
+    expect(localizedHref("en", "/docs/credits")).toBe("/docs/credits");
+    expect(localizedHref("zh-CN", "/wechat-muse")).toBe("/wechat-muse");
   });
 });

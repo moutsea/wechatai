@@ -154,6 +154,7 @@ With Wechatai ordinary chat and Xiaowei, you manage the model key and provider b
   related: [
     { label: "Connect a hosted Muse assistant to WeChat", href: "/wechat-muse" },
     { label: "WeChat AI options compared", href: "/wechat-ai-options" },
+    { label: "All comparisons", href: "/compare" },
     { label: "Wechatai vs self-hosted OpenClaw", href: "/compare/wechatai-vs-openclaw" },
     { label: "Wechatai vs commercial WeChat AI platforms", href: "/compare/wechatai-vs-commercial-wechat-ai" },
     { label: "WeChat AI with your own API key", href: "/bring-your-own-api-key" },

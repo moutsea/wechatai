@@ -142,6 +142,7 @@ A common combination is **BYOK relay for everyday conversation and a local agent
   ],
   related: [
     { label: "Connect a hosted Muse assistant to WeChat", href: "/wechat-muse" },
+    { label: "All comparisons", href: "/compare" },
     { label: "Wechatai vs the built-in WeChat AI", href: "/compare/wechatai-vs-wechat-official-ai" },
     { label: "Wechatai vs self-hosted OpenClaw", href: "/compare/wechatai-vs-openclaw" },
     { label: "Wechatai vs commercial WeChat AI platforms", href: "/compare/wechatai-vs-commercial-wechat-ai" },

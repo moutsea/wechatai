@@ -36,7 +36,8 @@ const translations = [
 describe("prerendered English landing pages", () => {
   for (const page of translations) {
     it(`renders the translated body for /en${page.path} before JavaScript`, () => {
-      const html = renderPublicPage(`/en${page.path}`)
+      const rendered = renderPublicPage(`/en${page.path}`);
+      const html = rendered
         .replaceAll("&quot;", '"')
         .replaceAll("&#x27;", "'")
         .replaceAll("&amp;", "&");
@@ -51,6 +52,12 @@ describe("prerendered English landing pages", () => {
         expect(html).toContain(content.comparison.note);
         const cell = content.comparison.rows.flatMap((row) => row.values).find(Boolean);
         if (cell) expect(html).toContain(cell);
+      }
+      if (content.comparison || page.path === "/wechat-ai-options") {
+        const doc = new DOMParser().parseFromString(rendered, "text/html");
+        const related = doc.querySelector(".seopage-related");
+        expect(related?.querySelector('a[href="/compare"]')?.textContent).toBe("All comparisons");
+        expect(related?.querySelector('a[href="/en/compare"]')).toBeNull();
       }
       // The pricing page belongs to T2: link it in English only once it is registered.
       const pricing = hasRegisteredTranslation("en", "/pricing")

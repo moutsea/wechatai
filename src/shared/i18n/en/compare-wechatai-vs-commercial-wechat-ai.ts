@@ -157,6 +157,7 @@ If migration is the only concern, run both in parallel for a while, configure yo
   related: [
     { label: "Connect a hosted Muse assistant to WeChat", href: "/wechat-muse" },
     { label: "WeChat AI options compared", href: "/wechat-ai-options" },
+    { label: "All comparisons", href: "/compare" },
     { label: "Wechatai vs the built-in WeChat AI", href: "/compare/wechatai-vs-wechat-official-ai" },
     { label: "Wechatai vs self-hosted OpenClaw", href: "/compare/wechatai-vs-openclaw" },
     { label: "WeChat AI with your own API key", href: "/bring-your-own-api-key" },
