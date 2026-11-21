@@ -16,9 +16,8 @@ function parse(path: string) {
   );
 }
 
-/** The switcher's Chinese endonym is allowed in link text, not in attributes. */
 function hanResidue(document: Document) {
-  const text = document.body.textContent?.replaceAll("中文", "") ?? "";
+  const text = document.body.textContent ?? "";
   const attributes = [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
     .flatMap((element) =>
       ["alt", "aria-label", "title", "placeholder"].map(

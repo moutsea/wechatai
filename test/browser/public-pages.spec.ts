@@ -94,10 +94,25 @@ for (const group of localePageGroups) {
       const targets = group.filter((target) => target !== expected);
       await expect(switcher).toHaveCount(targets.length ? 1 : 0);
       await expect(switcher.locator("a")).toHaveCount(targets.length);
+      const korean = expected.htmlLang === "ko-KR";
       for (const { htmlLang, label, path } of targets) {
-        const link = switcher.getByRole("link", { name: label, exact: true });
+        const link = korean
+          ? switcher.locator(`a[hreflang="${htmlLang}"]`)
+          : switcher.getByRole("link", { name: label, exact: true });
         await expect(link).toHaveAttribute("href", path);
         await expect(link).toHaveAttribute("hreflang", htmlLang);
+        if (korean && htmlLang === "zh-CN") await expect(link).toHaveText("중국어");
+      }
+      if (korean) {
+        await expect(switcher).not.toContainText(/\p{Script=Han}/u);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
+        const mobile = page.locator(".site-mobile-menu");
+        const chinese = mobile.getByRole("link", { name: "중국어", exact: true });
+        await expect(chinese).toBeVisible();
+        await expect(chinese).toHaveAttribute("href", group[0].path);
+        await expect(chinese).toHaveAttribute("hreflang", "zh-CN");
+        await expect(mobile).not.toContainText(/\p{Script=Han}/u);
       }
     });
   }
@@ -1567,6 +1582,22 @@ test("keeps the Chinese guide fallback working from the Japanese homepage", asyn
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 });
 
+test("keeps the signed-in Korean pricing account menu in Korean", async ({ page }) => {
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({ json: { plan: "plus", planUntil: Date.UTC(2030, 0, 1), wallet: { balance: 100 } } }),
+  );
+  await page.goto(`${origin}/ko/pricing`);
+  await page.getByRole("button", { name: "사용자 메뉴", exact: true }).click();
+  const menu = page.getByRole("dialog", { name: "계정 메뉴", exact: true });
+  await expect(menu.getByRole("link", { name: "워크스페이스 열기" }))
+    .toHaveAttribute("href", "/app");
+  await expect(menu.getByRole("link", { name: "멤버십 갱신" }))
+    .toHaveAttribute("href", "/app/billing");
+  await expect(menu.getByRole("button", { name: "로그아웃" })).toBeVisible();
+  await expect(menu).not.toContainText(/\p{Script=Han}/u);
+});
+
 test("serves the Korean homepage and pricing page without Chinese page copy", async ({ page }) => {
   const mounted = page.waitForRequest("**/api/auth/get-session");
   await page.goto(`${origin}/ko`);
@@ -1583,9 +1614,7 @@ test("serves the Korean homepage and pricing page without Chinese page copy", as
   await faq.locator("summary").click();
   await expect(faq).toHaveAttribute("open", "");
   await expect(faq).toContainText("모델 API 키를 직접 준비해야 하나요?");
-  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
-    /\p{Script=Han}/u,
-  );
+  expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
 
   await page.goto(`${origin}/pricing`);
   await page.getByRole("link", { name: "한국어", exact: true }).click();
@@ -1601,9 +1630,7 @@ test("serves the Korean homepage and pricing page without Chinese page copy", as
   await estimate.locator("summary").click();
   await expect(estimate).toHaveAttribute("open", "");
   await expect(estimate.locator(".cost-results")).toContainText("크레딧");
-  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
-    /\p{Script=Han}/u,
-  );
+  expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
   const readableAttributes = await page.evaluate(() =>
     [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
       .flatMap((element) =>
@@ -1625,9 +1652,7 @@ test("serves the Korean homepage and pricing page without Chinese page copy", as
   await landingFaq.locator("summary").click();
   await expect(landingFaq).toHaveAttribute("open", "");
   await expect(landingFaq).toContainText("위챗 AI는 위챗 공식 기능인가요?");
-  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
-    /\p{Script=Han}/u,
-  );
+  expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
 });
 
 test("opens the registered English getting-started guide from the homepage", async ({ page }) => {

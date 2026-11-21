@@ -1,5 +1,7 @@
-import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
+import { LOCALE_DEFINITIONS, localizedPath, type Locale } from "../shared/i18n";
 import { useLocale } from "./locale";
+
+const koreanLabels: Partial<Record<Locale, string>> = { "zh-CN": "중국어", ja: "일본어" };
 
 /**
  * Real links, never client-side navigation: switching language reloads the whole
@@ -12,14 +14,15 @@ export function LanguageSwitcher({ mobile = false }: { mobile?: boolean }) {
   if (!targets.length) return null;
   const links = targets.map((target) => {
     const definition = LOCALE_DEFINITIONS[target];
+    const label = locale === "ko" ? koreanLabels[target] : undefined;
     return (
       <a
         key={target}
         href={localizedPath(target, path)}
         hrefLang={definition.htmlLang}
-        lang={definition.htmlLang}
+        lang={label ? undefined : definition.htmlLang}
       >
-        {definition.label}
+        {label ?? definition.label}
       </a>
     );
   });
