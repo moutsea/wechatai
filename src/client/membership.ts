@@ -1,5 +1,5 @@
-export function membershipExpiry(value: number, includeTime = false) {
-  return new Intl.DateTimeFormat("zh-CN", {
+export function membershipExpiry(value: number, includeTime = false, locale = "zh-CN") {
+  return new Intl.DateTimeFormat(locale, {
     timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",

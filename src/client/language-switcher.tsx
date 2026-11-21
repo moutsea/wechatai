@@ -5,6 +5,15 @@ import { languageCopy as languageCopyKo } from "../shared/i18n/ko/copy/site-head
 import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
 import { useLocale } from "./locale";
 
+const portugueseLabels = {
+  "zh-CN": "Chinês",
+  en: "Inglês",
+  ja: "Japonês",
+  ko: "Coreano",
+  es: "Espanhol",
+  pt: "Português",
+} as const;
+
 /**
  * One trigger plus a menu of the languages published for this exact page.
  *
@@ -137,7 +146,12 @@ export function LanguageSwitcher() {
         >
           {alternates.map((target) => {
             const definition = LOCALE_DEFINITIONS[target];
-            const localized = locale === "ko" ? languageCopyKo.labels[target] : undefined;
+            const localized =
+              locale === "ko"
+                ? languageCopyKo.labels[target]
+                : locale === "pt"
+                  ? portugueseLabels[target]
+                  : undefined;
             return (
               <a
                 key={target}

@@ -38,3 +38,8 @@
 4. 五组页面分别断言 zh-CN、en 与 pt-BR 自指且互指，canonical 各指自身，`x-default` 指向该组中文原路径。葡语页 `lang=pt-BR`、`og:locale=pt_BR`，已发布的其他语种关联仍保留。用同一基线构建的 sitemap 比较 URL 集，恰好新增表中五条葡语 URL，既有 URL 无删除且 `lastmod` 保持一致。单独断言葡语白名单和 zh/en/pt 三语关联，避免仅按登记结果计算预期而漏查缺项。
 5. 开始全量检查前查看 load、`MemAvailable` 及正在运行的测试、构建。有重活或可用内存低于 2 GiB 时说明并等待。串行运行 `pnpm check`（含构建和静态 SEO 校验）、贡献指南要求的 `pnpm test:openclaw` 及相关 `pnpm test:browser` 用例。用仓库文档中的 `pnpm exec vite preview --host 127.0.0.1 --port 5174` 和 `node scripts/verify-seo.mjs http://127.0.0.1:5174` 验证构建后的 HTTP 路由。按贡献指南对准备提交的文件运行 `pnpm check:public`。PR 附命令结果、逐页证据、sitemap diff、base/head SHA 和改动文件清单。
 6. 本文仅存于仓库根 `internal-docs/wechatai-i18n-t10-pt.md`。禁止从源码导入、登记为公开文档或复制到公开树。构建后检查 `dist/client` 与 Worker bundle 中无本文的文件名和独有标题。用本地预览确认文档直链不可访问且 `/api/docs` 不返回本文。
+
+## 复审回归
+
+- 手机价格页分别选择 Plus 月付和年付，经注册页切换至邮箱登录。登录成功后返回 `/pt/pricing` 对应的 `interval` 查询参数和套餐锚点；其他葡语路径仍不作为登录回跳目标。
+- 葡语页面的桌面和手机切换器用葡语命名目标语言，`hreflang` 仍标注目标页语言。手机已登录时打开账号菜单，核对可访问名称、余额、升级、退出和键盘关闭。

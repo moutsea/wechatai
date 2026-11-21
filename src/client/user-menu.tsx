@@ -45,6 +45,30 @@ const userMenuCopyEn = {
   signOutFailed: "Could not log out. Please try again.",
 } as const;
 
+const userMenuCopyPt = {
+  avatarFallback: "?",
+  userMenu: "Menu do usuário",
+  accountMenu: "Menu da conta",
+  account: "Minha conta",
+  workspace: "Abrir o painel",
+  loading: "Carregando plano e créditos…",
+  loadFailed: "Não foi possível carregar os dados da conta",
+  reload: "Recarregar",
+  balance: "Saldo de créditos",
+  plus: "Plano Plus",
+  free: "Conta gratuita",
+  expiresOn: "Válido até",
+  timeZone: " (horário de Pequim)",
+  expired: "Seu plano expirou. Assine novamente para recuperar os benefícios do Plus.",
+  upgradeBenefits: "Faça upgrade para usar todos os plugins e conectar mais contas do WeChat.",
+  renew: "Renovar o Plus",
+  upgrade: "Fazer upgrade para o Plus",
+  admin: "Painel administrativo",
+  signingOut: "Saindo…",
+  signOut: "Sair",
+  signOutFailed: "Não foi possível sair. Tente novamente.",
+} as const;
+
 const userMenuCopyZh = {
   avatarFallback: "你",
   userMenu: "用户菜单",
@@ -76,7 +100,9 @@ export function UserMenu({ user }: { user: MenuUser }) {
     locale === "en" ? userMenuCopyEn
     : locale === "ja" ? userMenuCopyJa
     : locale === "ko" ? userMenuCopyKo
+    : locale === "pt" ? userMenuCopyPt
     : userMenuCopyZh;
+  const formatLocale = locale === "pt" ? "pt-BR" : undefined;
   const { loadFailed } = copy;
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -231,7 +257,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                     {copy.balance}
                   </span>
                   <strong>
-                    {formatCredits(summary.balance)}
+                    {formatCredits(summary.balance, formatLocale)}
                     <ChevronDown size={13} aria-hidden="true" />
                   </strong>
                 </Link>
@@ -248,7 +274,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                       <>
                         {copy.expiresOn}{" "}
                         <time dateTime={new Date(summary.planUntil).toISOString()}>
-                          {membershipExpiry(summary.planUntil, true)}
+                          {membershipExpiry(summary.planUntil, true, formatLocale)}
                         </time>
                         <small>{copy.timeZone}</small>
                       </>

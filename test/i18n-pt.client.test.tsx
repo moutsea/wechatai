@@ -10,9 +10,8 @@ function parse(path: string) {
   );
 }
 
-/** The switcher's Chinese endonym is a language name, not page copy. */
 function hanResidue(document: Document) {
-  const text = document.body.textContent?.replaceAll("中文", "") ?? "";
+  const text = document.body.textContent ?? "";
   const attributes = [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
     .flatMap((element) =>
       ["alt", "aria-label", "title", "placeholder"].map((name) => element.getAttribute(name) ?? ""),
@@ -94,8 +93,8 @@ describe("published Brazilian Portuguese pages", () => {
       link.getAttribute("hreflang"),
     ]);
     expect(switcher).toEqual([
-      ["中文", "/", "zh-CN"],
-      ["English", "/en", "en"],
+      ["Chinês", "/", "zh-CN"],
+      ["Inglês", "/en", "en"],
     ]);
   });
 
@@ -155,6 +154,7 @@ describe("published Brazilian Portuguese pages", () => {
     ({ path, heading, faq, related, copyLabel }) => {
       const document = parse(path);
       expect(document.querySelector("h1")?.textContent).toBe(heading);
+      expect(hanResidue(document)).toEqual([]);
       expect(document.querySelectorAll(".seopage-faq details")).toHaveLength(faq);
       expect(document.querySelector(".seopage-answer")?.textContent?.length).toBeGreaterThan(80);
       expect(document.querySelectorAll(".seopage-prose section").length).toBeGreaterThan(2);

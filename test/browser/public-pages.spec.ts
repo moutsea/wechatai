@@ -15,6 +15,14 @@ const {
   fileURLToPath(new URL("../../scripts/locale-expectations.ts", import.meta.url)),
 );
 
+const portugueseLanguageNames: Record<string, string> = {
+  "zh-CN": "Chinês",
+  en: "Inglês",
+  ja: "Japonês",
+  ko: "Coreano",
+  es: "Espanhol",
+};
+
 test.beforeEach(async ({ page }) => {
   const fakeApi = createFakeApi();
   await page.route("**/*", async (route) => {
@@ -121,9 +129,10 @@ for (const group of localePageGroups) {
       const korean = expected.htmlLang === "ko-KR";
       if (targets.length) await expect(page.getByRole("menu")).toBeVisible();
       for (const { htmlLang, label, path } of targets) {
+        const name = expected.htmlLang === "pt-BR" ? portugueseLanguageNames[htmlLang] : label;
         const link = korean
           ? switcher.locator(`[role="menuitem"][hreflang="${htmlLang}"]`)
-          : switcher.getByRole("menuitem", { name: label, exact: true });
+          : switcher.getByRole("menuitem", { name, exact: true });
         await expect(link).toHaveAttribute("href", path);
         await expect(link).toHaveAttribute("hreflang", htmlLang);
         if (korean && htmlLang === "zh-CN") await expect(link).toHaveText("중국어");
@@ -142,6 +151,20 @@ for (const group of localePageGroups) {
         await expect(chinese).toHaveAttribute("href", group[0].path);
         await expect(chinese).toHaveAttribute("hreflang", "zh-CN");
         await expect(mobile).not.toContainText(/\p{Script=Han}/u);
+      }
+      if (expected.htmlLang === "pt-BR") {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+        const mobile = page.locator(".site-mobile-menu");
+        await expect(mobile.locator("a[hreflang]")).toHaveCount(targets.length);
+        for (const { htmlLang, path } of targets) {
+          const link = mobile.getByRole("link", {
+            name: portugueseLanguageNames[htmlLang],
+            exact: true,
+          });
+          await expect(link).toHaveAttribute("href", path);
+          await expect(link).toHaveAttribute("lang", "pt-BR");
+        }
       }
     });
   }
@@ -227,6 +250,49 @@ for (const [path, heading] of Object.entries(portuguesePages)) {
     );
   });
 }
+
+const pricingUser = {
+  id: "pricing-user",
+  name: "Ana",
+  email: "ana@example.test",
+  emailVerified: true,
+};
+const pricingSession = {
+  user: pricingUser,
+  session: {
+    id: "pricing-session",
+    userId: pricingUser.id,
+    token: "pricing-token",
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  },
+};
+
+test("keeps the signed-in Portuguese account menu usable on mobile", async ({ page }) => {
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: pricingSession }));
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({ json: { plan: "free", planUntil: 0, wallet: { balance: 1234 } } }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${origin}/pt/pricing`);
+
+  const trigger = page.getByRole("button", { name: "Menu do usuário", exact: true });
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Menu da conta", exact: true });
+  await expect(menu.getByRole("link", { name: "Abrir o painel" })).toHaveAttribute("href", "/app");
+  const balance = menu.getByRole("link", { name: /Saldo de créditos/ });
+  await expect(balance).toHaveAttribute("href", "/app/credits");
+  await expect(balance).toContainText("1.234");
+  await expect(menu.getByText("Conta gratuita", { exact: true })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Fazer upgrade para o Plus" })).toHaveAttribute(
+    "href",
+    "/app/billing",
+  );
+  await expect(menu.getByRole("button", { name: "Sair", exact: true })).toBeInViewport();
+  await expect(menu).not.toContainText(/\p{Script=Han}/u);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
 
 test("opens Portuguese FAQ answers and the pricing estimator from a DeepSeek CTA", async ({
   page,
