@@ -175,6 +175,13 @@ describe("published Brazilian Portuguese pages", () => {
     },
   );
 
+  it("keeps the DeepSeek language capability claim aligned with the Chinese source", () => {
+    const doc = parse("/pt/wechat-ai");
+    const deepSeek = doc.querySelector('#models a[href="/docs/deepseek-in-wechat"]')?.closest("li");
+    expect(deepSeek?.textContent).toMatch(/chinês/i);
+    expect(deepSeek?.textContent).not.toMatch(/português/i);
+  });
+
   it("localizes the DeepSeek CTA destinations that have Portuguese pages", () => {
     const document = parse("/pt/wechat-deepseek");
     expect(document.querySelector(".seopage-actions a[href='/docs/deepseek-in-wechat']")?.textContent)

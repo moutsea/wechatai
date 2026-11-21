@@ -92,7 +92,7 @@ Envie \`/wx plugins\` para ver os aliases configurados e depois \`/use alias\` p
       title: "Quais modelos podem ser conectados",
       body: `Basta que o provedor ofereça um dos três protocolos acima. Entre os mais comuns:
 
-- **DeepSeek**: preço baixo e bom desempenho em português e chinês, uma escolha principal para perguntas e textos do dia a dia. As etapas estão em [Usar DeepSeek no WeChat](/docs/deepseek-in-wechat).
+- **DeepSeek**: preço baixo e bom desempenho em chinês, uma escolha principal para perguntas e textos do dia a dia. As etapas estão em [Usar DeepSeek no WeChat](/docs/deepseek-in-wechat).
 - **Claude**: mais estável para entender textos longos e ler código, adequado para documentos extensos.
 - **Série GPT**: o ecossistema mais completo, com suporte maduro a plugins e chamadas de ferramentas.
 - **Serviços próprios ou intermediários**: desde que o endereço seja compatível com um dos protocolos, incluindo gateways que você mesmo mantenha.
