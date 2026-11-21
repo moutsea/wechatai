@@ -55,7 +55,7 @@ describe("published English pages", () => {
     const footer = document.querySelector(".landing-footer");
     expect(footer?.querySelector('a[href="/en/pricing"]')).not.toBeNull();
     expect(footer?.querySelector('a[href="/en/docs"]')?.textContent).toBe("Docs and tutorials");
-    expect(footer?.querySelector('a[href="/wechat-ai"]')).not.toBeNull();
+    expect(footer?.querySelector('a[href="/en/wechat-ai"]')).not.toBeNull();
 
     expect(document.querySelectorAll(".landing-faq details")).toHaveLength(7);
     expect(document.querySelector(".landing-faq summary")?.textContent).toContain(
@@ -192,7 +192,7 @@ describe("published English pages", () => {
     expect(homeFaq.mainEntity[0].name).toBe("Do I need my own API key?");
   });
 
-  it("keeps the existing Chinese pages and publishes only registered localized URLs", () => {
+  it("keeps the existing Chinese pages and publishes only the approved localized URLs", () => {
     const home = parse("/");
     expect(home.querySelector("h1")?.textContent).toContain("把你的 AI");
     expect(home.querySelector('.site-header-nav a[href="/pricing"]')?.textContent).toBe("价格");
@@ -210,6 +210,14 @@ describe("published English pages", () => {
       "/en",
       ...englishDocs.map(({ path }) => `/en${path}`),
       "/en/pricing",
+      "/en/wechat-ai",
+      "/en/wechat-claude",
+      "/en/wechat-clawbot",
+      "/en/wechat-clawbot-models",
+      "/en/wechat-deepseek",
+      "/en/wechat-gpt",
+      "/en/wechat-kimi",
+      "/en/wechat-qwen",
       "/ja",
       "/ja/pricing",
     ].sort();

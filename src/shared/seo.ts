@@ -133,14 +133,17 @@ function findDeveloperPage(path: string) {
 }
 
 /** Organization 只写这一处：logo 与 sameAs 不会因为某个分支漏改而不一致。 */
-function organizationNode() {
+function organizationNode(locale: Locale = DEFAULT_LOCALE) {
   return {
     "@type": "Organization",
     "@id": ORGANIZATION_ID,
     name: SITE_NAME,
     alternateName: ["Wechatai", "微伴"],
     url: `${SITE_URL}/`,
-    description: "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
+    description:
+      locale === "en"
+        ? "An independently maintained service that connects AI models and agents to one-to-one WeChat ClawBot chats. It is not officially affiliated with Tencent or WeChat."
+        : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
     // 站内唯一的方形品牌资源是 favicon.svg（64×64 矢量）；og-image.png 是 1200×630 横幅，不能当 logo。
     logo: {
       "@type": "ImageObject",
@@ -278,7 +281,7 @@ function seoLandingPage(
   const english = locale === "en";
   const japanese = locale === "ja";
   const isArticle = page.kind === "article";
-  const publisher = organizationNode();
+  const publisher = organizationNode(locale);
   const webPage = isArticle
     ? {
         "@type": "Article",
@@ -713,9 +716,14 @@ function withAlternates(seo: PageSeo, path: string): PageSeo {
 }
 
 function translatedPageSeo(path: string, translation: RegisteredTranslation): PageSeo {
-  const { locale, title, description } = translation;
+  const { locale, title, description, content } = translation;
   const { htmlLang, ogLocale } = LOCALE_DEFINITIONS[locale];
-  const base = basePageSeo(path, locale);
+  const canonical = `${SITE_URL}${localizedPath(locale, path)}`;
+  // A complete translation feeds the same builder as the Chinese page, so the
+  // visible body and page-owned JSON-LD cannot drift apart.
+  const base = content
+    ? seoLandingPage(content, canonical, htmlLang, locale)
+    : basePageSeo(path, locale);
   if (!base.indexable) return notFoundPageSeo();
   return {
     ...base,

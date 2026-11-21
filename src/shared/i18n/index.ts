@@ -5,6 +5,8 @@
  * intentionally empty in T1: adding a locale directory is not enough to publish
  * a URL, a module must explicitly register every translated path.
  */
+import type { SeoPage } from "../seo-pages";
+
 export const AVAILABLE_LOCALES = ["zh-CN", "en", "ja", "ko", "es", "pt"] as const;
 export type Locale = (typeof AVAILABLE_LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "zh-CN";
@@ -37,6 +39,12 @@ export interface TranslationPage {
   readonly description: string;
   /** ISO date of the translation; drives the sitemap lastmod. */
   readonly updatedAt: string;
+  /**
+   * Complete landing-page copy for pages rendered from `SeoPage`. The same
+   * object feeds the prerendered body and the page-owned JSON-LD. Pages whose
+   * body lives in a hand-written component omit it.
+   */
+  readonly content?: SeoPage;
 }
 
 export interface RegisteredTranslation extends TranslationPage {
@@ -100,6 +108,17 @@ function assertTranslation(locale: Locale, page: TranslationPage, source: string
   if (!/^\d{4}-\d{2}-\d{2}$/.test(page.updatedAt)) {
     throw new Error(`${source}: ${path} needs an ISO updatedAt date`);
   }
+  if (page.content) {
+    if (page.content.path !== path) {
+      throw new Error(`${source}: ${path} content points at ${page.content.path}`);
+    }
+    if (!page.content.h1.trim() || !page.content.sections.length) {
+      throw new Error(`${source}: ${path} content needs a heading and sections`);
+    }
+    if (page.description !== page.content.description) {
+      throw new Error(`${source}: ${path} metadata description differs from page content`);
+    }
+  }
 }
 
 /** Registers explicit, complete page translations. Used by discovery modules and tests. */
@@ -121,6 +140,7 @@ export function registerTranslations(
       title: page.title,
       description: page.description,
       updatedAt: page.updatedAt,
+      ...(page.content ? { content: page.content } : {}),
     });
   }
 }

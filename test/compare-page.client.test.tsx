@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AnonymousAuthProvider } from "../src/client/auth";
+import { LocaleProvider } from "../src/client/locale";
 import { ComparePage } from "../src/client/pages/compare-page";
 import { SeoLandingPage } from "../src/client/pages/seo-landing";
 
@@ -26,13 +27,15 @@ async function renderAt(path: string) {
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={[path]}>
-        <AnonymousAuthProvider>
-          <Routes>
-            <Route path="/compare/:pair" element={<ComparePage />} />
-            <Route path="/:slug" element={<SeoLandingPage />} />
-            <Route path="*" element={<p>这个页面没有找到。</p>} />
-          </Routes>
-        </AnonymousAuthProvider>
+        <LocaleProvider>
+          <AnonymousAuthProvider>
+            <Routes>
+              <Route path="/compare/:pair" element={<ComparePage />} />
+              <Route path="/:slug" element={<SeoLandingPage />} />
+              <Route path="*" element={<p>这个页面没有找到。</p>} />
+            </Routes>
+          </AnonymousAuthProvider>
+        </LocaleProvider>
       </MemoryRouter>,
     ),
   );

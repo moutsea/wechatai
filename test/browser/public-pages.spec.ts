@@ -103,6 +103,40 @@ for (const group of localePageGroups) {
   }
 }
 
+for (const { path } of localePageGroups.flat()) {
+  if (!path.startsWith("/en/wechat-")) continue;
+  test(`uses English desktop and mobile navigation on ${path}`, async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}${path}`);
+    await mounted;
+
+    const navigation = page.getByRole("navigation", { name: "Main navigation", exact: true });
+    await expect(navigation.getByRole("link", { name: "Home", exact: true })).toHaveAttribute(
+      "href",
+      "/en",
+    );
+    await expect(navigation.getByRole("link", { name: "Pricing", exact: true })).toHaveAttribute(
+      "href",
+      "/en/pricing",
+    );
+    await expect(
+      page.locator(".landing-footer").getByRole("link", { name: "Wechatai home" }),
+    ).toHaveAttribute("href", "/en");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Open menu", exact: true }).click();
+    const mobile = page.locator(".site-mobile-menu");
+    await expect(mobile.getByRole("link", { name: "Pricing", exact: true })).toHaveAttribute(
+      "href",
+      "/en/pricing",
+    );
+    await expect(mobile.getByRole("link", { name: "Home", exact: true })).toHaveAttribute(
+      "href",
+      "/en",
+    );
+  });
+}
+
 // An unregistered prefix must not fall back to the Chinese homepage or pricing page.
 for (const path of locale404Probes) {
   test(`shows the built 404 page for the unregistered locale path ${path}`, async ({ page }) => {
