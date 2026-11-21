@@ -65,6 +65,16 @@ describe("published English pages", () => {
     expect(hanResidue(document)).toEqual([]);
   });
 
+  it.each([
+    ["/en", "ai-wechat-connections-en"],
+    ["/", "ai-wechat-connections"],
+  ])("serves the matching hero artwork at both resolutions on %s", (path, filename) => {
+    const image = parse(path).querySelector(".hero-connections img");
+    const asset = `/images/landing/${filename}`;
+    expect(image?.getAttribute("src")).toBe(`${asset}.webp`);
+    expect(image?.getAttribute("srcset")).toBe(`${asset}-640.webp 640w, ${asset}.webp 1280w`);
+  });
+
   it("limits the English homepage privacy statement to proactive review", () => {
     const document = parse("/en");
     const statements = [...document.querySelectorAll(".landing-privacy-item p")];
