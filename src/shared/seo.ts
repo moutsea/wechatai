@@ -775,9 +775,11 @@ export function renderSeoHead(seo: PageSeo) {
     `<meta ${property ? "property" : "name"}="${name}" content="${escapeHtml(content)}" data-seo />`;
   const defaultLocale = LOCALE_DEFINITIONS[DEFAULT_LOCALE];
   const imageAlt =
-    (seo.htmlLang ?? defaultLocale.htmlLang) === "en"
+    seo.htmlLang === LOCALE_DEFINITIONS.en.htmlLang
       ? "Wechatai: chat with the models you choose in WeChat."
-      : "微伴 Wechatai：在微信里，与自选大模型对话。";
+      : seo.htmlLang === LOCALE_DEFINITIONS.ja.htmlLang
+        ? "Wechatai：選んだモデルと WeChat でチャットできます。"
+        : "微伴 Wechatai：在微信里，与自选大模型对话。";
   return [
     `<title data-seo>${escapeHtml(seo.title)}</title>`,
     meta("description", seo.description),

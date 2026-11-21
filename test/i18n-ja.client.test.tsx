@@ -51,6 +51,18 @@ describe("published Japanese pages", () => {
     expect(document.body.textContent).not.toMatch(CHINESE_RESIDUE);
   });
 
+  it.each(["/ja", "/ja/pricing", "/ja/wechat-ai", "/ja/wechat-bot", "/ja/wechat-deepseek"])(
+    "uses Japanese alternative text for both social image tags on %s",
+    (path) => {
+      const document = parse(path);
+      for (const selector of ['meta[property="og:image:alt"]', 'meta[name="twitter:image:alt"]']) {
+        expect(document.querySelector(selector)?.getAttribute("content")).toBe(
+          "Wechatai：選んだモデルと WeChat でチャットできます。",
+        );
+      }
+    },
+  );
+
   it("localizes the homepage shell and prefixes only registered targets", () => {
     const document = parse("/ja");
     const header = document.querySelector(".site-header-nav");
