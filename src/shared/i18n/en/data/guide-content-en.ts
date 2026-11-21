@@ -156,7 +156,15 @@ Wechatai tries to sync available models after saving. If syncing fails, add mode
         illustration: "kimiseek-import",
         body: `Open [Channels & models](/app/channels), click “Add channel” (“添加渠道”), then click **kimiseek one-click import** (“kimiseek 一键导入”) next to “Provider” (“服务商”). Follow the prompts on the new page to link your account.
 
-After linking, Wechatai imports the channel and tries to sync models automatically; you do not type an API key. Return to the channels page, confirm the models you need were imported, then continue to [connect WeChat](/en/docs/getting-started#start).`,
+After linking, Wechatai imports the channel and tries to sync models automatically; you do not type an API key. Return to the channels page, confirm the models you need were imported, then continue to [connect WeChat](/en/docs/getting-started#start).
+
+**Email not verified?** First [verify your Wechatai email](/verify-email?returnTo=%2Fapp%2Fchannels%3Fnew%3D1). Then return to the channels page and click one-click import again.
+
+**Email not supported?** KimiSeek accepts only supported major email providers for new registrations. See its registration page for the full list of domains. You can keep your current Wechatai account and add the channel manually:
+
+1. [Register for KimiSeek](https://kimiseek.app/zh-CN/register) with a supported email address (such as QQ, 163/126, Gmail or Outlook), then create an API key in the KimiSeek console.
+2. Return to [Add channel](/app/channels?new=1) and choose “Custom (third-party channel / other protocol)” (“自定义（第三方渠道 / 其他协议）”). Name the channel KimiSeek, select OpenAI Chat Completions, set the Base URL to \`https://api.kimiseek.app/v1\`, and paste your API key.
+3. Click “Save channel” (“保存渠道”), then “Fetch available models” (“获取可用模型”) on the channel card. For a manual channel, manage your API key and top-ups in the KimiSeek console. Wechatai does not show the balance or top-up entry that is available for one-click linked channels.`,
       },
       {
         id: "custom",
