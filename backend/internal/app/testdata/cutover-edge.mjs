@@ -61,6 +61,22 @@ export class PersonalAccount extends SourceAccount {
       if (i !== 5) await this.env.MEDIA.put("generated/" + this.ctx.id + "/" + id, "from R2");
     }
     this.ctx.storage.transactionSync(() => {
+      sql.exec(
+        "INSERT INTO inbox(id,payload,state,createdAt,wechatTextReceipts) VALUES(?,'{}','done',?,?)",
+        "fixture-text-receipt",
+        now,
+        JSON.stringify({
+          0: {
+            outcome: "unconfirmed",
+            httpStatus: 200,
+            ret: null,
+            errcode: null,
+            hasMessageId: false,
+            attempt: 1,
+            at: now,
+          },
+        }),
+      );
       sql.exec("INSERT INTO wechat_links VALUES(?,?,?)", "comparison", "测试微信", 1);
       sql.exec(
         "INSERT INTO settings VALUES(?,?)",

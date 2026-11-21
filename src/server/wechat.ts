@@ -80,6 +80,17 @@ export async function wxRequest<T>(
   pollBaseUrl?: string,
   signal?: AbortSignal,
 ): Promise<T> {
+  return (await wechatResponse<T>(path, body, credentials, timeout, pollBaseUrl, signal)).data;
+}
+
+async function wechatResponse<T>(
+  path: string,
+  body: unknown,
+  credentials: WxCredentials | undefined,
+  timeout: number,
+  pollBaseUrl?: string,
+  signal?: AbortSignal,
+) {
   const base = credentials
     ? validateWechatHost(credentials.baseUrl)
     : pollBaseUrl
@@ -139,7 +150,7 @@ export async function wxRequest<T>(
       ret,
       errcode,
     );
-  return data;
+  return { data, httpStatus: response.status };
 }
 export function extractText(message: WxMessage) {
   return (message.item_list ?? [])
@@ -213,14 +224,21 @@ export async function downloadImage(item: WxItem) {
   if (!mime) throw new AppError("image_format", "请发送 JPG、PNG 或 WebP 图片");
   return { mime, data: data.toString("base64") };
 }
+export type WechatTextReceipt = {
+  outcome: "accepted" | "unconfirmed" | "error";
+  httpStatus: number | null;
+  ret: number | null;
+  errcode: number | null;
+  hasMessageId: boolean | null;
+};
 export async function sendText(
   credentials: WxCredentials,
   contextToken: string,
   clientId: string,
   text: string,
   timeout = 15000,
-) {
-  await wxRequest(
+): Promise<WechatTextReceipt> {
+  const { data, httpStatus } = await wechatResponse<{ message_id?: unknown }>(
     "sendmessage",
     {
       msg: {
@@ -236,6 +254,17 @@ export async function sendText(
     credentials,
     timeout,
   );
+  const id = data.message_id;
+  const hasMessageId =
+    (typeof id === "string" && /^[1-9]\d{0,19}$/.test(id)) ||
+    (typeof id === "number" && Number.isInteger(id) && id > 0);
+  return {
+    outcome: data.ret === 0 || data.errcode === 0 || hasMessageId ? "accepted" : "unconfirmed",
+    httpStatus,
+    ret: data.ret ?? null,
+    errcode: data.errcode ?? null,
+    hasMessageId,
+  };
 }
 
 export type UploadedWechatImage = { downloadParam: string; aeskey: string; size: number };

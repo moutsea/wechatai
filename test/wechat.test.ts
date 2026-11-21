@@ -1,6 +1,7 @@
 import { env, runInDurableObject, runDurableObjectAlarm } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { encrypt } from "../src/server/security";
+import { initWechatInbox } from "../src/server/wechat-inbox";
 const input = {
   name: "微信助手",
   protocol: "responses",
@@ -48,6 +49,77 @@ async function connectedAccount() {
   return stub;
 }
 describe("durable WeChat delivery", () => {
+  it("adds nullable receipts to a legacy inbox without fabricating acknowledgements", async () => {
+    const stub = await connectedAccount();
+    await runInDurableObject(stub, async (_instance, state) => {
+      const sql = state.storage.sql;
+      sql.exec("ALTER TABLE inbox DROP COLUMN wechatTextReceipts");
+      sql.exec("INSERT INTO inbox (id,payload,state,createdAt) VALUES ('old','{}','done',1)");
+      initWechatInbox(sql);
+      initWechatInbox(sql);
+      expect(sql.exec("SELECT state,wechatTextReceipts FROM inbox WHERE id='old'").one()).toEqual({
+        state: "done",
+        wechatTextReceipts: null,
+      });
+      await state.storage.deleteAlarm();
+    });
+  });
+  it("records explicit WeChat errors on HTTP 200 and recognizes an ID-only retry receipt", async () => {
+    const stub = await connectedAccount();
+    await runInDurableObject(stub, (_instance, state) => {
+      state.storage.sql.exec(
+        "INSERT INTO inbox (id,payload,state,reply,createdAt) VALUES ('retry','{}','reply','test',1)",
+      );
+    });
+    let sends = 0;
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      if (String(url).endsWith("/getupdates")) return Response.json({ ret: 0 });
+      expect(String(url)).toMatch(/\/sendmessage$/);
+      return Response.json(
+        ++sends === 1
+          ? { ret: -1, errcode: 429, errmsg: "private fixture" }
+          : { message_id: "18446744073709551615" },
+      );
+    });
+    await runDurableObjectAlarm(stub);
+    await runInDurableObject(stub, (_instance, state) => {
+      const row = state.storage.sql
+        .exec<{ state: string; receipt: string }>(
+          "SELECT state, wechatTextReceipts AS receipt FROM inbox WHERE id='retry'",
+        )
+        .one();
+      expect(row.state).toBe("reply");
+      expect(JSON.parse(row.receipt)["0"]).toEqual({
+        outcome: "error",
+        httpStatus: 200,
+        ret: -1,
+        errcode: 429,
+        hasMessageId: null,
+        attempt: 1,
+        at: expect.any(Number),
+      });
+    });
+    await runDurableObjectAlarm(stub);
+    await runInDurableObject(stub, async (_instance, state) => {
+      const row = state.storage.sql
+        .exec<{ state: string; receipt: string }>(
+          "SELECT state, wechatTextReceipts AS receipt FROM inbox WHERE id='retry'",
+        )
+        .one();
+      expect(row.state).toBe("done");
+      expect(JSON.parse(row.receipt)["0"]).toEqual({
+        outcome: "accepted",
+        httpStatus: 200,
+        ret: null,
+        errcode: null,
+        hasMessageId: true,
+        attempt: 2,
+        at: expect.any(Number),
+      });
+      await state.storage.deleteAlarm();
+    });
+    expect(sends).toBe(2);
+  });
   it("persists inbox and cursor atomically, isolates sender, replays saved results and retries delivery without billing twice", async () => {
     const stub = await connectedAccount();
     const sends: string[] = [];
@@ -92,7 +164,11 @@ describe("durable WeChat delivery", () => {
         sendCount++;
         return sendCount === 1
           ? Response.json({ ret: 1 }, { status: 503 })
-          : Response.json({ ret: 0 });
+          : Response.json({
+              ret: 0,
+              message_id: "18446744073709551614",
+              errmsg: "private fixture",
+            });
       }
       throw new Error("Unexpected network endpoint");
     });
@@ -114,6 +190,16 @@ describe("durable WeChat delivery", () => {
     // inference after that failed send, before any successful acknowledgement.
     await runInDurableObject(stub, (_instance, state) => {
       state.storage.sql.exec("UPDATE inbox SET state = 'pending'");
+      const { receipt } = state.storage.sql
+        .exec<{ receipt: string }>("SELECT wechatTextReceipts AS receipt FROM inbox")
+        .one();
+      expect(JSON.parse(receipt)["0"]).toMatchObject({
+        outcome: "error",
+        httpStatus: 503,
+        ret: null,
+        errcode: null,
+        attempt: 1,
+      });
     });
     await runDurableObjectAlarm(stub);
     await runDurableObjectAlarm(stub);
@@ -126,9 +212,74 @@ describe("durable WeChat delivery", () => {
     expect(after.wallet.balance).toBeCloseTo(before - 0.024);
     expect(after.stats.messages).toBe(2);
     await runInDurableObject(stub, async (_instance, state) => {
-      expect(state.storage.sql.exec<{ state: string }>("SELECT state FROM inbox").one().state).toBe(
-        "done",
+      const row = state.storage.sql
+        .exec<{ state: string; receipt: string }>(
+          "SELECT state, wechatTextReceipts AS receipt FROM inbox",
+        )
+        .one();
+      expect(row.state).toBe("done");
+      expect(JSON.parse(row.receipt)).toEqual({
+        "0": {
+          outcome: "accepted",
+          httpStatus: 200,
+          ret: 0,
+          errcode: null,
+          hasMessageId: true,
+          attempt: 2,
+          at: expect.any(Number),
+        },
+      });
+      await state.storage.deleteAlarm();
+    });
+  });
+  it("records each text part without resending an ambiguous response", async () => {
+    const stub = await connectedAccount();
+    await runInDurableObject(stub, (_instance, state) => {
+      state.storage.sql.exec(
+        "INSERT INTO inbox (id,payload,state,reply,createdAt) VALUES (?, '{}', 'reply', ?, ?)",
+        "long-reply",
+        "好".repeat(1501),
+        Date.now(),
       );
+    });
+    const ids: string[] = [];
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (String(url).endsWith("/getupdates")) return Response.json({ ret: 0 });
+      expect(String(url)).toMatch(/\/sendmessage$/);
+      ids.push(JSON.parse(String(init?.body)).msg.client_id);
+      return ids.length === 1
+        ? Response.json({ errmsg: "private fixture" })
+        : Response.json({ ret: 0 });
+    });
+    for (let i = 0; i < 3; i++) await runDurableObjectAlarm(stub);
+    expect(ids).toEqual(["long-reply:0", "long-reply:1"]);
+    await runInDurableObject(stub, async (_instance, state) => {
+      const row = state.storage.sql
+        .exec<{ state: string; receipt: string }>(
+          "SELECT state, wechatTextReceipts AS receipt FROM inbox WHERE id='long-reply'",
+        )
+        .one();
+      expect(row.state).toBe("done");
+      expect(JSON.parse(row.receipt)).toEqual({
+        "0": {
+          outcome: "unconfirmed",
+          httpStatus: 200,
+          ret: null,
+          errcode: null,
+          hasMessageId: false,
+          attempt: 1,
+          at: expect.any(Number),
+        },
+        "1": {
+          outcome: "accepted",
+          httpStatus: 200,
+          ret: 0,
+          errcode: null,
+          hasMessageId: false,
+          attempt: 1,
+          at: expect.any(Number),
+        },
+      });
       await state.storage.deleteAlarm();
     });
   });

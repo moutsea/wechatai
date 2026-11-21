@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS inbox (
 		{Version: 5, When: "SELECT NOT EXISTS (SELECT 1 FROM pragma_table_info('inbox') WHERE name='wechatExactId')", SQL: "ALTER TABLE inbox ADD COLUMN wechatExactId TEXT"},
 		{Version: 6, When: "SELECT NOT EXISTS (SELECT 1 FROM pragma_table_info('inbox') WHERE name='wechatSeq')", SQL: "ALTER TABLE inbox ADD COLUMN wechatSeq TEXT"},
 		{Version: 7, SQL: "CREATE INDEX IF NOT EXISTS inbox_wechat_rounded ON inbox(wechatRoundedId) WHERE wechatRoundedId IS NOT NULL"},
+		{Version: 8, When: "SELECT NOT EXISTS (SELECT 1 FROM pragma_table_info('inbox') WHERE name='wechatTextReceipts')", SQL: "ALTER TABLE inbox ADD COLUMN wechatTextReceipts TEXT"},
 	}}
 }
 
