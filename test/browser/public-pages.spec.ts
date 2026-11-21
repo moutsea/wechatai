@@ -1127,10 +1127,16 @@ test("keeps one mobile Plus card with the selected price and purchase link", asy
   await expect(page.locator(".landing-plan-year").first()).toBeVisible();
 });
 
-for (const interval of ["month", "year"]) {
-  test(`returns mobile buyers to the ${interval} card after signing in`, async ({ page }) => {
+for (const [path, interval] of [
+  ["/pricing", "month"],
+  ["/pricing", "year"],
+  ["/ja/pricing", "year"],
+]) {
+  test(`returns mobile buyers on ${path} to the ${interval} card after signing in`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    const destination = `/pricing?interval=${interval}#plan-${interval}`;
+    const destination = `${path}?interval=${interval}#plan-${interval}`;
     let signedIn = false;
     const user = {
       id: "pricing-buyer",
@@ -1186,45 +1192,62 @@ const englishBuyer = {
   },
 };
 
-test("returns expired English checkout buyers to their selected plan after login", async ({ page }) => {
-  const destination = "/en/pricing?interval=year#plan-year";
-  const oldSession = englishBuyer.session;
-  const newSession = { ...oldSession, id: "new-session", token: "new-token" };
-  let signedInAgain = false;
-  await page.route("**/api/billing/checkout", (route) =>
-    route.fulfill({ status: 401, json: { error: "unauthorized", message: "请先登录" } }),
-  );
-  await page.route("**/api/auth/get-session*", (route) =>
-    route.fulfill({
-      // Keep returning the stale session until the buyer actually signs in again.
-      json: { ...englishBuyer, session: signedInAgain ? newSession : oldSession },
-    }),
-  );
-  await page.route("**/api/auth/sign-in/email", (route) => {
-    signedInAgain = true;
-    return route.fulfill({
-      json: { redirect: false, token: newSession.token, user: englishBuyer.user },
+for (const [path, purchaseLabel, expiredMessage, loginLabel] of [
+  [
+    "/en/pricing",
+    /Get Plus Yearly/,
+    "Your session has expired. Log in again to continue.",
+    "Log in again",
+  ],
+  [
+    "/ja/pricing",
+    /Plus 年間プランを購入/,
+    "セッションの有効期限が切れました。再度ログインしてください。",
+    "もう一度ログイン",
+  ],
+] as const) {
+  test(`returns expired checkout buyers on ${path} to their selected plan after login`, async ({
+    page,
+  }) => {
+    const destination = `${path}?interval=year#plan-year`;
+    const oldSession = englishBuyer.session;
+    const newSession = { ...oldSession, id: "new-session", token: "new-token" };
+    let signedInAgain = false;
+    await page.route("**/api/billing/checkout", (route) =>
+      route.fulfill({ status: 401, json: { error: "unauthorized", message: "请先登录" } }),
+    );
+    await page.route("**/api/auth/get-session*", (route) =>
+      route.fulfill({
+        // Keep returning the stale session until the buyer actually signs in again.
+        json: { ...englishBuyer, session: signedInAgain ? newSession : oldSession },
+      }),
+    );
+    await page.route("**/api/auth/sign-in/email", (route) => {
+      signedInAgain = true;
+      return route.fulfill({
+        json: { redirect: false, token: newSession.token, user: englishBuyer.user },
+      });
     });
-  });
 
-  await page.goto(`${origin}${destination}`);
-  const card = page.locator("#plan-year");
-  const purchase = card.getByRole("button", { name: /Get Plus Yearly/ });
-  const alert = card.getByRole("alert");
-  await purchase.click();
-  await expect(alert).toHaveText("Your session has expired. Log in again to continue.");
-  await expect(page.locator("#plan-month").getByRole("alert")).toHaveCount(0);
-  const login = card.getByRole("link", { name: "Log in again" });
-  await expect(login).toHaveAttribute("href", `/login?returnTo=${encodeURIComponent(destination)}`);
-  await login.click();
-  await expect(page.getByRole("button", { name: "登录工作台", exact: true })).toBeVisible();
-  await page.locator('input[type="email"]').fill(englishBuyer.user.email);
-  await page.locator('input[type="password"]').fill("test-password");
-  await page.getByRole("button", { name: "登录工作台", exact: true }).click();
-  await expect(page).toHaveURL(`${origin}${destination}`);
-  await expect(purchase).toBeEnabled();
-  await expect(alert).toHaveCount(0);
-});
+    await page.goto(`${origin}${destination}`);
+    const card = page.locator("#plan-year");
+    const purchase = card.getByRole("button", { name: purchaseLabel });
+    const alert = card.getByRole("alert");
+    await purchase.click();
+    await expect(alert).toHaveText(expiredMessage);
+    await expect(page.locator("#plan-month").getByRole("alert")).toHaveCount(0);
+    const login = card.getByRole("link", { name: loginLabel });
+    await expect(login).toHaveAttribute("href", `/login?returnTo=${encodeURIComponent(destination)}`);
+    await login.click();
+    await expect(page.getByRole("button", { name: "登录工作台", exact: true })).toBeVisible();
+    await page.locator('input[type="email"]').fill(englishBuyer.user.email);
+    await page.locator('input[type="password"]').fill("test-password");
+    await page.getByRole("button", { name: "登录工作台", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}${destination}`);
+    await expect(purchase).toBeEnabled();
+    await expect(alert).toHaveCount(0);
+  });
+}
 
 test("shows an English checkout failure without asking the buyer to log in again", async ({ page }) => {
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
