@@ -4,7 +4,7 @@ import { estimateTextCost } from "../shared/cost-estimate";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { pricingCopy } from "../shared/i18n/en/copy/pricing";
 import { useDocumentInputs } from "./document-handoff";
-import { useLocale } from "./locale";
+import { localizedHref, useLocale } from "./locale";
 import "./cost-estimator.css";
 
 const estimateInputIds = [
@@ -108,7 +108,7 @@ export function CostEstimator() {
       </div>
       <p className="cost-estimator-note">
         {copy.note}
-        <Link to="/docs/credits">{copy.noteLink}</Link>
+        <Link to={localizedHref(locale, "/docs/credits")}>{copy.noteLink}</Link>
       </p>
     </section>
   );

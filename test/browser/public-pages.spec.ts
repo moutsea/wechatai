@@ -1338,6 +1338,37 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
 });
 
+test("opens the registered English getting-started guide from the homepage", async ({ page }) => {
+  await page.goto(`${origin}/en`);
+  await page.getByRole("link", { name: "Read the getting-started guide", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/en/docs/getting-started`);
+  await expect(page.locator("h1")).toHaveText(
+    "WeChat AI guide: configure a model and connect by QR code",
+  );
+});
+
+test("preserves the getting-started section when opening the English guide", async ({ page }) => {
+  await page.goto(`${origin}/en`);
+  await page.getByRole("link", { name: "ClawBot entry", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/en/docs/getting-started#clawbot-entry`);
+  await expect(page.locator("#clawbot-entry")).toBeVisible();
+});
+
+for (const [surface, toggle] of [
+  ["FAQ", "How do credits work? Do daily credits roll over?"],
+  ["estimator", "Estimate my daily usage"],
+]) {
+  test(`opens the registered English billing guide from the pricing ${surface}`, async ({ page }) => {
+    await page.goto(`${origin}/en/pricing`);
+    await page.getByText(toggle, { exact: true }).click();
+    await page.getByRole("link", { name: "See full billing rules", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/en/docs/credits`);
+    await expect(page.locator("h1")).toHaveText(
+      "Wechatai membership and credits: allowance, billing and referral rewards",
+    );
+  });
+}
+
 test("labels the Xiaowei mention with the configured shortcut placeholder", async ({ page }) => {
   await page.goto(`${origin}/en`);
   const example = page.locator(".use-case-cloud .scene-task-prompt");

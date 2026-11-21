@@ -7,7 +7,7 @@ import { pricingCopy } from "../../shared/i18n/en/copy/pricing";
 import { CostEstimator } from "../cost-estimator";
 import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
-import { useLocale } from "../locale";
+import { localizedHref, useLocale } from "../locale";
 import { PricingPlans } from "./pricing-plans";
 import { SeoRelated } from "./seo-related";
 
@@ -63,7 +63,7 @@ export function PricingPage({ page, children }: { page: SeoPage; children?: Reac
               <div className="pricing-faq-answer">
                 <p>{item.answer}</p>
                 {item.guide && (
-                  <Link className="pricing-faq-guide" to={item.guide.href}>
+                  <Link className="pricing-faq-guide" to={localizedHref(locale, item.guide.href)}>
                     {item.guide.label}
                     <ArrowRight size={15} aria-hidden="true" />
                   </Link>

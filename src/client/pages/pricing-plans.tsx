@@ -14,7 +14,7 @@ import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { pricingCopy } from "../../shared/i18n/en/copy/pricing";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../../shared/wechat-links";
-import { useLocale } from "../locale";
+import { localizedHref, useLocale } from "../locale";
 import "./pricing-plans.css";
 
 const monthly = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")!;
@@ -111,7 +111,11 @@ function PlanFeatures({ plus }: { plus: boolean }) {
         return (
           <li key={feature.label}>
             <span>
-              {feature.href ? <Link to={feature.href}>{feature.label}</Link> : feature.label}
+              {feature.href ? (
+                <Link to={localizedHref(locale, feature.href)}>{feature.label}</Link>
+              ) : (
+                feature.label
+              )}
             </span>
             <PlanValue value={value} />
           </li>
@@ -285,7 +289,11 @@ export function PricingPlans() {
             {copy.features.map((feature) => (
               <tr key={feature.label}>
                 <th scope="row">
-                  {feature.href ? <Link to={feature.href}>{feature.label}</Link> : feature.label}
+                  {feature.href ? (
+                    <Link to={localizedHref(locale, feature.href)}>{feature.label}</Link>
+                  ) : (
+                    feature.label
+                  )}
                 </th>
                 <td>
                   <PlanValue value={feature.free} />

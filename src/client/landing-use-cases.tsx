@@ -1,7 +1,7 @@
 import { ArrowDownUp, ArrowUpRight, Check, Drama, FileText, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { homeCopy } from "../shared/i18n/en/copy/home";
-import { useLocale } from "./locale";
+import { localizedHref, useLocale } from "./locale";
 import "./landing-use-cases.css";
 
 const useCasesCopyZh = {
@@ -86,7 +86,7 @@ function ModelsScene() {
   return (
     <Link
       className="scene-model-stack"
-      to="/docs/deepseek-in-wechat"
+      to={localizedHref(locale, "/docs/deepseek-in-wechat")}
       aria-label={copy.modelsAria}
     >
       <div className="scene-model scene-model-selected">
@@ -130,7 +130,7 @@ function AgentsScene() {
         ].map(({ name, logo, href }) => (
           <Link
             key={name}
-            to={href}
+            to={localizedHref(locale, href)}
             aria-label={copy.agentGuide(name)}
           >
             <img src={logo} width={56} height={56} alt="" loading="lazy" />
@@ -280,7 +280,7 @@ export function LandingUseCases() {
                 <Scene />
               </div>
               {separateLinks ? (
-                <Link className="use-case-action" to={href}>
+                <Link className="use-case-action" to={localizedHref(locale, href)}>
                   {actionContent}
                 </Link>
               ) : (
@@ -301,7 +301,7 @@ export function LandingUseCases() {
           ) : (
             <Link
               className={`use-case-card use-case-${kind}`}
-              to={href}
+              to={localizedHref(locale, href)}
               key={kind}
               aria-labelledby={`use-case-${kind}-title use-case-${kind}-action`}
             >

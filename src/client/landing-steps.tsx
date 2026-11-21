@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, QrCode } from "lucide-react";
 import { CHANNEL_PROVIDERS } from "../shared/channel-providers";
 import { homeCopy } from "../shared/i18n/en/copy/home";
-import { useLocale } from "./locale";
+import { localizedHref, useLocale } from "./locale";
 import "./landing-steps.css";
 
 const steps = [
@@ -202,14 +202,16 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
         <h2 id="how-title">{copy.title}</h2>
         <div className="steps-actions">
           {startAction}
-          <Link className="button secondary" to="/docs/getting-started">
+          <Link className="button secondary" to={localizedHref(locale, "/docs/getting-started")}>
             {copy.guide}
             <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
         <p className="steps-requirements">
           {copy.requirementsPrefix}
-          <Link to="/docs/getting-started#clawbot-entry">{copy.requirementsLink}</Link>
+          <Link to={localizedHref(locale, "/docs/getting-started#clawbot-entry")}>
+            {copy.requirementsLink}
+          </Link>
           {copy.requirementsSuffix}
         </p>
       </div>
@@ -249,7 +251,7 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
               <span className="steps-page-number">STEP {String(index + 1).padStart(2, "0")}</span>
               <h3>{step.title}</h3>
               <p>{step.description}</p>
-              <Link className="text-link" to={step.guide}>
+              <Link className="text-link" to={localizedHref(locale, step.guide)}>
                 {step.guideLabel}
                 <ArrowUpRight size={16} aria-hidden="true" />
               </Link>
@@ -288,7 +290,9 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
         {copy.alternativesPrefix}
         <Link to="/wechat-agent">{copy.alternativesAgent}</Link>
         {copy.alternativesMiddle}
-        <Link to="/docs/notifications">{copy.alternativesNotifications}</Link>
+        <Link to={localizedHref(locale, "/docs/notifications")}>
+          {copy.alternativesNotifications}
+        </Link>
         {copy.alternativesEnd}
       </p>
     </section>

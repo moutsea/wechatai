@@ -14,12 +14,6 @@ import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { landingFaq } from "../shared/landing-faq";
 import { homeCopy } from "../shared/i18n/en/copy/home";
-import {
-  DEFAULT_LOCALE,
-  hasRegisteredTranslation,
-  localizedPath,
-  type Locale,
-} from "../shared/i18n";
 import { PLUGIN_LIMITS } from "../shared/plugin-access";
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN, approxYuan } from "../shared/pricing-copy";
 import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
@@ -30,7 +24,7 @@ import { LandingSteps } from "./landing-steps";
 import { LandingUseCases } from "./landing-use-cases";
 import { SiteFooter } from "./site-footer";
 import { SiteHeader } from "./site-header";
-import { useLocale } from "./locale";
+import { localizedHref, useLocale } from "./locale";
 const landingPlans = [
   {
     id: "free",
@@ -153,19 +147,6 @@ const homeCopyZh = {
   },
 };
 
-/**
- * Keeps query strings and fragments while prefixing only translated pages.
- * Unregistered destinations stay on their real unprefixed Chinese URL.
- */
-function localizedHref(locale: Locale, href: string) {
-  if (locale === DEFAULT_LOCALE) return href;
-  const [beforeHash, hash] = href.split("#");
-  const [path, query] = beforeHash.split("?");
-  const base = path || "/";
-  if (!hasRegisteredTranslation(locale, base)) return href;
-  return `${localizedPath(locale, base)}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
-}
-
 function LandingPlanFeatures({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
   const copy = (locale === "en" ? homeCopy : homeCopyZh).plans.features;
@@ -220,7 +201,7 @@ function LandingPlanFeatures({ plus }: { plus: boolean }) {
               alt=""
               loading="lazy"
             />
-            <Link to="/docs/cloud-agent">
+            <Link to={localizedHref(locale, "/docs/cloud-agent")}>
               <strong>{copy.xiaoweiName}</strong> {copy.xiaoweiCloud}
             </Link>
           </>
@@ -479,7 +460,7 @@ export function Landing() {
             <h2 id="landing-faq-title">{copy.faqSection.title}</h2>
             <p className="landing-faq-intro">{copy.faqSection.intro}</p>
             <p className="landing-faq-more">
-              <Link to="/docs/faq">
+              <Link to={localizedHref(locale, "/docs/faq")}>
                 {copy.faqSection.more}
                 <ArrowRight size={16} aria-hidden="true" />
               </Link>
