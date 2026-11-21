@@ -764,6 +764,39 @@ test("describes the maximum KimiSeek discount in English docs", async ({ page })
   await expect(card).toContainText("up to 50% off");
 });
 
+test("documents both KimiSeek email recovery paths in English", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/en/docs/model-providers#kimiseek`);
+  await mounted;
+  const section = page.locator("#kimiseek");
+  const verification = section.locator("p").filter({ hasText: "Email not verified?" });
+  await expect(verification.getByRole("link", { name: "verify your Wechatai email" })).toHaveAttribute(
+    "href",
+    "/verify-email?returnTo=%2Fapp%2Fchannels%3Fnew%3D1",
+  );
+  await expect(verification).toContainText(/return to .*channels page.*click .*one-click import/i);
+
+  await expect(section.getByText("Email not supported?", { exact: true })).toBeVisible();
+  await expect(section).toContainText("keep your current Wechatai account");
+  const steps = section.getByRole("listitem");
+  await expect(steps).toHaveCount(3);
+  const [register, configure, save] = await steps.all();
+  await expect(register.getByRole("link", { name: "register for KimiSeek" })).toHaveAttribute(
+    "href",
+    "https://kimiseek.app/zh-CN/register",
+  );
+  await expect(register).toContainText(/QQ, 163\/126, Gmail or Outlook.*create an API key/);
+  await expect(configure.getByRole("link", { name: "Add channel", exact: true })).toHaveAttribute(
+    "href",
+    "/app/channels?new=1",
+  );
+  await expect(configure).toContainText("OpenAI Chat Completions");
+  await expect(configure.locator("code")).toHaveText("https://api.kimiseek.app/v1");
+  await expect(save).toContainText(/Save channel.*Fetch available models/);
+  await expect(save).toContainText(/API key and top-ups .* KimiSeek console/);
+  await expect(save).toContainText(/Wechatai does not show .* balance or top-up entry/);
+});
+
 test("English docs keep navigation, search, table of contents and pagination in English", async ({
   page,
 }) => {
