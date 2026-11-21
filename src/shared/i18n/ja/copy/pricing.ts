@@ -94,7 +94,7 @@ export const pricingCopy = {
       badge: "気軽に開始",
       description: "日常の質問から始める",
       unit: "ずっと無料",
-      note: "会員登録なしでも始められます",
+      note: "有料プランへの加入は不要です",
       workspace: "ワークスペースを開く",
       start: "無料で始める",
     },

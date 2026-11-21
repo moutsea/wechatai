@@ -1404,6 +1404,18 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
 });
 
+for (const [path, card, note, register] of [
+  ["/ja", ".landing-plan-free", ".landing-plan-note", "/register?returnTo=%2Fapp"],
+  ["/ja/pricing", ".plan-free", ".plan-note", "/register"],
+]) {
+  test(`describes the free plan without promising no registration on ${path}`, async ({ page }) => {
+    await page.goto(`${origin}${path}`);
+    const free = page.locator(card);
+    await expect(free.locator(note)).toHaveText("有料プランへの加入は不要です");
+    await expect(free.getByRole("link", { name: "無料で始める" })).toHaveAttribute("href", register);
+  });
+}
+
 test("serves the Japanese homepage and pricing page without Chinese page copy", async ({
   page,
 }) => {

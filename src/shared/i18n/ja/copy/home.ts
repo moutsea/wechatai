@@ -30,7 +30,7 @@ export const homeCopy = {
       name: "無料プラン",
       description: "日常の質問から始める",
       unit: "ずっと無料",
-      note: "会員登録なしでも始められます",
+      note: "有料プランへの加入は不要です",
       badge: "まずは体験",
       action: "無料で始める",
     },
