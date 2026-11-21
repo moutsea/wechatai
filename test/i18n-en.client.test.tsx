@@ -210,12 +210,17 @@ describe("published English pages", () => {
       "/en/wechat-gpt",
       "/en/wechat-kimi",
       "/en/wechat-qwen",
+      "/pt",
+      "/pt/pricing",
+      "/pt/wechat-ai",
+      "/pt/wechat-bot",
+      "/pt/wechat-deepseek",
     ].sort();
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
-    const localized = [...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/en[^<]*)<\/loc>/g)].map(
-      ([, path]) => path,
-    );
+    const localized = [
+      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|pt)[^<]*)<\/loc>/g),
+    ].map(([, path]) => path);
     expect(localized.sort()).toEqual(expected);
   });
 });

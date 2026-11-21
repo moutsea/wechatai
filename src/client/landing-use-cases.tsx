@@ -1,6 +1,8 @@
 import { ArrowDownUp, ArrowUpRight, Check, Drama, FileText, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { homeCopy } from "../shared/i18n/en/copy/home";
+import { homeCopyPt } from "../shared/i18n/pt/copy/home";
+import type { Locale } from "../shared/i18n";
 import { localizedHref, useLocale } from "./locale";
 import "./landing-use-cases.css";
 
@@ -37,9 +39,13 @@ const useCasesCopyZh = {
   },
 };
 
+function useCasesCopyFor(locale: Locale) {
+  return locale === "pt" ? homeCopyPt.useCases : locale === "en" ? homeCopy.useCases : useCasesCopyZh;
+}
+
 function CreativeScene() {
   const { locale } = useLocale();
-  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes.creative;
+  const copy = useCasesCopyFor(locale).scenes.creative;
   return (
     <div className="scene-creative">
       <div className="scene-image-chat">
@@ -82,7 +88,7 @@ function CreativeScene() {
 
 function ModelsScene() {
   const { locale } = useLocale();
-  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes;
+  const copy = useCasesCopyFor(locale).scenes;
   return (
     <Link
       className="scene-model-stack"
@@ -111,7 +117,7 @@ function ModelsScene() {
 
 function AgentsScene() {
   const { locale } = useLocale();
-  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes;
+  const copy = useCasesCopyFor(locale).scenes;
   return (
     <div className="scene-bridge">
       <div className="scene-agent-names">
@@ -161,7 +167,7 @@ function AgentsScene() {
 
 function CloudScene() {
   const { locale } = useLocale();
-  const copy = (locale === "en" ? homeCopy.useCases : useCasesCopyZh).scenes.cloud;
+  const copy = useCasesCopyFor(locale).scenes.cloud;
   return (
     <div className="scene-xiaowei">
       <div className="scene-xiaowei-intro">
@@ -244,12 +250,15 @@ const useCasesEn = useCases.map((item, index) => ({
   ...item,
   ...homeCopy.useCases.items[index]!,
 }));
+const useCasesPt = useCases.map((item, index) => ({
+  ...item,
+  ...homeCopyPt.useCases.items[index]!,
+}));
 
 export function LandingUseCases() {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = english ? homeCopy.useCases : useCasesCopyZh;
-  const cases = english ? useCasesEn : useCases;
+  const copy = useCasesCopyFor(locale);
+  const cases = locale === "pt" ? useCasesPt : locale === "en" ? useCasesEn : useCases;
   return (
     <section className="landing-use-cases" aria-labelledby="use-cases-title">
       <div className="use-cases-heading">

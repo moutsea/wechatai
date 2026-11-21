@@ -4,6 +4,7 @@ import { ArrowRight, ChevronDown } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { pricingPageFor } from "../../shared/seo-content/pricing";
 import { pricingCopy } from "../../shared/i18n/en/copy/pricing";
+import { pricingCopyPt } from "../../shared/i18n/pt/copy/pricing";
 import { CostEstimator } from "../cost-estimator";
 import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
@@ -26,8 +27,8 @@ export function PricingPage({ page, children }: { page: SeoPage; children?: Reac
   const { hash } = useLocation();
   const { locale } = useLocale();
   const english = locale === "en";
-  const content = english ? pricingPageFor("en") : page;
-  const copy = english ? pricingCopy.page : pageCopyZh;
+  const content = locale === "en" || locale === "pt" ? pricingPageFor(locale) : page;
+  const copy = locale === "pt" ? pricingCopyPt.page : english ? pricingCopy.page : pageCopyZh;
   const estimator = useRef<HTMLDetailsElement>(null);
   // Keep existing /pricing#estimate links useful while the calculator is collapsed by default.
   useLayoutEffect(() => {
@@ -42,7 +43,7 @@ export function PricingPage({ page, children }: { page: SeoPage; children?: Reac
       <SiteHeader active="/pricing" />
       <main id="pricing-content">
         <nav className="pricing-breadcrumb" aria-label={copy.breadcrumbLabel}>
-          <Link to={english ? "/en" : "/"}>{copy.home}</Link>
+          <Link to={localizedHref(locale, "/")}>{copy.home}</Link>
           <span aria-hidden="true">/</span>
           <span>{copy.breadcrumbCurrent}</span>
         </nav>

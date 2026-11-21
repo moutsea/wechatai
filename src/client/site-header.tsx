@@ -22,10 +22,10 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", en: "Home", match: "/" },
-  { to: "/pricing", label: "价格", en: "Pricing", match: "/pricing" },
-  { to: "/docs", label: "文档", en: "Docs", match: "/docs" },
-  { to: "/#how", label: "如何使用", en: "How it works", match: "/#how" },
+  { to: "/", label: "首页", en: "Home", pt: "Início", match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", pt: "Preços", match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", pt: "Documentação", match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", pt: "Como funciona", match: "/#how" },
 ] as const;
 
 const headerCopyEn = {
@@ -40,6 +40,20 @@ const headerCopyEn = {
   closeMenu: "Close menu",
   menuFailed: "The account menu could not load",
   reloadMenu: "Reload the account menu",
+} as const;
+
+const headerCopyPt = {
+  homeAria: "Página inicial do Wechatai",
+  topNav: "Navegação principal",
+  account: "Conta",
+  login: "Entrar",
+  start: "Comece grátis",
+  workspace: "Abrir o painel",
+  workspaceFallback: "Abrir o painel",
+  openMenu: "Abrir menu",
+  closeMenu: "Fechar menu",
+  menuFailed: "Não foi possível carregar o menu da conta",
+  reloadMenu: "Recarregar o menu da conta",
 } as const;
 
 const headerCopyZh = {
@@ -65,10 +79,10 @@ type SiteHeaderProps = {
 
 /**
  * The wordmark is part of the brand, but the Chinese glyphs are page copy on
- * English routes. Keep the same mark and typography with an English wordmark.
+ * localized routes. Keep the same mark and typography with a Latin wordmark.
  */
-export function SiteBrand({ light = false, english }: { light?: boolean; english: boolean }) {
-  if (!english) return <Brand light={light} />;
+export function SiteBrand({ light = false, latin }: { light?: boolean; latin: boolean }) {
+  if (!latin) return <Brand light={light} />;
   return (
     <span className={`brand ${light ? "light" : ""}`}>
       <span className="brand-mark">
@@ -88,7 +102,8 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { pathname, hash } = useLocation();
   const { locale, path } = useLocale();
   const english = locale === "en";
-  const copy = english ? headerCopyEn : headerCopyZh;
+  const portuguese = locale === "pt";
+  const copy = portuguese ? headerCopyPt : english ? headerCopyEn : headerCopyZh;
   const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -111,7 +126,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           to={localeHref(item.to)}
           aria-current={current === item.match ? "page" : undefined}
         >
-          {english ? item.en : item.label}
+          {portuguese ? item.pt : english ? item.en : item.label}
         </Link>
       ))}
       {extra}
@@ -175,7 +190,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     <header className="site-header">
       <div className="site-header-inner">
         <Link to={localeHref("/")} aria-label={copy.homeAria}>
-          <SiteBrand english={english} />
+          <SiteBrand latin={english || portuguese} />
         </Link>
         <nav aria-label={copy.topNav} className="site-header-nav">
           {links}
@@ -214,7 +229,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
             to={localeHref(item.to)}
             aria-current={current === item.match ? "page" : undefined}
           >
-            {english ? item.en : item.label}
+            {portuguese ? item.pt : english ? item.en : item.label}
           </Link>
         ))}
         {extra}

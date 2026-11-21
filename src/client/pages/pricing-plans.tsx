@@ -12,6 +12,8 @@ import {
 import { approxYuan } from "../../shared/pricing-copy";
 import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
 import { pricingCopy } from "../../shared/i18n/en/copy/pricing";
+import { pricingCopyPt } from "../../shared/i18n/pt/copy/pricing";
+import type { Locale } from "../../shared/i18n";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../../shared/wechat-links";
 import { localizedHref, useLocale } from "../locale";
@@ -73,9 +75,13 @@ const plansCopyZh = {
   checked: "价格核查于",
 };
 
+function plansCopyFor(locale: Locale) {
+  return locale === "pt" ? pricingCopyPt.plans : locale === "en" ? pricingCopy.plans : plansCopyZh;
+}
+
 function PlanValue({ value }: { value: string | number | boolean }) {
   const { locale } = useLocale();
-  const copy = locale === "en" ? pricingCopy.plans : plansCopyZh;
+  const copy = plansCopyFor(locale);
   return typeof value === "boolean" ? (
     <strong className={value ? "plan-supported" : "plan-unavailable"}>
       {value ? <Check size={16} aria-hidden="true" /> : <Minus size={16} aria-hidden="true" />}
@@ -88,7 +94,7 @@ function PlanValue({ value }: { value: string | number | boolean }) {
 
 function PlanHighlights({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
-  const { features: rows, highlights: labels } = locale === "en" ? pricingCopy.plans : plansCopyZh;
+  const { features: rows, highlights: labels } = plansCopyFor(locale);
   return (
     <dl className="plan-highlights">
       {labels.map((label, index) => (
@@ -103,7 +109,7 @@ function PlanHighlights({ plus }: { plus: boolean }) {
 
 function PlanFeatures({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
-  const { features: rows } = locale === "en" ? pricingCopy.plans : plansCopyZh;
+  const { features: rows } = plansCopyFor(locale);
   return (
     <ul className="plan-features">
       {rows.map((feature) => {
@@ -128,8 +134,11 @@ function PlanFeatures({ plus }: { plus: boolean }) {
 export function PricingPlans() {
   const { data: session, isPending, requireSignIn } = useAuth();
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = english ? pricingCopy.plans : plansCopyZh;
+  const localized = locale === "en" || locale === "pt";
+  const copy = plansCopyFor(locale);
+  const localizedCopy: typeof pricingCopy.plans | typeof pricingCopyPt.plans | undefined = localized
+    ? (copy as typeof pricingCopy.plans | typeof pricingCopyPt.plans)
+    : undefined;
   const [params] = useSearchParams();
   const requestedInterval = params.get("interval");
   const [busyOffer, setBusyOffer] = useState<string | null>(null);
@@ -148,15 +157,18 @@ export function PricingPlans() {
       window.location.assign(result.url);
     } catch (e) {
       const code = e instanceof ApiError ? e.code : undefined;
-      const loginRequired = english && code === "unauthorized";
+      const loginRequired = localized && code === "unauthorized";
       if (loginRequired) requireSignIn();
       setError({
         offerId: offer.id,
-        message: english
-          ? code && Object.hasOwn(pricingCopy.plans.checkoutErrors, code)
-            ? pricingCopy.plans.checkoutErrors[code as keyof typeof pricingCopy.plans.checkoutErrors]
-            : pricingCopy.plans.checkoutFailed
-          : (e as Error).message,
+        message:
+          localizedCopy && code && Object.hasOwn(localizedCopy.checkoutErrors, code)
+            ? localizedCopy.checkoutErrors[
+                code as keyof typeof localizedCopy.checkoutErrors
+              ]
+            : localizedCopy
+              ? localizedCopy.checkoutFailed
+              : (e as Error).message,
         loginRequired,
       });
     } finally {
@@ -202,7 +214,9 @@ export function PricingPlans() {
 
         {[monthly, yearly].map((offer) => {
           const annual = offer.interval === "year";
-          const name = english ? pricingCopy.plans.offerName(annual ? "year" : "month") : offer.name;
+          const name = localizedCopy
+            ? localizedCopy.offerName(annual ? "year" : "month")
+            : offer.name;
           const planError = error?.offerId === offer.id ? error : null;
           return (
             <article
@@ -257,10 +271,12 @@ export function PricingPlans() {
                 <Link
                   className="button plan-cta"
                   to={`${planError?.loginRequired ? "/login" : "/register"}?returnTo=${encodeURIComponent(
-                    `${english ? "/en/pricing" : "/pricing"}?interval=${offer.interval}#plan-${offer.interval}`,
+                    `${localizedHref(locale, "/pricing")}?interval=${offer.interval}#plan-${offer.interval}`,
                   )}`}
                 >
-                  {planError?.loginRequired ? pricingCopy.plans.loginAgain : copy.ctaChoose(name)}
+                  {planError?.loginRequired && localizedCopy
+                    ? localizedCopy.loginAgain
+                    : copy.ctaChoose(name)}
                   <ArrowRight size={17} aria-hidden="true" />
                 </Link>
               )}

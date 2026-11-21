@@ -128,6 +128,73 @@ for (const { path } of localePageGroups.flat()) {
   });
 }
 
+const portuguesePages: Record<string, string> = {
+  "/pt": "Leve sua IA para o WeChat",
+  "/pt/pricing": "Comece grátis e faça upgrade para o Plus quando precisar",
+  "/pt/wechat-ai": "WeChat AI: leve seu próprio modelo para o chat do WeChat",
+  "/pt/wechat-bot": "Como criar um bot para WeChat: escolha a rota certa primeiro",
+  "/pt/wechat-deepseek": "Quer usar DeepSeek no WeChat? Comece aqui",
+};
+for (const [path, heading] of Object.entries(portuguesePages)) {
+  test(`serves ${path} in Portuguese after application takeover`, async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    const response = await page.goto(`${origin}${path}`);
+    expect(response?.status()).toBe(200);
+    await mounted;
+    await expect(page.locator("h1")).toHaveText(heading);
+    await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
+
+    const navigation = page.getByRole("navigation", { name: "Navegação principal" });
+    await expect(navigation.getByRole("link", { name: "Início", exact: true })).toHaveAttribute(
+      "href",
+      "/pt",
+    );
+    await expect(navigation.getByRole("link", { name: "Preços", exact: true })).toHaveAttribute(
+      "href",
+      "/pt/pricing",
+    );
+    await expect(
+      navigation.getByRole("link", { name: "Documentação", exact: true }),
+    ).toHaveAttribute("href", "/docs");
+    await expect(
+      page.locator(".landing-footer").getByRole("link", { name: "Página inicial do Wechatai" }),
+    ).toHaveAttribute("href", "/pt");
+    await expect(page.getByRole("navigation", { name: "Idioma" })).toHaveCount(1);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+    const mobile = page.locator(".site-mobile-menu");
+    await expect(mobile.getByRole("link", { name: "Preços", exact: true })).toHaveAttribute(
+      "href",
+      "/pt/pricing",
+    );
+    await expect(mobile.getByRole("link", { name: "Início", exact: true })).toHaveAttribute(
+      "href",
+      "/pt",
+    );
+  });
+}
+
+test("opens Portuguese FAQ answers and the pricing estimator from a DeepSeek CTA", async ({
+  page,
+}) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/pt/wechat-deepseek`);
+  await mounted;
+
+  const faq = page.locator(".seopage-faq details").first();
+  await expect(faq).not.toHaveAttribute("open", "");
+  await faq.locator("summary").click();
+  await expect(faq).toHaveAttribute("open", "");
+  await expect(faq.locator("p")).toContainText("ClawBot");
+
+  await expect(page.locator(".seopage-cta a")).toHaveAttribute("href", "/register");
+  await page.locator(".seopage-actions a[href='/pt/pricing#estimate']").click();
+  await expect(page).toHaveURL(`${origin}/pt/pricing#estimate`);
+  await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
+  await expect(page.locator(".cost-estimator h2")).toHaveText("Estime primeiro seu uso de texto");
+});
+
 // An unregistered prefix must not fall back to the Chinese homepage or pricing page.
 for (const path of locale404Probes) {
   test(`shows the built 404 page for the unregistered locale path ${path}`, async ({ page }) => {

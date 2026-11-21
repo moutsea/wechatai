@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { estimateTextCost } from "../shared/cost-estimate";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { pricingCopy } from "../shared/i18n/en/copy/pricing";
+import { pricingCopyPt } from "../shared/i18n/pt/copy/pricing";
 import { useDocumentInputs } from "./document-handoff";
 import { localizedHref, useLocale } from "./locale";
 import "./cost-estimator.css";
@@ -43,8 +44,8 @@ export function CostEstimator() {
   const inputs = useDocumentInputs();
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = english ? pricingCopy.estimator : estimatorCopyZh;
-  const numberLocale = english ? "en-US" : "zh-CN";
+  const copy = locale === "pt" ? pricingCopyPt.estimator : english ? pricingCopy.estimator : estimatorCopyZh;
+  const numberLocale = locale === "pt" ? "pt-BR" : english ? "en-US" : "zh-CN";
   const [values, setValues] = useState(() =>
     ["1000", "1000", "10", "", ""].map(
       (value, index) => inputs?.get(estimateInputIds[index]) ?? value,

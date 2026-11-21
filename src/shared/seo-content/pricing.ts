@@ -3,6 +3,7 @@ import { BILLING_OFFERS } from "../billing-offers";
 import { DAILY_CREDIT_DEFAULTS } from "../credits";
 import { DEFAULT_LOCALE, type Locale } from "../i18n";
 import { pricingCopy } from "../i18n/en/copy/pricing";
+import { pricingCopyPt } from "../i18n/pt/copy/pricing";
 import { approxYuan } from "../pricing-copy";
 
 const monthly = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")!;
@@ -78,18 +79,19 @@ export const pricingPage: SeoPage = {
  * paths, amounts and links stay on `pricingPage`; only wording changes.
  */
 export function pricingPageFor(locale: Locale = DEFAULT_LOCALE): SeoPage {
-  if (locale !== "en") return pricingPage;
+  if (locale !== "en" && locale !== "pt") return pricingPage;
+  const copy = locale === "pt" ? pricingCopyPt : pricingCopy;
   return {
     ...pricingPage,
-    title: pricingCopy.seo.title,
-    description: pricingCopy.seo.description,
-    eyebrow: pricingCopy.seo.eyebrow,
-    h1: pricingCopy.seo.h1,
-    lede: pricingCopy.seo.lede,
-    answer: pricingCopy.seo.answer,
-    primaryKeyword: pricingCopy.seo.primaryKeyword,
-    secondaryKeywords: pricingCopy.seo.secondaryKeywords,
-    faq: pricingCopy.seo.faq,
-    related: pricingCopy.seo.related,
+    title: copy.seo.title,
+    description: copy.seo.description,
+    eyebrow: copy.seo.eyebrow,
+    h1: copy.seo.h1,
+    lede: copy.seo.lede,
+    answer: copy.seo.answer,
+    primaryKeyword: copy.seo.primaryKeyword,
+    secondaryKeywords: copy.seo.secondaryKeywords,
+    faq: copy.seo.faq,
+    related: copy.seo.related,
   };
 }

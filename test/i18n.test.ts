@@ -49,18 +49,18 @@ describe("translation registry", () => {
 
 describe("registered localized pages", () => {
   it.each([
-    ["ja", "ja_JP"],
-    ["ko", "ko_KR"],
-    ["es", "es_ES"],
-    ["pt", "pt_BR"],
-  ] as const)("publishes %s only after registration", (locale, ogLocale) => {
+    ["ja", "ja", "ja_JP"],
+    ["ko", "ko", "ko_KR"],
+    ["es", "es", "es_ES"],
+    ["pt", "pt-BR", "pt_BR"],
+  ] as const)("publishes %s only after registration", (locale, htmlLang, ogLocale) => {
     const path = `/${locale}/pricing`;
     expect(getPageSeo(path).indexable).toBe(false);
     registerTranslations(locale, [sample], "fixture");
     expect(publishedLocalizedPaths()).toEqual([path]);
     expect(getPageSeo(path)).toMatchObject({
       canonical: `https://wechatai.app${path}`,
-      htmlLang: locale,
+      htmlLang,
       ogLocale,
     });
   });

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, QrCode } from "lucide-react";
 import { CHANNEL_PROVIDERS } from "../shared/channel-providers";
 import { homeCopy } from "../shared/i18n/en/copy/home";
+import { homeCopyPt } from "../shared/i18n/pt/copy/home";
 import { localizedHref, useLocale } from "./locale";
 import "./landing-steps.css";
 
@@ -99,12 +100,14 @@ const stepsCopyZh = {
 };
 
 const stepsEn = steps.map((step, index) => ({ ...step, ...homeCopy.steps.items[index]! }));
+const stepsPt = steps.map((step, index) => ({ ...step, ...homeCopyPt.steps.items[index]! }));
 
 function StepPreview({ step }: { step: number }) {
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = (english ? homeCopy.steps : stepsCopyZh).preview;
-  const labels = english ? providerLabelsEn : providerLabels;
+  const portuguese = locale === "pt";
+  const copy = (portuguese ? homeCopyPt.steps : english ? homeCopy.steps : stepsCopyZh).preview;
+  const labels = english || portuguese ? providerLabelsEn : providerLabels;
   if (step === 0)
     return (
       <div className="steps-preview">
@@ -166,8 +169,8 @@ function StepPreview({ step }: { step: number }) {
 export function LandingSteps({ startAction }: { startAction: ReactNode }) {
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = english ? homeCopy.steps : stepsCopyZh;
-  const localizedSteps = english ? stepsEn : steps;
+  const copy = locale === "pt" ? homeCopyPt.steps : english ? homeCopy.steps : stepsCopyZh;
+  const localizedSteps = locale === "pt" ? stepsPt : english ? stepsEn : steps;
   const [activeStep, setActiveStep] = useState(0);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const move = (offset: number) =>

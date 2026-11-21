@@ -14,6 +14,7 @@ import { EN_DOC_CONTENT, EN_FAQ_SECTIONS } from "./i18n/en/data/docs-content-en"
 import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
 import { landingFaq } from "./landing-faq";
 import { homeCopy } from "./i18n/en/copy/home";
+import { homeCopyPt } from "./i18n/pt/copy/home";
 import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
@@ -141,7 +142,9 @@ function organizationNode(locale: Locale = DEFAULT_LOCALE) {
     description:
       locale === "en"
         ? "An independently maintained service that connects AI models and agents to one-to-one WeChat ClawBot chats. It is not officially affiliated with Tencent or WeChat."
-        : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
+        : locale === "pt"
+          ? "Serviço mantido de forma independente que conecta modelos de IA e agentes a conversas individuais do WeChat ClawBot. Sem vínculo oficial com a Tencent ou o WeChat."
+          : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
     // 站内唯一的方形品牌资源是 favicon.svg（64×64 矢量）；og-image.png 是 1200×630 横幅，不能当 logo。
     logo: {
       "@type": "ImageObject",
@@ -183,12 +186,19 @@ function softwareApplicationRef() {
  */
 function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   const english = locale === "en";
+  const portuguese = locale === "pt";
   const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus").map((offer) => {
     const price = offer.amount / 100;
-    const name = offer.interval === "year" ? "Plus Yearly" : "Plus Monthly";
+    const name = portuguese
+      ? offer.interval === "year"
+        ? "Plus Anual"
+        : "Plus Mensal"
+      : offer.interval === "year"
+        ? "Plus Yearly"
+        : "Plus Monthly";
     return {
       "@type": "Offer",
-      name: english ? name : offer.name,
+      name: english || portuguese ? name : offer.name,
       url: `${SITE_URL}/pricing`,
       price,
       priceCurrency: "CNY",
@@ -206,14 +216,16 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   return [
     {
       "@type": "Offer",
-      name: english ? "Free" : "免费版",
+      name: english || portuguese ? "Free" : "免费版",
       url: `${SITE_URL}/`,
       price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
       description: english
         ? `Includes daily credits, ${WECHAT_LINK_LIMITS.free} WeChat connection, and ${PLUGIN_LIMITS.free} plugin configuration.`
-        : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
+        : portuguese
+          ? `Inclui credits diários, ${WECHAT_LINK_LIMITS.free} conexão do WeChat e ${PLUGIN_LIMITS.free} configuração de plugin.`
+          : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: freePrice,
@@ -269,6 +281,8 @@ function seoLandingPage(
   locale: Locale = DEFAULT_LOCALE,
 ): PageSeo {
   const english = locale === "en";
+  const portuguese = locale === "pt";
+  const homeLabel = english ? "Home" : portuguese ? "Início" : "首页";
   const isArticle = page.kind === "article";
   const publisher = organizationNode(locale);
   const webPage = isArticle
@@ -315,8 +329,16 @@ function seoLandingPage(
               {
                 "@type": "Service",
                 "@id": `${SITE_URL}${page.path}#plans`,
-                name: english ? "Wechatai Free and Plus" : `${SITE_NAME} 免费版与 Plus`,
-                serviceType: english ? "WeChat AI integration service" : "微信 AI 接入服务",
+                name: english
+                  ? "Wechatai Free and Plus"
+                  : portuguese
+                    ? "Wechatai Free e Plus"
+                    : `${SITE_NAME} 免费版与 Plus`,
+                serviceType: english
+                  ? "WeChat AI integration service"
+                  : portuguese
+                    ? "Serviço de integração de IA ao WeChat"
+                    : "微信 AI 接入服务",
                 provider: { "@id": ORGANIZATION_ID },
                 offers: softwareApplicationOffers(locale),
               },
@@ -324,7 +346,7 @@ function seoLandingPage(
           : []),
         breadcrumbList([
           {
-            name: english ? "Home" : "首页",
+            name: homeLabel,
             item: `${SITE_URL}${hasRegisteredTranslation(locale, "/") ? localizedPath(locale, "/") : "/"}`,
           },
           { name: page.title, item: canonical },
@@ -554,12 +576,17 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   }
   if (path === "/") {
     const english = locale === "en";
+    const portuguese = locale === "pt";
     const title = english
       ? homeCopy.seo.title
-      : `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
+      : portuguese
+        ? homeCopyPt.seo.title
+        : `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
     const description = english
       ? homeCopy.seo.description
-      : "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
+      : portuguese
+        ? homeCopyPt.seo.description
+        : "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
     return {
       title,
       description,
@@ -586,7 +613,7 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
             isPartOf: { "@id": `${SITE_URL}/#website` },
             about: { "@id": APPLICATION_ID },
           },
-          organizationNode(),
+          organizationNode(locale),
           {
             ...softwareApplicationRef(),
             description,
@@ -603,7 +630,17 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                   "Customize characters and storylines with the role-play plugin",
                   "Plus cloud assistant Xiaowei handles files, creates documents, and runs tasks; requires a text model",
                 ]
-              : [
+              : portuguese
+                ? [
+                    "Use sua própria API key e endpoint de modelo",
+                    "Alterne modelos e gerencie conversas no WeChat",
+                    "Compatível com OpenAI Chat Completions, Responses e Anthropic Messages",
+                    "Conecte agentes Muse, Hermes e OpenClaw existentes",
+                    "Configure um modelo de imagem para gerar e receber imagens no WeChat",
+                    "Personalize personagens e histórias com o plugin de role-play",
+                    "A assistente em nuvem Xiaowei, do Plus, processa arquivos, cria documentos e executa tarefas; exige um modelo de texto",
+                  ]
+                : [
                   "使用自己的 API Key 与模型服务地址",
                   "在微信中切换大模型并管理聊天会话",
                   "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
@@ -739,10 +776,13 @@ export function renderSeoHead(seo: PageSeo) {
   const meta = (name: string, content: string, property = false) =>
     `<meta ${property ? "property" : "name"}="${name}" content="${escapeHtml(content)}" data-seo />`;
   const defaultLocale = LOCALE_DEFINITIONS[DEFAULT_LOCALE];
+  const imageLang = seo.htmlLang ?? defaultLocale.htmlLang;
   const imageAlt =
-    (seo.htmlLang ?? defaultLocale.htmlLang) === "en"
+    imageLang === "en"
       ? "Wechatai: chat with the models you choose in WeChat."
-      : "微伴 Wechatai：在微信里，与自选大模型对话。";
+      : imageLang === "pt-BR"
+        ? "Wechatai: converse com os modelos que você escolher no WeChat."
+        : "微伴 Wechatai：在微信里，与自选大模型对话。";
   return [
     `<title data-seo>${escapeHtml(seo.title)}</title>`,
     meta("description", seo.description),

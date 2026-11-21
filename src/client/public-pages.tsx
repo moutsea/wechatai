@@ -14,6 +14,8 @@ import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { landingFaq } from "../shared/landing-faq";
 import { homeCopy } from "../shared/i18n/en/copy/home";
+import { homeCopyPt } from "../shared/i18n/pt/copy/home";
+import type { Locale } from "../shared/i18n";
 import { PLUGIN_LIMITS } from "../shared/plugin-access";
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN, approxYuan } from "../shared/pricing-copy";
 import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
@@ -76,7 +78,28 @@ const landingPlansEn = [
   },
 ] as const;
 
-type LandingPlan = (typeof landingPlans)[number] | (typeof landingPlansEn)[number];
+const landingPlansPt = [
+  {
+    id: "free",
+    ...homeCopyPt.plans.free,
+    price: 0,
+  },
+  {
+    id: "month",
+    ...homeCopyPt.plans.month,
+    price: PLUS_MONTHLY_YUAN,
+  },
+  {
+    id: "year",
+    ...homeCopyPt.plans.year,
+    price: PLUS_YEARLY_YUAN,
+  },
+] as const;
+
+type LandingPlan =
+  | (typeof landingPlans)[number]
+  | (typeof landingPlansEn)[number]
+  | (typeof landingPlansPt)[number];
 
 const homeCopyZh = {
   plans: {
@@ -147,9 +170,13 @@ const homeCopyZh = {
   },
 };
 
+function homeCopyFor(locale: Locale) {
+  return locale === "pt" ? homeCopyPt : locale === "en" ? homeCopy : homeCopyZh;
+}
+
 function LandingPlanFeatures({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
-  const copy = (locale === "en" ? homeCopy : homeCopyZh).plans.features;
+  const copy = homeCopyFor(locale).plans.features;
   const links = WECHAT_LINK_LIMITS[plus ? "plus" : "free"];
   const plugins = PLUGIN_LIMITS.free;
   return (
@@ -251,7 +278,7 @@ function LandingPlanCard({
 }) {
   const { data: session } = useAuth();
   const { locale } = useLocale();
-  const { hero } = locale === "en" ? homeCopy : homeCopyZh;
+  const { hero } = homeCopyFor(locale);
   return (
     <article
       className={`landing-plan landing-plan-${plan.id}${plan.id === "free" ? "" : " landing-plan-plus"} ${className}`}
@@ -292,9 +319,9 @@ export function Landing() {
   const { data: session } = useAuth();
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = english ? homeCopy : homeCopyZh;
-  const heroImage = `/images/landing/ai-wechat-connections${english ? "-en" : ""}`;
-  const plans = english ? landingPlansEn : landingPlans;
+  const copy = homeCopyFor(locale);
+  const heroImage = `/images/landing/ai-wechat-connections${locale === "zh-CN" ? "" : "-en"}`;
+  const plans = locale === "pt" ? landingPlansPt : english ? landingPlansEn : landingPlans;
   const faq = landingFaq(locale);
   return (
     <div className="landing">
@@ -304,7 +331,7 @@ export function Landing() {
           <div className="landing-copy">
             <h1>
               {copy.hero.titleLead}
-              {english && " "}
+              {locale === "zh-CN" ? null : " "}
               <span>{copy.hero.titleAccent}</span>
             </h1>
             <p>{copy.hero.body}</p>
