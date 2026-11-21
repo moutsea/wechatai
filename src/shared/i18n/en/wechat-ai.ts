@@ -12,7 +12,7 @@ const content: SeoPage = {
   kind: "product",
   title: "WeChat AI: Connect Your Own LLM to WeChat Chat",
   description:
-    "WeChat AI means calling an LLM directly inside your own WeChat. Wechatai supports bring-your-own API keys and, where the operator has enabled it, the Plus cloud assistant Xiaowei.",
+    "WeChat AI means using an LLM directly in WeChat. Bring your own API key to Wechatai. When enabled by the operator, the Plus cloud assistant Xiaowei uses your own model, consumes credits, and limits task runs.",
   eyebrow: "WeChat AI",
   h1: "WeChat AI: bring your own model into WeChat chat",
   lede: "No app switching, and no copying questions into a web page. Connect a model with your own API key; when you need background tasks, check on the Plugins page whether the Plus cloud assistant Xiaowei is available. It follows the WeChat profile's normal model by default and can also be set separately.",

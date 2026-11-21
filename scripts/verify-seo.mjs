@@ -307,6 +307,25 @@ assert.match(
   "ClawBot models: text-only users skip attachment testing",
 );
 
+const englishWechatAi = await read("en/wechat-ai.html");
+const aiDescription = englishWechatAi.match(/<meta name="description" content="([^"]+)"/)?.[1];
+assert(aiDescription, "WeChat AI: English meta description");
+assert.match(aiDescription, /Xiaowei uses your own model/, "WeChat AI: bring-your-own model");
+assert.match(aiDescription, /consumes credits/, "WeChat AI: Xiaowei credit usage");
+assert.match(aiDescription, /limits task runs/, "WeChat AI: Xiaowei execution limit");
+assert(
+  englishWechatAi.includes(`<meta property="og:description" content="${aiDescription}"`),
+  "WeChat AI: OG description matches meta description",
+);
+const aiGraph = JSON.parse(
+  englishWechatAi.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+)["@graph"];
+assert.equal(
+  aiGraph.find((item) => item["@type"] === "WebPage")?.description,
+  aiDescription,
+  "WeChat AI: JSON-LD description matches meta description",
+);
+
 // /pricing must ship plan offers and a machine-readable price check date in the
 // static HTML, not only after client JavaScript runs.
 const pricingHtml = await read("pricing.html");
