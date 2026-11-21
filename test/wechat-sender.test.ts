@@ -105,3 +105,106 @@ it("routes only the selected account and preserves its client ID when a VPS ackn
     ws.close();
   }
 });
+
+it("isolates concurrent senders, including a standby pilot and an unlisted account", async () => {
+  const [owner, pilot, other] = Array.from({ length: 3 }, () =>
+    env.ACCOUNTS.getByName(crypto.randomUUID()),
+  );
+  const ownerToken = "owner-test-credential-of-at-least-32-characters";
+  const pilotToken = "pilot-test-credential-of-at-least-32-characters";
+  const entry = { account: pilot.id.toString(), token: pilotToken, enabled: false };
+  const bindings = {
+    ...env,
+    WECHAT_SENDER_ACCOUNT: owner.id.toString(),
+    WECHAT_SENDER_SECRET: ownerToken,
+    WECHAT_SENDER_ENABLED: "true",
+    WECHAT_SENDER_PILOTS: JSON.stringify([entry]),
+  };
+  const route = (action: string, account: string, token: string) =>
+    worker.fetch(
+      new Request("https://example.com/api/internal/wechat-sender/" + action, {
+        headers: {
+          Authorization: "Bearer " + token,
+          "X-Wechatai-Account": account,
+          Upgrade: "websocket",
+        },
+      }),
+      bindings,
+      createExecutionContext(),
+    );
+  for (const stub of [owner, pilot, other]) {
+    await connectForManualDelivery(stub);
+    await runInDurableObject(stub, (instance, state) => {
+      Object.assign(Reflect.get(instance, "env"), bindings);
+      state.storage.sql.exec(
+        "INSERT INTO inbox(id,payload,state,reply,createdAt) VALUES('pilot-test','{}','reply','hello',?)",
+        Date.now(),
+      );
+    });
+  }
+  const got: string[] = [];
+  async function open(account: string, token: string) {
+    const r = await route("connect", account, token);
+    expect(r.status).toBe(101);
+    const ws = r.webSocket!;
+    ws.addEventListener("message", ({ data }) => {
+      const m = JSON.parse(String(data));
+      if (m.operation !== "probe") got.push(account);
+      ws.send(
+        JSON.stringify({
+          id: m.id,
+          status: m.operation === "probe" ? 204 : 200,
+          body: '{"ret":0}',
+        }),
+      );
+    });
+    ws.accept();
+    return ws;
+  }
+  const ownerId = owner.id.toString(),
+    pilotId = pilot.id.toString();
+  const first = await open(ownerId, ownerToken);
+  const second = await open(pilotId, pilotToken);
+  try {
+    for (const [id, token] of [
+      [ownerId, pilotToken],
+      [pilotId, ownerToken],
+      [other.id.toString(), pilotToken],
+    ])
+      expect((await route("connect", id, token)).status).toBe(403);
+    expect(await (await route("status", pilotId, pilotToken)).json()).toEqual({
+      enabled: false,
+      connected: true,
+      ready: true,
+    });
+    await runInDurableObject(pilot, (instance) => {
+      Reflect.get(instance, "env").WECHAT_SENDER_PILOTS = JSON.stringify([
+        { ...entry, enabled: true },
+      ]);
+    });
+    expect(await (await route("status", pilotId, pilotToken)).json()).toEqual({
+      enabled: true,
+      connected: true,
+      ready: true,
+    });
+    expect(await deliverQueuedReplies(owner)).toEqual([]);
+    expect(await deliverQueuedReplies(pilot)).toEqual([]);
+    expect(got).toEqual([ownerId, pilotId]);
+    expect(await deliverQueuedReplies(other)).toEqual([{ id: "pilot-test:0", text: "hello" }]);
+    for (const bad of [
+      "{",
+      "{}",
+      JSON.stringify([entry, entry]),
+      JSON.stringify([entry, { ...entry, account: other.id.toString() }]),
+      JSON.stringify([{ ...entry, token: ownerToken }]),
+      JSON.stringify([{ ...entry, account: "*" }]),
+    ]) {
+      bindings.WECHAT_SENDER_PILOTS = bad;
+      expect((await route("status", pilotId, pilotToken)).status).toBe(401);
+      expect((await route("status", ownerId, ownerToken)).status).toBe(200);
+    }
+  } finally {
+    first.close();
+    second.close();
+  }
+});

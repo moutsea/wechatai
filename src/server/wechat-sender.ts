@@ -4,16 +4,61 @@ import type { WechatOutbound } from "./wechat";
 
 export const SENDER_TAG = "wechat-sender";
 
-// A single exact account is supported. Empty, wildcard and list values fail closed.
+type SenderPolicy = { account: string; token: string; enabled: boolean };
+const accountId = /^[a-f0-9]{64}$/;
+
 export function senderAccount(env: Env) {
   const id = secret(env, "WECHAT_SENDER_ACCOUNT", false);
-  return /^[a-f0-9]{64}$/.test(id) ? id : "";
+  return accountId.test(id) ? id : "";
 }
-export function senderAuthorized(env: Env, authorization: string) {
-  const expected = secret(env, "WECHAT_SENDER_SECRET", false);
-  if (expected.length < 32 || !authorization.startsWith("Bearer ")) return false;
+
+function senderPolicies(env: Env): SenderPolicy[] {
+  const primary = senderAccount(env);
+  const token = secret(env, "WECHAT_SENDER_SECRET", false);
+  const policies: SenderPolicy[] = [];
+  if (primary && token.length >= 32)
+    policies.push({
+      account: primary,
+      token,
+      enabled: secret(env, "WECHAT_SENDER_ENABLED", false) === "true",
+    });
+
+  const raw = secret(env, "WECHAT_SENDER_PILOTS", false);
+  if (!raw) return policies;
+  // Reject the additional group on ambiguity, preserving the original account.
+  let entries: unknown;
+  try {
+    entries = JSON.parse(raw);
+  } catch {
+    return policies;
+  }
+  if (!Array.isArray(entries)) return policies;
+  const accounts = new Set([primary]);
+  const tokens = new Set([token]);
+  for (const p of entries) {
+    if (
+      !p ||
+      typeof p.account !== "string" ||
+      !accountId.test(p.account) ||
+      typeof p.token !== "string" ||
+      p.token.length < 32 ||
+      p.token.trim() !== p.token ||
+      typeof p.enabled !== "boolean" ||
+      accounts.has(p.account) ||
+      tokens.has(p.token)
+    )
+      return policies;
+    accounts.add(p.account);
+    tokens.add(p.token);
+  }
+  return policies.concat(entries);
+}
+
+export function authenticatedSenderAccount(env: Env, authorization: string) {
+  if (!authorization.startsWith("Bearer ")) return undefined;
   const digest = (s: string) => createHash("sha256").update(s).digest();
-  return timingSafeEqual(digest(expected), digest(authorization.slice(7)));
+  const received = digest(authorization.slice(7));
+  return senderPolicies(env).find((p) => timingSafeEqual(digest(p.token), received))?.account;
 }
 
 type Result = { id: string; status?: number; body?: string; downloadParam?: string };
@@ -28,17 +73,17 @@ export class WechatSender {
     private env: Env,
   ) {}
 
-  selected() {
-    return senderAccount(this.env) === this.ctx.id.toString();
+  private policy() {
+    return senderPolicies(this.env).find((p) => p.account === this.ctx.id.toString());
   }
   enabled() {
-    return this.selected() && secret(this.env, "WECHAT_SENDER_ENABLED", false) === "true";
+    return this.policy()?.enabled === true;
   }
   private socket() {
     return this.ctx.getWebSockets(SENDER_TAG).find((ws) => ws.readyState === WebSocket.OPEN);
   }
   connect() {
-    if (!this.selected()) return new Response(null, { status: 403 });
+    if (!this.policy()) return new Response(null, { status: 403 });
     for (const old of this.ctx.getWebSockets(SENDER_TAG)) {
       this.disconnected(old);
       old.close(1012, "replaced");
