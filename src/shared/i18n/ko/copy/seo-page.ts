@@ -1,0 +1,26 @@
+export const seoPageLabels = {
+  skipToContent: "본문으로 건너뛰기",
+  home: "홈",
+  breadcrumb: "이동 경로",
+  comparisonTable: "비교 표",
+  compareMissing:
+    "공개적으로 확인 가능한 출처를 찾지 못했으며 상대방이 지원하지 않는다는 뜻은 아닙니다",
+  commands: "자주 쓰는 위챗 명령",
+  copyCommand: (command: string) => `명령 ${command} 복사`,
+  copy: "복사",
+  copied: "복사됨",
+  copyFailed: "복사 실패",
+  faq: "자주 묻는 질문",
+  contents: "이 페이지 내용",
+  tableOfContents: "페이지 목차",
+  ctaTitle: "연결 조건을 확인하고 위챗 AI 설정을 시작하세요",
+  ctaBody:
+    "먼저 위챗 ClawBot 진입점을 확인한 뒤 모델, 에이전트, 알림 경로에 따라 설정하세요. 모델 호출 요금은 별도입니다.",
+  ctaAction: "무료로 시작",
+  updated: "이 페이지 업데이트",
+  checkRequirements: "가입 전 연결 조건 확인",
+  estimateCosts: "플랫폼과 모델 비용 예측",
+  startFree: "무료로 시작",
+  estimateFirst: "먼저 사용 비용 예측",
+  setupGuide: "사용 가이드 보기",
+} as const;

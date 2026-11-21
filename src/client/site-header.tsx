@@ -7,6 +7,7 @@ import { LoadErrorBoundary, reloadPage } from "./load-error-boundary";
 import { LanguageSwitcher } from "./language-switcher";
 import { useLocale } from "./locale";
 import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath, type Locale } from "../shared/i18n";
+import { headerCopy as headerCopyKo, navLabels as navLabelsKo } from "../shared/i18n/ko/copy/site-header";
 
 const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
@@ -22,10 +23,10 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", en: "Home", ja: "ホーム", ko: "홈", match: "/" },
-  { to: "/pricing", label: "价格", en: "Pricing", ja: "料金", ko: "가격", match: "/pricing" },
-  { to: "/docs", label: "文档", en: "Docs", ja: "ドキュメント", ko: "문서", match: "/docs" },
-  { to: "/#how", label: "如何使用", en: "How it works", ja: "使い方", ko: "사용 방법", match: "/#how" },
+  { to: "/", label: "首页", en: "Home", ja: "ホーム", ko: navLabelsKo["/"], match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", ja: "料金", ko: navLabelsKo["/pricing"], match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", ja: "ドキュメント", ko: navLabelsKo["/docs"], match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", ja: "使い方", ko: navLabelsKo["/#how"], match: "/#how" },
 ] as const;
 
 interface HeaderCopy {
@@ -83,20 +84,6 @@ const headerCopyZh = {
   menuFailed: "账户菜单未能加载",
   reloadMenu: "重新加载账户菜单",
 } as const;
-
-const headerCopyKo: HeaderCopy = {
-  homeAria: "Wechatai 홈",
-  topNav: "주요 메뉴",
-  account: "계정",
-  login: "로그인",
-  start: "무료로 시작",
-  workspace: "워크스페이스 열기",
-  workspaceFallback: "워크스페이스",
-  openMenu: "메뉴 열기",
-  closeMenu: "메뉴 닫기",
-  menuFailed: "계정 메뉴를 불러오지 못했습니다",
-  reloadMenu: "계정 메뉴 새로고침",
-};
 
 const headerCopies: Partial<Record<Locale, HeaderCopy>> = {
   en: headerCopyEn,

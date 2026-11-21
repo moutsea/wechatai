@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, QrCode } from "lucide-react";
 import { CHANNEL_PROVIDERS } from "../shared/channel-providers";
 import { homeCopyFor } from "../shared/i18n/copy";
+import { providerLabels as providerLabelsKo } from "../shared/i18n/ko/copy/home";
 import { localizedHref, useLocale } from "./locale";
 import "./landing-steps.css";
 
@@ -31,17 +32,6 @@ const steps = [
     guideLabel: "查看微信命令速查",
   },
 ];
-
-const providerLabelsKo: Record<string, string> = {
-  kimi: "Kimi",
-  zhipu: "Zhipu GLM",
-  qwen: "알리바바 클라우드 모델 스튜디오",
-  volcengine: "볼케노 엔진 아크",
-  anthropic: "Anthropic",
-  gemini: "Gemini",
-  xai: "Grok / xAI",
-  siliconflow: "SiliconFlow",
-};
 
 const providerLabels: Record<string, string> = {
   kimi: "Kimi",

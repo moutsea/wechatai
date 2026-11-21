@@ -1,7 +1,6 @@
-import { LOCALE_DEFINITIONS, localizedPath, type Locale } from "../shared/i18n";
+import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
+import { languageCopy as languageCopyKo } from "../shared/i18n/ko/copy/site-header";
 import { useLocale } from "./locale";
-
-const koreanLabels: Partial<Record<Locale, string>> = { "zh-CN": "중국어", ja: "일본어" };
 
 /**
  * Real links, never client-side navigation: switching language reloads the whole
@@ -14,7 +13,7 @@ export function LanguageSwitcher({ mobile = false }: { mobile?: boolean }) {
   if (!targets.length) return null;
   const links = targets.map((target) => {
     const definition = LOCALE_DEFINITIONS[target];
-    const label = locale === "ko" ? koreanLabels[target] : undefined;
+    const label = locale === "ko" ? languageCopyKo.labels[target] : undefined;
     return (
       <a
         key={target}
@@ -31,7 +30,7 @@ export function LanguageSwitcher({ mobile = false }: { mobile?: boolean }) {
   ) : (
     <nav
       className="site-language"
-      aria-label={locale === "ko" ? "언어" : locale === "en" ? "Language" : locale === "ja" ? "言語" : "语言"}
+      aria-label={locale === "ko" ? languageCopyKo.navigation : locale === "en" ? "Language" : locale === "ja" ? "言語" : "语言"}
     >
       {links}
     </nav>

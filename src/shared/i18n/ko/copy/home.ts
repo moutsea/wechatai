@@ -12,6 +12,17 @@ import { WECHAT_LINK_LIMITS } from "../../../wechat-links";
 
 const yearlySaving = Number((PLUS_MONTHLY_YUAN * 12 - PLUS_YEARLY_YUAN).toFixed(1));
 
+export const providerLabels: Record<string, string> = {
+  kimi: "Kimi",
+  zhipu: "Zhipu GLM",
+  qwen: "알리바바 클라우드 모델 스튜디오",
+  volcengine: "볼케노 엔진 아크",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+  xai: "Grok / xAI",
+  siliconflow: "SiliconFlow",
+};
+
 export interface KoreanFaqItem {
   question: string;
   answer: string;
