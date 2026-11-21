@@ -197,6 +197,7 @@ import {
 import { DEFAULT_OUTPUT_TOKENS, modelInputBudget } from "../shared/context";
 import { wechatHelp, welcomeGuide } from "../shared/guide";
 import { leadingMention, nativeCommand, platformCommand } from "../shared/command-routing";
+import { WechatSender, SENDER_TAG } from "./wechat-sender";
 import { watchdogHeader } from "./receiver-watchdog";
 import { referralRecipient } from "./referral-reward";
 import { REFERRAL_CREDITS } from "../shared/referrals";
@@ -308,9 +309,11 @@ export class PersonalAccount extends DurableObject<Env> {
   private wechatPolls = new Set<AbortController>();
   private wechatWakeVersion = 0;
   private receiver: WechatReceiver;
+  private sender: WechatSender;
   private execution: ExecutionStore;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.sender = new WechatSender(ctx, env);
     this.execution = new ExecutionStore(ctx.storage, env, ctx.id.toString());
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(RECEIVER_PING, RECEIVER_PONG));
     this.receiver = new WechatReceiver(ctx, env, {
@@ -596,6 +599,7 @@ export class PersonalAccount extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
       return new Response("WebSocket required", { status: 426 });
     const path = new URL(request.url).pathname;
+    if (path === "/wechat-sender") return this.sender.connect();
     if (path === "/wechat-receiver")
       return this.receiver.connect(request.headers.get(watchdogHeader) === "1");
     if (path !== "/connector-wait") return new Response("Not found", { status: 404 });
@@ -620,20 +624,36 @@ export class PersonalAccount extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
+    if (this.ctx.getTags(socket).includes(SENDER_TAG)) this.sender.message(socket, message);
+    else if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
       await this.receiver.message(socket, message);
     else socket.close(1008, "receive-only socket");
   }
   async webSocketClose(socket: WebSocket) {
     socket.close(1000, "closed");
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.receiver.disconnected(socket);
+    if (this.ctx.getTags(socket).includes(SENDER_TAG)) this.sender.disconnected(socket);
+    else if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
+      await this.receiver.disconnected(socket);
   }
   async webSocketError(socket: WebSocket) {
     socket.close(1011, "connection error");
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.receiver.disconnected(socket);
+    if (this.ctx.getTags(socket).includes(SENDER_TAG)) this.sender.disconnected(socket);
+    else if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
+      await this.receiver.disconnected(socket);
   }
   async recoverReceiverWatchdog(session: string) {
     await this.receiver.recoverWatchdog(session);
+  }
+  async senderStatus() {
+    return this.sender.status();
+  }
+
+  private async deliveryCredentials(encrypted: string): Promise<WxCredentials> {
+    const credentials = JSON.parse(
+      await decrypt(this.env, encrypted, `${this.ctx.id}:wechat`),
+    ) as WxCredentials;
+    if (this.sender.enabled()) credentials.outbound = this.sender.send;
+    return credentials;
   }
   async receiverStatus() {
     const socket = this.receiver.socket();
@@ -2299,9 +2319,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (!claimed) continue;
       job = claimed;
       try {
-        const credentials = JSON.parse(
-          await decrypt(this.env, target.encryptedCredentials!, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(target.encryptedCredentials!);
         if (
           this.getSetting("planUntil", 0) !== job.planUntil ||
           !this.membershipReminders.isCurrent(job)
@@ -2467,9 +2485,7 @@ export class PersonalAccount extends DurableObject<Env> {
       }
       if (!this.notifications.claim(job.id)) continue;
       try {
-        const credentials = JSON.parse(
-          await decrypt(this.env, link.encryptedCredentials, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials);
         const current = this.notifications.get(job.id);
         const latest = this.notificationPlugin(job.pluginId);
         const target = this.connection(job.connectionId);
@@ -2655,9 +2671,7 @@ export class PersonalAccount extends DurableObject<Env> {
         const target = this.personalReminderDeliveryTarget(reminder);
         if (!target) continue;
         const { plugin, link } = target;
-        const credentials = JSON.parse(
-          await decrypt(this.env, link.encryptedCredentials!, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials!);
         if (!this.personalRecords.isCurrent(reminder)) continue;
         if (this.expirePersonalReminder(reminder, record)) continue;
         // Reuse every prerequisite check after async preparation, immediately
@@ -5607,9 +5621,7 @@ export class PersonalAccount extends DurableObject<Env> {
           });
         }
       } else {
-        const credentials = JSON.parse(
-          await decrypt(this.env, link.encryptedCredentials!, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials!);
         if (
           this.connection(connectionId).generation !== link.generation ||
           !this.linkReceivable(connectionId)
@@ -5879,15 +5891,17 @@ export class PersonalAccount extends DurableObject<Env> {
               let waitingContext = false;
               this.ctx.storage.transactionSync(() => {
                 if (
-                  error instanceof WechatRequestError &&
+                  (error instanceof WechatRequestError ||
+                    (error instanceof AppError && error.code === "wechat_sender_unavailable")) &&
                   !images.length &&
                   pending.part < parts.length
                 )
                   recordWechatTextReceipt(this.sql, pending, {
+                    ...(credentials.outbound ? { transport: "vps" as const } : {}),
                     outcome: "error",
                     httpStatus: error.upstreamStatus ?? null,
-                    ret: error.ret ?? null,
-                    errcode: error.errcode ?? null,
+                    ret: error instanceof WechatRequestError ? (error.ret ?? null) : null,
+                    errcode: error instanceof WechatRequestError ? (error.errcode ?? null) : null,
                     hasMessageId: null,
                   });
                 this.sql.exec("UPDATE inbox SET attempts = attempts + 1 WHERE id = ?", pending.id);

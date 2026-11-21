@@ -47,7 +47,20 @@ export function orderedWechatMessages(messages: WxMessage[]) {
     return [...messages].sort((a, b) => a.create_time_ms! - b.create_time_ms!);
   return messages;
 }
-export type WxCredentials = { token: string; baseUrl: string; userId: string; botId: string };
+export type WechatOutbound = (
+  operation: "sendmessage" | "getuploadurl" | "upload",
+  url: string,
+  body: string | Uint8Array,
+  headers: Record<string, string>,
+  timeout: number,
+) => Promise<Response>;
+export type WxCredentials = {
+  token: string;
+  baseUrl: string;
+  userId: string;
+  botId: string;
+  outbound?: WechatOutbound;
+};
 export class WechatRequestError extends AppError {
   constructor(
     code: string,
@@ -106,15 +119,22 @@ async function wechatResponse<T>(
     headers.AuthorizationType = "ilink_bot_token";
     headers["X-WECHAT-UIN"] = btoa(String(crypto.getRandomValues(new Uint32Array(1))[0]));
   }
-  const response = await fetch(`${base}/ilink/bot/${path}`, {
-    method: body ? "POST" : "GET",
-    headers,
-    body: body ? JSON.stringify({ ...body, base_info: { channel_version: "2.1.6" } }) : undefined,
-    redirect: "manual",
-    signal: signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
-      : AbortSignal.timeout(timeout),
-  });
+  const url = `${base}/ilink/bot/${path}`;
+  const json = body
+    ? JSON.stringify({ ...body, base_info: { channel_version: "2.1.6" } })
+    : undefined;
+  const response =
+    credentials?.outbound && (path === "sendmessage" || path === "getuploadurl") && json
+      ? await credentials.outbound(path, url, json, headers, timeout)
+      : await fetch(url, {
+          method: body ? "POST" : "GET",
+          headers,
+          body: json,
+          redirect: "manual",
+          signal: signal
+            ? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
+            : AbortSignal.timeout(timeout),
+        });
   if (!response.ok) {
     await response.body?.cancel();
     throw new WechatRequestError(
@@ -225,6 +245,7 @@ export async function downloadImage(item: WxItem) {
   return { mime, data: data.toString("base64") };
 }
 export type WechatTextReceipt = {
+  transport?: "vps";
   outcome: "accepted" | "unconfirmed" | "error";
   httpStatus: number | null;
   ret: number | null;
@@ -259,6 +280,7 @@ export async function sendText(
     (typeof id === "string" && /^[1-9]\d{0,19}$/.test(id)) ||
     (typeof id === "number" && Number.isInteger(id) && id > 0);
   return {
+    ...(credentials.outbound ? { transport: "vps" as const } : {}),
     outcome: data.ret === 0 || data.errcode === 0 || hasMessageId ? "accepted" : "unconfirmed",
     httpStatus,
     ret: data.ret ?? null,
@@ -305,13 +327,16 @@ export async function uploadWechatImage(
     url.password
   )
     throw new AppError("wechat_upload_host", "微信附件上传地址无效", 502);
-  const result = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/octet-stream" },
-    body: encrypted,
-    redirect: "manual",
-    signal: AbortSignal.timeout(60000),
-  });
+  const headers = { "content-type": "application/octet-stream" };
+  const result = credentials.outbound
+    ? await credentials.outbound("upload", url.href, encrypted, headers, 60000)
+    : await fetch(url, {
+        method: "POST",
+        headers,
+        body: encrypted,
+        redirect: "manual",
+        signal: AbortSignal.timeout(60000),
+      });
   await result.body?.cancel();
   const downloadParam = result.headers.get("x-encrypted-param");
   if (!result.ok || !downloadParam || downloadParam.length > 16000)

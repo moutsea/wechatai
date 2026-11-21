@@ -1,9 +1,13 @@
 import { env, runInDurableObject } from "cloudflare:test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dayWindow, Wallet } from "../src/server/wallet";
 
-const account = () => env.ACCOUNTS.getByName(crypto.randomUUID());
-const start = Date.parse("2026-10-08T02:00:00Z");
+let account: ReturnType<typeof env.ACCOUNTS.getByName>;
+beforeEach(() => {
+  account = env.ACCOUNTS.getByName(crypto.randomUUID());
+});
+// Native scheduler alarms use wall time. Keep the simulated days ahead of it.
+const start = dayWindow().end + 10 * 3600000;
 const day = 86400000;
 const payment = (expires = start + 10 * day) => ({
   id: crypto.randomUUID(),
@@ -11,16 +15,21 @@ const payment = (expires = start + 10 * day) => ({
   units: 0,
   expires,
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(async () => {
+  vi.restoreAllMocks();
+  const scheduler = env.REMINDERS.getByName(`${account.id}:membership`);
+  for (const object of [account, scheduler])
+    await runInDurableObject(object, (_, state) => state.storage.deleteAlarm());
+});
 
 describe("plan-based daily allowances", () => {
   it("grants Plus 1000 daily credits and never a monthly bucket", async () => {
-    await runInDurableObject(account(), (instance) => {
+    await runInDurableObject(account, async (instance) => {
       vi.spyOn(Date, "now").mockReturnValue(start);
       const invoice = payment();
-      instance.applyPayment(invoice);
-      instance.applyPayment(invoice);
-      instance.applyPayment(payment(start + 30 * day));
+      await instance.applyPayment(invoice);
+      await instance.applyPayment(invoice);
+      await instance.applyPayment(payment(start + 30 * day));
       for (let i = 0; i < 3; i++) {
         const snapshot = instance.snapshot();
         expect(snapshot.plan).toBe("plus");
@@ -37,17 +46,17 @@ describe("plan-based daily allowances", () => {
   });
 
   it("only adds 900 on upgrade even after Free credits were spent, and cannot refill on renewal", async () => {
-    await runInDurableObject(account(), (instance, state) => {
+    await runInDurableObject(account, async (instance, state) => {
       vi.spyOn(Date, "now").mockReturnValue(start);
       expect(instance.snapshot().wallet.daily).toBe(100);
       const wallet = new Wallet(state.storage);
       wallet.charge("before-upgrade", 40000, 40000);
       const invoice = payment();
-      instance.applyPayment(invoice);
+      await instance.applyPayment(invoice);
       expect(instance.snapshot().wallet.daily).toBe(960);
       wallet.charge("after-upgrade", 20000, 20000);
-      instance.applyPayment(invoice);
-      instance.applyPayment(payment(start + 40 * day));
+      await instance.applyPayment(invoice);
+      await instance.applyPayment(payment(start + 40 * day));
       expect(instance.snapshot().wallet.daily).toBe(940);
       expect(
         instance
@@ -59,13 +68,13 @@ describe("plan-based daily allowances", () => {
   });
 
   it("expires yesterday's unused grant exactly at Beijing midnight and preserves top-ups", async () => {
-    await runInDurableObject(account(), (instance, state) => {
+    await runInDurableObject(account, async (instance, state) => {
       const midnight = dayWindow(start).end;
       const clock = vi.spyOn(Date, "now").mockReturnValue(midnight - 1);
-      instance.applyPayment(payment());
+      await instance.applyPayment(payment());
       const wallet = new Wallet(state.storage);
       wallet.charge("spent", 200000, 200000);
-      instance.applyPayment({
+      await instance.applyPayment({
         id: "topup",
         kind: "purchase",
         units: 50000,
@@ -81,9 +90,9 @@ describe("plan-based daily allowances", () => {
   });
 
   it("does not accumulate missed days and grants on the first request of the current day", async () => {
-    await runInDurableObject(account(), (instance) => {
+    await runInDurableObject(account, async (instance) => {
       const clock = vi.spyOn(Date, "now").mockReturnValue(start);
-      instance.applyPayment(payment());
+      await instance.applyPayment(payment());
       clock.mockReturnValue(start + 4 * day);
       const snapshot = instance.snapshot();
       expect(snapshot.wallet.daily).toBe(1000);
@@ -92,9 +101,9 @@ describe("plan-based daily allowances", () => {
   });
 
   it("repays persistent debt across Plus daily resets without refilling a spent grant", async () => {
-    await runInDurableObject(account(), (instance, state) => {
+    await runInDurableObject(account, async (instance, state) => {
       const clock = vi.spyOn(Date, "now").mockReturnValue(start);
-      instance.applyPayment(payment());
+      await instance.applyPayment(payment());
       new Wallet(state.storage).charge("overdraw", 2200000, 2200000);
       expect(instance.snapshot().wallet.balance).toBe(-1200);
       clock.mockReturnValue(start + day);
@@ -106,9 +115,9 @@ describe("plan-based daily allowances", () => {
   });
 
   it("returns to Free after membership expires without retracting today's already issued allowance", async () => {
-    await runInDurableObject(account(), (instance, state) => {
+    await runInDurableObject(account, async (instance, state) => {
       const clock = vi.spyOn(Date, "now").mockReturnValue(start);
-      instance.applyPayment(payment(start + 3600000));
+      await instance.applyPayment(payment(start + 3600000));
       new Wallet(state.storage).charge("spent", 40000, 40000);
       clock.mockReturnValue(start + 3600000);
       expect(instance.snapshot()).toMatchObject({
@@ -125,13 +134,13 @@ describe("plan-based daily allowances", () => {
   });
 
   it("recognizes legacy daily grants after reopening and preserves existing monthly balances", async () => {
-    await runInDurableObject(account(), (instance, state) => {
+    await runInDurableObject(account, async (instance, state) => {
       vi.spyOn(Date, "now").mockReturnValue(start);
       const wallet = new Wallet(state.storage);
       wallet.grant(`daily:${dayWindow().day}`, "daily", 100000, dayWindow().end, "每日赠送");
       wallet.charge("spent", 40000, 40000);
       wallet.grant("payment:legacy", "subscription", 25000, start + day, "Plus 周期额度");
-      instance.applyPayment(payment());
+      await instance.applyPayment(payment());
       const reopened = new Wallet(state.storage);
       reopened.init();
       reopened.daily(1000);
@@ -144,7 +153,7 @@ describe("plan-based daily allowances", () => {
   });
 
   it("rolls back membership and the daily supplement if recording the invoice fails", async () => {
-    await runInDurableObject(account(), (instance, state) => {
+    await runInDurableObject(account, (instance, state) => {
       vi.spyOn(Date, "now").mockReturnValue(start);
       expect(instance.snapshot().wallet.daily).toBe(100);
       state.storage.sql.exec(
