@@ -8,7 +8,9 @@ import {
   findDocArticle,
 } from "./docs";
 import { SEO_PATHS, findSeoPage, type SeoPage } from "./seo-pages";
-import { FAQ_DOC_SECTIONS, faqAnswerText } from "./faq-doc";
+import { FAQ_DOC_SECTIONS, faqAnswerText, type FaqDocSection } from "./faq-doc";
+import { EN_DOC_ARTICLES, EN_DOCS_DESCRIPTION, EN_DOCS_TITLE } from "./i18n/en/docs";
+import { EN_DOC_CONTENT, EN_FAQ_SECTIONS } from "./i18n/en/data/docs-content-en";
 import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
 import { LANDING_FAQ } from "./landing-faq";
 import { PLUGIN_LIMITS } from "./plugin-access";
@@ -330,11 +332,11 @@ function seoLandingPage(page: SeoPage, canonical: string, htmlLang: string): Pag
  * `/docs/faq` 的 FAQPage 节点。问答正文与页面共用 `FAQ_DOC_SECTIONS`，
  * 答案在这里被还原成纯文本（Markdown 链接标记原样输出会被当成乱码）。
  */
-function faqPageNode(canonical: string) {
+function faqPageNode(canonical: string, sections: readonly FaqDocSection[] = FAQ_DOC_SECTIONS) {
   return {
     "@type": "FAQPage",
     "@id": `${canonical}#faq`,
-    mainEntity: FAQ_DOC_SECTIONS.map((section) => ({
+    mainEntity: sections.map((section) => ({
       "@type": "Question",
       name: section.title,
       acceptedAnswer: {
@@ -353,35 +355,46 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   const { htmlLang } = LOCALE_DEFINITIONS[locale];
   const landing = findSeoPage(path);
   if (landing) return seoLandingPage(landing, canonical, htmlLang);
+  const englishDocs = locale === "en";
   const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
-  if (path === "/docs" || article) {
-    const title = article?.title ?? DOCS_TITLE;
-    const description = article?.description ?? DOCS_DESCRIPTION;
+  const englishArticle = englishDocs
+    ? EN_DOC_ARTICLES.find((item) => item.path === path)
+    : undefined;
+  const docEntry = englishDocs ? englishArticle : article;
+  if (path === "/docs" || docEntry) {
+    const title = docEntry?.title ?? (englishDocs ? EN_DOCS_TITLE : DOCS_TITLE);
+    const description =
+      docEntry?.description ?? (englishDocs ? EN_DOCS_DESCRIPTION : DOCS_DESCRIPTION);
+    const docsIndex = `${SITE_URL}${localizedPath(locale, "/docs")}`;
     const breadcrumbs = [
-      { name: "首页", item: `${SITE_URL}/` },
-      { name: "文档", item: article ? `${SITE_URL}/docs` : canonical },
-      ...(article ? [{ name: title, item: canonical }] : []),
+      { name: englishDocs ? "Home" : "首页", item: `${SITE_URL}/` },
+      { name: englishDocs ? "Documentation" : "文档", item: docEntry ? docsIndex : canonical },
+      ...(docEntry ? [{ name: title, item: canonical }] : []),
     ];
+    const sections =
+      englishDocs && docEntry
+        ? EN_DOC_CONTENT[docEntry.slug as keyof typeof EN_DOC_CONTENT].sections
+        : undefined;
     return {
-      title: `${article?.seoTitle ?? title} | ${SITE_NAME}`,
+      title: `${docEntry?.seoTitle ?? title} | ${englishDocs ? "Wechatai" : SITE_NAME}`,
       description,
       indexable: true,
       canonical,
-      ogType: article ? "article" : "website",
+      ogType: docEntry ? "article" : "website",
       structuredData: {
         "@context": "https://schema.org",
         "@graph": [
-          article
+          docEntry
             ? {
                 "@type": "Article",
                 "@id": `${canonical}#article`,
                 url: canonical,
                 mainEntityOfPage: canonical,
-                headline: article.seoTitle ?? title,
+                headline: docEntry.seoTitle ?? title,
                 description,
                 inLanguage: htmlLang,
                 image: SOCIAL_IMAGE,
-                dateModified: article.updatedAt,
+                dateModified: docEntry.updatedAt,
                 author: {
                   "@id": ORGANIZATION_ID,
                   "@type": "Organization",
@@ -389,8 +402,17 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                   url: `${SITE_URL}/`,
                 },
                 publisher: organizationNode(),
-                articleSection: article.category,
-                isPartOf: { "@id": `${SITE_URL}/docs` },
+                articleSection: docEntry.category,
+                isPartOf: { "@id": docsIndex },
+                ...(sections
+                  ? {
+                      hasPart: sections.map((section) => ({
+                        "@type": "WebPageElement",
+                        name: section.title,
+                        url: `${canonical}#${section.id}`,
+                      })),
+                    }
+                  : {}),
               }
             : {
                 "@type": "CollectionPage",
@@ -401,16 +423,20 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                 inLanguage: htmlLang,
                 mainEntity: {
                   "@type": "ItemList",
-                  itemListElement: DOC_ARTICLES.map((item, index) => ({
-                    "@type": "ListItem",
-                    position: index + 1,
-                    name: item.title,
-                    url: `${SITE_URL}${docPath(item.slug)}`,
-                  })),
+                  itemListElement: (englishDocs ? EN_DOC_ARTICLES : DOC_ARTICLES).map(
+                    (item, index) => ({
+                      "@type": "ListItem",
+                      position: index + 1,
+                      name: item.title,
+                      url: `${SITE_URL}${localizedPath(locale, docPath(item.slug))}`,
+                    }),
+                  ),
                 },
               },
           breadcrumbList(breadcrumbs),
-          ...(article?.slug === "faq" ? [faqPageNode(canonical)] : []),
+          ...(docEntry?.slug === "faq"
+            ? [faqPageNode(canonical, englishDocs ? EN_FAQ_SECTIONS : FAQ_DOC_SECTIONS)]
+            : []),
         ],
       },
     };

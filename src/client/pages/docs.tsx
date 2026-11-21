@@ -18,19 +18,18 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  DOC_ARTICLES,
-  DOC_GROUPS,
-  DOC_TUTORIALS,
-  docPath,
-  findDocArticle,
-  guideSectionRedirect,
-} from "../../shared/docs";
-import type { DocArticle } from "../../shared/docs";
+import { DOC_ARTICLES, DOC_GROUPS, docPath, guideSectionRedirect } from "../../shared/docs";
+import type { DocArticle, DocContent, DocSection } from "../../shared/docs";
+import { EN_DOC_ARTICLES, EN_DOC_GROUPS } from "../../shared/i18n/en/docs";
+import type { Locale } from "../../shared/i18n";
+import { EN_DOC_CONTENT } from "../../shared/i18n/en/data/docs-content-en";
 import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
 import { NotFound } from "../not-found";
+import { useLocale } from "../locale";
+import { useDocumentInputs } from "../document-handoff";
 import { DOC_CONTENT } from "./docs-content";
+import { docsCopy, type DocsCopy } from "./docs-copy";
 import {
   DocChannelExample,
   DocCustomChannelExample,
@@ -50,9 +49,30 @@ import {
   DocMembershipPlans,
   DocVoiceExample,
 } from "./doc-usage-examples";
-import { useDocumentInputs } from "../document-handoff";
 
-function DocMarkdown({ children }: { children: string }) {
+function docsHref(locale: Locale, slug: string): string {
+  return locale === "en" ? `/en/docs/${slug}` : docPath(slug as DocArticle["slug"]);
+}
+
+function docsIndexHref(locale: Locale): string {
+  return locale === "en" ? "/en/docs" : "/docs";
+}
+
+function articlesFor(locale: Locale): readonly DocArticle[] {
+  return locale === "en" ? EN_DOC_ARTICLES : DOC_ARTICLES;
+}
+
+function groupsFor(locale: Locale): readonly { id: string; title: string }[] {
+  return locale === "en" ? EN_DOC_GROUPS : DOC_GROUPS;
+}
+
+function contentFor(locale: Locale, slug: string): DocContent {
+  return locale === "en"
+    ? EN_DOC_CONTENT[slug as keyof typeof EN_DOC_CONTENT]
+    : DOC_CONTENT[slug as DocArticle["slug"]];
+}
+
+function DocMarkdown({ children, copy }: { children: string; copy: DocsCopy }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -63,16 +83,11 @@ function DocMarkdown({ children }: { children: string }) {
           ) : (
             <a href={href} rel="noreferrer" target="_blank">
               {children}
-              <span className="docs-sr-only">（新窗口打开）</span>
+              <span className="docs-sr-only">{copy.externalLinkSuffix}</span>
             </a>
           ),
         table: ({ children }) => (
-          <div
-            className="docs-table-scroll"
-            tabIndex={0}
-            role="region"
-            aria-label="配置与命令对照表"
-          >
+          <div className="docs-table-scroll" tabIndex={0} role="region" aria-label={copy.tableAria}>
             <table>{children}</table>
           </div>
         ),
@@ -83,7 +98,21 @@ function DocMarkdown({ children }: { children: string }) {
   );
 }
 
-function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: string }) {
+function DocsNavigation({
+  activePath,
+  inputId,
+  locale,
+  copy,
+  articles,
+  groups,
+}: {
+  activePath: string;
+  inputId: string;
+  locale: Locale;
+  copy: DocsCopy;
+  articles: readonly DocArticle[];
+  groups: readonly { id: string; title: string }[];
+}) {
   // 文档一共二十来篇，本地过滤就够；不做全文检索，只匹配标题、分类和摘要，
   // 免得给出一个「搜得到但答不上」的结果。
   const inputs = useDocumentInputs();
@@ -97,25 +126,25 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
         : `${entry.title} ${entry.navTitle ?? ""} ${entry.category} ${entry.description}`;
     return text.toLowerCase().includes(keyword);
   };
-  const groups = DOC_GROUPS.map((group) => ({
+  const navigationGroups = groups.map((group) => ({
     group,
-    articles: DOC_ARTICLES.filter(
+    articles: articles.filter(
       (article) =>
         article.slug !== "model-providers" &&
         article.group === group.id &&
         matches(article as DocArticle),
-    ).map((article): DocArticle => article),
+    ),
   }));
-  const providersArticle = findDocArticle("model-providers");
+  const providersArticle = articles.find((article) => article.slug === "model-providers");
   const showProviders = providersArticle && matches(providersArticle);
-  const museTitle = "Muse 接入指南";
+  const museTitle = copy.museTitle;
   const showMuse = matches(museTitle);
   const hits =
-    groups.reduce((total, item) => total + item.articles.length, 0) +
+    navigationGroups.reduce((total, item) => total + item.articles.length, 0) +
     Number(showProviders) +
     Number(showMuse);
   return (
-    <nav aria-label="文档导航" data-handoff-focus-fallback={inputId}>
+    <nav aria-label={copy.navAria} data-handoff-focus-fallback={inputId}>
       <label className="docs-search">
         <Search size={15} aria-hidden="true" />
         <input
@@ -123,20 +152,20 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
           type="search"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="搜索文档"
-          aria-label="搜索文档"
+          placeholder={copy.searchPlaceholder}
+          aria-label={copy.searchAria}
         />
       </label>
       <Link
         id={`${inputId}-overview`}
         className="docs-nav-overview"
-        to="/docs"
-        aria-current={activePath === "/docs" ? "page" : undefined}
+        to={docsIndexHref(locale)}
+        aria-current={activePath === docsIndexHref(locale) ? "page" : undefined}
       >
         <BookOpen size={16} />
-        文档概览
+        {copy.overview}
       </Link>
-      {groups.map(({ group, articles }) =>
+      {navigationGroups.map(({ group, articles }) =>
         articles.length === 0 ? null : (
           <div className="docs-nav-group" key={group.id}>
             <p>{group.title}</p>
@@ -145,8 +174,10 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
                 <li key={article.slug}>
                   <Link
                     id={`${inputId}-${article.slug}`}
-                    to={docPath(article.slug)}
-                    aria-current={activePath === docPath(article.slug) ? "page" : undefined}
+                    to={docsHref(locale, article.slug)}
+                    aria-current={
+                      activePath === docsHref(locale, article.slug) ? "page" : undefined
+                    }
                     onClick={() => setQuery("")}
                   >
                     {article.navTitle ?? article.title}
@@ -159,15 +190,17 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
       )}
       {keyword && hits === 0 && (
         <p className="docs-search-empty" role="status">
-          没有匹配「{query.trim()}」的文档，可以试试「渠道」或「插件」。
+          {copy.emptyResult(query.trim())}
         </p>
       )}
       <div className="docs-nav-developer">
         {showProviders && (
           <Link
             id={`${inputId}-model-providers`}
-            to={docPath(providersArticle.slug)}
-            aria-current={activePath === docPath(providersArticle.slug) ? "page" : undefined}
+            to={docsHref(locale, providersArticle.slug)}
+            aria-current={
+              activePath === docsHref(locale, providersArticle.slug) ? "page" : undefined
+            }
             onClick={() => setQuery("")}
           >
             <Network size={15} />
@@ -184,7 +217,7 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
         )}
         <Link id={`${inputId}-developer`} to="/developers/plugins">
           <Terminal size={15} />
-          插件开发文档
+          {copy.developerDocs}
           <ArrowUpRight size={13} />
         </Link>
       </div>
@@ -193,17 +226,21 @@ function DocsNavigation({ activePath, inputId }: { activePath: string; inputId: 
 }
 
 function DocTableOfContents({
-  article,
+  slug,
+  sections,
+  copy,
   mobile = false,
 }: {
-  article: DocArticle;
+  slug: string;
+  sections: readonly DocSection[];
+  copy: DocsCopy;
   mobile?: boolean;
 }) {
   return (
     <details
       id={`docs-toc-${mobile ? "mobile" : "desktop"}`}
       className={`docs-article-toc${mobile ? " docs-article-toc-mobile" : ""}`}
-      key={article.slug}
+      key={slug}
       open={mobile ? undefined : true}
       onKeyDown={(event) => {
         if (mobile && event.key === "Escape") {
@@ -214,11 +251,11 @@ function DocTableOfContents({
     >
       <summary>
         <List size={16} aria-hidden="true" />
-        本文目录
+        {copy.tocTitle}
         <ChevronDown size={14} aria-hidden="true" />
       </summary>
-      <nav aria-label="本文目录">
-        {DOC_CONTENT[article.slug].sections.map((section) => (
+      <nav aria-label={copy.tocAria}>
+        {sections.map((section) => (
           <a
             key={section.id}
             href={`#${section.id}`}
@@ -236,40 +273,72 @@ function DocTableOfContents({
   );
 }
 
-function DocsLayout({ article, children }: { article?: DocArticle; children: ReactNode }) {
+function DocsLayout({
+  article,
+  locale,
+  copy,
+  sections,
+  children,
+}: {
+  article?: DocArticle;
+  locale: Locale;
+  copy: DocsCopy;
+  sections?: readonly DocSection[];
+  children: ReactNode;
+}) {
   const { pathname } = useLocation();
-  const activePath = article ? docPath(article.slug) : "/docs";
+  const activePath = article ? docsHref(locale, article.slug) : docsIndexHref(locale);
+  const articles = articlesFor(locale);
+  const groups = groupsFor(locale);
   return (
     <div className="docs-page">
       <a className="docs-skip-link" href="#doc-content">
-        跳到正文
+        {copy.skipToContent}
       </a>
       <SiteHeader active="/docs" />
       <div className="docs-layout">
         <aside id="docs-sidebar" className="docs-sidebar">
-          {article && <DocTableOfContents article={article} />}
-          <DocsNavigation activePath={activePath} inputId="docs-search-desktop" />
+          {article && sections && (
+            <DocTableOfContents slug={article.slug} sections={sections} copy={copy} />
+          )}
+          <DocsNavigation
+            activePath={activePath}
+            inputId="docs-search-desktop"
+            locale={locale}
+            copy={copy}
+            articles={articles}
+            groups={groups}
+          />
         </aside>
         <details id="docs-mobile-navigation" className="docs-mobile-navigation" key={pathname}>
           <summary>
             <List size={17} />
-            <span>文档导航</span>
+            <span>{copy.mobileNav}</span>
             <span className="docs-mobile-current">
-              {article?.navTitle ?? article?.title ?? "文档概览"}
+              {article?.navTitle ?? article?.title ?? copy.overviewFallback}
             </span>
             <ChevronDown size={15} />
           </summary>
-          <DocsNavigation activePath={activePath} inputId="docs-search-mobile" />
+          <DocsNavigation
+            activePath={activePath}
+            inputId="docs-search-mobile"
+            locale={locale}
+            copy={copy}
+            articles={articles}
+            groups={groups}
+          />
         </details>
         <main id="doc-content" className="docs-main" tabIndex={-1}>
-          <nav className="docs-breadcrumb" aria-label="面包屑导航">
-            <Link to="/docs">文档</Link>
+          <nav className="docs-breadcrumb" aria-label={copy.breadcrumbAria}>
+            <Link to={docsIndexHref(locale)}>{copy.breadcrumbDocs}</Link>
             <ChevronRight size={13} />
-            <span>{article?.category ?? "概览"}</span>
+            <span>{article?.category ?? copy.breadcrumbOverview}</span>
           </nav>
           {children}
         </main>
-        {article && <DocTableOfContents article={article} mobile />}
+        {article && sections && (
+          <DocTableOfContents slug={article.slug} sections={sections} copy={copy} mobile />
+        )}
       </div>
       <SiteFooter />
     </div>
@@ -277,75 +346,56 @@ function DocsLayout({ article, children }: { article?: DocArticle; children: Rea
 }
 
 export function DocsIndex() {
+  const { locale } = useLocale();
+  const copy = docsCopy(locale);
+  const articles = articlesFor(locale);
+  const groups = groupsFor(locale);
+  const tutorials = articles.filter((article) => article.group === "tutorials");
+  const quickIcons = [Terminal, MessageSquare, BookOpen, Coins];
   return (
-    <DocsLayout>
+    <DocsLayout locale={locale} copy={copy}>
       <header className="docs-index-header">
-        <span className="docs-kicker">微伴使用文档</span>
-        <h1>在微信里，用好你的 AI。</h1>
-        <p>从第一次连接，到模型、插件与会话管理。按步骤上手，或直接查找需要的功能。</p>
-        <p className="docs-index-lede">
-          文档按「开始使用 → 日常功能 → 插件 → 实操教程」组织。第一次使用，先确认手机微信有 ClawBot
-          入口，再准备模型 API Key，跟着使用指南完成配置和扫码；已经连上微信，可以直接查
-          命令、会话、附件与 credits。下面的摘要都来自各文档的现有说明，方便先判断该打开哪一篇。
-        </p>
+        <span className="docs-kicker">{copy.kicker}</span>
+        <h1>{copy.indexTitle}</h1>
+        <p>{copy.indexIntro}</p>
+        <p className="docs-index-lede">{copy.indexLede}</p>
       </header>
-      <Link className="docs-start-card" to="/docs/getting-started">
+      <Link className="docs-start-card" to={docsHref(locale, "getting-started")}>
         <span className="docs-start-icon">
           <BookOpen size={24} />
         </span>
         <span>
-          <strong>第一次使用？从这里开始</strong>
-          <small>添加模型 → 扫码连接 → 发出第一条消息</small>
+          <strong>{copy.startStrong}</strong>
+          <small>{copy.startSmall}</small>
         </span>
         <ArrowRight size={20} />
       </Link>
       <section className="docs-index-section" aria-labelledby="quick-title">
-        <h2 id="quick-title">常用功能</h2>
+        <h2 id="quick-title">{copy.quickTitle}</h2>
         <div className="docs-quick-grid">
-          {[
-            {
-              to: "/docs/commands",
-              title: "微信命令速查",
-              text: "查看状态、切换模型和插件",
-              icon: Terminal,
-            },
-            {
-              to: "/docs/sessions",
-              title: "会话与上下文",
-              text: "管理话题、记录和长对话",
-              icon: MessageSquare,
-            },
-            {
-              to: "/docs/attachments",
-              title: "图片、文件与语音",
-              text: "先发附件，再补充要求",
-              icon: BookOpen,
-            },
-            {
-              to: "/docs/credits",
-              title: "会员与 credits",
-              text: "了解额度、计费和邀请奖励",
-              icon: Coins,
-            },
-          ].map(({ to, title, text, icon: Icon }) => (
-            <Link to={to} key={to}>
-              <Icon size={19} />
-              <strong>{title}</strong>
-              <span>{text}</span>
-              <ChevronRight size={15} />
-            </Link>
-          ))}
+          {copy.quickLinks.map(({ slug, title, text }, index) => {
+            const Icon = quickIcons[index];
+            return (
+              <Link to={docsHref(locale, slug)} key={slug}>
+                <Icon size={19} />
+                <strong>{title}</strong>
+                <span>{text}</span>
+                <ChevronRight size={15} />
+              </Link>
+            );
+          })}
         </div>
       </section>
       <section className="docs-index-section" aria-labelledby="tutorials-title">
-        <h2 id="tutorials-title">跟着教程配置</h2>
+        <h2 id="tutorials-title">{copy.tutorialsTitle}</h2>
         <p>
-          想在微信里用 DeepSeek？先看<Link to="/wechat-deepseek">接入条件与费用说明</Link>，准备好
-          Key 后跟着下方教程完成配置。
+          {copy.tutorialsIntroBefore}
+          <Link to="/wechat-deepseek">{copy.tutorialsIntroLink}</Link>
+          {copy.tutorialsIntroAfter}
         </p>
         <div className="docs-tutorial-list">
-          {DOC_TUTORIALS.map((article) => (
-            <Link to={docPath(article.slug)} key={article.slug}>
+          {tutorials.map((article) => (
+            <Link to={docsHref(locale, article.slug)} key={article.slug}>
               <img src={article.image} alt="" width="42" height="42" />
               <span>
                 <strong>{article.title}</strong>
@@ -357,20 +407,18 @@ export function DocsIndex() {
         </div>
       </section>
       <section className="docs-index-section" aria-labelledby="all-docs-title">
-        <h2 id="all-docs-title">按主题浏览全部文档</h2>
-        <p className="docs-index-lede">
-          每篇附一句话摘要；具体步骤、限制与报错处理以文档内正文为准。
-        </p>
-        {DOC_GROUPS.map((group) => {
-          const articles = DOC_ARTICLES.filter((article) => article.group === group.id);
-          if (!articles.length) return null;
+        <h2 id="all-docs-title">{copy.allDocsTitle}</h2>
+        <p className="docs-index-lede">{copy.allDocsLede}</p>
+        {groups.map((group) => {
+          const groupArticles = articles.filter((article) => article.group === group.id);
+          if (!groupArticles.length) return null;
           return (
             <div className="docs-index-group" key={group.id}>
               <h3>{group.title}</h3>
               <ul className="docs-index-doc-list">
-                {articles.map((article) => (
+                {groupArticles.map((article) => (
                   <li key={article.slug}>
-                    <Link to={docPath(article.slug)}>
+                    <Link to={docsHref(locale, article.slug)}>
                       <span>
                         <strong>{article.title}</strong>
                         <small>{article.description}</small>
@@ -386,8 +434,10 @@ export function DocsIndex() {
       </section>
       <div className="docs-index-help">
         <span>
-          遇到问题？先看看<Link to="/docs/faq">常见问题</Link>，也可以
-          <Link to="/contact">联系我们</Link>。
+          {copy.helpBefore}
+          <Link to={docsHref(locale, "faq")}>{copy.helpFaq}</Link>
+          {copy.helpMiddle}
+          <Link to="/contact">{copy.helpContact}</Link>
         </span>
       </div>
     </DocsLayout>
@@ -398,8 +448,11 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
   const params = useParams();
   const { hash, pathname } = useLocation();
   const navigate = useNavigate();
+  const { locale } = useLocale();
+  const copy = docsCopy(locale);
+  const articles = articlesFor(locale);
   const legacyTarget = guideSectionRedirect(pathname, hash);
-  const article = findDocArticle(suppliedSlug ?? params.slug);
+  const article = articles.find((item) => item.slug === (suppliedSlug ?? params.slug));
   useEffect(() => {
     if (legacyTarget) {
       navigate(legacyTarget, { replace: true });
@@ -407,12 +460,12 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
     }
   }, [legacyTarget, navigate]);
   if (!article) return <NotFound />;
-  const content = DOC_CONTENT[article.slug];
-  const currentIndex = DOC_ARTICLES.findIndex((item) => item.slug === article.slug);
-  const previous = DOC_ARTICLES[currentIndex - 1];
-  const next = DOC_ARTICLES[currentIndex + 1];
+  const content = contentFor(locale, article.slug);
+  const currentIndex = articles.findIndex((item) => item.slug === article.slug);
+  const previous = articles[currentIndex - 1];
+  const next = articles[currentIndex + 1];
   return (
-    <DocsLayout article={article}>
+    <DocsLayout article={article} locale={locale} copy={copy} sections={content.sections}>
       <header className="docs-article-header">
         <div className="docs-article-label">
           {article.image && (
@@ -425,10 +478,11 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
         <p>{article.outcome}</p>
         <div className="docs-article-meta">
           <span>
-            <Clock3 size={13} />约 {article.minutes} 分钟
+            <Clock3 size={13} />
+            {copy.minutes(article.minutes)}
           </span>
           <span>
-            更新于{" "}
+            {copy.updated}{" "}
             <time dateTime={article.updatedAt}>{article.updatedAt.replaceAll("-", ".")}</time>
           </span>
         </div>
@@ -442,7 +496,7 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
             )}
             <h2>{section.title}</h2>
             {section.illustration === "wechat-ai-bridge" && <DocBridgeDiagram />}
-            <DocMarkdown>{section.body}</DocMarkdown>
+            <DocMarkdown copy={copy}>{section.body}</DocMarkdown>
             {section.illustration === "channel-form" && <DocChannelExample />}
             {section.illustration === "channel-models" && <DocModelSyncExample showTools />}
             {section.illustration === "model-settings" && <DocModelSettings />}
@@ -452,15 +506,35 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
                 <DocChannelExample />
                 <ol start={2}>
                   <li>
-                    填入该服务商的 <strong>API Key</strong>
-                    ，点击「保存并获取模型」，系统会尝试同步可用模型。
+                    {locale === "en" ? (
+                      <>
+                        Enter the provider's <strong>API Key</strong> (“API Key”) and click “Save
+                        and fetch models” (“保存并获取模型”); Wechatai tries to sync the available
+                        models.
+                      </>
+                    ) : (
+                      <>
+                        填入该服务商的 <strong>API Key</strong>
+                        ，点击「保存并获取模型」，系统会尝试同步可用模型。
+                      </>
+                    )}
                   </li>
                 </ol>
                 <DocModelSyncExample />
                 <ol start={3}>
                   <li>
-                    确认渠道下已有想用的文本模型。若同步失败，按
-                    <Link to="/docs/channels-models#import">渠道与模型教程</Link>手动添加即可。
+                    {locale === "en" ? (
+                      <>
+                        Confirm the channel now has the text model you want. If syncing failed, add
+                        it manually following the{" "}
+                        <Link to="/en/docs/channels-models#import">channels and models guide</Link>.
+                      </>
+                    ) : (
+                      <>
+                        确认渠道下已有想用的文本模型。若同步失败，按
+                        <Link to="/docs/channels-models#import">渠道与模型教程</Link>手动添加即可。
+                      </>
+                    )}
                   </li>
                 </ol>
               </>
@@ -502,7 +576,7 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
                   href={shot.src}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label={`查看大图：${shot.alt}（新窗口打开）`}
+                  aria-label={copy.viewLarge(shot.alt)}
                 >
                   <img
                     src={shot.src}
@@ -513,14 +587,16 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
                     decoding="async"
                   />
                   <span>
-                    查看大图
+                    {copy.viewLargeLabel}
                     <ArrowUpRight size={14} />
                   </span>
                 </a>
                 <figcaption>{shot.caption}</figcaption>
               </figure>
             ))}
-            {section.afterIllustration && <DocMarkdown>{section.afterIllustration}</DocMarkdown>}
+            {section.afterIllustration && (
+              <DocMarkdown copy={copy}>{section.afterIllustration}</DocMarkdown>
+            )}
             {section.followUpIllustration === "kimiseek-import" && <DocKimiseekImport />}
             {section.followUpIllustration === "wechat-connection" && <DocWechatConnection />}
             {section.details && (
@@ -532,7 +608,7 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
                       <ChevronDown size={17} aria-hidden="true" />
                     </summary>
                     <div className="docs-disclosure-content">
-                      <DocMarkdown>{detail.body}</DocMarkdown>
+                      <DocMarkdown copy={copy}>{detail.body}</DocMarkdown>
                       {detail.illustration === "custom-channel" && <DocCustomChannelExample />}
                     </div>
                   </details>
@@ -542,12 +618,12 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
           </section>
         ))}
       </article>
-      <nav className="docs-pagination" aria-label="相邻文档">
+      <nav className="docs-pagination" aria-label={copy.adjacentAria}>
         {previous ? (
-          <Link to={docPath(previous.slug)}>
+          <Link to={docsHref(locale, previous.slug)}>
             <ArrowLeft size={16} />
             <span>
-              <small>上一篇</small>
+              <small>{copy.previous}</small>
               <strong>{previous.title}</strong>
             </span>
           </Link>
@@ -555,9 +631,9 @@ export function DocArticlePage({ slug: suppliedSlug }: { slug?: string }) {
           <span />
         )}
         {next && (
-          <Link to={docPath(next.slug)}>
+          <Link to={docsHref(locale, next.slug)}>
             <span>
-              <small>下一篇</small>
+              <small>{copy.next}</small>
               <strong>{next.title}</strong>
             </span>
             <ArrowRight size={16} />
