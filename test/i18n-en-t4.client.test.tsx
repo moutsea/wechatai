@@ -107,4 +107,14 @@ describe("prerendered English landing pages", () => {
     expect.soft(faq?.querySelector("p")?.textContent, "BYOK FAQ").toMatch(endpointRequirement);
     expect.soft(option?.textContent, "options comparison").toMatch(endpointRequirement);
   });
+
+  it("warns that rebinding keeps story context unless the user starts a new story", () => {
+    const html = renderPublicPage("/en/wechat-character-card");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const answer = [...doc.querySelectorAll("#faq details")]
+      .find(({ textContent }) => textContent?.startsWith("Can one character switch models?"))
+      ?.querySelector("p")?.textContent;
+    expect.soft(answer).toMatch(/same story.*existing context can be sent to the new model provider/);
+    expect.soft(answer).toMatch(/send \/wx new .*before sending your next chat message/);
+  });
 });

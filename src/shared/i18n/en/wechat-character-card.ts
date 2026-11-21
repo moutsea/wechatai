@@ -134,7 +134,7 @@ Note that the export contains text settings only: no PNG cover, and no shortcut 
     {
       question: "Can one character switch models?",
       answer:
-        "Yes, each character binds its own model. After rebinding, new replies come from the new model; old records are kept but context is not shared automatically. After switching, start a new story with /wx new.",
+        "Yes. Rebinding changes which model replies, not which story is active. If you continue the same story, its existing context can be sent to the new model provider. To keep earlier story context out of the new provider's requests, send /wx new in WeChat before sending your next chat message. This starts a separate story for the same character and keeps the old record.",
     },
     {
       question: "Is the PNG cover stored during import?",
