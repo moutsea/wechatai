@@ -27,6 +27,7 @@
 
 1. 五条韩语 URL 首次请求均真实返回 HTTP 200。逐页核对预渲染 HTML 与浏览器接管后的正文、页头页脚、首屏图文、FAQ 展开态、估算器、CTA、相关链接、`alt`、`aria-label` 和页面专属 SEO 文案。附韩语内容标记、汉字扫描（如 `rg -n '\p{Han}'`，扫描解码后的可读字段）和必要截图。手机宽度检查字体、换行与页面交互，字体无需额外下载。
 2. 对照相同基线的中文源页核对价格、币种、每日与购买额度、微信连接和插件限制、图片费用、模型 API 另付、续费及退款表述。三条落地页的模型能力、ClawBot 前置条件和使用限制与中文一致。页面专属 JSON-LD 与可见正文一致，保留已有实体标识与真实链接目标。
+   - `/ko/wechat-ai` 的 description、Open Graph 和 Twitter 描述须明确 Xiaowei 使用用户配置的模型，模型 API 费另付服务商。`#models` 不扩写中文原页未声明的 DeepSeek 能力。
 3. `/ko/docs` 及未登记的韩语路径（如 `/ko/wechat-claude`）直达真实 HTTP 404，无语言重定向、目标页正文或检索入口。用登记集合断言只有上述五条韩语路径，验证切换器和内链不生成未登记的韩语 URL。
 4. 五组页面的 zh/en/ko 各自 canonical 自指，hreflang 含本页并成组互指，韩语为 `ko-KR`，`x-default` 指向当前页面的中文原路径。既有其他语种若已经发布则保留其链接。对照同一基线，sitemap 的 URL 集合恰好增加本卡五条，无删除，原条目的 `lastmod` 保持一致。回归中文和英文对应页面的正文、价格及可访问性。
 5. 开始全量验证前检查 load、`MemAvailable` 及现有测试或构建进程。有其他重活或低于 2 GiB 时说明并等待。串行运行 `pnpm check`（已含构建和静态 SEO 校验）、仓库适用的 `pnpm test:openclaw` 和相关 `pnpm test:browser` 用例。对采用生产资产规则的本地预览执行 `node scripts/verify-seo.mjs <本地预览 origin>` 核验真实 HTTP 状态。提交前按贡献指南对准备提交的文件运行 `pnpm check:public`。PR 附命令结果、逐页及 sitemap 证据、base/head SHA 和改动文件清单。

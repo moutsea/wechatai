@@ -160,6 +160,27 @@ describe("published Korean pages", () => {
     expect(hanResidue(document)).toEqual([]);
   });
 
+  it("attributes the Xiaowei model and separate API fees correctly in all descriptions", () => {
+    const document = parse("/ko/wechat-ai");
+    for (const selector of [
+      'meta[name="description"]',
+      'meta[property="og:description"]',
+      'meta[name="twitter:description"]',
+    ]) {
+      const description = document.querySelector(selector)?.getAttribute("content");
+      expect(description, selector).toContain("Xiaowei는 사용자가 설정한 모델을 사용");
+      expect(description, selector).toContain("모델 API 요금은 서비스 제공자에게 별도로 지불");
+    }
+  });
+
+  it("limits the Korean DeepSeek recommendation to the capabilities on the Chinese landing page", () => {
+    const item = [...parse("/ko/wechat-ai").querySelectorAll("#models li")].find((node) =>
+      node.textContent?.startsWith("DeepSeek"),
+    );
+    expect(item?.textContent).toContain("중국어에 강해 일상 질의응답과 글쓰기");
+    expect(item?.textContent).not.toContain("한국어");
+  });
+
   it("renders the Korean DeepSeek landing page with its CTA and cost estimator link", () => {
     const document = parse("/ko/wechat-deepseek");
     expect(document.title).toBe(
