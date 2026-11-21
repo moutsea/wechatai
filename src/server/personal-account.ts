@@ -212,6 +212,7 @@ import {
   validateWechatHost,
   wxRequest,
   type WxCredentials,
+  type WechatOutbound,
   type WxMessage,
 } from "./wechat";
 import { AttachmentQueue, attachmentRetryError } from "./attachments";
@@ -648,11 +649,15 @@ export class PersonalAccount extends DurableObject<Env> {
     return this.sender.status();
   }
 
+  async forwardWechat(...args: Parameters<WechatOutbound>): Promise<Response | null> {
+    return this.sender.forward(...args);
+  }
+
   private async deliveryCredentials(encrypted: string): Promise<WxCredentials> {
     const credentials = JSON.parse(
       await decrypt(this.env, encrypted, `${this.ctx.id}:wechat`),
     ) as WxCredentials;
-    if (this.sender.enabled()) credentials.outbound = this.sender.send;
+    credentials.outbound = this.sender.outbound();
     return credentials;
   }
   async receiverStatus() {

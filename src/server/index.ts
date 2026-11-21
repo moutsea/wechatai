@@ -40,7 +40,7 @@ import {
   receiverPoolHeader,
   receiverPoolMatches,
 } from "./wechat-receiver";
-import { senderAccount, senderAuthorized } from "./wechat-sender";
+import { senderAccess } from "./wechat-sender";
 import { watchdogHeader, fallbackWatchdogs } from "./receiver-watchdog";
 import { watchdogRoutes } from "./receiver-watchdog-routes";
 import { connectorPoll } from "./connector-poll";
@@ -244,11 +244,13 @@ app.post("/api/internal/server-status", async (c) => {
 });
 app.get("/api/internal/wechat-sender/:action", async (c) => {
   c.header("Cache-Control", "no-store");
-  if (!senderAuthorized(c.env, c.req.header("authorization") || "")) return c.body(null, 401);
-  const id = senderAccount(c.env);
-  if (!id || c.req.header("X-Wechatai-Account") !== id) return c.body(null, 403);
-  const account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id));
+  const access = senderAccess(c.env, c.req.header("authorization") || "");
+  if (!access) return c.body(null, 401);
   const action = c.req.param("action");
+  if (action === "pool") return access.pool ? c.json({ ids: access.ids }) : c.body(null, 403);
+  const id = c.req.header("X-Wechatai-Account") || "";
+  if (!access.ids.includes(id)) return c.body(null, 403);
+  const account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id));
   if (action === "status") return c.json(await account.senderStatus());
   if (action !== "connect") return c.body(null, 404);
   if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.body(null, 426);

@@ -6,7 +6,7 @@ PartOf=wechatai-backend.service
 
 [Service]
 DynamicUser=yes
-EnvironmentFile=/etc/wechatai/wechat-sender.env
+EnvironmentFile=/etc/wechatai/wechat-sender%i.env
 ExecStart=/opt/wechatai/current/wechatai wechat-sender
 Restart=on-failure
 RestartSec=5

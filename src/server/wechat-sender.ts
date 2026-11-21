@@ -4,16 +4,83 @@ import type { WechatOutbound } from "./wechat";
 
 export const SENDER_TAG = "wechat-sender";
 
-// A single exact account is supported. Empty, wildcard and list values fail closed.
+type SenderPolicy = { account: string; token: string; enabled: boolean };
+const accountId = /^[a-f0-9]{64}$/;
+
 export function senderAccount(env: Env) {
   const id = secret(env, "WECHAT_SENDER_ACCOUNT", false);
-  return /^[a-f0-9]{64}$/.test(id) ? id : "";
+  return accountId.test(id) ? id : "";
 }
-export function senderAuthorized(env: Env, authorization: string) {
-  const expected = secret(env, "WECHAT_SENDER_SECRET", false);
-  if (expected.length < 32 || !authorization.startsWith("Bearer ")) return false;
+
+function senderPolicies(env: Env): SenderPolicy[] {
+  const primary = senderAccount(env);
+  const token = secret(env, "WECHAT_SENDER_SECRET", false);
+  const policies: SenderPolicy[] = [];
+  if (primary && token.length >= 32)
+    policies.push({
+      account: primary,
+      token,
+      enabled: secret(env, "WECHAT_SENDER_ENABLED", false) === "true",
+    });
+
+  const raw = secret(env, "WECHAT_SENDER_PILOTS", false);
+  if (!raw) return policies;
+  // Reject the additional group on ambiguity, preserving the original account.
+  let entries: unknown;
+  try {
+    entries = JSON.parse(raw);
+  } catch {
+    return policies;
+  }
+  if (!Array.isArray(entries)) return policies;
+  const accounts = new Set([primary]);
+  const tokens = new Set([token]);
+  for (const p of entries) {
+    if (
+      !p ||
+      typeof p.account !== "string" ||
+      !accountId.test(p.account) ||
+      typeof p.token !== "string" ||
+      p.token.length < 32 ||
+      p.token.trim() !== p.token ||
+      typeof p.enabled !== "boolean" ||
+      accounts.has(p.account) ||
+      tokens.has(p.token)
+    )
+      return policies;
+    accounts.add(p.account);
+    tokens.add(p.token);
+  }
+  return policies.concat(entries);
+}
+
+// Reserved names are outside the user ID format. The VPS discovers their real
+// object IDs over the authenticated control route and uses its existing protocol.
+const poolNames = ["system:wechat-egress:v1:0", "system:wechat-egress:v1:1"] as const;
+
+function poolIds(env: Env) {
+  return poolNames.map((name) => env.ACCOUNTS.idFromName(name).toString());
+}
+
+function poolToken(env: Env) {
+  const value = secret(env, "WECHAT_SENDER_POOL_SECRET", false);
+  return value.length >= 32 ? value : "";
+}
+
+function poolEnabled(env: Env) {
+  return !!poolToken(env) && secret(env, "WECHAT_SENDER_POOL_ENABLED", false) === "true";
+}
+
+export function senderAccess(env: Env, authorization: string) {
+  if (!authorization.startsWith("Bearer ")) return undefined;
   const digest = (s: string) => createHash("sha256").update(s).digest();
-  return timingSafeEqual(digest(expected), digest(authorization.slice(7)));
+  const received = digest(authorization.slice(7));
+  const matches = (value: string) => timingSafeEqual(digest(value), received);
+  const account = senderPolicies(env).find((p) => matches(p.token))?.account;
+  if (account) return { pool: false, ids: [account] };
+  const token = poolToken(env);
+  if (token && matches(token)) return { pool: true, ids: poolIds(env) };
+  return undefined;
 }
 
 type Result = { id: string; status?: number; body?: string; downloadParam?: string };
@@ -22,23 +89,54 @@ const unavailable = () => new AppError("wechat_sender_unavailable", "微信发�
 
 export class WechatSender {
   private pending = new Map<string, Pending>();
+  private uploadsInFlight = 0;
 
   constructor(
     private ctx: DurableObjectState,
     private env: Env,
   ) {}
 
-  selected() {
-    return senderAccount(this.env) === this.ctx.id.toString();
+  private policy() {
+    return senderPolicies(this.env).find((p) => p.account === this.ctx.id.toString());
   }
-  enabled() {
-    return this.selected() && secret(this.env, "WECHAT_SENDER_ENABLED", false) === "true";
+  private poolMember() {
+    return !!poolToken(this.env) && poolIds(this.env).includes(this.ctx.id.toString());
+  }
+
+  outbound(): WechatOutbound | undefined {
+    if (this.policy()?.enabled) return this.send;
+    if (!poolEnabled(this.env)) return undefined;
+    const index = parseInt(this.ctx.id.toString().slice(0, 8), 16) % poolNames.length;
+    return async (...args) => {
+      try {
+        const result = await this.env.ACCOUNTS.getByName(poolNames[index]).forwardWechat(...args);
+        if (result) return result;
+      } catch {
+        // The normal delivery job can retry with the same client ID.
+      }
+      throw unavailable();
+    };
+  }
+
+  async forward(...args: Parameters<WechatOutbound>): Promise<Response | null> {
+    if (!this.poolMember() || !poolEnabled(this.env)) return null;
+    // Media frames hold binary and base64 copies. Reserve capacity for text replies.
+    const isUpload = args[0] === "upload";
+    if (isUpload && this.uploadsInFlight >= 2) return null;
+    if (isUpload) this.uploadsInFlight++;
+    try {
+      return await this.send(...args);
+    } catch {
+      return null;
+    } finally {
+      if (isUpload) this.uploadsInFlight--;
+    }
   }
   private socket() {
     return this.ctx.getWebSockets(SENDER_TAG).find((ws) => ws.readyState === WebSocket.OPEN);
   }
   connect() {
-    if (!this.selected()) return new Response(null, { status: 403 });
+    if (!this.policy() && !this.poolMember()) return new Response(null, { status: 403 });
     for (const old of this.ctx.getWebSockets(SENDER_TAG)) {
       this.disconnected(old);
       old.close(1012, "replaced");
@@ -55,7 +153,11 @@ export class WechatSender {
         (r) => r.status === 204,
         () => false,
       ));
-    return { enabled: this.enabled(), connected, ready };
+    return {
+      enabled: this.poolMember() ? poolEnabled(this.env) : this.policy()?.enabled === true,
+      connected,
+      ready,
+    };
   }
   message(socket: WebSocket, message: string | ArrayBuffer) {
     if (typeof message !== "string" || message.length > 192 * 1024) {
