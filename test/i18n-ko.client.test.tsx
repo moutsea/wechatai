@@ -94,6 +94,7 @@ describe("published Korean pages", () => {
     expect(document.querySelector(".cost-estimator h2")?.textContent).toBe(
       "먼저 텍스트 사용량을 예측하세요",
     );
+    expect(document.querySelector(".cost-results strong")?.textContent).toBe("18 크레딧");
     expect(document.querySelector(".seopage-related h2")?.textContent).toBe("계속 알아보기");
     expect(document.querySelector('.pricing-breadcrumb a[href="/ko"]')?.textContent).toBe("홈");
 

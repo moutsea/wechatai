@@ -167,6 +167,7 @@ export const pricingCopy = {
       "제공자 출력 단가(위안 / 백만 토큰)",
     ],
     placeholder: "선택 입력, 위안 단가",
+    creditsUnit: "크레딧",
     platformLabel: "Wechatai 사용량 / 일",
     platformHint: (free: number, plus: number) =>
       `무료는 매일 ${free}, Plus는 매일 ${plus}입니다. 일일 크레딧은 이월되지 않습니다.`,
