@@ -1623,12 +1623,14 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
     "href",
     "/wechat-bot",
   );
+  const englishPath = "/en/wechat-bot";
   const destination = page.waitForResponse(`${origin}${englishPath}`);
-  await english.click();
+  await switcher.getByRole("menuitem", { name: "English", exact: true }).click();
   expect((await destination).status()).toBe(200);
   await expect(page).toHaveURL(`${origin}${englishPath}`);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(switcher.getByRole("link", { name: "日本語", exact: true })).toHaveAttribute(
+  await switcher.getByRole("button", { name: "Language: English", exact: true }).click();
+  await expect(switcher.getByRole("menuitem", { name: "日本語", exact: true })).toHaveAttribute(
     "href",
     "/ja/wechat-bot",
   );
