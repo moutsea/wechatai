@@ -26,3 +26,12 @@ go run ./cmd/wechatai version
 4. 回滚时先将 `WECHAT_SENDER_ENABLED` 设为 `false`，核验后可以停止发送器。连接中断时，发送器将错误交回现有队列，由队列沿用原消息的 client ID 决定重试。
 
 增加账号时，将附加名单保存到 Worker 密钥 `WECHAT_SENDER_PILOTS`，格式为 `[{"account":"<64 位账号对象 ID>","token":"<独立随机密钥，至少 32 字符>","enabled":false}]`。每个账号和密钥都必须唯一。把同一份 service 文件安装为 `/etc/systemd/system/wechatai-wechat-sender@.service`，然后执行 `systemctl daemon-reload`。实例 `wechatai-wechat-sender@2.service` 读取 `/etc/wechatai/wechat-sender2.env`，变量与主实例相同，使用该账号自己的 ID 和密钥。启用实例后用该密钥完成第 3 步的探测，再仅将对应条目的 `enabled` 改为 `true`。回滚单个账号时将该条目设为 `false` 并再次探测。
+
+### 全量微信发送出口
+
+全量共用两个 VPS 发送进程。现有独立灰度账号继续使用原进程。其他账号及新绑定账号按账户对象 ID 固定分配出口，队列沿用同一条消息的 client ID 重试。发送器只处理微信及微信 CDN 的出站请求。
+
+1. 配置独立的 Worker 密钥 `WECHAT_SENDER_POOL_SECRET`（至少 32 个字符），先保持 `WECHAT_SENDER_POOL_ENABLED=false`。
+2. 从可信环境带上该 Bearer 密钥请求 `GET /api/internal/wechat-sender/pool`。为返回的每个对象 ID 配置一个 VPS 发送实例，例如 `wechatai-wechat-sender@pool0` 和 `wechatai-wechat-sender@pool1`。每份 root 0600 环境文件分别填写返回的 ID、共用出口密钥及 HTTPS 站点。进程沿用灰度版 Go 程序。
+3. 逐个请求带对应账号头和密钥的 `/api/internal/wechat-sender/status`。两个实例都返回 `connected=true`、`ready=true` 后设置 `WECHAT_SENDER_POOL_ENABLED=true`，再次核对每个实例的三项状态及实际发送回执。
+4. 回退全量时将 `WECHAT_SENDER_POOL_ENABLED` 设为 `false`，待生产探测确认后再按需停止共用进程。独立灰度账号保留自己的设置。

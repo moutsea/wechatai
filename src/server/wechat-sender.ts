@@ -54,11 +54,33 @@ function senderPolicies(env: Env): SenderPolicy[] {
   return policies.concat(entries);
 }
 
-export function authenticatedSenderAccount(env: Env, authorization: string) {
+// Reserved names are outside the user ID format. The VPS discovers their real
+// object IDs over the authenticated control route and uses its existing protocol.
+const poolNames = ["system:wechat-egress:v1:0", "system:wechat-egress:v1:1"] as const;
+
+function poolIds(env: Env) {
+  return poolNames.map((name) => env.ACCOUNTS.idFromName(name).toString());
+}
+
+function poolToken(env: Env) {
+  const value = secret(env, "WECHAT_SENDER_POOL_SECRET", false);
+  return value.length >= 32 ? value : "";
+}
+
+function poolEnabled(env: Env) {
+  return !!poolToken(env) && secret(env, "WECHAT_SENDER_POOL_ENABLED", false) === "true";
+}
+
+export function senderAccess(env: Env, authorization: string) {
   if (!authorization.startsWith("Bearer ")) return undefined;
   const digest = (s: string) => createHash("sha256").update(s).digest();
   const received = digest(authorization.slice(7));
-  return senderPolicies(env).find((p) => timingSafeEqual(digest(p.token), received))?.account;
+  const matches = (value: string) => timingSafeEqual(digest(value), received);
+  const account = senderPolicies(env).find((p) => matches(p.token))?.account;
+  if (account) return { pool: false, ids: [account] };
+  const token = poolToken(env);
+  if (token && matches(token)) return { pool: true, ids: poolIds(env) };
+  return undefined;
 }
 
 type Result = { id: string; status?: number; body?: string; downloadParam?: string };
@@ -67,6 +89,7 @@ const unavailable = () => new AppError("wechat_sender_unavailable", "微信发�
 
 export class WechatSender {
   private pending = new Map<string, Pending>();
+  private uploadsInFlight = 0;
 
   constructor(
     private ctx: DurableObjectState,
@@ -76,14 +99,44 @@ export class WechatSender {
   private policy() {
     return senderPolicies(this.env).find((p) => p.account === this.ctx.id.toString());
   }
-  enabled() {
-    return this.policy()?.enabled === true;
+  private poolMember() {
+    return !!poolToken(this.env) && poolIds(this.env).includes(this.ctx.id.toString());
+  }
+
+  outbound(): WechatOutbound | undefined {
+    if (this.policy()?.enabled) return this.send;
+    if (!poolEnabled(this.env)) return undefined;
+    const index = parseInt(this.ctx.id.toString().slice(0, 8), 16) % poolNames.length;
+    return async (...args) => {
+      try {
+        const result = await this.env.ACCOUNTS.getByName(poolNames[index]).forwardWechat(...args);
+        if (result) return result;
+      } catch {
+        // The normal delivery job can retry with the same client ID.
+      }
+      throw unavailable();
+    };
+  }
+
+  async forward(...args: Parameters<WechatOutbound>): Promise<Response | null> {
+    if (!this.poolMember() || !poolEnabled(this.env)) return null;
+    // Media frames hold binary and base64 copies. Reserve capacity for text replies.
+    const isUpload = args[0] === "upload";
+    if (isUpload && this.uploadsInFlight >= 2) return null;
+    if (isUpload) this.uploadsInFlight++;
+    try {
+      return await this.send(...args);
+    } catch {
+      return null;
+    } finally {
+      if (isUpload) this.uploadsInFlight--;
+    }
   }
   private socket() {
     return this.ctx.getWebSockets(SENDER_TAG).find((ws) => ws.readyState === WebSocket.OPEN);
   }
   connect() {
-    if (!this.policy()) return new Response(null, { status: 403 });
+    if (!this.policy() && !this.poolMember()) return new Response(null, { status: 403 });
     for (const old of this.ctx.getWebSockets(SENDER_TAG)) {
       this.disconnected(old);
       old.close(1012, "replaced");
@@ -100,7 +153,11 @@ export class WechatSender {
         (r) => r.status === 204,
         () => false,
       ));
-    return { enabled: this.enabled(), connected, ready };
+    return {
+      enabled: this.poolMember() ? poolEnabled(this.env) : this.policy()?.enabled === true,
+      connected,
+      ready,
+    };
   }
   message(socket: WebSocket, message: string | ArrayBuffer) {
     if (typeof message !== "string" || message.length > 192 * 1024) {
