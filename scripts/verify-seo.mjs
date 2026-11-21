@@ -296,6 +296,17 @@ assert.match(
   "ClawBot: binding duration, not link expiry",
 );
 
+const englishClawbotModels = await read("en/wechat-clawbot-models.html");
+const featureTestStep = englishClawbotModels.match(
+  /<li><strong>Test other features as needed<\/strong>:[\s\S]*?<\/li>/,
+)?.[0] ?? "";
+assert.match(featureTestStep, /you need Plus/i, "ClawBot models: Plus required to test attachments");
+assert.match(
+  featureTestStep,
+  /text chat, skip the attachment test/i,
+  "ClawBot models: text-only users skip attachment testing",
+);
+
 // /pricing must ship plan offers and a machine-readable price check date in the
 // static HTML, not only after client JavaScript runs.
 const pricingHtml = await read("pricing.html");
