@@ -182,7 +182,12 @@ import {
   type ImageGenerationPlugin,
   type UserPlugin,
 } from "../shared/image-generation";
-import { initWechatInbox, insertWechatMessage, wechatReceiptId } from "./wechat-inbox";
+import {
+  initWechatInbox,
+  insertWechatMessage,
+  recordWechatTextReceipt,
+  wechatReceiptId,
+} from "./wechat-inbox";
 import { uploadWechatImage, sendUploadedWechatImage, type UploadedWechatImage } from "./wechat";
 import {
   webResearchInputSchema,
@@ -201,6 +206,8 @@ import {
   orderedWechatMessages,
   sendUploadedWechatFile,
   sendText,
+  WechatRequestError,
+  type WechatTextReceipt,
   validateWechatHost,
   wxRequest,
   type WxCredentials,
@@ -5775,6 +5782,7 @@ export class PersonalAccount extends DurableObject<Env> {
               ? ((JSON.parse(completedRun.response) as { images?: string[] }).images ?? [])
               : [];
             let parts: string[] = [];
+            let textReceipt: WechatTextReceipt | undefined;
             const token = this.connection(connectionId).contextToken || message.context_token;
             const sendStartedAt = Date.now();
             // A deletion or disconnect can cancel this row while network I/O is
@@ -5846,7 +5854,7 @@ export class PersonalAccount extends DurableObject<Env> {
                   link.generation,
                 );
               else
-                await sendText(
+                textReceipt = await sendText(
                   credentials,
                   token,
                   `${pending.id}:${pending.part}`,
@@ -5855,7 +5863,11 @@ export class PersonalAccount extends DurableObject<Env> {
               if (!replyIsPending()) return;
               console.info(
                 JSON.stringify({
-                  event: "wechat.reply_sent",
+                  event:
+                    textReceipt?.outcome === "unconfirmed"
+                      ? "wechat.reply_unconfirmed"
+                      : "wechat.reply_sent",
+                  ...textReceipt,
                   durationMs: Date.now() - sendStartedAt,
                   sinceReceivedMs: Math.max(0, Date.now() - pending.createdAt),
                   part: pending.part,
@@ -5866,6 +5878,18 @@ export class PersonalAccount extends DurableObject<Env> {
               if (!replyIsPending()) return;
               let waitingContext = false;
               this.ctx.storage.transactionSync(() => {
+                if (
+                  error instanceof WechatRequestError &&
+                  !images.length &&
+                  pending.part < parts.length
+                )
+                  recordWechatTextReceipt(this.sql, pending, {
+                    outcome: "error",
+                    httpStatus: error.upstreamStatus ?? null,
+                    ret: error.ret ?? null,
+                    errcode: error.errcode ?? null,
+                    hasMessageId: null,
+                  });
                 this.sql.exec("UPDATE inbox SET attempts = attempts + 1 WHERE id = ?", pending.id);
                 if (
                   pending.attempts >= 4 ||
@@ -5929,6 +5953,7 @@ export class PersonalAccount extends DurableObject<Env> {
                   : null;
               this.ctx.storage.transactionSync(() => {
                 if (!replyIsPending()) return;
+                recordWechatTextReceipt(this.sql, pending, textReceipt);
                 if (cloudTaskId) {
                   if (!this.cloudDelivery.acknowledge(cloudTaskId, pending.part)) return;
                 } else
@@ -5955,11 +5980,15 @@ export class PersonalAccount extends DurableObject<Env> {
                     retryAt: 0,
                   } satisfies ReferralUse);
               });
-            } else
-              this.sql.exec(
-                "UPDATE inbox SET part = part + 1, attempts = 0 WHERE id = ?",
-                pending.id,
-              );
+            } else {
+              this.ctx.storage.transactionSync(() => {
+                recordWechatTextReceipt(this.sql, pending, textReceipt);
+                this.sql.exec(
+                  "UPDATE inbox SET part = part + 1, attempts = 0 WHERE id = ?",
+                  pending.id,
+                );
+              });
+            }
           }
         } else {
           // An inbound hibernating socket delegates receive-only polling to the
