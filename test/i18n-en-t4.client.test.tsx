@@ -129,4 +129,17 @@ describe("prerendered English landing pages", () => {
       expect.soft(copy?.textContent).toMatch(/PNG (?:cover|image).*not uploaded or stored/i);
     }
   });
+
+  it("separates local inference, cloud API charges, and Wechatai relay credits", () => {
+    const html = renderPublicPage("/en/wechat-agent");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const answer = [...doc.querySelectorAll("#faq details")]
+      .find(({ textContent }) => textContent?.startsWith("Does an agent's internal model usage"))
+      ?.querySelector("p");
+    for (const copy of [doc.querySelector("#cost"), answer]) {
+      expect.soft(copy?.textContent).toMatch(/local inference.*no model API fee.*device.*maintenance/i);
+      expect.soft(copy?.textContent).toMatch(/cloud API.*provider.*rates/i);
+      expect.soft(copy?.textContent).toMatch(/Wechatai credits.*text sent into the plugin.*final reply/i);
+    }
+  });
 });

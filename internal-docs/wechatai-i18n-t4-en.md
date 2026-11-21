@@ -31,3 +31,4 @@ T4 新增以下 14 条：
 7. `/en/bring-your-own-api-key` 的 FAQ 和 `/en/wechat-ai-options` 的 BYOK 对比段均要求兼容协议、公网 HTTPS 域名和默认 443 端口；仅能从公网访问不够。
 8. `/en/wechat-character-card` 的换模型 FAQ 明确：同一角色换绑后续聊可将旧剧情上下文发送给新服务商；要隔离旧剧情，下一条聊天消息前先在微信发 `/wx new`，保留旧记录。
 9. `/en/wechat-character-card` 的导入正文和 FAQ 明确：点击保存时上传并存储原卡 JSON（含创作者备注和扩展）；PNG 封面不上传、不保存。
+10. `/en/wechat-agent` 的费用正文和 FAQ 分开说明：自托管 OpenClaw 本地推理无模型 API 费，但有设备和维护成本；使用云 API 才按服务商资费计算；微伴单独按中转边界计 credits。

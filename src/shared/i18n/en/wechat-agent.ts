@@ -104,10 +104,10 @@ Free can bind 1 WeChat link and Plus up to 10, which is enough to keep a work ac
       body: `This is the most misunderstood part, so state it plainly:
 
 - **Wechatai credits** cover only the text sent into the plugin and the final reply; proactive pushes are charged on output only. No matter how many times the agent calls a model internally, Wechatai does not meter it again.
-- **Model fees inside the agent** are billed by your own API provider by usage. The more complex the agent's work, the higher this part: one task may call a model dozens of times.
+- **Model and hosting costs.** With self-hosted OpenClaw, local inference incurs no model API fee, but you still pay for the device or hosting, electricity, and maintenance. If the agent uses a cloud API, model calls are billed separately at the provider's rates. One task can make dozens of model calls.
 - **The input and output limits in plugin settings** control the text entering and returning on the WeChat side, not the model usage inside the agent.
 
-So "agents are expensive" usually means expensive on the model side, not the relay side. To control cost, improve the agent's task design rather than worrying about credits.`,
+When comparing costs, count the device and upkeep, any cloud API fees, and Wechatai relay credits separately. These are different costs, even when they all arise from the same task.`,
     },
   ],
   faq: [
@@ -134,7 +134,7 @@ So "agents are expensive" usually means expensive on the model side, not the rel
     {
       question: "Does an agent's internal model usage deduct credits again?",
       answer:
-        "No. Wechatai charges only the text sent into the plugin and the final reply; proactive pushes are charged on output only. The provider bills the agent's internal model calls separately.",
+        "No. Wechatai credits cover only the text sent into the plugin and the final reply; proactive pushes are charged on output only. With self-hosted OpenClaw, local inference incurs no model API fee, but device or hosting and maintenance costs still apply. If the agent uses a cloud API, model calls are billed separately at the provider's rates.",
     },
   ],
   related: [
