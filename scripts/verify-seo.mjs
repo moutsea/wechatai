@@ -289,6 +289,65 @@ for (const [file, , marker] of landingPages) {
     assert(target.includes(`id="${match[2]}"`), `${file}: cross-page anchor ${match[0]}`);
   }
 }
+const englishClawbot = await read("en/wechat-clawbot.html");
+assert.match(
+  englishClawbot.match(/<ul class="seopage-highlights">.*?<\/ul>/s)?.[0] ?? "",
+  /Binding takes about 30 seconds/,
+  "ClawBot: binding duration, not link expiry",
+);
+
+const englishClawbotModels = await read("en/wechat-clawbot-models.html");
+const featureTestStep = englishClawbotModels.match(
+  /<li><strong>Test other features as needed<\/strong>:[\s\S]*?<\/li>/,
+)?.[0] ?? "";
+assert.match(featureTestStep, /you need Plus/i, "ClawBot models: Plus required to test attachments");
+assert.match(
+  featureTestStep,
+  /text chat, skip the attachment test/i,
+  "ClawBot models: text-only users skip attachment testing",
+);
+
+const englishWechatAi = await read("en/wechat-ai.html");
+const aiDescription = englishWechatAi.match(/<meta name="description" content="([^"]+)"/)?.[1];
+assert(aiDescription, "WeChat AI: English meta description");
+assert.match(aiDescription, /Xiaowei uses your own model/, "WeChat AI: bring-your-own model");
+assert.match(aiDescription, /consumes credits/, "WeChat AI: Xiaowei credit usage");
+assert.match(aiDescription, /limits task runs/, "WeChat AI: Xiaowei execution limit");
+assert(
+  englishWechatAi.includes(`<meta property="og:description" content="${aiDescription}"`),
+  "WeChat AI: OG description matches meta description",
+);
+const aiGraph = JSON.parse(
+  englishWechatAi.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+)["@graph"];
+assert.equal(
+  aiGraph.find((item) => item["@type"] === "WebPage")?.description,
+  aiDescription,
+  "WeChat AI: JSON-LD description matches meta description",
+);
+
+const englishQwen = await read("en/wechat-qwen.html");
+const qwenAnswer = englishQwen.match(/<section[^>]+id="faq"[^>]*>.*?<details>.*?<p>(.*?)<\/p>/s)?.[1];
+assert(qwenAnswer, "Qwen: first visible FAQ answer");
+assert.match(
+  qwenAnswer,
+  /preset fills in the Beijing endpoint\. Enter your own API key and save the channel, then sync available models or add a model manually/,
+  "Qwen: preset supplies the endpoint; enter a key, save, and sync or add a model",
+);
+assert.match(
+  qwenAnswer,
+  /another region or a dedicated endpoint, choose Custom first and enter the endpoint from the provider documentation/,
+  "Qwen: other endpoints require Custom mode",
+);
+const qwenGraph = JSON.parse(
+  englishQwen.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+)["@graph"];
+assert.equal(
+  qwenGraph.find((item) => item["@type"] === "FAQPage")?.mainEntity[0]?.acceptedAnswer.text,
+  qwenAnswer,
+  "Qwen: first FAQ JSON-LD answer matches the visible answer",
+);
+
 // /pricing must ship plan offers and a machine-readable price check date in the
 // static HTML, not only after client JavaScript runs.
 const pricingHtml = await read("pricing.html");
@@ -623,6 +682,17 @@ for (const group of localePageGroups) {
       [...switchTargets, ...switchTargets], // Desktop header and mobile menu.
       `${path}: switcher links exactly the other published languages`,
     );
+    if (path.startsWith("/en/wechat-")) {
+      const graph = JSON.parse(
+        html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+      )["@graph"];
+      const { publisher } = graph.find(
+        (item) => item["@type"] === "WebPage" || item["@type"] === "Article",
+      );
+      assert.equal(publisher["@id"], "https://wechatai.app/#organization", `${path}: publisher ID`);
+      assert.match(publisher.description, /WeChat ClawBot/, `${path}: publisher description`);
+      assert.doesNotMatch(publisher.description, /\p{Script=Han}/u, `${path}: English publisher`);
+    }
     if (lastmod) {
       assert(
         sitemap.includes(`<loc>${canonical}</loc><lastmod>${lastmod}</lastmod>`),

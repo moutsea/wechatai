@@ -32,7 +32,7 @@ export function renderPublicPage(path: string) {
   const infoKind = (Object.keys(INFO_PAGES) as Array<keyof typeof INFO_PAGES>).find(
     (kind) => INFO_PAGES[kind].path === pagePath,
   );
-  const landing = findSeoPage(pagePath);
+  const landing = localized?.translation.content ?? findSeoPage(pagePath);
   return renderToString(
     <StaticRouter location={pagePath}>
       <LocaleProvider locale={locale} path={pagePath}>

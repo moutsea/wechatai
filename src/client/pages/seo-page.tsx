@@ -5,19 +5,29 @@ import remarkGfm from "remark-gfm";
 import { ArrowRight, Check, ChevronDown, Copy, Sprout } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { SiteHeader } from "../site-header";
+import { localizedHref, useLocale } from "../locale";
 import { PricingPage } from "./pricing-page";
 import { SeoRelated } from "./seo-related";
+import { seoPageLabels, type SeoPageLabels } from "./seo-page-labels";
 import { SiteFooter } from "../site-footer";
 
 /** Markdown with router-aware links, the same treatment the documentation uses. */
-function SeoMarkdown({ children }: { children: string }) {
+function SeoMarkdown({
+  children,
+  labels,
+  localizeHref,
+}: {
+  children: string;
+  labels: SeoPageLabels;
+  localizeHref: (href: string) => string;
+}) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
         a: ({ href, children: label }) => {
           if (href?.startsWith("#")) return <a href={href}>{label}</a>;
-          if (href?.startsWith("/")) return <Link to={href}>{label}</Link>;
+          if (href?.startsWith("/")) return <Link to={localizeHref(href)}>{label}</Link>;
           return (
             <a href={href} rel="noreferrer noopener" target="_blank">
               {label}
@@ -25,7 +35,12 @@ function SeoMarkdown({ children }: { children: string }) {
           );
         },
         table: ({ children: table }) => (
-          <div className="seopage-table-scroll" tabIndex={0} role="region" aria-label="对照表">
+          <div
+            className="seopage-table-scroll"
+            tabIndex={0}
+            role="region"
+            aria-label={labels.comparisonTable}
+          >
             <table>{table}</table>
           </div>
         ),
@@ -52,7 +67,13 @@ function SeoSteps({ steps }: { steps: NonNullable<SeoPage["steps"]> }) {
   );
 }
 
-function SeoCommands({ items }: { items: NonNullable<SeoPage["commands"]> }) {
+function SeoCommands({
+  items,
+  labels,
+}: {
+  items: NonNullable<SeoPage["commands"]>;
+  labels: SeoPageLabels;
+}) {
   const [status, setStatus] = useState<{ command: string; copied: boolean } | null>(null);
   async function copy(command: string) {
     try {
@@ -63,7 +84,7 @@ function SeoCommands({ items }: { items: NonNullable<SeoPage["commands"]> }) {
     }
   }
   return (
-    <div className="seopage-commands" role="group" aria-label="常用微信命令">
+    <div className="seopage-commands" role="group" aria-label={labels.commands}>
       {items.map(({ label, command }) => {
         const copied = status?.command === command && status.copied;
         const failed = status?.command === command && !status.copied;
@@ -75,11 +96,13 @@ function SeoCommands({ items }: { items: NonNullable<SeoPage["commands"]> }) {
             </span>
             <button
               type="button"
-              aria-label={`复制命令 ${command}`}
+              aria-label={labels.copyCommand(command)}
               onClick={() => void copy(command)}
             >
               {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
-              <span role="status">{copied ? "已复制" : failed ? "复制失败" : "复制"}</span>
+              <span role="status">
+                {copied ? labels.copied : failed ? labels.copyFailed : labels.copy}
+              </span>
             </button>
           </div>
         );
@@ -88,7 +111,13 @@ function SeoCommands({ items }: { items: NonNullable<SeoPage["commands"]> }) {
   );
 }
 
-function SeoCompareTable({ comparison }: { comparison: NonNullable<SeoPage["comparison"]> }) {
+function SeoCompareTable({
+  comparison,
+  labels,
+}: {
+  comparison: NonNullable<SeoPage["comparison"]>;
+  labels: SeoPageLabels;
+}) {
   return (
     <section className="seopage-compare" aria-labelledby="seopage-compare-title">
       <h2 id="seopage-compare-title">{comparison.title}</h2>
@@ -115,7 +144,7 @@ function SeoCompareTable({ comparison }: { comparison: NonNullable<SeoPage["comp
                       {value ?? (
                         <span
                           className="seopage-compare-missing"
-                          title="没有找到可公开核实的来源，不代表对方不支持"
+                          title={labels.compareMissing}
                         >
                           —
                         </span>
@@ -133,10 +162,10 @@ function SeoCompareTable({ comparison }: { comparison: NonNullable<SeoPage["comp
   );
 }
 
-function SeoFaq({ items }: { items: SeoPage["faq"] }) {
+function SeoFaq({ items, labels }: { items: SeoPage["faq"]; labels: SeoPageLabels }) {
   return (
     <section className="seopage-faq" id="faq" aria-labelledby="seopage-faq-title">
-      <h2 id="seopage-faq-title">常见问题</h2>
+      <h2 id="seopage-faq-title">{labels.faq}</h2>
       {items.map((item) => (
         <details key={item.question}>
           <summary>
@@ -151,16 +180,23 @@ function SeoFaq({ items }: { items: SeoPage["faq"] }) {
 }
 
 export function SeoPageView({ page, children }: { page: SeoPage; children?: ReactNode }) {
+  const { locale } = useLocale();
+  const labels = seoPageLabels(locale);
+  const localizeHref = (href: string) => localizedHref(locale, href);
   if (page.path === "/pricing") return <PricingPage page={page}>{children}</PricingPage>;
+  const related = page.related.map((link) => ({
+    ...link,
+    href: localizeHref(link.href),
+  }));
   return (
     <div className="seopage">
       <a className="seopage-skip" href="#seopage-content">
-        跳到正文
+        {labels.skipToContent}
       </a>
       <SiteHeader active={page.path === "/pricing" ? "/pricing" : undefined} />
       <main id="seopage-content">
-        <nav className="seopage-breadcrumb" aria-label="面包屑">
-          <Link to="/">首页</Link>
+        <nav className="seopage-breadcrumb" aria-label={labels.breadcrumb}>
+          <Link to={localizeHref("/")}>{labels.home}</Link>
           <span aria-hidden="true">/</span>
           <span>{page.title}</span>
         </nav>
@@ -172,23 +208,23 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
           <h1>{page.h1}</h1>
           <p className="seopage-lede">{page.lede}</p>
           <div className="seopage-actions">
-            <Link className="button" to={page.ctaHref ?? "/register"}>
-              {page.ctaLabel ?? "免费开始"}
+            <Link className="button" to={localizeHref(page.ctaHref ?? "/register")}>
+              {page.ctaLabel ?? labels.startFree}
               <ArrowRight size={18} aria-hidden="true" />
             </Link>
             <Link
               className="button secondary"
-              to={
+              to={localizeHref(
                 page.secondaryCta?.href ??
-                (page.ctaHref ? "/pricing#estimate" : "/docs/getting-started")
-              }
+                  (page.ctaHref ? "/pricing#estimate" : "/docs/getting-started"),
+              )}
             >
-              {page.secondaryCta?.label ?? (page.ctaHref ? "先算使用费用" : "查看使用指南")}
+              {page.secondaryCta?.label ?? (page.ctaHref ? labels.estimateFirst : labels.setupGuide)}
             </Link>
           </div>
           <p className="hero-prerequisite">
-            <Link to="/wechat-clawbot">注册前检查接入条件</Link> ·{" "}
-            <Link to="/pricing#estimate">估算平台与模型费用</Link>
+            <Link to={localizeHref("/wechat-clawbot")}>{labels.checkRequirements}</Link> ·{" "}
+            <Link to={localizeHref("/pricing#estimate")}>{labels.estimateCosts}</Link>
           </p>
           <ul className="seopage-highlights">
             {page.highlights.map((item) => (
@@ -200,7 +236,7 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
           </ul>
           <p className="seopage-answer">{page.answer}</p>
         </header>
-        {page.comparison && <SeoCompareTable comparison={page.comparison} />}
+        {page.comparison && <SeoCompareTable comparison={page.comparison} labels={labels} />}
         {page.steps &&
           (page.stepsSummary ? (
             <details className="seopage-details seopage-steps-details" open>
@@ -213,52 +249,57 @@ export function SeoPageView({ page, children }: { page: SeoPage; children?: Reac
           ) : (
             <SeoSteps steps={page.steps} />
           ))}
-        {page.commands && <SeoCommands items={page.commands} />}
+        {page.commands && <SeoCommands items={page.commands} labels={labels} />}
         <article className="seopage-prose">
           {page.sections.length > 2 && (
             <details className="seopage-toc">
               <summary>
-                本页内容
+                {labels.contents}
                 <ChevronDown size={14} aria-hidden="true" />
               </summary>
-              <nav aria-label="本页目录">
+              <nav aria-label={labels.tableOfContents}>
                 {page.sections.map((section) => (
                   <a key={section.id} href={`#${section.id}`}>
                     {section.title}
                   </a>
                 ))}
-                <a href="#faq">常见问题</a>
+                <a href="#faq">{labels.faq}</a>
               </nav>
             </details>
           )}
           {page.sections.map((section) => (
             <section key={section.id} id={section.id}>
               <h2>{section.title}</h2>
-              <SeoMarkdown>{section.body}</SeoMarkdown>
+              <SeoMarkdown labels={labels} localizeHref={localizeHref}>
+                {section.body}
+              </SeoMarkdown>
               {section.details && (
                 <details className="seopage-details">
                   <summary>
                     {section.details.summary}
                     <ChevronDown size={16} aria-hidden="true" />
                   </summary>
-                  <SeoMarkdown>{section.details.body}</SeoMarkdown>
+                  <SeoMarkdown labels={labels} localizeHref={localizeHref}>
+                    {section.details.body}
+                  </SeoMarkdown>
                 </details>
               )}
             </section>
           ))}
-          <SeoFaq items={page.faq} />
-          <SeoRelated links={page.related} />
+          <SeoFaq items={page.faq} labels={labels} />
+          <SeoRelated links={related} />
           <section className="seopage-cta" aria-labelledby="seopage-cta-title">
             <Sprout size={28} aria-hidden="true" />
-            <h2 id="seopage-cta-title">确认接入条件，开始配置你的微信 AI</h2>
-            <p>先检查微信 ClawBot 入口，再按模型、Agent 或通知的路径配置。模型调用费用另计。</p>
+            <h2 id="seopage-cta-title">{labels.ctaTitle}</h2>
+            <p>{labels.ctaBody}</p>
             <Link className="button" to="/register">
-              免费开始
+              {labels.ctaAction}
               <ArrowRight size={18} aria-hidden="true" />
             </Link>
           </section>
           <p className="seopage-updated">
-            本页更新于 <time dateTime={page.updatedAt}>{page.updatedAt.replaceAll("-", ".")}</time>
+            {labels.updated}{" "}
+            <time dateTime={page.updatedAt}>{page.updatedAt.replaceAll("-", ".")}</time>
           </p>
         </article>
       </main>
