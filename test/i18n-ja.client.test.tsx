@@ -183,6 +183,65 @@ describe("published Japanese pages", () => {
     );
   });
 
+  it.each([
+    ["/ja/wechat-ai", "WeChat AI：自分の大規模モデルを WeChat の会話へ"],
+    ["/ja/wechat-bot", "WeChat ボットの作り方：まず経路を選ぶ"],
+    ["/ja/wechat-deepseek", "WeChat で DeepSeek を使いたい方は、ここから"],
+  ])("renders the Japanese landing page %s from the registered content", (path, h1) => {
+    const document = parse(path);
+    const seo = getPageSeo(path);
+    expect(seo.indexable).toBe(true);
+    expect(seo.canonical).toBe(`${SITE_URL}${path}`);
+    expect(seo.htmlLang).toBe("ja-JP");
+    expect(document.querySelector("h1")?.textContent).toBe(h1);
+    expect(document.querySelector(".seopage-skip")?.textContent).toBe("本文へスキップ");
+    expect(document.querySelector(".seopage-breadcrumb a[href]")?.textContent).toBe("ホーム");
+    expect(document.querySelector(".seopage-breadcrumb a[href]")?.getAttribute("href")).toBe("/ja");
+    expect(document.querySelector(".seopage-faq h2")?.textContent).toBe("よくある質問");
+    expect(document.querySelector(".seopage-cta-title, #seopage-cta-title")?.textContent).toBe(
+      "接続条件を確認して、WeChat AI の設定を始める",
+    );
+    expect(document.body.textContent).not.toMatch(CHINESE_RESIDUE);
+
+    // Chinese guides stay on their unprefixed paths; only the registered pages get a prefix.
+    const guide = document.querySelector('.seopage-prose a[href="/docs/deepseek-in-wechat"]');
+    if (path === "/ja/wechat-deepseek") expect(guide).not.toBeNull();
+    expect(document.querySelector('[href="/ja/docs"]')).toBeNull();
+
+    const alternates = seo.alternates ?? [];
+    expect(alternates.at(-1)).toEqual({
+      hreflang: "x-default",
+      href: `${SITE_URL}${path.replace("/ja", "")}`,
+    });
+    expect(alternates).toContainEqual({ hreflang: "ja-JP", href: `${SITE_URL}${path}` });
+    const published = new Set(publishedLocalizedPaths());
+    for (const alternate of alternates.slice(0, -1)) {
+      const alternatePath = alternate.href.slice(SITE_URL.length) || "/";
+      const localePath = alternatePath.split("/")[1];
+      if (localePath === "en" || localePath === "ja") {
+        expect(published.has(alternatePath), alternatePath).toBe(true);
+      }
+    }
+  });
+
+  it("limits the landing-page switcher to published languages", () => {
+    const ai = parse("/ja/wechat-ai");
+    expect(ai.querySelector(".site-language a[hreflang='en']")?.textContent).toBe("English");
+    expect(ai.querySelector(".site-language a[hreflang='en']")?.getAttribute("href")).toBe(
+      "/en/wechat-ai",
+    );
+    expect(ai.querySelector(".site-language a[hreflang='zh-CN']")?.getAttribute("href")).toBe(
+      "/wechat-ai",
+    );
+
+    // T4 delivers /en/wechat-bot; until it lands the group holds Chinese and Japanese only.
+    const bot = parse("/ja/wechat-bot");
+    expect(bot.querySelector(".site-language a[hreflang='en']")).toBeNull();
+    expect(bot.querySelector(".site-language a[hreflang='zh-CN']")?.getAttribute("href")).toBe(
+      "/wechat-bot",
+    );
+  });
+
   it("keeps the Chinese page group unchanged and adds only the registered Japanese URLs", () => {
     const chineseHome = parse("/");
     expect(chineseHome.querySelector("h1")?.textContent).toContain("把你的 AI");
@@ -196,13 +255,19 @@ describe("published Japanese pages", () => {
     expect(pricing.querySelector("h1")?.textContent).toBe("免费开始，按需升级 Plus");
 
     const japanese = publishedLocalizedPaths().filter((path) => path.startsWith("/ja"));
-    expect(japanese.sort()).toEqual(["/ja", "/ja/pricing"]);
+    expect(japanese.sort()).toEqual([
+      "/ja",
+      "/ja/pricing",
+      "/ja/wechat-ai",
+      "/ja/wechat-bot",
+      "/ja/wechat-deepseek",
+    ]);
     const sitemap = renderSitemap();
     for (const path of japanese) expect(sitemap).toContain(`<loc>${SITE_URL}${path}</loc>`);
   });
 
   it("publishes no other Japanese path", () => {
-    for (const path of ["/ja/docs", "/ja/wechat-claude", "/ja/terms"]) {
+    for (const path of ["/ja/docs", "/ja/wechat-claude", "/ja/terms", "/ja/wechat-glm"]) {
       expect(getPageSeo(path).indexable).toBe(false);
       expect(getPageSeo(path).canonical).toBeUndefined();
     }

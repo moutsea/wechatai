@@ -143,7 +143,9 @@ function organizationNode(locale: Locale = DEFAULT_LOCALE) {
     description:
       locale === "en"
         ? "An independently maintained service that connects AI models and agents to one-to-one WeChat ClawBot chats. It is not officially affiliated with Tencent or WeChat."
-        : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
+        : locale === "ja"
+          ? "AI モデルとエージェントを WeChat ClawBot の 1 対 1 チャットにつなぐ独立運営のサービスです。Tencent および WeChat とは公式な関係はありません。"
+          : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
     // 站内唯一的方形品牌资源是 favicon.svg（64×64 矢量）；og-image.png 是 1200×630 横幅，不能当 logo。
     logo: {
       "@type": "ImageObject",

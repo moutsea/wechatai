@@ -1448,6 +1448,38 @@ test("serves the Japanese homepage and pricing page without Chinese page copy", 
   );
 });
 
+test("serves the Japanese landing pages with localized chrome and Chinese guide links", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto(`${origin}/ja/wechat-deepseek`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja-JP");
+  await expect(page.locator("h1")).toHaveText("WeChat で DeepSeek を使いたい方は、ここから");
+  await expect(page.locator(".seopage-skip")).toHaveText("本文へスキップ");
+  await expect(page.locator('.seopage-breadcrumb a[href="/ja"]')).toHaveText("ホーム");
+  await expect(page.locator(".seopage-faq h2")).toHaveText("よくある質問");
+  await expect(page.locator(".seopage-related a[href='/wechat-claude']")).toContainText(
+    "WeChat で Claude を使う",
+  );
+  expect(withoutSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
+    CHINESE_RESIDUE,
+  );
+
+  // The Chinese tutorial keeps its unprefixed URL and opens in Chinese.
+  await page.locator('.seopage-hero a[href="/docs/deepseek-in-wechat"]').first().click();
+  await expect(page).toHaveURL(`${origin}/docs/deepseek-in-wechat`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+
+  await page.goto(`${origin}/ja/wechat-bot`);
+  await expect(page.locator("h1")).toHaveText("WeChat ボットの作り方：まず経路を選ぶ");
+  const switcher = page.locator(".site-language");
+  await expect(switcher.getByRole("link", { name: "English", exact: true })).toHaveCount(0);
+  await expect(switcher.getByRole("link", { name: "中文", exact: true })).toHaveAttribute(
+    "href",
+    "/wechat-bot",
+  );
+});
+
 test("keeps the Chinese guide fallback working from the Japanese homepage", async ({ page }) => {
   await page.goto(`${origin}/ja`);
   await page.locator(".steps-heading").getByRole("link", { name: "はじめかたガイドを読む" }).click();
