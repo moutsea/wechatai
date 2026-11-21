@@ -28,3 +28,4 @@ T4 新增以下 14 条：
 4. 开工前查负载、全量测试或构建进程及 `MemAvailable`；有重活或低于 2 GiB 时等待并说明。串行运行 `pnpm check`（含构建及静态 SEO 校验）、相关 `pnpm test:browser` 用例；用 `node scripts/verify-seo.mjs <本地预览 origin>` 核验 HTTP。PR 附逐页证据、sitemap diff、基线及 HEAD、检查输出和改动文件清单。
 5. 本文仅放仓库根 `internal-docs/`，不导入、不登记、不复制到任何公开树。构建后查公开资产和文档 bundle 无文件名或独有标题；用本地生产规则预览确认本文直链不可访问且 `/api/docs` 不返回本文。
 6. `/en/wechat-ai-image` 正文和 FAQ 区分套餐：Free 在微信保存生成图；只有 Plus 可在生成后 30 天内从网页会话记录查看。FAQ 的 JSON-LD 与可见答案一致。
+7. `/en/bring-your-own-api-key` 的 FAQ 和 `/en/wechat-ai-options` 的 BYOK 对比段均要求兼容协议、公网 HTTPS 域名和默认 443 端口；仅能从公网访问不够。

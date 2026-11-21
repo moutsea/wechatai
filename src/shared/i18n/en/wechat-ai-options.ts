@@ -82,7 +82,7 @@ CowAgent's WeChat setup is documented in its [project docs](https://docs.cowagen
       title: "BYOK relay: splitting the two bills",
       body: `This approach only relays: you enter your own API key, the platform forwards WeChat messages to the model, and the answer comes back to WeChat.
 
-- **Model freedom.** Any endpoint compatible with OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages works, so changing models does not mean changing tools.
+- **Model freedom.** You can switch models without changing tools if the endpoint is compatible with OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages. The endpoint must use a public HTTPS domain on the default port (443).
 - **Transparent fees.** Model fees go to the model provider; Wechatai charges text by weighted tokens, adds 5 credits per generated image plus the description text, and keeps the two bills separate.
 - **No operations for ordinary model chat.** Scan, bind, and use it. When connecting OpenClaw or Hermes, you still run and maintain the agent yourself.
 - **The trade-off.** You sign up with the provider and manage the key, and messages pass through the relay service.

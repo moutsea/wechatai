@@ -87,4 +87,24 @@ describe("prerendered English landing pages", () => {
       "Connect a hosted Muse assistant to WeChat: setup, switching, and no-reply checks",
     );
   });
+
+  it("states the public HTTPS domain and default port in both BYOK explanations", () => {
+    const byokDoc = new DOMParser().parseFromString(
+      renderPublicPage("/en/bring-your-own-api-key"),
+      "text/html",
+    );
+    const faq = [...byokDoc.querySelectorAll("#faq details")].find(({ textContent }) =>
+      textContent?.startsWith("Can I connect my own model service?"),
+    );
+    const optionsDoc = new DOMParser().parseFromString(
+      renderPublicPage("/en/wechat-ai-options"),
+      "text/html",
+    );
+    const option = [...optionsDoc.querySelectorAll("#byok li")].find(({ textContent }) =>
+      textContent?.startsWith("Model freedom."),
+    );
+    const endpointRequirement = /must .*public HTTPS domain on the default port \(443\)/;
+    expect.soft(faq?.querySelector("p")?.textContent, "BYOK FAQ").toMatch(endpointRequirement);
+    expect.soft(option?.textContent, "options comparison").toMatch(endpointRequirement);
+  });
 });

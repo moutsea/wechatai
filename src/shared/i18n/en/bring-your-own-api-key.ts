@@ -118,7 +118,7 @@ Having an API key or knowing your usage helps with setup and estimates, but it d
     {
       question: "Can I connect my own model service?",
       answer:
-        "Yes, as long as it exposes an OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages compatible endpoint and is reachable from the public internet. A purely internal address cannot be connected.",
+        "Yes, if your service exposes an endpoint compatible with OpenAI Chat Completions, OpenAI Responses, or Anthropic Messages. The endpoint must use a public HTTPS domain on the default port (443).",
     },
     {
       question: "Does bringing your own key make an account ban more likely?",
