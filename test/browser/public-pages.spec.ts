@@ -1483,6 +1483,31 @@ test("serves the Japanese homepage and pricing page without Chinese page copy", 
   );
 });
 
+test("opens a Japanese account menu for signed-in pricing visitors", async ({ page }) => {
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
+  await page.route("**/api/admin/access", (route) => route.fulfill({ json: { isAdmin: true } }));
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({
+      json: { plan: "plus", planUntil: Date.UTC(2026, 11, 1), wallet: { balance: 100 } },
+    }),
+  );
+  await page.goto(`${origin}/ja/pricing`);
+  const trigger = page.getByRole("button", { name: "ユーザーメニュー", exact: true });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "アカウントメニュー", exact: true });
+  await expect(menu.getByRole("link", { name: "ワークスペースを開く" })).toHaveAttribute(
+    "href",
+    "/app",
+  );
+  await expect(menu.getByRole("link", { name: "クレジット残高" })).toBeVisible();
+  await expect(menu).toContainText("Plus 会員");
+  await expect(menu).toContainText("有効期限： 2026/12/01 08:00（北京時間）");
+  await expect(menu.getByRole("link", { name: "会員期間を更新" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "管理コンソール" })).toBeVisible();
+  await expect(menu.getByRole("button", { name: "ログアウト" })).toBeVisible();
+});
+
 test("serves the Japanese landing pages with localized chrome and Chinese guide links", async ({
   page,
 }) => {
