@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
 import englishDocs from "../src/shared/i18n/en/docs";
+import { AVAILABLE_LOCALES, LOCALE_DEFINITIONS } from "../src/shared/i18n";
 import {
   getPageSeo,
   publishedLocalizedPaths,
@@ -17,9 +18,16 @@ function parse(path: string) {
   );
 }
 
-/** The switcher's Chinese endonym is allowed in link text, not in attributes. */
+/** Switcher endonyms (中文, 日本語) are allowed in link text, not in attributes. */
+function withoutLanguageLabels(text: string) {
+  return AVAILABLE_LOCALES.reduce(
+    (result, locale) => result.replaceAll(LOCALE_DEFINITIONS[locale].label, ""),
+    text,
+  );
+}
+
 function hanResidue(document: Document) {
-  const text = document.body.textContent?.replaceAll("中文", "") ?? "";
+  const text = withoutLanguageLabels(document.body.textContent ?? "");
   const attributes = [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
     .flatMap((element) =>
       ["alt", "aria-label", "title", "placeholder"].map(
@@ -184,7 +192,7 @@ describe("published English pages", () => {
     expect(homeFaq.mainEntity[0].name).toBe("Do I need my own API key?");
   });
 
-  it("keeps the existing Chinese pages and publishes only the T2 and English docs URLs", () => {
+  it("keeps the existing Chinese pages and publishes only registered localized URLs", () => {
     const home = parse("/");
     expect(home.querySelector("h1")?.textContent).toContain("把你的 AI");
     expect(home.querySelector('.site-header-nav a[href="/pricing"]')?.textContent).toBe("价格");
@@ -198,12 +206,18 @@ describe("published English pages", () => {
       "会员费包含模型费用吗？",
     );
 
-    const expected = ["/en", ...englishDocs.map(({ path }) => `/en${path}`), "/en/pricing"].sort();
+    const expected = [
+      "/en",
+      ...englishDocs.map(({ path }) => `/en${path}`),
+      "/en/pricing",
+      "/ja",
+      "/ja/pricing",
+    ].sort();
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
-    const localized = [...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/en[^<]*)<\/loc>/g)].map(
-      ([, path]) => path,
-    );
+    const localized = [
+      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja)[^<]*)<\/loc>/g),
+    ].map(([, path]) => path);
     expect(localized.sort()).toEqual(expected);
   });
 });

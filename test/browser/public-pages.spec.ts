@@ -55,6 +55,15 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+/** Switcher endonyms (中文, 日本語) are page chrome, not page copy. */
+function withoutSwitcherLabels(text: string) {
+  return text.replaceAll("中文", "").replaceAll("日本語", "");
+}
+
+/** Chinese source strings that must never reach a Japanese page. */
+const CHINESE_RESIDUE =
+  /免费开始|价格与方案|常见问题|还有疑问|额度怎么用|会员费|微伴|页面未找到|继续了解|估算我的每日用量/;
+
 for (const group of localePageGroups) {
   // Keep the Chinese homepage/pricing regressions and cover both sides of each registered group.
   if (group.length === 1 && !["/", "/pricing"].includes(group[0].path)) continue;
@@ -1306,7 +1315,7 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   await faq.locator("summary").click();
   await expect(faq).toHaveAttribute("open", "");
   await expect(faq).toContainText("Do I need my own API key?");
-  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
+  expect(withoutSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
     /\p{Script=Han}/u,
   );
 
@@ -1323,7 +1332,7 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   await estimate.locator("summary").click();
   await expect(estimate).toHaveAttribute("open", "");
   await expect(estimate.locator(".cost-results")).toContainText("credits");
-  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
+  expect(withoutSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
     /\p{Script=Han}/u,
   );
   const readableAttributes = await page.evaluate(() =>
@@ -1336,6 +1345,80 @@ test("serves the English homepage and pricing page without Chinese page copy", a
       .join(" "),
   );
   expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
+});
+
+test("serves the Japanese homepage and pricing page without Chinese page copy", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/ja`);
+  await mounted;
+
+  await expect(page.locator("h1")).toHaveText("あなたの AI を、WeChat へ");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja-JP");
+  await expect(page.locator('.site-header-nav a[href="/ja/pricing"]')).toHaveText("料金");
+  await expect(page.locator('.site-header-nav a[href="/docs"]')).toHaveText("ドキュメント");
+  await expect(page.locator('.landing-footer a[href="/ja/pricing"]').first()).toHaveText(
+    "料金と無料クレジット",
+  );
+  await expect(page.locator(".landing-plan-month .landing-plan-price span").first()).toHaveText(
+    "/ 月（人民元）",
+  );
+  await expect(
+    page.locator('.landing-plan-year a[href="/ja/pricing?interval=year#plan-year"]').first(),
+  ).toBeVisible();
+  await expect(page.locator(".hero-connections img")).toHaveAttribute(
+    "src",
+    "/images/landing/ai-wechat-connections-en.webp",
+  );
+  const faq = page.locator(".landing-faq details").first();
+  await faq.locator("summary").click();
+  await expect(faq).toHaveAttribute("open", "");
+  await expect(faq).toContainText("自分で API キーを用意する必要がありますか？");
+  expect(withoutSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
+    CHINESE_RESIDUE,
+  );
+
+  const switcher = page.locator(".site-language");
+  await expect(switcher.getByRole("link", { name: "English", exact: true })).toHaveAttribute(
+    "href",
+    "/en",
+  );
+  await expect(switcher.getByRole("link", { name: "中文", exact: true })).toHaveAttribute(
+    "href",
+    "/",
+  );
+
+  await page.goto(`${origin}/ja/pricing`);
+  await expect(page.locator("h1")).toHaveText("無料で始めて、必要に応じて Plus へ");
+  await expect(page.locator(".plan h3")).toHaveText([
+    "無料プラン",
+    "Plus 月額プラン",
+    "Plus 年間プラン",
+  ]);
+  await expect(page.locator(".plan-month .plan-price-unit")).toHaveText("/ 月（人民元）");
+  await expect(page.locator(".plan-month .plan-note")).toHaveText(
+    "1 か月分を 1 回払いで購入。必要なときに更新できます。",
+  );
+  const estimate = page.locator(".pricing-estimate");
+  await estimate.locator("summary").click();
+  await expect(estimate).toHaveAttribute("open", "");
+  await expect(estimate.locator(".cost-results")).toContainText("クレジット");
+  await expect(page.locator('.pricing-breadcrumb a[href="/ja"]')).toHaveText("ホーム");
+  await expect(page.locator('.seopage-related a[href="/wechat-muse"]')).toContainText(
+    "Muse マネージドアシスタント",
+  );
+  expect(withoutSwitcherLabels(await page.locator("body").innerText())).not.toMatch(
+    CHINESE_RESIDUE,
+  );
+});
+
+test("keeps the Chinese guide fallback working from the Japanese homepage", async ({ page }) => {
+  await page.goto(`${origin}/ja`);
+  await page.locator(".steps-heading").getByRole("link", { name: "はじめかたガイドを読む" }).click();
+  await expect(page).toHaveURL(`${origin}/docs/getting-started`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 });
 
 test("opens the registered English getting-started guide from the homepage", async ({ page }) => {

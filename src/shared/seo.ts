@@ -14,6 +14,8 @@ import { EN_DOC_CONTENT, EN_FAQ_SECTIONS } from "./i18n/en/data/docs-content-en"
 import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
 import { landingFaq } from "./landing-faq";
 import { homeCopy } from "./i18n/en/copy/home";
+import { homeCopy as homeCopyJa } from "./i18n/ja/copy/home";
+import { pricingCopy as pricingCopyJa } from "./i18n/ja/copy/pricing";
 import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
@@ -180,12 +182,18 @@ function softwareApplicationRef() {
  */
 function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   const english = locale === "en";
+  const japanese = locale === "ja";
   const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus").map((offer) => {
     const price = offer.amount / 100;
     const name = offer.interval === "year" ? "Plus Yearly" : "Plus Monthly";
+    const localizedName = japanese
+      ? pricingCopyJa.plans.offerName(offer.interval)
+      : english
+        ? name
+        : offer.name;
     return {
       "@type": "Offer",
-      name: english ? name : offer.name,
+      name: localizedName,
       url: `${SITE_URL}/pricing`,
       price,
       priceCurrency: "CNY",
@@ -203,14 +211,16 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   return [
     {
       "@type": "Offer",
-      name: english ? "Free" : "免费版",
+      name: english ? "Free" : japanese ? pricingCopyJa.plans.free.name : "免费版",
       url: `${SITE_URL}/`,
       price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
       description: english
         ? `Includes daily credits, ${WECHAT_LINK_LIMITS.free} WeChat connection, and ${PLUGIN_LIMITS.free} plugin configuration.`
-        : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
+        : japanese
+          ? `毎日クレジットを進呈し、WeChat 接続 ${WECHAT_LINK_LIMITS.free} 件とプラグイン設定 ${PLUGIN_LIMITS.free} 件が含まれます。`
+          : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: freePrice,
@@ -266,6 +276,7 @@ function seoLandingPage(
   locale: Locale = DEFAULT_LOCALE,
 ): PageSeo {
   const english = locale === "en";
+  const japanese = locale === "ja";
   const isArticle = page.kind === "article";
   const publisher = organizationNode();
   const webPage = isArticle
@@ -312,8 +323,16 @@ function seoLandingPage(
               {
                 "@type": "Service",
                 "@id": `${SITE_URL}${page.path}#plans`,
-                name: english ? "Wechatai Free and Plus" : `${SITE_NAME} 免费版与 Plus`,
-                serviceType: english ? "WeChat AI integration service" : "微信 AI 接入服务",
+                name: english
+                  ? "Wechatai Free and Plus"
+                  : japanese
+                    ? "Wechatai 無料プランと Plus"
+                    : `${SITE_NAME} 免费版与 Plus`,
+                serviceType: english
+                  ? "WeChat AI integration service"
+                  : japanese
+                    ? "WeChat AI 連携サービス"
+                    : "微信 AI 接入服务",
                 provider: { "@id": ORGANIZATION_ID },
                 offers: softwareApplicationOffers(locale),
               },
@@ -321,7 +340,7 @@ function seoLandingPage(
           : []),
         breadcrumbList([
           {
-            name: english ? "Home" : "首页",
+            name: english ? "Home" : japanese ? pricingCopyJa.page.home : "首页",
             item: `${SITE_URL}${hasRegisteredTranslation(locale, "/") ? localizedPath(locale, "/") : "/"}`,
           },
           { name: page.title, item: canonical },
@@ -553,10 +572,14 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
     const english = locale === "en";
     const title = english
       ? homeCopy.seo.title
-      : `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
+      : locale === "ja"
+        ? homeCopyJa.seo.title
+        : `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
     const description = english
       ? homeCopy.seo.description
-      : "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
+      : locale === "ja"
+        ? homeCopyJa.seo.description
+        : "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
     return {
       title,
       description,
@@ -600,7 +623,17 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                   "Customize characters and storylines with the role-play plugin",
                   "Plus cloud assistant Xiaowei handles files, creates documents, and runs tasks; requires a text model",
                 ]
-              : [
+              : locale === "ja"
+                ? [
+                    "ご自身の API キーとモデルエンドポイントを使用",
+                    "WeChat でモデルを切り替え、会話を管理",
+                    "OpenAI Chat Completions、Responses、Anthropic Messages に対応",
+                    "既存の Muse・Hermes・OpenClaw エージェントを接続",
+                    "画像モデルを設定して WeChat で AI 画像を生成・受信",
+                    "ロールプレイプラグインでキャラクターとストーリーをカスタマイズ",
+                    "Plus のクラウドアシスタント小薇（Xiaowei）がファイル処理・文書作成・タスク実行を担当。テキストモデルが必要",
+                  ]
+                : [
                   "使用自己的 API Key 与模型服务地址",
                   "在微信中切换大模型并管理聊天会话",
                   "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",

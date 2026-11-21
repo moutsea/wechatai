@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { estimateTextCost } from "../shared/cost-estimate";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { pricingCopy } from "../shared/i18n/en/copy/pricing";
+import { pricingCopy as pricingCopyJa } from "../shared/i18n/ja/copy/pricing";
 import { useDocumentInputs } from "./document-handoff";
 import { localizedHref, useLocale } from "./locale";
 import "./cost-estimator.css";
@@ -27,6 +28,7 @@ const estimatorCopyZh = {
     "服务商输出价（元 / 百万 tokens）",
   ],
   placeholder: "选填，人民币单价",
+  creditsUnit: "credits",
   platformLabel: "微伴中转用量 / 天",
   platformHint: (free: number, plus: number) =>
     `Free 每天 ${free}，Plus 每天 ${plus}；赠额不累计。`,
@@ -43,8 +45,8 @@ export function CostEstimator() {
   const inputs = useDocumentInputs();
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = english ? pricingCopy.estimator : estimatorCopyZh;
-  const numberLocale = english ? "en-US" : "zh-CN";
+  const copy = english ? pricingCopy.estimator : locale === "ja" ? pricingCopyJa.estimator : estimatorCopyZh;
+  const numberLocale = english ? "en-US" : locale === "ja" ? "ja-JP" : "zh-CN";
   const [values, setValues] = useState(() =>
     ["1000", "1000", "10", "", ""].map(
       (value, index) => inputs?.get(estimateInputIds[index]) ?? value,
@@ -86,7 +88,7 @@ export function CostEstimator() {
               <span>{copy.platformLabel}</span>
               <strong>
                 {estimate.credits.toLocaleString(numberLocale, { maximumFractionDigits: 3 })}{" "}
-                credits
+                {copy.creditsUnit}
               </strong>
               <p>{copy.platformHint(DAILY_CREDIT_DEFAULTS.free, DAILY_CREDIT_DEFAULTS.plus)}</p>
             </div>
