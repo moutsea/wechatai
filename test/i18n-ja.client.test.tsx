@@ -275,6 +275,11 @@ describe("published Japanese pages", () => {
     }
   });
 
+  it("distinguishes model numbers from provider numbers in the Japanese DeepSeek guide", () => {
+    const usage = parse("/ja/wechat-deepseek").querySelector("#usage")?.textContent;
+    expect(usage).toContain("/wx models で現在のプロバイダーで利用できるモデルの番号を確認");
+  });
+
   it("limits the landing-page switcher to published languages", async () => {
     const home = await mountSwitcher("/ja");
     await home.open();
