@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
 import englishDocs from "../src/shared/i18n/en/docs";
+import { AVAILABLE_LOCALES, LOCALE_DEFINITIONS } from "../src/shared/i18n";
 import {
   getPageSeo,
   publishedLocalizedPaths,
@@ -17,9 +18,16 @@ function parse(path: string) {
   );
 }
 
-/** The switcher's Chinese endonym is allowed in link text, not in attributes. */
+/** Switcher endonyms (中文, 日本語) are allowed in link text, not in attributes. */
+function withoutLanguageLabels(text: string) {
+  return AVAILABLE_LOCALES.reduce(
+    (result, locale) => result.replaceAll(LOCALE_DEFINITIONS[locale].label, ""),
+    text,
+  );
+}
+
 function hanResidue(document: Document) {
-  const text = document.body.textContent?.replaceAll("中文", "") ?? "";
+  const text = withoutLanguageLabels(document.body.textContent ?? "");
   const attributes = [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
     .flatMap((element) =>
       ["alt", "aria-label", "title", "placeholder"].map(
@@ -200,22 +208,41 @@ describe("published English pages", () => {
 
     const expected = [
       "/en",
+      "/en/bring-your-own-api-key",
+      "/en/compare/wechatai-vs-commercial-wechat-ai",
+      "/en/compare/wechatai-vs-openclaw",
+      "/en/compare/wechatai-vs-wechat-official-ai",
       ...englishDocs.map(({ path }) => `/en${path}`),
       "/en/pricing",
+      "/en/wechat-agent",
       "/en/wechat-ai",
+      "/en/wechat-ai-ban-risk",
+      "/en/wechat-ai-image",
+      "/en/wechat-ai-options",
+      "/en/wechat-ai-partner",
+      "/en/wechat-ai-privacy",
+      "/en/wechat-bot",
+      "/en/wechat-character-card",
       "/en/wechat-claude",
       "/en/wechat-clawbot",
       "/en/wechat-clawbot-models",
       "/en/wechat-deepseek",
+      "/en/wechat-glm",
       "/en/wechat-gpt",
       "/en/wechat-kimi",
+      "/en/wechat-muse",
       "/en/wechat-qwen",
+      "/ja",
+      "/ja/pricing",
+      "/ja/wechat-ai",
+      "/ja/wechat-bot",
+      "/ja/wechat-deepseek",
     ].sort();
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
-    const localized = [...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/en[^<]*)<\/loc>/g)].map(
-      ([, path]) => path,
-    );
+    const localized = [
+      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja)[^<]*)<\/loc>/g),
+    ].map(([, path]) => path);
     expect(localized.sort()).toEqual(expected);
   });
 });

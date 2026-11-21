@@ -161,6 +161,7 @@ export const pricingCopy = {
       "Provider output price (CNY / million tokens)",
     ],
     placeholder: "Optional, CNY price",
+    creditsUnit: "credits",
     platformLabel: "Wechatai usage / day",
     platformHint: (free: number, plus: number) =>
       `Free includes ${free} per day; Plus includes ${plus}. Daily credits do not roll over.`,
