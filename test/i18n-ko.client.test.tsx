@@ -118,6 +118,32 @@ describe("published Korean pages", () => {
     expect(hanResidue(document)).toEqual([]);
   });
 
+  it("shows how Plus members enable Xiaowei on the Korean homepage", () => {
+    const scene = parse("/ko").querySelector(".use-case-cloud .use-case-copy p");
+    expect(scene?.textContent).toMatch(
+      /서비스가 열리면 Plus 회원은 .*텍스트 모델.*설정한 뒤 플러그인 페이지에서 .*직접 활성화/,
+    );
+  });
+
+  it("shows the same Xiaowei activation requirements in the Korean pricing FAQ and FAQPage", () => {
+    const document = parse("/ko/pricing");
+    const question = "Plus의 Xiaowei AI는 무엇을 할 수 있나요?";
+    const details = [...document.querySelectorAll(".pricing-faq details")].find(
+      (item) => item.querySelector("summary")?.textContent === question,
+    );
+    const answer = details?.querySelector(".pricing-faq-answer p")?.textContent;
+    const graph = JSON.parse(
+      document.querySelector('script[type="application/ld+json"]')!.textContent!,
+    )["@graph"];
+    const faq = graph.find((node: { "@type": string }) => node["@type"] === "FAQPage") as {
+      mainEntity: Array<{ name: string; acceptedAnswer: { text: string } }>;
+    };
+    expect(answer).toMatch(
+      /서비스가 열리면 Plus 회원은 .*텍스트 모델.*설정한 뒤 플러그인 페이지에서 .*직접 활성화/,
+    );
+    expect(faq.mainEntity.find((item) => item.name === question)?.acceptedAnswer.text).toBe(answer);
+  });
+
   it.each([
     ["/", "/en", "/ko", "/ja"],
     ["/pricing", "/en/pricing", "/ko/pricing", "/ja/pricing"],
