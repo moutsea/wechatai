@@ -6,7 +6,7 @@ import {
 } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import { PersonalRecordsStore } from "../src/server/personal-records";
-import { beijingDate, beijingTime } from "../src/shared/personal-assistant";
+import { beijingDate } from "../src/shared/personal-assistant";
 import {
   connect,
   deliver,
@@ -68,7 +68,9 @@ describe("reminder occurrence recovery", () => {
       await fresh.dispatchPersonalReminders();
       expect(sent).toHaveLength(2);
       expect(sent[1].client_id).not.toBe(sent[0].client_id);
-      expect(sent[1].item_list[0].text_item.text).toContain(beijingTime(morning + day));
+      const nextDate = new Date(Date.parse(`${reminderTestDate}T00:00:00Z`) + day);
+      const nextDateText = `${nextDate.getUTCFullYear()}年${nextDate.getUTCMonth() + 1}月${nextDate.getUTCDate()}日`;
+      expect(sent[1].item_list[0].text_item.text).toContain(`${nextDateText} 08:00`);
       expect((await list(fresh, plugin.id)).data.records[0]).toMatchObject({
         nextReminderAt: morning + 2 * day,
         reminderError: "",
