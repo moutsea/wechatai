@@ -14,6 +14,10 @@ import {
   linkLabels as linkLabelsKo,
   tutorialLabels as tutorialLabelsKo,
 } from "../shared/i18n/ko/copy/site-footer";
+import {
+  footerCopy as footerCopyJa,
+  tutorialLabels as tutorialLabelsJa,
+} from "../shared/i18n/ja/copy/site-footer";
 import { useLocale } from "./locale";
 
 const footerLabel = (article: { title: string; navTitle?: string }) =>
@@ -26,13 +30,6 @@ const tutorialLabelsEn: Record<string, string> = {
   "hermes-in-wechat": "Use Hermes in WeChat",
 };
 
-const tutorialLabelsJa: Record<string, string> = {
-  "wechat-ai-assistant": "小薇：デプロイ不要の AI アシスタント",
-  "deepseek-in-wechat": "WeChat で DeepSeek を使う",
-  "multiple-openclaw-in-wechat": "複数の OpenClaw を接続",
-  "hermes-in-wechat": "WeChat で Hermes を使う",
-};
-
 type LabelKey = "zh" | "en" | "ja" | "ko";
 type FooterLink = { href: string } & Record<LabelKey, string>;
 type FooterGroup = Record<LabelKey, string> & { links: FooterLink[] };
@@ -41,31 +38,31 @@ const footerGroups: FooterGroup[] = [
   {
     zh: "产品",
     en: "Product",
-    ja: "プロダクト",
+    ja: footerCopyJa.groups.product,
     ko: groupLabelsKo.product,
     links: [
-      { href: "/wechat-ai", zh: "微信 AI 助手", en: "WeChat AI assistant", ja: "WeChat AI アシスタント", ko: linkLabelsKo.wechatAi },
-      { href: "/wechat-ai-options", zh: "方案对比", en: "Compare options", ja: "プラン比較", ko: linkLabelsKo.compareOptions },
+      { href: "/wechat-ai", zh: "微信 AI 助手", en: "WeChat AI assistant", ja: footerCopyJa.links.wechatAi, ko: linkLabelsKo.wechatAi },
+      { href: "/wechat-ai-options", zh: "方案对比", en: "Compare options", ja: footerCopyJa.links.compare, ko: linkLabelsKo.compareOptions },
       {
         href: "/pricing",
         zh: "价格与免费额度",
         en: "Pricing and free credits",
-        ja: "料金と無料クレジット",
+        ja: footerCopyJa.links.pricing,
         ko: linkLabelsKo.freePricing,
       },
-      { href: "/app", zh: "我的工作台", en: "My workspace", ja: "マイワークスペース", ko: linkLabelsKo.myWorkspace },
+      { href: "/app", zh: "我的工作台", en: "My workspace", ja: footerCopyJa.links.myWorkspace, ko: linkLabelsKo.myWorkspace },
       {
         href: "/docs/channels-models",
         zh: "渠道与模型",
         en: "Providers and models",
-        ja: "プロバイダーとモデル",
+        ja: footerCopyJa.links.providers,
         ko: linkLabelsKo.channels,
       },
       {
         href: "/docs/credits",
         zh: "会员与 credits",
         en: "Membership and credits",
-        ja: "会員とクレジット",
+        ja: footerCopyJa.links.membership,
         ko: linkLabelsKo.credits,
       },
     ],
@@ -73,86 +70,86 @@ const footerGroups: FooterGroup[] = [
   {
     zh: "使用帮助",
     en: "Help",
-    ja: "ヘルプ",
+    ja: footerCopyJa.groups.help,
     ko: groupLabelsKo.help,
     links: [
-      { href: "/docs", zh: "文档与教程", en: "Docs and tutorials", ja: "ドキュメントとチュートリアル", ko: linkLabelsKo.docs },
+      { href: "/docs", zh: "文档与教程", en: "Docs and tutorials", ja: footerCopyJa.links.docs, ko: linkLabelsKo.docs },
       {
         href: "/wechat-clawbot",
         zh: "ClawBot 绑定与排查",
         en: "ClawBot setup and troubleshooting",
-        ja: "ClawBot の接続とトラブルシューティング",
+        ja: footerCopyJa.links.clawbotSetup,
         ko: linkLabelsKo.clawbot,
       },
       {
         href: "/wechat-clawbot-models",
         zh: "ClawBot 支持哪些模型",
         en: "Models supported by ClawBot",
-        ja: "ClawBot が対応するモデル",
+        ja: footerCopyJa.links.clawbotModels,
         ko: linkLabelsKo.clawbotModels,
       },
       {
         href: "/wechat-ai-ban-risk",
         zh: "用 AI 会不会封号",
         en: "Can AI get my account banned?",
-        ja: "AI 利用でアカウント停止になる？",
+        ja: footerCopyJa.links.banRisk,
         ko: linkLabelsKo.banRisk,
       },
       {
         href: "/wechat-deepseek",
         zh: "在微信里用 DeepSeek",
         en: "Use DeepSeek in WeChat",
-        ja: "WeChat で DeepSeek を使う",
+        ja: footerCopyJa.links.deepseek,
         ko: linkLabelsKo.deepSeek,
       },
       {
         href: "/wechat-claude",
         zh: "在微信里用 Claude",
         en: "Use Claude in WeChat",
-        ja: "WeChat で Claude を使う",
+        ja: footerCopyJa.links.claude,
         ko: linkLabelsKo.claude,
       },
-      { href: "/wechat-gpt", zh: "在微信里用 GPT", en: "Use GPT in WeChat", ja: "WeChat で GPT を使う", ko: linkLabelsKo.gpt },
-      { href: "/docs/faq", zh: "常见问题", en: "FAQ", ja: "よくある質問", ko: linkLabelsKo.faq },
+      { href: "/wechat-gpt", zh: "在微信里用 GPT", en: "Use GPT in WeChat", ja: footerCopyJa.links.gpt, ko: linkLabelsKo.gpt },
+      { href: "/docs/faq", zh: "常见问题", en: "FAQ", ja: footerCopyJa.links.faq, ko: linkLabelsKo.faq },
     ],
   },
   {
     zh: "开发者",
     en: "Developers",
-    ja: "開発者",
+    ja: footerCopyJa.groups.developers,
     ko: groupLabelsKo.developers,
     links: [
       {
         href: "/developers/plugins",
         zh: "插件开发文档",
         en: "Plugin development docs",
-        ja: "プラグイン開発ドキュメント",
+        ja: footerCopyJa.links.plugins,
         ko: linkLabelsKo.plugins,
       },
-      { href: "/developers/openclaw", zh: "OpenClaw 接入", en: "OpenClaw setup", ja: "OpenClaw の接続", ko: linkLabelsKo.openClaw },
-      { href: "/developers/hermes", zh: "Hermes 接入", en: "Hermes setup", ja: "Hermes の接続", ko: linkLabelsKo.hermes },
-      { href: "/developers/muse", zh: "Muse 接入", en: "Muse setup", ja: "Muse の接続", ko: linkLabelsKo.muse },
+      { href: "/developers/openclaw", zh: "OpenClaw 接入", en: "OpenClaw setup", ja: footerCopyJa.links.openclaw, ko: linkLabelsKo.openClaw },
+      { href: "/developers/hermes", zh: "Hermes 接入", en: "Hermes setup", ja: footerCopyJa.links.hermes, ko: linkLabelsKo.hermes },
+      { href: "/developers/muse", zh: "Muse 接入", en: "Muse setup", ja: footerCopyJa.links.muse, ko: linkLabelsKo.muse },
       {
         href: "/wechat-agent",
         zh: "微信接入 Agent",
         en: "Connect an agent to WeChat",
-        ja: "WeChat にエージェントを接続",
+        ja: footerCopyJa.links.agent,
         ko: linkLabelsKo.agent,
       },
       {
         href: "/bring-your-own-api-key",
         zh: "自带 API Key",
         en: "Bring your own API key",
-        ja: "ご自身の API キーを使う",
+        ja: footerCopyJa.links.apiKey,
         ko: linkLabelsKo.ownApiKey,
       },
-      { href: "/developers/plugins.md", zh: "协议 Markdown", en: "Protocol Markdown", ja: "プロトコル Markdown", ko: linkLabelsKo.protocol },
+      { href: "/developers/plugins.md", zh: "协议 Markdown", en: "Protocol Markdown", ja: footerCopyJa.links.protocol, ko: linkLabelsKo.protocol },
     ],
   },
   {
     zh: "实操教程",
     en: "Tutorials",
-    ja: "チュートリアル",
+    ja: footerCopyJa.groups.tutorials,
     ko: groupLabelsKo.tutorials,
     links: DOC_TUTORIALS.map((article) => ({
       href: docPath(article.slug),
@@ -165,31 +162,31 @@ const footerGroups: FooterGroup[] = [
   {
     zh: "支持与条款",
     en: "Support & terms",
-    ja: "サポートと規約",
+    ja: footerCopyJa.groups.support,
     ko: groupLabelsKo.support,
     links: [
-      { href: "/terms", zh: "服务协议", en: "Terms of service", ja: "利用規約", ko: linkLabelsKo.terms },
-      { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: "プライバシーポリシー", ko: linkLabelsKo.privacy },
-      { href: "/contact", zh: "联系我们", en: "Contact us", ja: "お問い合わせ", ko: linkLabelsKo.contact },
+      { href: "/terms", zh: "服务协议", en: "Terms of service", ja: footerCopyJa.links.terms, ko: linkLabelsKo.terms },
+      { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: footerCopyJa.links.privacy, ko: linkLabelsKo.privacy },
+      { href: "/contact", zh: "联系我们", en: "Contact us", ja: footerCopyJa.links.contact, ko: linkLabelsKo.contact },
       {
         href: "/contact#maintainer",
         zh: "维护者与项目来源",
         en: "Maintainer and project origin",
-        ja: "メンテナーとプロジェクトの由来",
+        ja: footerCopyJa.links.maintainer,
         ko: linkLabelsKo.maintainer,
       },
       {
         href: "https://github.com/moutsea/wechatai",
         zh: "项目源码与维护者",
         en: "Source code and maintainer",
-        ja: "ソースコードとメンテナー",
+        ja: footerCopyJa.links.source,
         ko: linkLabelsKo.source,
       },
       {
         href: "https://github.com/moutsea/wechatai/commits/main/",
         zh: "公开变更记录",
         en: "Public change log",
-        ja: "公開変更履歴",
+        ja: footerCopyJa.links.changelog,
         ko: linkLabelsKo.changelog,
       },
     ],
@@ -197,16 +194,22 @@ const footerGroups: FooterGroup[] = [
 ];
 
 const quickLinks: FooterLink[] = [
-  { href: "/app", zh: "进入工作台", en: "Open workspace", ja: "ワークスペースを開く", ko: linkLabelsKo.openWorkspace },
-  { href: "/pricing", zh: "价格与额度", en: "Pricing and credits", ja: "料金とクレジット", ko: linkLabelsKo.pricing },
-  { href: "/docs/getting-started", zh: "入门教程", en: "Getting started", ja: "はじめかた", ko: linkLabelsKo.gettingStarted },
-  { href: "/contact", zh: "联系我们", en: "Contact us", ja: "お問い合わせ", ko: linkLabelsKo.contact },
-  { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: "プライバシーポリシー", ko: linkLabelsKo.privacy },
+  { href: "/app", zh: "进入工作台", en: "Open workspace", ja: footerCopyJa.links.workspace, ko: linkLabelsKo.openWorkspace },
+  { href: "/pricing", zh: "价格与额度", en: "Pricing and credits", ja: footerCopyJa.links.pricingQuick, ko: linkLabelsKo.pricing },
+  {
+    href: "/docs/getting-started",
+    zh: "入门教程",
+    en: "Getting started",
+    ja: footerCopyJa.links.gettingStarted,
+    ko: linkLabelsKo.gettingStarted,
+  },
+  { href: "/contact", zh: "联系我们", en: "Contact us", ja: footerCopyJa.links.contact, ko: linkLabelsKo.contact },
+  { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: footerCopyJa.links.privacy, ko: linkLabelsKo.privacy },
   {
     href: "https://github.com/moutsea/wechatai",
     zh: "GitHub 开源",
     en: "Open source on GitHub",
-    ja: "GitHub でオープンソース",
+    ja: footerCopyJa.links.github,
     ko: linkLabelsKo.openSource,
   },
 ];
@@ -252,16 +255,6 @@ const footerCopyZh: FooterCopy = {
   navigation: "页脚导航",
   brand: "微伴 Wechatai",
   disclaimer: "独立开发产品，与微信、腾讯及模型供应商无官方关联。",
-};
-
-const footerCopyJa = {
-  home: "ホーム",
-  intro: "選んだモデルと、WeChat の中でそのまま会話できます。",
-  tagline: "モデルとエージェントをつないで、アイデアにいつでも応えを。",
-  navigation: "フッターナビゲーション",
-  brand: "Wechatai",
-  disclaimer:
-    "個人開発のプロダクトです。WeChat、Tencent、各モデルプロバイダーとは公式な関係はありません。",
 };
 
 const footerCopyEn = {

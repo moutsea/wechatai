@@ -24,6 +24,15 @@ export const homeCopy = {
     title: "WeChat AI：DeepSeek・Claude・GPT とエージェント接続 | Wechatai",
     description:
       "Wechatai はモデルとエージェントを WeChat につなぐサービスです。DeepSeek・Claude・GPT とのチャット、画像生成、Muse・Hermes・OpenClaw の接続、Plus のクラウドアシスタント小薇（Xiaowei）によるファイル処理とタスク実行ができます。無料で始められ、モデルの API キーはご自身で用意し、モデル利用料は各プロバイダーに別途お支払いいただきます。",
+    featureList: [
+      "ご自身の API キーとモデルエンドポイントを使用",
+      "WeChat でモデルを切り替え、会話を管理",
+      "OpenAI Chat Completions、Responses、Anthropic Messages に対応",
+      "既存の Muse・Hermes・OpenClaw エージェントを接続",
+      "画像モデルを設定して WeChat で AI 画像を生成・受信",
+      "ロールプレイプラグインでキャラクターとストーリーをカスタマイズ",
+      "Plus のクラウドアシスタント小薇（Xiaowei）がファイル処理・文書作成・タスク実行を担当。テキストモデルが必要",
+    ],
   },
   plans: {
     free: {

@@ -15,6 +15,9 @@ import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
 import { landingFaq } from "./landing-faq";
 import { homeCopyFor, pricingCopyFor } from "./i18n/copy";
 import { seoCopy as seoCopyKo } from "./i18n/ko/copy/seo";
+import { seoCopy as seoCopyJa } from "./i18n/ja/copy/seo";
+import { homeCopy as homeCopyJa } from "./i18n/ja/copy/home";
+import { pricingCopy as pricingCopyJa } from "./i18n/ja/copy/pricing";
 import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
@@ -143,7 +146,7 @@ function organizationNode(locale: Locale = DEFAULT_LOCALE) {
       locale === "en"
         ? "An independently maintained service that connects AI models and agents to one-to-one WeChat ClawBot chats. It is not officially affiliated with Tencent or WeChat."
         : locale === "ja"
-          ? "AI モデルとエージェントを WeChat ClawBot の 1 対 1 チャットにつなぐ独立運営のサービスです。Tencent および WeChat とは公式な関係はありません。"
+          ? seoCopyJa.organizationDescription
           : locale === "ko"
             ? seoCopyKo.organizationDescription
             : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
@@ -223,7 +226,7 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
       description: english
         ? `Includes daily credits, ${WECHAT_LINK_LIMITS.free} WeChat connection, and ${PLUGIN_LIMITS.free} plugin configuration.`
         : japanese
-          ? `毎日クレジットを進呈し、WeChat 接続 ${WECHAT_LINK_LIMITS.free} 件とプラグイン設定 ${PLUGIN_LIMITS.free} 件が含まれます。`
+          ? pricingCopyJa.seo.freeOfferDescription
           : korean
             ? seoCopyKo.freeOfferDescription(WECHAT_LINK_LIMITS.free, PLUGIN_LIMITS.free)
             : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
@@ -333,14 +336,14 @@ function seoLandingPage(
                 name: english
                   ? "Wechatai Free and Plus"
                   : japanese
-                    ? "Wechatai 無料プランと Plus"
+                    ? pricingCopyJa.seo.serviceName
                     : korean
                       ? seoCopyKo.serviceName
                       : `${SITE_NAME} 免费版与 Plus`,
                 serviceType: english
                   ? "WeChat AI integration service"
                   : japanese
-                    ? "WeChat AI 連携サービス"
+                    ? pricingCopyJa.seo.serviceType
                     : korean
                       ? seoCopyKo.serviceType
                       : "微信 AI 接入服务",
@@ -634,15 +637,7 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                     "Plus cloud assistant Xiaowei handles files, creates documents, and runs tasks; requires a text model",
                   ]
                 : locale === "ja"
-                  ? [
-                      "ご自身の API キーとモデルエンドポイントを使用",
-                      "WeChat でモデルを切り替え、会話を管理",
-                      "OpenAI Chat Completions、Responses、Anthropic Messages に対応",
-                      "既存の Muse・Hermes・OpenClaw エージェントを接続",
-                      "画像モデルを設定して WeChat で AI 画像を生成・受信",
-                      "ロールプレイプラグインでキャラクターとストーリーをカスタマイズ",
-                      "Plus のクラウドアシスタント小薇（Xiaowei）がファイル処理・文書作成・タスク実行を担当。テキストモデルが必要",
-                    ]
+                  ? homeCopyJa.seo.featureList
                   : [
                     "使用自己的 API Key 与模型服务地址",
                     "在微信中切换大模型并管理聊天会话",
@@ -783,7 +778,7 @@ export function renderSeoHead(seo: PageSeo) {
     seo.htmlLang === LOCALE_DEFINITIONS.en.htmlLang
       ? "Wechatai: chat with the models you choose in WeChat."
       : seo.htmlLang === LOCALE_DEFINITIONS.ja.htmlLang
-        ? "Wechatai：選んだモデルと WeChat でチャットできます。"
+        ? seoCopyJa.imageAlt
         : seo.htmlLang === LOCALE_DEFINITIONS.ko.htmlLang
           ? seoCopyKo.imageAlt
           : "微伴 Wechatai：在微信里，与自选大模型对话。";

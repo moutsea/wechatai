@@ -1,5 +1,6 @@
 import { DEFAULT_LOCALE, type Locale } from "../../shared/i18n";
 import { seoPageLabels as ko } from "../../shared/i18n/ko/copy/seo-page";
+import { seoPageLabels as ja } from "../../shared/i18n/ja/copy/seo-page-labels";
 
 /** Chrome shared by every landing page rendered through `SeoPageView`. */
 export interface SeoPageLabels {
@@ -76,33 +77,6 @@ const en: SeoPageLabels = {
   startFree: "Start for free",
   estimateFirst: "Estimate usage costs first",
   setupGuide: "Read the setup guide",
-};
-
-const ja: SeoPageLabels = {
-  skipToContent: "本文へスキップ",
-  home: "ホーム",
-  breadcrumb: "パンくずリスト",
-  comparisonTable: "比較表",
-  compareMissing:
-    "公開されている情報源を確認できなかった箇所です。相手側が非対応という意味ではありません",
-  commands: "よく使う WeChat コマンド",
-  copyCommand: (command) => `コマンドをコピー ${command}`,
-  copy: "コピー",
-  copied: "コピーしました",
-  copyFailed: "コピーに失敗しました",
-  faq: "よくある質問",
-  contents: "このページの内容",
-  tableOfContents: "ページ内目次",
-  ctaTitle: "接続条件を確認して、WeChat AI の設定を始める",
-  ctaBody:
-    "まず WeChat の ClawBot 入口を確認し、モデル・エージェント・通知のいずれかの経路で設定してください。モデルの利用料は別途です。",
-  ctaAction: "無料で始める",
-  updated: "本ページの更新日",
-  checkRequirements: "登録前に接続条件を確認",
-  estimateCosts: "プラットフォームとモデルの費用を試算",
-  startFree: "無料で始める",
-  estimateFirst: "まず利用費用を試算",
-  setupGuide: "利用ガイドを見る",
 };
 
 /** Locales without a dedicated dictionary use English. */

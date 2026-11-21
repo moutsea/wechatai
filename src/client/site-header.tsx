@@ -8,6 +8,7 @@ import { LanguageSwitcher } from "./language-switcher";
 import { useLocale } from "./locale";
 import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath, type Locale } from "../shared/i18n";
 import { headerCopy as headerCopyKo, navLabels as navLabelsKo } from "../shared/i18n/ko/copy/site-header";
+import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
 
 const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
@@ -23,10 +24,10 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", en: "Home", ja: "ホーム", ko: navLabelsKo["/"], match: "/" },
-  { to: "/pricing", label: "价格", en: "Pricing", ja: "料金", ko: navLabelsKo["/pricing"], match: "/pricing" },
-  { to: "/docs", label: "文档", en: "Docs", ja: "ドキュメント", ko: navLabelsKo["/docs"], match: "/docs" },
-  { to: "/#how", label: "如何使用", en: "How it works", ja: "使い方", ko: navLabelsKo["/#how"], match: "/#how" },
+  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], match: "/#how" },
 ] as const;
 
 interface HeaderCopy {
@@ -55,20 +56,6 @@ const headerCopyEn: HeaderCopy = {
   closeMenu: "Close menu",
   menuFailed: "The account menu could not load",
   reloadMenu: "Reload the account menu",
-} as const;
-
-const headerCopyJa = {
-  home: "ホーム",
-  topNav: "メインナビゲーション",
-  account: "アカウント",
-  login: "ログイン",
-  start: "無料で始める",
-  workspace: "ワークスペースを開く",
-  workspaceFallback: "ワークスペース",
-  openMenu: "メニューを開く",
-  closeMenu: "メニューを閉じる",
-  menuFailed: "アカウントメニューを読み込めませんでした",
-  reloadMenu: "アカウントメニューを再読み込み",
 } as const;
 
 const headerCopyZh = {
