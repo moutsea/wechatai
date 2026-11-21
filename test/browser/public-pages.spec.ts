@@ -1480,6 +1480,26 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
   );
 });
 
+test("keeps the pricing query and fragment when the Japanese homepage links to a plan", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto(`${origin}/ja`);
+  await page.locator('.landing-plan-year a[href="/ja/pricing?interval=year#plan-year"]').first().click();
+  await expect(page).toHaveURL(`${origin}/ja/pricing?interval=year#plan-year`);
+  await expect(page.locator("#plan-year")).toHaveAttribute("aria-current", "true");
+  await expect(page.locator("#plan-year h3")).toBeInViewport();
+  await expect(page.locator("#plan-year .plan-price-unit")).toHaveText("/ 年（人民元）");
+  await expect(page.locator("#plan-year .plan-cta")).toHaveAttribute(
+    "href",
+    `/register?returnTo=${encodeURIComponent("/ja/pricing?interval=year#plan-year")}`,
+  );
+
+  await page.goto(`${origin}/ja/pricing?interval=month#plan-month`);
+  await expect(page.locator("#plan-month h3")).toBeInViewport();
+  await expect(page.locator("#plan-month .plan-price-unit")).toHaveText("/ 月（人民元）");
+});
+
 test("keeps the Chinese guide fallback working from the Japanese homepage", async ({ page }) => {
   await page.goto(`${origin}/ja`);
   await page.locator(".steps-heading").getByRole("link", { name: "はじめかたガイドを読む" }).click();
