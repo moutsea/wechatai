@@ -326,6 +326,28 @@ assert.equal(
   "WeChat AI: JSON-LD description matches meta description",
 );
 
+const englishQwen = await read("en/wechat-qwen.html");
+const qwenAnswer = englishQwen.match(/<section[^>]+id="faq"[^>]*>.*?<details>.*?<p>(.*?)<\/p>/s)?.[1];
+assert(qwenAnswer, "Qwen: first visible FAQ answer");
+assert.match(
+  qwenAnswer,
+  /preset fills in the Beijing endpoint\. Enter your own API key and save the channel, then sync available models or add a model manually/,
+  "Qwen: preset supplies the endpoint; enter a key, save, and sync or add a model",
+);
+assert.match(
+  qwenAnswer,
+  /another region or a dedicated endpoint, choose Custom first and enter the endpoint from the provider documentation/,
+  "Qwen: other endpoints require Custom mode",
+);
+const qwenGraph = JSON.parse(
+  englishQwen.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+)["@graph"];
+assert.equal(
+  qwenGraph.find((item) => item["@type"] === "FAQPage")?.mainEntity[0]?.acceptedAnswer.text,
+  qwenAnswer,
+  "Qwen: first FAQ JSON-LD answer matches the visible answer",
+);
+
 // /pricing must ship plan offers and a machine-readable price check date in the
 // static HTML, not only after client JavaScript runs.
 const pricingHtml = await read("pricing.html");

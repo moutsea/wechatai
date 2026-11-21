@@ -75,7 +75,7 @@ To switch models, use \`/wx models\` to see numbers in the current channel, then
     {
       question: "Does using Qwen in WeChat always require SiliconFlow?",
       answer:
-        "No. This page uses SiliconFlow as an example because one key can call many models the platform offers. If you already have an Alibaba Cloud Model Studio key, choose the Qwen (Alibaba Cloud Model Studio) preset when adding a channel and enter the endpoint and model ID from that platform's docs.",
+        "No. This page uses SiliconFlow as an example because one key can call many models the platform offers. The Qwen (Alibaba Cloud Model Studio) preset fills in the Beijing endpoint. Enter your own API key and save the channel, then sync available models or add a model manually. For another region or a dedicated endpoint, choose Custom first and enter the endpoint from the provider documentation.",
     },
     {
       question: "Are the SiliconFlow key and Wechatai credits the same thing?",
