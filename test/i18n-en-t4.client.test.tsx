@@ -117,4 +117,16 @@ describe("prerendered English landing pages", () => {
     expect.soft(answer).toMatch(/same story.*existing context can be sent to the new model provider/);
     expect.soft(answer).toMatch(/send \/wx new .*before sending your next chat message/);
   });
+
+  it("distinguishes stored source JSON from the PNG cover on card import", () => {
+    const html = renderPublicPage("/en/wechat-character-card");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const answer = [...doc.querySelectorAll("#faq details")]
+      .find(({ textContent }) => textContent?.startsWith("Is the PNG cover stored during import?"))
+      ?.querySelector("p");
+    for (const copy of [doc.querySelector("#import"), answer]) {
+      expect.soft(copy?.textContent).toMatch(/upload.*stor.*original card JSON.*creator notes and extensions/i);
+      expect.soft(copy?.textContent).toMatch(/PNG (?:cover|image).*not uploaded or stored/i);
+    }
+  });
 });

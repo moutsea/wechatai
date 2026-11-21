@@ -30,3 +30,4 @@ T4 新增以下 14 条：
 6. `/en/wechat-ai-image` 正文和 FAQ 区分套餐：Free 在微信保存生成图；只有 Plus 可在生成后 30 天内从网页会话记录查看。FAQ 的 JSON-LD 与可见答案一致。
 7. `/en/bring-your-own-api-key` 的 FAQ 和 `/en/wechat-ai-options` 的 BYOK 对比段均要求兼容协议、公网 HTTPS 域名和默认 443 端口；仅能从公网访问不够。
 8. `/en/wechat-character-card` 的换模型 FAQ 明确：同一角色换绑后续聊可将旧剧情上下文发送给新服务商；要隔离旧剧情，下一条聊天消息前先在微信发 `/wx new`，保留旧记录。
+9. `/en/wechat-character-card` 的导入正文和 FAQ 明确：点击保存时上传并存储原卡 JSON（含创作者备注和扩展）；PNG 封面不上传、不保存。

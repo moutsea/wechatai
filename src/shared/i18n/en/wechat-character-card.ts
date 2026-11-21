@@ -57,7 +57,7 @@ Two easy misunderstandings: **a character card is not an image**, since a PNG is
 | World-book entries | ≤ 50 | The world book supports at most 50 entries |
 | One character configuration | ≤ 120 KB overall | Reduce the persona or world-book content |
 
-The file is parsed in your browser, and only the text settings with length limits are submitted to the interface; the PNG cover itself is not uploaded or stored. When you see "V2 character information not found", first confirm the PNG actually contains \`chara\` metadata, or import the JSON instead.`,
+The file is parsed in your browser. When you save the character, Wechatai uploads and stores the original card JSON, including creator notes and extensions, alongside the editable settings. The PNG cover is not uploaded or stored. When you see "V2 character information not found", first confirm the PNG actually contains \`chara\` metadata, or import the JSON instead.`,
     },
     {
       id: "fields",
@@ -139,7 +139,7 @@ Note that the export contains text settings only: no PNG cover, and no shortcut 
     {
       question: "Is the PNG cover stored during import?",
       answer:
-        "No. Wechatai reads only the text settings in the card; the PNG image itself is not uploaded or stored, and the avatar uses a Wechatai preset marker. Save the original file yourself if you want to keep the cover.",
+        "No. The PNG cover is not uploaded or stored, and the avatar uses a Wechatai preset marker. When you save the character, Wechatai uploads and stores the original card JSON, including creator notes and extensions. Keep the original PNG yourself if you want to keep the cover.",
     },
   ],
   related: [
