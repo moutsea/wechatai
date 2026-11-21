@@ -2,7 +2,7 @@ import { ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { SeoPage } from "../../shared/seo-pages";
 import { pricingCopyFor } from "../../shared/i18n/copy";
-import { useLocale } from "../locale";
+import { localizedHref, useLocale } from "../locale";
 
 const relatedCopyZh = { heading: "继续了解" };
 
@@ -16,7 +16,7 @@ export function SeoRelated({ links }: { links: SeoPage["related"] }) {
       <h2 id="seopage-related-title">{heading}</h2>
       <div className="seopage-related-grid">
         {links.map((link) => (
-          <Link to={link.href} key={link.href}>
+          <Link to={localizedHref(locale, link.href)} key={link.href}>
             <span>{link.label}</span>
             <ArrowRight size={16} aria-hidden="true" />
           </Link>

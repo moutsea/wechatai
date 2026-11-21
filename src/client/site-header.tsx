@@ -24,10 +24,10 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], match: "/" },
-  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], match: "/pricing" },
-  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], match: "/docs" },
-  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], match: "/#how" },
+  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], pt: "Início", match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], pt: "Preços", match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], pt: "Documentação", match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], pt: "Como funciona", match: "/#how" },
 ] as const;
 
 interface HeaderCopy {
@@ -58,6 +58,20 @@ const headerCopyEn: HeaderCopy = {
   reloadMenu: "Reload the account menu",
 } as const;
 
+const headerCopyPt = {
+  home: "Página inicial do Wechatai",
+  topNav: "Navegação principal",
+  account: "Conta",
+  login: "Entrar",
+  start: "Comece grátis",
+  workspace: "Abrir o painel",
+  workspaceFallback: "Abrir o painel",
+  openMenu: "Abrir menu",
+  closeMenu: "Fechar menu",
+  menuFailed: "Não foi possível carregar o menu da conta",
+  reloadMenu: "Recarregar o menu da conta",
+} as const;
+
 const headerCopyZh = {
   home: "首页",
   topNav: "顶部导航",
@@ -76,6 +90,7 @@ const headerCopies: Partial<Record<Locale, HeaderCopy>> = {
   en: headerCopyEn,
   ja: headerCopyJa,
   ko: headerCopyKo,
+  pt: headerCopyPt,
 };
 
 type SiteHeaderProps = {
@@ -111,7 +126,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { locale, path } = useLocale();
   const copy = headerCopies[locale] ?? headerCopyZh;
   const latin = locale !== DEFAULT_LOCALE;
-  const navLabelKey = locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : "label";
+  const navLabelKey = locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : locale === "pt" ? "pt" : "label";
   const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();

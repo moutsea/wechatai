@@ -50,7 +50,9 @@ export function LanguageSwitcher() {
         ? "Language"
         : locale === "ja"
           ? headerCopyJa.language
-          : "语言";
+          : locale === "pt"
+            ? "Idioma"
+            : "语言";
   const currentLabel =
     (locale === "ko" ? languageCopyKo.labels[locale] : undefined) ??
     LOCALE_DEFINITIONS[locale].label;

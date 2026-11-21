@@ -307,7 +307,7 @@ export function Landing() {
           <div className="landing-copy">
             <h1>
               {copy.hero.titleLead}
-              {(locale === "en" || locale === "ko") && " "}
+              {(locale === "en" || locale === "ko" || locale === "pt") && " "}
               <span>{copy.hero.titleAccent}</span>
             </h1>
             <p>{copy.hero.body}</p>
