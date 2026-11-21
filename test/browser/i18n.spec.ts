@@ -69,7 +69,10 @@ test.beforeEach(async ({ page }) => {
 test("the application takes over a registered route and switches back to Chinese", async ({
   page,
 }) => {
-  const pricingHeading = page.getByRole("heading", { name: "免费开始，按需升级 Plus" });
+  const chineseHeading = page.getByRole("heading", { name: "免费开始，按需升级 Plus" });
+  const englishHeading = page.getByRole("heading", {
+    name: "Start free, upgrade to Plus when you need more",
+  });
   await page.goto(`${origin}/pricing`);
   const english = page.getByRole("link", { name: "English" });
   await expect(english).toHaveAttribute("href", "/en/pricing");
@@ -78,7 +81,7 @@ test("the application takes over a registered route and switches back to Chinese
   await english.click();
   await expect(page).toHaveURL(`${origin}/en/pricing`);
   const chinese = page.getByRole("link", { name: "中文" });
-  await expect(pricingHeading).toBeVisible();
+  await expect(englishHeading).toBeVisible();
   await expect(page).toHaveTitle("Pricing | Wechatai");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "en_US");
@@ -87,6 +90,7 @@ test("the application takes over a registered route and switches back to Chinese
 
   await chinese.click();
   await expect(page).toHaveURL(`${origin}/pricing`);
+  await expect(chineseHeading).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "zh_CN");
   await expect(page.getByRole("link", { name: "English" })).toBeVisible();

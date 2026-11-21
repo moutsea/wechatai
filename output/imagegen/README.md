@@ -2,6 +2,8 @@
 
 [ai-wechat-connections.png](ai-wechat-connections.png) 为图生图生成的原图。网站使用 `public/images/landing/` 下的 1280px 与 640px WebP，避免首屏加载原始 PNG。
 
+英文首页使用 `ai-wechat-connections-en.webp`（1280 × 1024）和 `ai-wechat-connections-en-640.webp`（640 × 512）。从原 1280px WebP 局部重绘微信图标下的标签为 `WeChat`，再缩放生成 640px 版本，保留构图；中文首页仍使用原有两张 WebP。
+
 - 方式：imagegen CLI，`edit`，`gpt-image-2`，high，1280 × 1024。
 - 构图：DeepSeek / Claude / GPT 与 Muse / Hermes / OpenClaw 在上方，两行三列；连接线向下汇入微信。
 - 完整提示词：[ai-wechat-connections.prompt.txt](ai-wechat-connections.prompt.txt)。

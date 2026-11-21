@@ -4,6 +4,7 @@ import {
   DEFAULT_LOCALE,
   alternateLocales,
   hasRegisteredTranslation,
+  localizedPath,
   normalizePath,
   splitLocalePath,
   type Locale,
@@ -51,4 +52,14 @@ export function LocaleProvider({
 
 export function useLocale(): LocaleContextValue {
   return useContext(LocaleContext);
+}
+
+/** Keeps query strings and fragments and prefixes only registered translations. */
+export function localizedHref(locale: Locale, href: string) {
+  if (locale === DEFAULT_LOCALE) return href;
+  const [beforeHash, hash] = href.split("#");
+  const [path, query] = beforeHash.split("?");
+  const base = path || "/";
+  if (!hasRegisteredTranslation(locale, base)) return href;
+  return `${localizedPath(locale, base)}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
 }

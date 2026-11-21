@@ -2,6 +2,8 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, QrCode } from "lucide-react";
 import { CHANNEL_PROVIDERS } from "../shared/channel-providers";
+import { homeCopy } from "../shared/i18n/en/copy/home";
+import { localizedHref, useLocale } from "./locale";
 import "./landing-steps.css";
 
 const steps = [
@@ -39,6 +41,17 @@ const providerLabels: Record<string, string> = {
   xai: "Grok / xAI",
 };
 
+const providerLabelsEn: Record<string, string> = {
+  kimi: "Kimi",
+  zhipu: "Zhipu GLM",
+  qwen: "Alibaba Cloud Model Studio",
+  volcengine: "Volcengine Ark",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+  xai: "Grok / xAI",
+  siliconflow: "SiliconFlow",
+};
+
 const providerLogos: Record<string, string> = {
   deepseek: "/images/channels/deepseek.png",
   kimi: "/images/channels/kimi.png",
@@ -54,12 +67,49 @@ const providerLogos: Record<string, string> = {
   xai: "/images/channels/xai.png",
 };
 
+const stepsCopyZh = {
+  eyebrow: "轻松开始",
+  title: "2 分钟配置，免费开始",
+  guide: "查看入门教程",
+  requirementsPrefix: "请先确认微信已有",
+  requirementsLink: "ClawBot 入口",
+  requirementsSuffix: "； 普通聊天需自备模型 API Key。手机扫码请用电脑或另一台设备展示二维码。",
+  tabsLabel: "使用步骤",
+  preview: {
+    providersTitle: "支持的模型渠道",
+    providersNote: "也支持 Coding Plan 与自定义兼容渠道",
+    connectLabel: "连接示意",
+    connectTitle: "扫码连接你的微信",
+    connectHint: "微信 ClawBot 扫一扫 · 在手机上确认",
+    connectNote: "示意图，请在工作台获取二维码",
+    connectSuccess: "个人专属连接",
+    chatBrand: "微伴",
+    chatSent: "帮我想三个周末出游的点子。",
+    chatReceived: "当然。你想去户外走走，还是在城市里慢慢逛？",
+    chatNote: "已开始新会话，原会话已保留。",
+  },
+  previous: "上一步",
+  next: "下一步",
+  status: (index: number, total: number, title: string) => `第 ${index} 步，共 ${total} 步：${title}`,
+  alternativesPrefix: "配置模型、连接微信、开始聊天。也可以",
+  alternativesAgent: "连接已有 Agent",
+  alternativesMiddle: "或",
+  alternativesNotifications: "接收服务通知",
+  alternativesEnd: "。",
+};
+
+const stepsEn = steps.map((step, index) => ({ ...step, ...homeCopy.steps.items[index]! }));
+
 function StepPreview({ step }: { step: number }) {
+  const { locale } = useLocale();
+  const english = locale === "en";
+  const copy = (english ? homeCopy.steps : stepsCopyZh).preview;
+  const labels = english ? providerLabelsEn : providerLabels;
   if (step === 0)
     return (
       <div className="steps-preview">
         <div className="steps-providers">
-          <strong>支持的模型渠道</strong>
+          <strong>{copy.providersTitle}</strong>
           <ul className="steps-provider-grid">
             {CHANNEL_PROVIDERS.filter((provider) => !provider.codingPlan).map((provider) => (
               <li key={provider.id}>
@@ -70,11 +120,11 @@ function StepPreview({ step }: { step: number }) {
                   alt=""
                   loading="lazy"
                 />
-                <span>{providerLabels[provider.id] ?? provider.name}</span>
+                <span>{labels[provider.id] ?? provider.name}</span>
               </li>
             ))}
           </ul>
-          <p>也支持 Coding Plan 与自定义兼容渠道</p>
+          <p>{copy.providersNote}</p>
         </div>
       </div>
     );
@@ -82,15 +132,15 @@ function StepPreview({ step }: { step: number }) {
     return (
       <div className="steps-preview" aria-hidden="true">
         <div className="steps-connect">
-          <span className="steps-preview-label">连接示意</span>
-          <strong>扫码连接你的微信</strong>
+          <span className="steps-preview-label">{copy.connectLabel}</span>
+          <strong>{copy.connectTitle}</strong>
           <div className="steps-qr">
             <QrCode size={116} strokeWidth={1.3} />
           </div>
-          <span>微信 ClawBot 扫一扫 · 在手机上确认</span>
-          <p className="steps-qr-note">示意图，请在工作台获取二维码</p>
+          <span>{copy.connectHint}</span>
+          <p className="steps-qr-note">{copy.connectNote}</p>
           <div className="steps-preview-success">
-            <Check size={15} /> 个人专属连接
+            <Check size={15} /> {copy.connectSuccess}
           </div>
         </div>
       </div>
@@ -99,13 +149,14 @@ function StepPreview({ step }: { step: number }) {
     <div className="steps-preview" aria-hidden="true">
       <div className="steps-chat">
         <div className="steps-chat-heading">
-          <img src="/favicon.svg" width={22} height={22} alt="" /> 微伴 <span>DeepSeek</span>
+          <img src="/favicon.svg" width={22} height={22} alt="" />{" "}
+          {copy.chatBrand} <span>DeepSeek</span>
         </div>
         <div className="steps-chat-body">
-          <div className="steps-chat-sent">帮我想三个周末出游的点子。</div>
-          <div className="steps-chat-received">当然。你想去户外走走，还是在城市里慢慢逛？</div>
+          <div className="steps-chat-sent">{copy.chatSent}</div>
+          <div className="steps-chat-received">{copy.chatReceived}</div>
           <div className="steps-chat-command">/wx new</div>
-          <div className="steps-chat-note">已开始新会话，原会话已保留。</div>
+          <div className="steps-chat-note">{copy.chatNote}</div>
         </div>
       </div>
     </div>
@@ -113,24 +164,28 @@ function StepPreview({ step }: { step: number }) {
 }
 
 export function LandingSteps({ startAction }: { startAction: ReactNode }) {
+  const { locale } = useLocale();
+  const english = locale === "en";
+  const copy = english ? homeCopy.steps : stepsCopyZh;
+  const localizedSteps = english ? stepsEn : steps;
   const [activeStep, setActiveStep] = useState(0);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const move = (offset: number) =>
-    setActiveStep((current) => (current + offset + steps.length) % steps.length);
+    setActiveStep((current) => (current + offset + localizedSteps.length) % localizedSteps.length);
   const onTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let next: number;
     switch (event.key) {
       case "ArrowRight":
-        next = (index + 1) % steps.length;
+        next = (index + 1) % localizedSteps.length;
         break;
       case "ArrowLeft":
-        next = (index + steps.length - 1) % steps.length;
+        next = (index + localizedSteps.length - 1) % localizedSteps.length;
         break;
       case "Home":
         next = 0;
         break;
       case "End":
-        next = steps.length - 1;
+        next = localizedSteps.length - 1;
         break;
       default:
         return;
@@ -143,22 +198,25 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
   return (
     <section className="landing-steps" id="how" aria-labelledby="how-title">
       <div className="steps-heading">
-        <div className="eyebrow">轻松开始</div>
-        <h2 id="how-title">2 分钟配置，免费开始</h2>
+        <div className="eyebrow">{copy.eyebrow}</div>
+        <h2 id="how-title">{copy.title}</h2>
         <div className="steps-actions">
           {startAction}
-          <Link className="button secondary" to="/docs/getting-started">
-            查看入门教程
+          <Link className="button secondary" to={localizedHref(locale, "/docs/getting-started")}>
+            {copy.guide}
             <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
         </div>
         <p className="steps-requirements">
-          请先确认微信已有<Link to="/docs/getting-started#clawbot-entry">ClawBot 入口</Link>；
-          普通聊天需自备模型 API Key。手机扫码请用电脑或另一台设备展示二维码。
+          {copy.requirementsPrefix}
+          <Link to={localizedHref(locale, "/docs/getting-started#clawbot-entry")}>
+            {copy.requirementsLink}
+          </Link>
+          {copy.requirementsSuffix}
         </p>
       </div>
-      <div className="steps-tabs" role="tablist" aria-label="使用步骤">
-        {steps.map((step, index) => (
+      <div className="steps-tabs" role="tablist" aria-label={copy.tabsLabel}>
+        {localizedSteps.map((step, index) => (
           <button
             key={step.title}
             ref={(element) => {
@@ -179,7 +237,7 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
         ))}
       </div>
       <div className="steps-pages">
-        {steps.map((step, index) => (
+        {localizedSteps.map((step, index) => (
           <div
             key={step.title}
             className="steps-slide"
@@ -193,7 +251,7 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
               <span className="steps-page-number">STEP {String(index + 1).padStart(2, "0")}</span>
               <h3>{step.title}</h3>
               <p>{step.description}</p>
-              <Link className="text-link" to={step.guide}>
+              <Link className="text-link" to={localizedHref(locale, step.guide)}>
                 {step.guideLabel}
                 <ArrowUpRight size={16} aria-hidden="true" />
               </Link>
@@ -205,24 +263,37 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
       <div className="steps-controls">
         <span role="status" aria-live="polite" aria-atomic="true">
           <span className="steps-screen-reader">
-            第 {activeStep + 1} 步，共 {steps.length} 步：{steps[activeStep].title}
+            {copy.status(activeStep + 1, localizedSteps.length, localizedSteps[activeStep].title)}
           </span>
           <span aria-hidden="true">
             <b>{String(activeStep + 1).padStart(2, "0")}</b> / 03
           </span>
         </span>
         <div>
-          <button type="button" aria-label="上一步" onClick={() => move(-1)}>
+          <button
+            type="button"
+            aria-label={copy.previous}
+            onClick={() => move(-1)}
+          >
             <ArrowLeft size={19} aria-hidden="true" />
           </button>
-          <button type="button" aria-label="下一步" onClick={() => move(1)}>
+          <button
+            type="button"
+            aria-label={copy.next}
+            onClick={() => move(1)}
+          >
             <ArrowRight size={19} aria-hidden="true" />
           </button>
         </div>
       </div>
       <p className="steps-alternatives">
-        配置模型、连接微信、开始聊天。也可以<Link to="/wechat-agent">连接已有 Agent</Link>或
-        <Link to="/docs/notifications">接收服务通知</Link>。
+        {copy.alternativesPrefix}
+        <Link to="/wechat-agent">{copy.alternativesAgent}</Link>
+        {copy.alternativesMiddle}
+        <Link to={localizedHref(locale, "/docs/notifications")}>
+          {copy.alternativesNotifications}
+        </Link>
+        {copy.alternativesEnd}
       </p>
     </section>
   );

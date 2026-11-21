@@ -1133,6 +1133,75 @@ for (const interval of ["month", "year"]) {
   });
 }
 
+const englishBuyer = {
+  user: { id: "english-buyer", name: "Buyer", email: "buyer@example.test", emailVerified: true },
+  session: {
+    id: "english-session",
+    token: "old-token",
+    userId: "english-buyer",
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  },
+};
+
+test("returns expired English checkout buyers to their selected plan after login", async ({ page }) => {
+  const destination = "/en/pricing?interval=year#plan-year";
+  const oldSession = englishBuyer.session;
+  const newSession = { ...oldSession, id: "new-session", token: "new-token" };
+  let signedInAgain = false;
+  await page.route("**/api/billing/checkout", (route) =>
+    route.fulfill({ status: 401, json: { error: "unauthorized", message: "请先登录" } }),
+  );
+  await page.route("**/api/auth/get-session*", (route) =>
+    route.fulfill({
+      // Keep returning the stale session until the buyer actually signs in again.
+      json: { ...englishBuyer, session: signedInAgain ? newSession : oldSession },
+    }),
+  );
+  await page.route("**/api/auth/sign-in/email", (route) => {
+    signedInAgain = true;
+    return route.fulfill({
+      json: { redirect: false, token: newSession.token, user: englishBuyer.user },
+    });
+  });
+
+  await page.goto(`${origin}${destination}`);
+  const card = page.locator("#plan-year");
+  const purchase = card.getByRole("button", { name: /Get Plus Yearly/ });
+  const alert = card.getByRole("alert");
+  await purchase.click();
+  await expect(alert).toHaveText("Your session has expired. Log in again to continue.");
+  await expect(page.locator("#plan-month").getByRole("alert")).toHaveCount(0);
+  const login = card.getByRole("link", { name: "Log in again" });
+  await expect(login).toHaveAttribute("href", `/login?returnTo=${encodeURIComponent(destination)}`);
+  await login.click();
+  await expect(page.getByRole("button", { name: "登录工作台", exact: true })).toBeVisible();
+  await page.locator('input[type="email"]').fill(englishBuyer.user.email);
+  await page.locator('input[type="password"]').fill("test-password");
+  await page.getByRole("button", { name: "登录工作台", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}${destination}`);
+  await expect(purchase).toBeEnabled();
+  await expect(alert).toHaveCount(0);
+});
+
+test("shows an English checkout failure without asking the buyer to log in again", async ({ page }) => {
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
+  await page.route("**/api/billing/checkout", (route) =>
+    route.fulfill({
+      status: 503,
+      json: { error: "billing_unavailable", message: "该方案尚未开放购买" },
+    }),
+  );
+  await page.goto(`${origin}/en/pricing?interval=month#plan-month`);
+  const card = page.locator("#plan-month");
+  const purchase = card.getByRole("button", { name: /Get Plus Monthly/ });
+  await purchase.click();
+  await expect(card.getByRole("alert")).toHaveText(
+    "This plan is not available for purchase right now. Try again later.",
+  );
+  await expect(card.getByRole("link", { name: "Log in again" })).toHaveCount(0);
+  await expect(purchase).toBeEnabled();
+});
+
 for (const width of [320, 390]) {
   test(`keeps the Muse setup reachable, collapsible and copyable at ${width}px`, async ({
     page,
@@ -1194,3 +1263,118 @@ for (const width of [320, 390]) {
     for (const step of steps) await expect(step).toBeHidden();
   });
 }
+
+test("keeps signed-in account controls English on both marketing pages", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({ json: { plan: "free", planUntil: 0, wallet: { balance: 100 } } }),
+  );
+  for (const [path, freeCard] of [
+    ["/en", ".landing-plan-free"],
+    ["/en/pricing", ".plan-free"],
+  ]) {
+    await page.goto(`${origin}${path}`);
+    await expect(page.locator(freeCard).getByRole("link", { name: "Open workspace" }))
+      .toHaveAttribute("href", "/app");
+    await expect(page.getByRole("navigation", { name: "Language", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "User menu", exact: true }).click();
+    const menu = page.getByRole("dialog", { name: "Account menu", exact: true });
+    await expect(menu.getByRole("link", { name: "Open workspace" })).toHaveAttribute("href", "/app");
+    await expect(menu.getByRole("link", { name: "Upgrade membership" }))
+      .toHaveAttribute("href", "/app/billing");
+    await expect(menu.getByRole("button", { name: "Log out" })).toBeVisible();
+    await expect(menu).not.toContainText(/\p{Script=Han}/u);
+  }
+});
+
+test("serves the English homepage and pricing page without Chinese page copy", async ({
+  page,
+}) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/en`);
+  await mounted;
+
+  await expect(page.locator("h1")).toContainText("Bring your AI");
+  await expect(page.locator("h1")).toContainText("into WeChat");
+  await expect(page.locator('.site-header-nav a[href="/en/pricing"]')).toHaveText("Pricing");
+  await expect(page.locator('.site-header-nav a[href="/en/docs"]')).toHaveText("Docs");
+  await expect(
+    page.locator('.landing-plan-year a[href="/en/pricing?interval=year#plan-year"]').first(),
+  ).toBeVisible();
+  const faq = page.locator(".landing-faq details").first();
+  await faq.locator("summary").click();
+  await expect(faq).toHaveAttribute("open", "");
+  await expect(faq).toContainText("Do I need my own API key?");
+  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
+    /\p{Script=Han}/u,
+  );
+
+  await page.goto(`${origin}/en/pricing`);
+  await expect(page.locator("h1")).toHaveText(
+    "Start free, upgrade to Plus when you need more",
+  );
+  await expect(page.locator(".plan h3")).toHaveText(["Free", "Plus Monthly", "Plus Yearly"]);
+  await expect(page.locator(".plan-year .plan-price-unit")).toHaveText("/ year");
+  await expect(page.locator('.seopage-related a[href="/wechat-muse"]')).toContainText(
+    "Muse managed assistant for WeChat",
+  );
+  const estimate = page.locator(".pricing-estimate");
+  await estimate.locator("summary").click();
+  await expect(estimate).toHaveAttribute("open", "");
+  await expect(estimate.locator(".cost-results")).toContainText("credits");
+  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
+    /\p{Script=Han}/u,
+  );
+  const readableAttributes = await page.evaluate(() =>
+    [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
+      .flatMap((element) =>
+        ["alt", "aria-label", "title", "placeholder"].map(
+          (name) => element.getAttribute(name) ?? "",
+        ),
+      )
+      .join(" "),
+  );
+  expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
+});
+
+test("opens the registered English getting-started guide from the homepage", async ({ page }) => {
+  await page.goto(`${origin}/en`);
+  await page.getByRole("link", { name: "Read the getting-started guide", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/en/docs/getting-started`);
+  await expect(page.locator("h1")).toHaveText(
+    "WeChat AI guide: configure a model and connect by QR code",
+  );
+});
+
+test("preserves the getting-started section when opening the English guide", async ({ page }) => {
+  await page.goto(`${origin}/en`);
+  await page.getByRole("link", { name: "ClawBot entry", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/en/docs/getting-started#clawbot-entry`);
+  await expect(page.locator("#clawbot-entry")).toBeVisible();
+});
+
+for (const [surface, toggle] of [
+  ["FAQ", "How do credits work? Do daily credits roll over?"],
+  ["estimator", "Estimate my daily usage"],
+]) {
+  test(`opens the registered English billing guide from the pricing ${surface}`, async ({ page }) => {
+    await page.goto(`${origin}/en/pricing`);
+    await page.getByText(toggle, { exact: true }).click();
+    await page.getByRole("link", { name: "See full billing rules", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/en/docs/credits`);
+    await expect(page.locator("h1")).toHaveText(
+      "Wechatai membership and credits: allowance, billing and referral rewards",
+    );
+  });
+}
+
+test("labels the Xiaowei mention with the configured shortcut placeholder", async ({ page }) => {
+  await page.goto(`${origin}/en`);
+  const example = page.locator(".use-case-cloud .scene-task-prompt");
+  await expect(example).toBeVisible();
+  await expect(example).toContainText("@<shortcut> convert this Markdown to Word");
+  await expect(page.locator(".use-case-cloud .use-case-copy")).toContainText(
+    "replace <shortcut> with your configured WeChat shortcut.",
+  );
+});

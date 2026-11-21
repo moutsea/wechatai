@@ -12,12 +12,15 @@ import { FAQ_DOC_SECTIONS, faqAnswerText, type FaqDocSection } from "./faq-doc";
 import { EN_DOC_ARTICLES, EN_DOCS_DESCRIPTION, EN_DOCS_TITLE } from "./i18n/en/docs";
 import { EN_DOC_CONTENT, EN_FAQ_SECTIONS } from "./i18n/en/data/docs-content-en";
 import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
-import { LANDING_FAQ } from "./landing-faq";
+import { landingFaq } from "./landing-faq";
+import { homeCopy } from "./i18n/en/copy/home";
+import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
 import { MUSE_FAQ } from "./muse-faq";
 import {
   DEFAULT_LOCALE,
+  hasRegisteredTranslation,
   LOCALE_DEFINITIONS,
   localizedPath,
   normalizePath,
@@ -175,12 +178,14 @@ function softwareApplicationRef() {
  * `PLUGIN_LIMITS` / `WECHAT_LINK_LIMITS`。
  * credits 加油包是加购项而不是软件本身的订阅，因此没有放进 offers。
  */
-function softwareApplicationOffers() {
+function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
+  const english = locale === "en";
   const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus").map((offer) => {
     const price = offer.amount / 100;
+    const name = offer.interval === "year" ? "Plus Yearly" : "Plus Monthly";
     return {
       "@type": "Offer",
-      name: offer.name,
+      name: english ? name : offer.name,
       url: `${SITE_URL}/pricing`,
       price,
       priceCurrency: "CNY",
@@ -198,12 +203,14 @@ function softwareApplicationOffers() {
   return [
     {
       "@type": "Offer",
-      name: "免费版",
+      name: english ? "Free" : "免费版",
       url: `${SITE_URL}/`,
       price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
-      description: `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
+      description: english
+        ? `Includes daily credits, ${WECHAT_LINK_LIMITS.free} WeChat connection, and ${PLUGIN_LIMITS.free} plugin configuration.`
+        : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: freePrice,
@@ -252,7 +259,13 @@ export interface PageSeo {
  * breadcrumb trail and, when present, the FAQ block. Keeping it in one builder
  * stops the eight pages from drifting apart as they are edited.
  */
-function seoLandingPage(page: SeoPage, canonical: string, htmlLang: string): PageSeo {
+function seoLandingPage(
+  page: SeoPage,
+  canonical: string,
+  htmlLang: string,
+  locale: Locale = DEFAULT_LOCALE,
+): PageSeo {
+  const english = locale === "en";
   const isArticle = page.kind === "article";
   const publisher = organizationNode();
   const webPage = isArticle
@@ -299,15 +312,18 @@ function seoLandingPage(page: SeoPage, canonical: string, htmlLang: string): Pag
               {
                 "@type": "Service",
                 "@id": `${SITE_URL}${page.path}#plans`,
-                name: `${SITE_NAME} 免费版与 Plus`,
-                serviceType: "微信 AI 接入服务",
+                name: english ? "Wechatai Free and Plus" : `${SITE_NAME} 免费版与 Plus`,
+                serviceType: english ? "WeChat AI integration service" : "微信 AI 接入服务",
                 provider: { "@id": ORGANIZATION_ID },
-                offers: softwareApplicationOffers(),
+                offers: softwareApplicationOffers(locale),
               },
             ]
           : []),
         breadcrumbList([
-          { name: "首页", item: `${SITE_URL}/` },
+          {
+            name: english ? "Home" : "首页",
+            item: `${SITE_URL}${hasRegisteredTranslation(locale, "/") ? localizedPath(locale, "/") : "/"}`,
+          },
           { name: page.title, item: canonical },
         ]),
         ...(page.faq.length
@@ -354,7 +370,13 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   const canonical = `${SITE_URL}${locale === DEFAULT_LOCALE ? path : localizedPath(locale, path)}`;
   const { htmlLang } = LOCALE_DEFINITIONS[locale];
   const landing = findSeoPage(path);
-  if (landing) return seoLandingPage(landing, canonical, htmlLang);
+  if (landing)
+    return seoLandingPage(
+      path === "/pricing" ? pricingPageFor(locale) : landing,
+      canonical,
+      htmlLang,
+      locale,
+    );
   const englishDocs = locale === "en";
   const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
   const englishArticle = englishDocs
@@ -528,9 +550,13 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
     };
   }
   if (path === "/") {
-    const title = `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
-    const description =
-      "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
+    const english = locale === "en";
+    const title = english
+      ? homeCopy.seo.title
+      : `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
+    const description = english
+      ? homeCopy.seo.description
+      : "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
     return {
       title,
       description,
@@ -564,22 +590,32 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
             operatingSystem: "Web",
             image: SOCIAL_IMAGE,
             maintainer: maintainerNode(),
-            featureList: [
-              "使用自己的 API Key 与模型服务地址",
-              "在微信中切换大模型并管理聊天会话",
-              "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
-              "连接已有 Muse、Hermes 和 OpenClaw Agent",
-              "配置图片模型，在微信生成并接收 AI 图片",
-              "通过角色扮演插件自定义人设与剧情",
-              "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
-            ],
-            offers: softwareApplicationOffers(),
+            featureList: english
+              ? [
+                  "Use your own API key and model endpoint",
+                  "Switch models and manage conversations in WeChat",
+                  "Supports OpenAI Chat Completions, Responses, and Anthropic Messages",
+                  "Connect existing Muse, Hermes, and OpenClaw agents",
+                  "Configure an image model to generate and receive AI images in WeChat",
+                  "Customize characters and storylines with the role-play plugin",
+                  "Plus cloud assistant Xiaowei handles files, creates documents, and runs tasks; requires a text model",
+                ]
+              : [
+                  "使用自己的 API Key 与模型服务地址",
+                  "在微信中切换大模型并管理聊天会话",
+                  "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
+                  "连接已有 Muse、Hermes 和 OpenClaw Agent",
+                  "配置图片模型，在微信生成并接收 AI 图片",
+                  "通过角色扮演插件自定义人设与剧情",
+                  "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
+                ],
+            offers: softwareApplicationOffers(locale),
           },
-          // 首页折叠问答的 FAQPage 节点，条目与页面上渲染的 `LANDING_FAQ` 同源。
+          // 首页折叠问答的 FAQPage 节点，条目与页面上渲染的问答同源。
           {
             "@type": "FAQPage",
             "@id": `${canonical}#faq`,
-            mainEntity: LANDING_FAQ.map((item) => ({
+            mainEntity: landingFaq(locale).map((item) => ({
               "@type": "Question",
               name: item.question,
               acceptedAnswer: { "@type": "Answer", text: item.answer },
@@ -695,6 +731,10 @@ export function renderSeoHead(seo: PageSeo) {
   const meta = (name: string, content: string, property = false) =>
     `<meta ${property ? "property" : "name"}="${name}" content="${escapeHtml(content)}" data-seo />`;
   const defaultLocale = LOCALE_DEFINITIONS[DEFAULT_LOCALE];
+  const imageAlt =
+    (seo.htmlLang ?? defaultLocale.htmlLang) === "en"
+      ? "Wechatai: chat with the models you choose in WeChat."
+      : "微伴 Wechatai：在微信里，与自选大模型对话。";
   return [
     `<title data-seo>${escapeHtml(seo.title)}</title>`,
     meta("description", seo.description),
@@ -717,12 +757,12 @@ export function renderSeoHead(seo: PageSeo) {
           meta("og:image", SOCIAL_IMAGE, true),
           meta("og:image:width", "1200", true),
           meta("og:image:height", "630", true),
-          meta("og:image:alt", "微伴 Wechatai：在微信里，与自选大模型对话。", true),
+          meta("og:image:alt", imageAlt, true),
           meta("twitter:card", "summary_large_image"),
           meta("twitter:title", seo.title),
           meta("twitter:description", seo.description),
           meta("twitter:image", SOCIAL_IMAGE),
-          meta("twitter:image:alt", "微伴 Wechatai：在微信里，与自选大模型对话。"),
+          meta("twitter:image:alt", imageAlt),
         ]
       : []),
     ...(seo.structuredData
