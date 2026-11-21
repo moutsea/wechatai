@@ -4,6 +4,7 @@
  */
 import { DAILY_CREDIT_DEFAULTS } from "./credits";
 import { homeCopy } from "./i18n/en/copy/home";
+import { homeCopy as homeCopyJa } from "./i18n/ja/copy/home";
 import type { Locale } from "./i18n";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
@@ -63,7 +64,10 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
 /** English questions and answers; links stay identical to the Chinese source. */
 export const LANDING_FAQ_EN: readonly LandingFaqItem[] = homeCopy.faq;
 
+/** Japanese questions and answers; doc links fall back to the Chinese guides. */
+export const LANDING_FAQ_JA: readonly LandingFaqItem[] = homeCopyJa.faq;
+
 /** Selects the FAQ copy used by both the rendered page and its FAQPage JSON-LD. */
 export function landingFaq(locale: Locale): readonly LandingFaqItem[] {
-  return locale === "en" ? LANDING_FAQ_EN : LANDING_FAQ;
+  return locale === "en" ? LANDING_FAQ_EN : locale === "ja" ? LANDING_FAQ_JA : LANDING_FAQ;
 }

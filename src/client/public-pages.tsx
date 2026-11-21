@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { landingFaq } from "../shared/landing-faq";
 import { homeCopy } from "../shared/i18n/en/copy/home";
+import { homeCopy as homeCopyJa } from "../shared/i18n/ja/copy/home";
 import { PLUGIN_LIMITS } from "../shared/plugin-access";
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN, approxYuan } from "../shared/pricing-copy";
 import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
@@ -76,7 +77,28 @@ const landingPlansEn = [
   },
 ] as const;
 
-type LandingPlan = (typeof landingPlans)[number] | (typeof landingPlansEn)[number];
+const landingPlansJa = [
+  {
+    id: "free",
+    ...homeCopyJa.plans.free,
+    price: 0,
+  },
+  {
+    id: "month",
+    ...homeCopyJa.plans.month,
+    price: PLUS_MONTHLY_YUAN,
+  },
+  {
+    id: "year",
+    ...homeCopyJa.plans.year,
+    price: PLUS_YEARLY_YUAN,
+  },
+] as const;
+
+type LandingPlan =
+  | (typeof landingPlans)[number]
+  | (typeof landingPlansEn)[number]
+  | (typeof landingPlansJa)[number];
 
 const homeCopyZh = {
   plans: {
@@ -149,7 +171,8 @@ const homeCopyZh = {
 
 function LandingPlanFeatures({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
-  const copy = (locale === "en" ? homeCopy : homeCopyZh).plans.features;
+  const copy =
+    (locale === "en" ? homeCopy : locale === "ja" ? homeCopyJa : homeCopyZh).plans.features;
   const links = WECHAT_LINK_LIMITS[plus ? "plus" : "free"];
   const plugins = PLUGIN_LIMITS.free;
   return (
@@ -251,7 +274,7 @@ function LandingPlanCard({
 }) {
   const { data: session } = useAuth();
   const { locale } = useLocale();
-  const { hero } = locale === "en" ? homeCopy : homeCopyZh;
+  const { hero } = locale === "en" ? homeCopy : locale === "ja" ? homeCopyJa : homeCopyZh;
   return (
     <article
       className={`landing-plan landing-plan-${plan.id}${plan.id === "free" ? "" : " landing-plan-plus"} ${className}`}
@@ -292,9 +315,11 @@ export function Landing() {
   const { data: session } = useAuth();
   const { locale } = useLocale();
   const english = locale === "en";
-  const copy = english ? homeCopy : homeCopyZh;
-  const heroImage = `/images/landing/ai-wechat-connections${english ? "-en" : ""}`;
-  const plans = english ? landingPlansEn : landingPlans;
+  const copy = english ? homeCopy : locale === "ja" ? homeCopyJa : homeCopyZh;
+  // The artwork only labels brand names and the WeChat wordmark, so the English
+  // rendering also serves Japanese; only the alt text is localized (copy.hero).
+  const heroImage = `/images/landing/ai-wechat-connections${locale === "zh-CN" ? "" : "-en"}`;
+  const plans = english ? landingPlansEn : locale === "ja" ? landingPlansJa : landingPlans;
   const faq = landingFaq(locale);
   return (
     <div className="landing">

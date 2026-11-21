@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
 import englishDocs from "../src/shared/i18n/en/docs";
+import { AVAILABLE_LOCALES, LOCALE_DEFINITIONS } from "../src/shared/i18n";
 import {
   getPageSeo,
   publishedLocalizedPaths,
@@ -17,9 +18,16 @@ function parse(path: string) {
   );
 }
 
-/** The switcher's Chinese endonym is allowed in link text, not in attributes. */
+/** Switcher endonyms (中文, 日本語) are allowed in link text, not in attributes. */
+function withoutLanguageLabels(text: string) {
+  return AVAILABLE_LOCALES.reduce(
+    (result, locale) => result.replaceAll(LOCALE_DEFINITIONS[locale].label, ""),
+    text,
+  );
+}
+
 function hanResidue(document: Document) {
-  const text = document.body.textContent?.replaceAll("中文", "") ?? "";
+  const text = withoutLanguageLabels(document.body.textContent ?? "");
   const attributes = [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
     .flatMap((element) =>
       ["alt", "aria-label", "title", "placeholder"].map(
@@ -224,12 +232,17 @@ describe("published English pages", () => {
       "/en/wechat-kimi",
       "/en/wechat-muse",
       "/en/wechat-qwen",
+      "/ja",
+      "/ja/pricing",
+      "/ja/wechat-ai",
+      "/ja/wechat-bot",
+      "/ja/wechat-deepseek",
     ].sort();
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
-    const localized = [...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/en[^<]*)<\/loc>/g)].map(
-      ([, path]) => path,
-    );
+    const localized = [
+      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja)[^<]*)<\/loc>/g),
+    ].map(([, path]) => path);
     expect(localized.sort()).toEqual(expected);
   });
 });

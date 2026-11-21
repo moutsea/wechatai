@@ -25,7 +25,7 @@ export interface LocaleDefinition {
 export const LOCALE_DEFINITIONS: Readonly<Record<Locale, LocaleDefinition>> = {
   "zh-CN": { prefix: "", htmlLang: "zh-CN", ogLocale: "zh_CN", label: "中文" },
   en: { prefix: "en", htmlLang: "en", ogLocale: "en_US", label: "English" },
-  ja: { prefix: "ja", htmlLang: "ja", ogLocale: "ja_JP", label: "日本語" },
+  ja: { prefix: "ja", htmlLang: "ja-JP", ogLocale: "ja_JP", label: "日本語" },
   ko: { prefix: "ko", htmlLang: "ko", ogLocale: "ko_KR", label: "한국어" },
   es: { prefix: "es", htmlLang: "es", ogLocale: "es_ES", label: "Español" },
   pt: { prefix: "pt", htmlLang: "pt", ogLocale: "pt_BR", label: "Português" },
