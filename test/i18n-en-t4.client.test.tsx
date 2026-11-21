@@ -67,6 +67,19 @@ describe("prerendered English landing pages", () => {
     });
   }
 
+  it("explains Free image saving and Plus-only web history in the guide and FAQ", () => {
+    const doc = new DOMParser().parseFromString(renderPublicPage("/en/wechat-ai-image"), "text/html");
+    const faq = [...doc.querySelectorAll("#faq details")].find(({ textContent }) =>
+      textContent?.startsWith("How long are generated images kept?"),
+    );
+    expect.soft(doc.querySelector("#how-it-works")?.textContent, "guide").toMatch(
+      /Free users can save generated images .* in WeChat\. Only Plus users can view .* in web conversation history for 30 days/,
+    );
+    expect.soft(faq?.querySelector("p")?.textContent, "retention FAQ").toMatch(
+      /Only Plus users can view .* in web conversation history .*30 days\. Free users can save generated images .* in WeChat/,
+    );
+  });
+
   it("keeps the Chinese source body for the unprefixed path", () => {
     const html = renderPublicPage("/wechat-muse");
     expect(html).toContain("微信接入 Muse 托管助理：连接、切换与不回复排查");

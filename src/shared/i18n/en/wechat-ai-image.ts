@@ -24,7 +24,7 @@ const content: SeoPage = {
 
 **Cannot do:** image-to-image, editing the previous image, or using a photo as a style reference. Each generation is independent, the prompt is processed on its own, and the previous image is not carried in as input. For "change this one" workflows, use a dedicated image editor.
 
-The same plugin also shows images and prompts in the web conversation record, so you can copy a description and retry.`,
+Free users can save generated images directly in WeChat. Only Plus users can view generated images in web conversation history for 30 days after generation. They can also copy the prompt there and try again.`,
     },
     {
       id: "setup",
@@ -99,7 +99,7 @@ Credit and balance rules are in [credits](/docs/credits), and plan differences a
     {
       question: "How long are generated images kept?",
       answer:
-        "The platform keeps originals for 30 days and they can be viewed in the web conversation record during that time. After 30 days the link expires and cannot be retrieved from the platform; download images right after generation if you need to keep them.",
+        "Wechatai keeps originals for 30 days. Only Plus users can view them in web conversation history during those 30 days. Free users can save generated images directly in WeChat. After 30 days, the link expires and the original cannot be retrieved from Wechatai, so save a copy right away if you want to keep it.",
     },
     {
       question: "Can the image plugin be used in group chats?",

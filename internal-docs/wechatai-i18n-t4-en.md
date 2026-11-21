@@ -27,3 +27,4 @@ T4 新增以下 14 条：
 3. 每组中英文 canonical 自指、hreflang 互指，`x-default` 指向中文原路径，`lang` 及 `og:locale` 正确。英文页面 JSON-LD 与可见内容一致，保留共用实体标识。与含 T2/T3 的同一基线比，sitemap 恰好新增上述 14 条，原有 URL 与 `lastmod` 不变。检查未登记路径真正返回 404，中文原页与 T2/T3 英文路由通过回归。
 4. 开工前查负载、全量测试或构建进程及 `MemAvailable`；有重活或低于 2 GiB 时等待并说明。串行运行 `pnpm check`（含构建及静态 SEO 校验）、相关 `pnpm test:browser` 用例；用 `node scripts/verify-seo.mjs <本地预览 origin>` 核验 HTTP。PR 附逐页证据、sitemap diff、基线及 HEAD、检查输出和改动文件清单。
 5. 本文仅放仓库根 `internal-docs/`，不导入、不登记、不复制到任何公开树。构建后查公开资产和文档 bundle 无文件名或独有标题；用本地生产规则预览确认本文直链不可访问且 `/api/docs` 不返回本文。
+6. `/en/wechat-ai-image` 正文和 FAQ 区分套餐：Free 在微信保存生成图；只有 Plus 可在生成后 30 天内从网页会话记录查看。FAQ 的 JSON-LD 与可见答案一致。
