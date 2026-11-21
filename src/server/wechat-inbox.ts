@@ -1,15 +1,31 @@
-import type { WxMessage } from "./wechat";
+import type { WechatTextReceipt, WxMessage } from "./wechat";
 
 // The original inbox primary key is also used by replies, runs and billing.
 // Preserve it when connecting an old rounded receipt to an exact WeChat ID.
 export function initWechatInbox(sql: SqlStorage) {
   const columns = sql.exec<{ name: string }>("PRAGMA table_info(inbox)").toArray();
-  for (const name of ["wechatRoundedId", "wechatExactId", "wechatSeq"]) {
+  for (const name of ["wechatRoundedId", "wechatExactId", "wechatSeq", "wechatTextReceipts"]) {
     if (!columns.some((c) => c.name === name))
       sql.exec(`ALTER TABLE inbox ADD COLUMN ${name} TEXT`);
   }
   sql.exec(
     "CREATE INDEX IF NOT EXISTS inbox_wechat_rounded ON inbox(wechatRoundedId) WHERE wechatRoundedId IS NOT NULL",
+  );
+}
+
+// Keep only the last attempt for each text part. A historical row without receipts
+// predates diagnostics. Never store upstream bodies, message IDs or recipient IDs here.
+export function recordWechatTextReceipt(
+  sql: SqlStorage,
+  pending: { id: string; part: number; attempts: number },
+  receipt: WechatTextReceipt | undefined,
+) {
+  if (!receipt) return;
+  sql.exec(
+    "UPDATE inbox SET wechatTextReceipts=json_set(COALESCE(wechatTextReceipts,'{}'),?,json(?)) WHERE id=?",
+    `$."${pending.part}"`,
+    JSON.stringify({ ...receipt, attempt: pending.attempts + 1, at: Date.now() }),
+    pending.id,
   );
 }
 
