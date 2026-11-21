@@ -1,3 +1,4 @@
+import { allowAnonymousAnalytics } from "./analytics-budget";
 import { createHash, createHmac } from "node:crypto";
 import {
   ANALYTICS_MAX_DAYS,
@@ -65,7 +66,7 @@ export type RecordPageViewInput = {
 
 export type RecordPageViewResult =
   | { ok: true; stored: boolean }
-  | { ok: true; ignored: "bot" | "untracked_path" }
+  | { ok: true; ignored: "bot" | "untracked_path" | "budget" }
   | { ok: false; reason: "invalid_payload" };
 
 export async function recordPageView(
@@ -79,6 +80,7 @@ export async function recordPageView(
   const payload = parsed.data;
   const path = normalizePath(payload.pathname);
   if (!isTrackedPath(path)) return { ok: true, ignored: "untracked_path" };
+  if (!(await allowAnonymousAnalytics(env))) return { ok: true, ignored: "budget" };
 
   const now = input.now ?? Date.now();
   const day = shanghaiDay(new Date(now));
@@ -112,7 +114,7 @@ export async function recordPageView(
 
 export type RecordFunnelEventResult =
   | { ok: true; stored: boolean }
-  | { ok: true; ignored: "bot" | "server_event" }
+  | { ok: true; ignored: "bot" | "server_event" | "budget" }
   | { ok: false; reason: "invalid_payload" };
 
 /**
@@ -135,6 +137,7 @@ export async function recordFunnelEvent(
   if (!parsed.success) return { ok: false, reason: "invalid_payload" };
   const payload = parsed.data;
   if (isServerFunnelEvent(payload.name)) return { ok: true, ignored: "server_event" };
+  if (!(await allowAnonymousAnalytics(env))) return { ok: true, ignored: "budget" };
   return insertFunnelEvent(env, payload, input);
 }
 

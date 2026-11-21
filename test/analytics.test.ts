@@ -1,3 +1,5 @@
+import { AnonymousAnalyticsBudget } from "../src/server/analytics-budget";
+import budgetMigration from "../migrations/0020_analytics_budget.sql?raw";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
@@ -12,6 +14,7 @@ import {
   recordFunnelEvent,
   recordPageView,
   recordSignupConversion,
+  recordServerFunnelEvent,
 } from "../src/server/analytics";
 import {
   classifyDevice,
@@ -24,7 +27,7 @@ import {
 
 // D1 的 exec 只吃单行语句，测试里把注释与换行压平成一段脚本。
 async function applyMigration() {
-  for (const migration of [pageViewsMigration, signupMigration, funnelMigration])
+  for (const migration of [pageViewsMigration, signupMigration, funnelMigration, budgetMigration])
     await env.DB.exec(
       migration
         .replace(/^--.*$/gm, "")
@@ -229,6 +232,84 @@ describe("recordPageView", () => {
       reason: "invalid_payload",
     });
     expect((await rows()).results).toHaveLength(0);
+  });
+});
+
+describe("anonymous analytics budget", () => {
+  it("grants disjoint batches across isolates and reopens at Beijing midnight", async () => {
+    const now = Date.parse("2034-01-01T15:59:59Z");
+    const isolates = Array.from({ length: 6 }, () => new AnonymousAnalyticsBudget());
+    let accepted = 0;
+    for (let i = 0; i < 21; i++) {
+      const results = await Promise.all(isolates.map((isolate) => isolate.take(env.DB, 35, now)));
+      accepted += results.filter(Boolean).length;
+    }
+    expect(accepted).toBe(35);
+    expect(
+      await env.DB.prepare("SELECT reserved FROM anonymous_analytics_budget WHERE day=?")
+        .bind("2034-01-01")
+        .first("reserved"),
+    ).toBe(35);
+    expect(await isolates[0].take(env.DB, 35, now + 1000)).toBe(true);
+  });
+  it("shares the cap across public event types and preserves verified business events", async () => {
+    await env.DB.prepare("DELETE FROM anonymous_analytics_budget").run();
+    const limited = { ...env, ANALYTICS_DAILY_EVENT_BUDGET: "1" };
+    const client = { ip: "test", userAgent: "Mozilla/5.0", country: "" };
+    expect(await recordPageView(limited, { ...client, payload: event() })).toMatchObject({
+      stored: true,
+    });
+    expect(
+      await recordFunnelEvent(limited, {
+        ...client,
+        payload: { eventId: crypto.randomUUID(), name: "paywall_view", path: "/app" },
+      }),
+    ).toEqual({ ok: true, ignored: "budget" });
+    await recordServerFunnelEvent(limited, {
+      name: "checkout_success",
+      key: "order-one",
+      path: "/app",
+      request: new Request("https://example.test/"),
+    });
+    expect((await funnelRows()).results.map((row) => row.name)).toEqual(["checkout_success"]);
+  });
+  it("drops optional events when disabled or when the budget table is unavailable", async () => {
+    const one = new AnonymousAnalyticsBudget();
+    expect(await one.take(env.DB, 0)).toBe(false);
+    await env.DB.exec("DROP TABLE anonymous_analytics_budget");
+    try {
+      expect(await one.take(env.DB, 4)).toBe(false);
+    } finally {
+      await env.DB.exec(budgetMigration.replace(/\n/g, " "));
+    }
+  });
+  it("drops at the shared edge limiter before preparing a D1 statement", async () => {
+    let limiterKey = "";
+    let prepares = 0;
+    const limited = {
+      ...env,
+      ANALYTICS_LIMIT: {
+        limit: async ({ key }: { key: string }) => {
+          limiterKey = key;
+          return { success: false };
+        },
+      },
+      DB: {
+        prepare: () => {
+          prepares++;
+          throw new Error("unexpected D1 access");
+        },
+      },
+    } as unknown as Env;
+    const req = new Request(env.APP_URL + "/api/analytics/page-view", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(event()),
+    });
+    const res = await worker.fetch(req, limited, createExecutionContext());
+    expect(res.status).toBe(204);
+    expect(limiterKey).toBe("analytics:public");
+    expect(prepares).toBe(0);
   });
 });
 

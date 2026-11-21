@@ -559,6 +559,78 @@ describe("WeChat sessions on demand", () => {
 });
 
 describe("WeChat transport binding independent of chat configuration", () => {
+  it("coalesces concurrent QR fetches, reuses the QR after restart and throttles explicit replacement", async () => {
+    const stub = account();
+    const replies = await Promise.all(Array.from({ length: 5 }, () => api(stub, "wechat.bind")));
+    expect(replies.every((r) => r.ok)).toBe(true);
+    const qr = replies[0].data.connection.qrUrl;
+    expect(qr).toBeTruthy();
+    expect(replies.every((r) => r.data.connection.qrUrl === qr)).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await abortAllDurableObjects();
+    const fresh = env.ACCOUNTS.get(stub.id);
+    accounts[accounts.indexOf(stub)] = fresh;
+    expect((await api(fresh, "wechat.bind")).data.connection.qrUrl).toBe(qr);
+    expect((await api(fresh, "wechat.bind", { regenerate: true })).error).toBe("qr_cooldown");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not resurrect a disconnected link when an in-flight QR fetch completes", async () => {
+    const stub = account();
+    const id = await create(stub, "微信");
+    await runInDurableObject(stub, async (instance) => {
+      let started!: () => void;
+      const fetching = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      let release!: (qr: Response) => void;
+      vi.mocked(fetch).mockImplementationOnce(() => {
+        started();
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      });
+      const pending = instance.api("wechat.bind", { id });
+      await fetching;
+      expect(JSON.parse(await instance.api("wechat.disconnect", { id })).ok).toBe(true);
+      release(Response.json({ qrcode: "late", qrcode_img_content: "https://example.test/late" }));
+      expect(JSON.parse(await pending).error).toBe("bind_canceled");
+      expect((await instance.snapshot()).connection.status).toBe("disconnected");
+    });
+  });
+
+  it("retains terminal inbox records and caps QR issuance across deleted links", async () => {
+    const stub = account();
+    for (let attempts = 0; attempts < 12; attempts++) {
+      const id = await create(stub, "测试微信");
+      if (attempts === 0) {
+        await runInDurableObject(stub, (_, { storage }) => {
+          for (const state of ["failed", "done", "pending"]) {
+            storage.sql.exec(
+              "INSERT INTO inbox(id,payload,state,createdAt,connectionId) VALUES (?,'{}',?,1,?)",
+              state,
+              state,
+              id,
+            );
+          }
+        });
+      }
+      expect((await api(stub, "wechat.bind", { id })).ok).toBe(true);
+      if (attempts === 0)
+        await runInDurableObject(stub, (_, { storage }) => {
+          expect(storage.sql.exec("SELECT id,state FROM inbox ORDER BY id").toArray()).toEqual([
+            { id: "done", state: "done" },
+            { id: "failed", state: "failed" },
+            { id: "pending", state: "done" },
+          ]);
+        });
+      expect((await api(stub, "wechat.delete", { id })).ok).toBe(true);
+    }
+    const id = await create(stub, "测试微信");
+    expect((await api(stub, "wechat.bind", { id })).error).toBe("qr_rate_limited");
+    expect(fetch).toHaveBeenCalledTimes(12);
+  });
+
   it.each([false, true])(
     "binds an empty account without requiring or charging a model (Plus=%s)",
     async (isPlus) => {
@@ -881,6 +953,10 @@ describe("WeChat transport binding independent of chat configuration", () => {
     stub = fresh;
     expect((await stub.snapshot()).connection.hasReplyContext).toBe(true);
     expect((await api(stub, "wechat.bind")).ok).toBe(true);
+    expect((await stub.snapshot()).connection.hasReplyContext).toBe(true);
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31_000);
+    expect((await api(stub, "wechat.bind", { regenerate: true })).ok).toBe(true);
+    vi.mocked(Date.now).mockRestore();
     await cycles(stub, 1);
     const rebound = await stub.snapshot();
     expect(rebound.connection.status).toBe("connected");

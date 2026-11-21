@@ -82,7 +82,7 @@ function message(text = "/help", from = "owner", id = 1): WxMessage {
     item_list: [{ type: 1, text_item: { text } }],
   };
 }
-async function bind(stub: Account) {
+async function bind(stub: Account, afterCooldown = false) {
   if (!(await stub.snapshot()).assistants.length)
     expect(
       JSON.parse(
@@ -95,7 +95,14 @@ async function bind(stub: Account) {
         }),
       ).ok,
     ).toBe(true);
-  expect(JSON.parse(await stub.api("wechat.bind")).ok).toBe(true);
+  const clock = afterCooldown
+    ? vi.spyOn(Date, "now").mockReturnValue(Date.now() + 31_000)
+    : undefined;
+  try {
+    expect(JSON.parse(await stub.api("wechat.bind")).ok).toBe(true);
+  } finally {
+    clock?.mockRestore();
+  }
   await runDurableObjectAlarm(stub);
   expect((await stub.snapshot()).connection.status).toBe("connected");
 }
@@ -228,7 +235,7 @@ describe("connection onboarding", () => {
       mock.sends.filter((s) => s.item_list[0].text_item.text.includes("欢迎使用微伴")),
     ).toHaveLength(1);
     await stub.api("wechat.disconnect");
-    await bind(stub);
+    await bind(stub, true);
     await runDurableObjectAlarm(stub); // The old connection's context must not be reused.
     expect(mock.sends).toHaveLength(2);
     mock.batches.push([message("/balance", "owner", 2)]);
@@ -275,7 +282,7 @@ describe("connection onboarding", () => {
     await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(1);
     await stub.api("wechat.disconnect");
-    await bind(stub);
+    await bind(stub, true);
     mock.batches.push([message("/help", "owner", 2)]);
     await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(2);
@@ -311,7 +318,7 @@ describe("connection onboarding", () => {
     expect(mock.sends).toHaveLength(1);
     await stub.api("wechat.disconnect");
     mock.state.owner = "new-owner";
-    await bind(stub);
+    await bind(stub, true);
     await runDurableObjectAlarm(stub);
     expect(mock.sends).toHaveLength(1);
     mock.batches.push([message("/help", "new-owner", 2)]);

@@ -1,3 +1,4 @@
+import budgetMigration from "../migrations/0020_analytics_budget.sql?raw";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
@@ -93,6 +94,7 @@ beforeAll(async () => {
     referralMigration,
     emailMigration,
     pageViewsMigration,
+    budgetMigration,
     signupMigration,
     funnelMigration,
     billingMigration,

@@ -55,6 +55,8 @@ pnpm db:migrate:remote
 
 访问统计使用 `0014_page_views.sql` 与 `0015_signup_attributions.sql` 建表。没有这张表时页面照常工作（上报接口的失败不会影响页面），只是数据不会写入，`pnpm analytics` 会提示先执行迁移。迁移后可用 `pnpm analytics --days 7` 查看 PV、去重访客、会话数、来源深度和「落地页 → 注册」的转化；采集口径与隐私边界见 `design/analytics.md`。这套统计不依赖第三方脚本，也不需要额外配置项。
 
+匿名 PV 和浏览器漏斗事件共用每天 10,000 次写入许可，北京时间零点重置。可用 Worker 变量 `ANALYTICS_DAILY_EVENT_BUDGET` 调整，设为 `0` 可停采。配额按批预留，用量紧张、请求并发或实例回收时，实际统计数可能偏低。账号验证和支付成功的服务端事件独立记录。`publish:edge` 在发布前幂等创建 `0020_analytics_budget.sql` 的预算表。
+
 后台关键事件触达新增 `0016_funnel_events.sql`，仅创建事件表和索引，与旧版兼容。升级时先执行该迁移，再发布依赖此表的 Worker；报表展示访客日和事件次数。`/demo` 演示工作台已下线，上一版按路径过滤（`name='demo_view'` 或 `/demo` 前缀）的口径随之删除；历史 `demo_view` 行留在表里也不会进报表——`summarizeFunnel` 只按已知事件名取值，未知名字静默忽略。
 
 邮箱验证升级包含 `0007_auth_email_limits.sql`，发布前先执行远程迁移。不要批量把已有用户的 `emailVerified` 改成已验证；原会话继续有效，未验证的邮箱账号在下次登录时完成验证。

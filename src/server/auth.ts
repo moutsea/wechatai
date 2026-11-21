@@ -104,6 +104,9 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
   };
   return betterAuth({
     appName: env.APP_NAME,
+    // Some Better Auth error paths bypass custom log handlers. The HTTP boundary
+    // records sanitized server failures without exception text or SQL arguments.
+    logger: { disabled: true },
     baseURL: env.APP_URL,
     secret: secret(env, "BETTER_AUTH_SECRET"),
     trustedOrigins: trustedAppOrigins(env),

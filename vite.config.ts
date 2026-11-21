@@ -16,6 +16,30 @@ export default defineConfig(({ command, isPreview }) => ({
           : "wrangler.jsonc",
       config: (config) => {
         const { assets, vars } = config;
+        if (command === "build" && process.env.CLOUDFLARE_ENV === "production") {
+          // Older private configs also serve legacy links with credentials in the path.
+          if (!config.ratelimits?.some((binding) => binding.name === "ANALYTICS_LIMIT")) {
+            config.ratelimits = [
+              ...(config.ratelimits ?? []),
+              {
+                name: "ANALYTICS_LIMIT",
+                namespace_id: "12003",
+                simple: { limit: 600, period: 60 },
+              },
+            ];
+          }
+          const obs = config.observability;
+          config.observability = {
+            ...obs,
+            redact_query_string: true,
+            logs: {
+              ...obs?.logs,
+              enabled: obs?.logs?.enabled ?? obs?.enabled ?? true,
+              invocation_logs: false,
+            },
+            traces: { enabled: false },
+          };
+        }
         if (
           command === "build" &&
           process.env.CLOUDFLARE_ENV === "production" &&
