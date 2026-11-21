@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { APIError } from "better-auth/api";
+import { privateEmailLink } from "./auth-email-link";
 import { secret } from "./config";
 
 export type AuthEmailKind = "verify" | "reset" | "recover" | "existing";
@@ -99,6 +100,7 @@ export async function sendAuthEmail(env: Env, kind: AuthEmailKind, to: string, u
     (kind === "existing" ? target.pathname !== "/login" : !target.pathname.startsWith("/api/auth/"))
   )
     throw new Error("Invalid authentication email URL");
+  if (kind !== "existing") url = privateEmailLink(target);
   if (authEmailDelivery(env) === "preview") {
     // Explicit local-only mode. Never log verification/reset tokens in production.
     console.info(JSON.stringify({ event: "auth.email.preview", kind, to, url }));

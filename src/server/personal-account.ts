@@ -309,6 +309,7 @@ export class PersonalAccount extends DurableObject<Env> {
   private membershipDelivery: Promise<void> | null = null;
   private wechatPolls = new Set<AbortController>();
   private wechatWakeVersion = 0;
+  private qrRequests = new Map<string, { generation: string; request: Promise<void> }>();
   private receiver: WechatReceiver;
   private sender: WechatSender;
   private execution: ExecutionStore;
@@ -2836,12 +2837,7 @@ export class PersonalAccount extends DurableObject<Env> {
         status: "disconnected",
         generation: crypto.randomUUID(),
       });
-      this.cloud.stopConnection(id);
-      this.attachments.clear(id);
-      this.sql.exec(
-        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
-        id,
-      );
+      this.stopLinkWork(id);
       if (remove) {
         this.sql.exec("DELETE FROM wechat_links WHERE id = ?", id);
         if (id === DEFAULT_WECHAT_LINK) this.setSetting("legacyLinkDeleted", true);
@@ -3431,7 +3427,10 @@ export class PersonalAccount extends DurableObject<Env> {
         });
         data = this.snapshot();
       } else if (action === "wechat.bind")
-        data = await this.bind(typeof p.id === "string" ? p.id : this.selectedLink());
+        data = await this.bind(
+          typeof p.id === "string" ? p.id : this.selectedLink(),
+          p.regenerate === true,
+        );
       else if (action === "wechat.create") {
         this.createLink(p.name);
         data = this.snapshot();
@@ -4678,50 +4677,93 @@ export class PersonalAccount extends DurableObject<Env> {
     else await sendUploadedWechatImage(credentials, token, clientId, uploaded);
   }
 
-  private async bind(connectionId = this.selectedLink()) {
-    this.busy();
+  private async bind(connectionId = this.selectedLink(), regenerate = false) {
     const needsLink = !this.links().length && connectionId === DEFAULT_WECHAT_LINK;
-    if (!needsLink) this.requireLink(connectionId, true);
-    // Binding only establishes the transport. Model, plugin and billing checks
-    // happen when a task is submitted; notifications do not require a model.
     if (needsLink) connectionId = this.createLink("我的微信");
-    const generation = crypto.randomUUID();
-    this.ctx.storage.transactionSync(() => {
-      this.setLinkSetting(connectionId, "connection", { status: "waiting", generation });
-      // Starting a new binding invalidates old work even if fetching the QR fails.
-      this.cloud.stopConnection(connectionId);
-      this.attachments.clear(connectionId);
-      this.sql.exec(
-        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
-        connectionId,
-      );
-    });
-    await this.scheduleCloudRecovery();
-    let qr: { qrcode: string; qrcode_img_content: string };
-    try {
-      qr = await wxRequest("get_bot_qrcode?bot_type=3", undefined, undefined, 15000);
-    } catch (error) {
-      if (this.connection(connectionId).generation === generation)
-        this.setLinkSetting(connectionId, "connection", {
-          status: "error",
-          generation,
-          error: "二维码获取失败，请重新绑定",
-        });
-      throw error;
+    else this.requireLink(connectionId, true);
+    const link = this.connection(connectionId);
+    const active = this.qrRequests.get(connectionId);
+    if (active?.generation === link.generation) {
+      await active.request;
+      return this.snapshot();
     }
+    const validQr =
+      (link.status === "waiting" || link.status === "scanned") &&
+      link.qrCode &&
+      link.qrUrl &&
+      (link.qrExpires ?? 0) > Date.now();
+    if (!regenerate && (validQr || link.status === "connected")) return this.snapshot();
+    this.busy();
+    this.reserveQrRequest(connectionId);
+    const request = this.replaceBinding(connectionId, link);
+    this.qrRequests.set(connectionId, { generation: link.generation, request });
+    try {
+      await request;
+    } finally {
+      if (this.qrRequests.get(connectionId)?.request === request)
+        this.qrRequests.delete(connectionId);
+    }
+    return this.snapshot();
+  }
+
+  private reserveQrRequest(connectionId: string) {
+    const now = Date.now();
+    const recent = this.getSetting<{ id: string; at: number }[]>("wechatQrRequests", []).filter(
+      (entry) => entry.at > now - 3_600_000,
+    );
+    if (recent.some((entry) => entry.id === connectionId && entry.at + 30_000 > now))
+      throw new AppError("qr_cooldown", "二维码刚刚申请过，请稍等 30 秒再重新获取。", 429);
+    // Account-level history survives deletion of a link and Durable Object restarts.
+    if (recent.length >= 12)
+      throw new AppError(
+        "qr_rate_limited",
+        "这个账号最近一小时申请二维码次数过多，请稍后再试。",
+        429,
+      );
+    this.setSetting("wechatQrRequests", [...recent, { id: connectionId, at: now }]);
+  }
+
+  private async replaceBinding(connectionId: string, previous: Link) {
+    const qr = await wxRequest<{ qrcode: string; qrcode_img_content: string }>(
+      "get_bot_qrcode?bot_type=3",
+      undefined,
+      undefined,
+      15000,
+    );
     if (!qr.qrcode || !qr.qrcode_img_content)
       throw new AppError("qr_missing", "未能获取微信二维码，请重试", 502);
-    if (this.connection(connectionId).generation !== generation || !this.linkEnabled(connectionId))
-      throw new AppError("bind_canceled", "绑定已取消", 409);
-    this.setLinkSetting(connectionId, "connection", {
-      status: "waiting",
-      generation,
-      qrCode: qr.qrcode,
-      qrUrl: qr.qrcode_img_content,
-      qrExpires: Date.now() + 240000,
+    const current = this.connection(connectionId);
+    if (
+      current.generation !== previous.generation ||
+      !this.linkEnabled(connectionId) ||
+      (previous.status !== "connected" && current.status === "connected")
+    )
+      throw new AppError("bind_canceled", "微信连接状态已改变，请刷新后再试。", 409);
+    this.busy();
+    this.ctx.storage.transactionSync(() => {
+      this.setLinkSetting(connectionId, "connection", {
+        status: "waiting",
+        generation: crypto.randomUUID(),
+        qrCode: qr.qrcode,
+        qrUrl: qr.qrcode_img_content,
+        qrExpires: Date.now() + 240_000,
+      });
+      this.stopLinkWork(connectionId);
     });
-    await this.ctx.storage.setAlarm(Date.now() + 1000);
-    return this.snapshot();
+    this.wakeWechat();
+    const wake = Date.now() + 1000;
+    const alarm = await this.ctx.storage.getAlarm();
+    if (alarm === null || alarm > wake) await this.ctx.storage.setAlarm(wake);
+    await this.scheduleCloudRecovery();
+  }
+
+  private stopLinkWork(connectionId: string) {
+    this.cloud.stopConnection(connectionId);
+    this.attachments.clear(connectionId);
+    this.sql.exec(
+      "UPDATE inbox SET state='done',payload='{}',reply='' WHERE connectionId=? AND state IN ('pending','reply','waiting_context')",
+      connectionId,
+    );
   }
   private async resumePersonalRun(
     id: string,

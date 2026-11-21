@@ -1,3 +1,11 @@
+import { routePath } from "hono/route";
+import {
+  emailLinkPage,
+  emailLinkPath,
+  emailActionRequest,
+  privateEmailLink,
+  privateAuthResponse,
+} from "./auth-email-link";
 import {
   listUserNotices,
   readAllNotices,
@@ -89,7 +97,14 @@ const app = new Hono<App>();
 function dispatchBillingNotices(env: Env, ctx: Parameters<typeof app.fetch>[2]) {
   return dispatchPaymentNotices(env, (url, init) => app.fetch(new Request(url, init), env, ctx));
 }
-app.use("*", secureHeaders());
+const defaultHeaders = secureHeaders();
+const emailPageHeaders = secureHeaders({ referrerPolicy: "same-origin" });
+app.use("*", (c, next) =>
+  (c.req.path === emailLinkPath && c.req.method === "GET" ? emailPageHeaders : defaultHeaders)(
+    c,
+    next,
+  ),
+);
 // AGT callbacks use their own stream cap and signed credentials, so register
 // before the general body limit and browser session/Origin middleware.
 app.post(`${CLOUD_CALLBACK_PATH}/:token`, async (c) => {
@@ -191,8 +206,16 @@ async function analyticsPrecheck(c: import("hono").Context<App>): Promise<Respon
   if (origin && origin !== requestOrigin && !trustedAppOrigins(c.env).includes(origin))
     return c.json({ error: "origin_not_allowed" }, 403);
   const ip = c.req.header("cf-connecting-ip") || "local";
-  if (!(await c.env.API_LIMIT.limit({ key: `analytics-page-view:${ip}` })).success)
-    return c.json({ error: "rate_limited" }, 429);
+  try {
+    if (!(await c.env.API_LIMIT.limit({ key: `analytics-page-view:${ip}` })).success)
+      return c.json({ error: "rate_limited" }, 429);
+    // Rate limiting is local to a Cloudflare location. D1 leases enforce the daily global cap.
+    if (!(await c.env.ANALYTICS_LIMIT.limit({ key: "analytics:public" })).success)
+      return c.body(null, 204);
+  } catch {
+    // Optional telemetry stops before D1 if edge admission is unavailable.
+    return c.body(null, 204);
+  }
   return null;
 }
 // First-party page-view collection; the client ignores reporting failures.
@@ -387,18 +410,22 @@ app.get("/api/referrals/attribution", async (c) => {
   c.header("Cache-Control", "no-store");
   return c.json({ active: Boolean(await registrationReferrer(c.env, c.req.raw.headers)) });
 });
-app.on(["GET", "POST"], "/api/auth/*", async (c) => {
-  const response = await createAuth(c.env, c.executionCtx).handler(c.req.raw);
-  // Better Auth redirects may have immutable headers; clone before adding policies.
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "no-store");
-  headers.set("Referrer-Policy", "no-referrer");
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+app.get(emailLinkPath, () => emailLinkPage());
+app.post(emailLinkPath, async (c) => {
+  const request = await emailActionRequest(c.req.raw, c.env.APP_URL);
+  if (!request) return c.text("邮件链接无效，请重新打开邮件中的完整链接。", 400);
+  return privateAuthResponse(await createAuth(c.env, c.executionCtx).handler(request), request);
 });
+// Previously issued reset emails used the token in the path. Do no database or
+// authentication work (which could log errors) until the clean POST arrives.
+app.get("/api/auth/reset-password/:token", (c) => {
+  const url = new URL(c.req.url);
+  if (!/^[A-Za-z0-9_-]+$/.test(c.req.param("token"))) return c.text("重置链接无效。", 400);
+  return c.redirect(privateEmailLink(new URL(url.pathname + url.search, c.env.APP_URL)), 302);
+});
+app.on(["GET", "POST"], "/api/auth/*", async (c) =>
+  privateAuthResponse(await createAuth(c.env, c.executionCtx).handler(c.req.raw), c.req.raw),
+);
 app.post("/api/billing/webhook", async (c) => {
   await webhook(c.env, await c.req.text(), c.req.header("stripe-signature") || "");
   c.executionCtx.waitUntil(dispatchBillingNotices(c.env, c.executionCtx));
@@ -984,6 +1011,10 @@ for (const action of ["bind", "disconnect", "select"] as const)
     `/api/wechat/links/:id/${action}`,
     invoke(`wechat.${action}`, (c) => ({ id: c.req.param("id") })),
   );
+app.post(
+  "/api/wechat/links/:id/rebind",
+  invoke("wechat.bind", (c) => ({ id: c.req.param("id"), regenerate: true })),
+);
 app.post("/api/wechat/bind", invoke("wechat.bind"));
 app.post("/api/wechat/disconnect", invoke("wechat.disconnect"));
 app.get("/api/billing/catalog", async (c) => c.json(await catalog(c.env)));
@@ -1011,8 +1042,16 @@ app.onError((error, c) => {
       { error: error.code, message: error.message },
       error.status as ContentfulStatusCode,
     );
+  const requestId = crypto.randomUUID();
+  c.header("X-Request-Id", requestId);
   console.error(
-    JSON.stringify({ event: "request.failed", path: c.req.path, errorType: error.name }),
+    JSON.stringify({
+      event: "request.failed",
+      route: routePath(c),
+      method: c.req.method,
+      status: 500,
+      requestId,
+    }),
   );
   return c.json({ error: "internal_error", message: "服务暂时不可用，请稍后重试" }, 500);
 });

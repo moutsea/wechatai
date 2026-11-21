@@ -259,7 +259,10 @@ export function ForgotPasswordPage() {
 export function ResetPasswordPage() {
   const [params, setParams] = useSearchParams();
   const recovery = params.get("recovery") === "1";
-  const [token] = useState(() => params.get("token") || "");
+  const { hash } = useLocation();
+  const [token] = useState(
+    () => new URLSearchParams(hash.slice(1)).get("token") || params.get("token") || "",
+  );
   const returnTo = authReturnPath(params.get("returnTo"));
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -269,12 +272,12 @@ export function ResetPasswordPage() {
   const [error, setError] = useState("");
   const { refetch } = useAuth();
   useEffect(() => {
-    if (done && params.has("token")) {
+    if (done && (hash || params.has("token"))) {
       const clean = new URLSearchParams(params);
       clean.delete("token");
       setParams(clean, { replace: true });
     }
-  }, [done, params, setParams]);
+  }, [done, hash, params, setParams]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy || done) return;

@@ -495,7 +495,7 @@ describe("durable AGT reply delivery", () => {
         .mockImplementation(async () =>
           Response.json({ qrcode: "new-qr", qrcode_img_content: "https://qr.example.com/new" }),
         );
-      await api(stub, action, { id: task.connectionId });
+      await api(stub, action, { id: task.connectionId, regenerate: action === "wechat.bind" });
       expect(fetch).toHaveBeenCalledTimes(action === "wechat.bind" ? 1 : 0);
       fetch.mockRestore();
       expect(
@@ -572,23 +572,16 @@ describe("durable AGT reply delivery", () => {
       const result = JSON.parse(
         await stub.api("wechat.bind", {
           id: failure === "validation" ? "missing-link" : task.connectionId,
+          regenerate: true,
         }),
       );
       expect(result.ok).toBe(false);
       if (failure === "validation") expect(result.error).toBe("connection_missing");
       expect(fetch).toHaveBeenCalledTimes(failure === "qr" ? 1 : 0);
       await inAccount(stub, (storage, store) => {
-        if (failure === "validation") expect(store.get(task.id)).toEqual(queued);
-        else
-          expect(store.get(task.id)).toMatchObject({
-            stale: 1,
-            delivered: 1,
-            deliveryStatus: "stale",
-          });
+        expect(store.get(task.id)).toEqual(queued);
         expect(storage.sql.exec("SELECT state,reply FROM inbox WHERE id=?", inboxId).one()).toEqual(
-          failure === "validation"
-            ? { state: "reply", reply: task.result }
-            : { state: "done", reply: "" },
+          { state: "reply", reply: task.result },
         );
       });
     },

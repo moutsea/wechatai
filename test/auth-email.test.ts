@@ -1,3 +1,4 @@
+import { privateAuthResponse } from "../src/server/auth-email-link";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHmac } from "node:crypto";
@@ -58,6 +59,18 @@ async function request(
   extra: Record<string, string> = {},
   config: Env = bindings,
 ) {
+  const entry = new URL(path, env.APP_URL);
+  if (!body && entry.pathname === "/api/auth/email-link" && entry.hash) {
+    return rawRequest(
+      entry.pathname,
+      {
+        method: "POST",
+        headers: extra,
+        body: new URLSearchParams({ link: new URLSearchParams(entry.hash.slice(1)).get("link")! }),
+      },
+      config,
+    );
+  }
   return rawRequest(
     path,
     {
@@ -93,6 +106,9 @@ function mailLink() {
   if (!link) throw new Error("No link in captured mail");
   return link;
 }
+function mailTarget() {
+  return new URL(new URLSearchParams(new URL(mailLink()).hash.slice(1)).get("link")!, env.APP_URL);
+}
 async function unlock() {
   await env.DB.prepare("UPDATE auth_email_limit SET last_sent_at=0").run();
 }
@@ -106,8 +122,60 @@ async function requestReset(address: string) {
       })
     ).status,
   ).toBe(200);
-  return new URL(mailLink()).pathname.split("/").at(-1)!;
+  return mailTarget().pathname.split("/").at(-1)!;
 }
+it("keeps new and legacy reset tokens out of subsequent request URLs, and restricts the form relay", async () => {
+  const registered = await signup();
+  const outer = new URL(registered.link);
+  expect(outer.pathname + outer.search).toBe("/api/auth/email-link");
+  const landing = await rawRequest(outer.pathname);
+  expect(landing.headers.get("referrer-policy")).toBe("same-origin");
+  expect(landing.headers.get("cache-control")).toBe("no-store");
+  expect(await landing.text()).not.toContain(mailTarget().searchParams.get("token"));
+  for (const [origin, link] of [
+    ["https://other.example", mailTarget().pathname + mailTarget().search],
+    [env.APP_URL, "/api/auth/sign-out"],
+    [env.APP_URL, "//other.example/api/auth/verify-email?token=example"],
+    [env.APP_URL, "/api/auth/verify-email?token=x&callbackURL=https://other.example/"],
+  ]) {
+    expect(
+      (
+        await rawRequest(outer.pathname, {
+          method: "POST",
+          headers: { origin },
+          body: new URLSearchParams({ link }),
+        })
+      ).status,
+    ).toBe(400);
+  }
+  const token = await requestReset(registered.address);
+  const old = await rawRequest(mailTarget().href);
+  const entry = new URL(old.headers.get("location")!);
+  expect(entry.pathname + entry.search).toBe("/api/auth/email-link");
+  const reset = await request(entry.href);
+  const next = new URL(reset.headers.get("location")!, env.APP_URL);
+  expect(next.pathname + next.search).not.toContain(token);
+  expect(new URLSearchParams(next.hash.slice(1)).get("token")).toBe(token);
+});
+it("logs only a route template, status and request ID when an auth handler fails", () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const request = new Request(
+      env.APP_URL + "/api/auth/reset-password/private-token?private-query",
+    );
+    const response = privateAuthResponse(new Response(null, { status: 503 }), request);
+    expect(JSON.parse(error.mock.calls[0][0])).toEqual({
+      event: "auth.handler_error",
+      route: "/api/auth/*",
+      status: 503,
+      requestId: response.headers.get("x-request-id"),
+    });
+    expect(response.headers.get("x-request-id")).toBeTruthy();
+  } finally {
+    error.mockRestore();
+  }
+});
+
 beforeAll(async () => {
   for (const migration of [authMigration, referralMigration, emailMigration, funnelMigration])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
@@ -142,7 +210,7 @@ describe("verification success analytics", () => {
     expect(
       (await request("/api/auth/send-verification-email", { email: registered.address })).status,
     ).toBe(200);
-    const token = new URL(mailLink()).pathname.split("/").at(-1)!;
+    const token = mailTarget().pathname.split("/").at(-1)!;
     expect(
       (await request("/api/auth/reset-password", { token: "bad", newPassword: password })).status,
     ).toBe(400);
@@ -336,7 +404,7 @@ describe("verified email registration and recovery", () => {
     expect(
       (
         await request("/api/auth/reset-password", {
-          token: target.searchParams.get("token"),
+          token: new URLSearchParams(target.hash.slice(1)).get("token"),
           newPassword: "mailbox-owner-confirmed-password",
         })
       ).status,
@@ -371,7 +439,7 @@ describe("verified email registration and recovery", () => {
         })
       ).status,
     ).toBe(200);
-    expect(mailLink()).toContain("/api/auth/reset-password/");
+    expect(mailTarget().pathname).toContain("/api/auth/reset-password/");
     expect((await request(registered.link)).headers.get("location")).toContain(
       "PASSWORD_RESET_REQUIRED",
     );
@@ -650,7 +718,8 @@ describe("verified email registration and recovery", () => {
     const location = new URL(landing.headers.get("location")!, env.APP_URL);
     expect(location.pathname).toBe("/reset-password");
     expect(location.searchParams.get("returnTo")).toBe("/app/billing");
-    const token = location.searchParams.get("token");
+    expect(location.searchParams.has("token")).toBe(false);
+    const token = new URLSearchParams(location.hash.slice(1)).get("token");
     expect(
       (await request("/api/auth/reset-password", { token, newPassword: "short" })).status,
     ).toBe(400);
@@ -696,12 +765,16 @@ describe("verified email registration and recovery", () => {
       email: registered.address,
       redirectTo: "/reset-password",
     });
-    const url = new URL(mailLink());
+    const url = mailTarget();
     const token = url.pathname.split("/").at(-1);
     await env.DB.prepare("UPDATE verification SET expiresAt=0 WHERE identifier=?")
       .bind(`reset-password:${token}`)
       .run();
-    expect((await request(url.href)).headers.get("location")).toContain("error=INVALID_TOKEN");
+    const oldLink = await rawRequest(url.href);
+    expect(oldLink.status).toBe(302);
+    const entry = new URL(oldLink.headers.get("location")!);
+    expect(entry.pathname).toBe("/api/auth/email-link");
+    expect((await request(entry.href)).headers.get("location")).toContain("error=INVALID_TOKEN");
     expect(
       (await request("/api/auth/reset-password", { token, newPassword: password })).status,
     ).toBe(400);
