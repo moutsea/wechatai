@@ -46,7 +46,7 @@ In other words, any claim to be an "official WeChat AI assistant" implying inter
 1. After submission, the key and WeChat connection credentials are **encrypted at rest on the server** (AES-GCM, with the key derived from the deployment's \`ENCRYPTION_KEY\` and bound to the purpose as associated data).
 2. Public interfaces such as the channel list and plugin settings **return only whether it is configured** (\`hasKey: true/false\`), never the secret, and pages always show a mask.
 3. Model calls decrypt on the server and forward to the provider address you entered, without going through the browser.
-4. Deleting a channel or plugin deletes the corresponding credentials.
+4. Deleting a channel or plugin only removes the credentials stored in that configuration in Wechatai. It does not delete any copies already sent to AGT or another external service. To invalidate the key, revoke it with its issuer.
 
 Two things must be acknowledged: this is not end-to-end encryption, and the server can obtain the plaintext key at the moment of forwarding, so the trust basis is the service provider itself. Also, once the key falls into someone else's hands, the bill is yours: set a separate spending limit for this key and do not reuse your main account's key.
 

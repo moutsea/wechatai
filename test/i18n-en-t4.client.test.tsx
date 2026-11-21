@@ -153,4 +153,15 @@ describe("prerendered English landing pages", () => {
     expect.soft(answer).toMatch(/cloud model requests still send .*configured model provider/);
     expect.soft(answer).toMatch(/Xiaowei.*AGT service.*receives the selected model's key/);
   });
+
+  it("limits credential deletion to Wechatai and directs revocation to the issuer", () => {
+    const html = renderPublicPage("/en/wechat-ai-privacy");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const deletion = [...doc.querySelectorAll("#apikey li")].find(({ textContent }) =>
+      textContent?.startsWith("Deleting a channel or plugin"),
+    )?.textContent;
+    expect.soft(deletion).toMatch(/only removes .*credentials stored .* in Wechatai/);
+    expect.soft(deletion).toMatch(/does not delete .*copies .*AGT/);
+    expect.soft(deletion).toMatch(/invalidate the key, revoke it with its issuer/);
+  });
 });
