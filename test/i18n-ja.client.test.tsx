@@ -318,6 +318,21 @@ describe("published Japanese pages", () => {
     await bot.close();
   });
 
+  it.each(["/ja/wechat-bot", "/ja/wechat-deepseek"])(
+    "describes one-to-one chats in Japanese on %s, including the FAQ",
+    (path) => {
+      const document = parse(path);
+      expect(document.querySelector("table")?.textContent).toContain("1 対 1 のチャット");
+      expect(document.querySelector("#faq")?.textContent).toContain("1 対 1 のチャット");
+      expect(document.body.textContent).not.toContain("単聊");
+    },
+  );
+
+  it("uses the Japanese WeChat settings menu in the ClawBot setup steps", () => {
+    const setup = parse("/ja/wechat-bot").querySelector("#clawbot")?.textContent;
+    expect(setup).toContain("自分 → 設定");
+  });
+
   it("keeps the Chinese page group unchanged and adds only the registered Japanese URLs", () => {
     const chineseHome = parse("/");
     expect(chineseHome.querySelector("h1")?.textContent).toContain("把你的 AI");

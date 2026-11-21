@@ -34,7 +34,7 @@ const content: SeoPage = {
       title: "よくある 4 つの疑問に先に答えます",
       body: `| 疑問 | Wechatai で接続する場合の答え |
 | --- | --- |
-| WeChat の中で DeepSeek を使えますか？ | 使えます。ご自身の DeepSeek API を Wechatai 経由で WeChat ClawBot の単聊につなぎます。まずアカウントにこの入口があるか確認してください。 |
+| WeChat の中で DeepSeek を使えますか？ | 使えます。ご自身の DeepSeek API を Wechatai 経由で WeChat ClawBot との 1 対 1 のチャットにつなぎます。まずアカウントにこの入口があるか確認してください。 |
 | ソフトのインストールやパソコンの常時起動は必要ですか？ | 通常のモデルチャットは Wechatai のサーバーが中継するため、ご自身のパソコンを起動しておく必要はありません。端末上のエージェントを選ぶ場合だけオンラインの端末が必要です。 |
 | 無料ですか？ | Wechatai の無料プランには毎日 100 クレジットの中継枠があります。DeepSeek API はプロバイダーが別途請求するもので、無料のモデル枠ではありません。 |
 | どこから始めればよいですか？ | キーがあり WeChat に入口があれば、[スクリーンショット付きの設定チュートリアル](/docs/deepseek-in-wechat)へ。入口が見つからない場合は、先に [ClawBot の確認方法](/wechat-clawbot)をご覧ください。 |
@@ -101,7 +101,7 @@ Wechatai のホスト型チャットを選んだら、[DeepSeek の操作チュ�
     {
       question: "WeChat で DeepSeek をどう使いますか？",
       answer:
-        "まずスマートフォンの WeChat に ClawBot の入口があることを確認し、Wechatai で DeepSeek のプロバイダーを追加してご自身の API キーを入力し、モデルをテストします。その後 QR コードをスキャンして WeChat を接続し、該当する単聊でテキストを送ります。手順の全体とスクリーンショットは本サイトの DeepSeek 操作チュートリアルにあります。",
+        "まずスマートフォンの WeChat に ClawBot の入口があることを確認し、Wechatai で DeepSeek のプロバイダーを追加してご自身の API キーを入力し、モデルをテストします。その後 QR コードをスキャンして WeChat を接続し、ClawBot との 1 対 1 のチャットでテキストを送ります。手順の全体とスクリーンショットは本サイトの DeepSeek 操作チュートリアルにあります。",
     },
     {
       question: "WeChat に ClawBot の入口がない場合でも Wechatai で接続できますか？",
