@@ -20,37 +20,39 @@ function hanResidue(document: Document) {
   return `${text} ${attributes}`.match(/\p{Script=Han}+/gu) ?? [];
 }
 
-const pageGroups = [
-  { path: "/pt", english: "/en" },
-  { path: "/pt/pricing", english: "/en/pricing" },
-  { path: "/pt/wechat-ai", english: "/en/wechat-ai" },
-  { path: "/pt/wechat-deepseek", english: "/en/wechat-deepseek" },
-];
+const pageGroups = ["/", "/pricing", "/wechat-ai", "/wechat-bot", "/wechat-deepseek"];
 
 describe("published Brazilian Portuguese pages", () => {
-  it.each(pageGroups)(
-    "serves $path as pt-BR with self canonical and zh/en/pt alternates",
-    ({ path, english }) => {
+  it.each(pageGroups)("serves the full published language group for %s", (source) => {
+    const suffix = source === "/" ? "" : source;
+    const group = [
+      { path: source, lang: "zh-CN", ogLocale: "zh_CN" },
+      { path: `/en${suffix}`, lang: "en", ogLocale: "en_US" },
+      { path: `/ja${suffix}`, lang: "ja-JP", ogLocale: "ja_JP" },
+      { path: `/pt${suffix}`, lang: "pt-BR", ogLocale: "pt_BR" },
+    ];
+    const expected = [
+      ...group.map(({ lang, path }) => [lang, `${SITE_URL}${path}`]),
+      ["x-default", `${SITE_URL}${source}`],
+    ];
+    for (const { path, lang, ogLocale } of group) {
       const document = parse(path);
-      expect(document.documentElement.lang).toBe("pt-BR");
-      expect(document.querySelector('meta[property="og:locale"]')?.getAttribute("content")).toBe(
-        "pt_BR",
-      );
-      expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe(
-        `${SITE_URL}${path}`,
-      );
-      const alternates = [...document.querySelectorAll("link[rel='alternate'][hreflang]")].map(
+      expect(document.documentElement.lang, path).toBe(lang);
+      expect(document.querySelector('meta[property="og:locale"]')?.getAttribute("content"), path)
+        .toBe(ogLocale);
+      expect(
+        [...document.querySelectorAll('link[rel="canonical"]')].map((link) =>
+          link.getAttribute("href"),
+        ),
+        path,
+      ).toEqual([`${SITE_URL}${path}`]);
+      const alternates = [...document.querySelectorAll('link[rel="alternate"][hreflang]')].map(
         (link) => [link.getAttribute("hreflang"), link.getAttribute("href")],
       );
-      expect(alternates).toEqual([
-        ["zh-CN", `${SITE_URL}${path.slice(3) || "/"}`],
-        ["en", `${SITE_URL}${english}`],
-        ["pt-BR", `${SITE_URL}${path}`],
-        ["x-default", `${SITE_URL}${path.slice(3) || "/"}`],
-      ]);
-      expect(hanResidue(document)).toEqual([]);
-    },
-  );
+      expect(alternates, path).toEqual(expected);
+      if (lang === "pt-BR") expect(hanResidue(document), path).toEqual([]);
+    }
+  });
 
   it("renders the complete Portuguese homepage and keeps only registered links under /pt", () => {
     const document = parse("/pt");
@@ -95,6 +97,7 @@ describe("published Brazilian Portuguese pages", () => {
     expect(switcher).toEqual([
       ["Chinês", "/", "zh-CN"],
       ["Inglês", "/en", "en"],
+      ["Japonês", "/ja", "ja-JP"],
     ]);
   });
 
