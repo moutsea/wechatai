@@ -234,6 +234,14 @@ describe("published Japanese pages", () => {
     );
   });
 
+  it("publishes the Japanese Organization description in the homepage JSON-LD", () => {
+    const organization = graphOf("/ja").find((node) => node["@type"] === "Organization");
+    expect(organization).toMatchObject({
+      "@id": `${SITE_URL}/#organization`,
+      description: expect.stringContaining("WeChat ClawBot の 1 対 1 チャットにつなぐ"),
+    });
+  });
+
   it.each([
     ["/ja/wechat-ai", "WeChat AI：自分の大規模モデルを WeChat の会話へ"],
     ["/ja/wechat-bot", "WeChat ボットの作り方：まず経路を選ぶ"],
