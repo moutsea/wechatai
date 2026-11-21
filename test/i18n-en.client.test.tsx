@@ -237,11 +237,13 @@ describe("published English pages", () => {
       "/ja/wechat-ai",
       "/ja/wechat-bot",
       "/ja/wechat-deepseek",
+      "/ko",
+      "/ko/pricing",
     ].sort();
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
     const localized = [
-      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja)[^<]*)<\/loc>/g),
+      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja|ko)[^<]*)<\/loc>/g),
     ].map(([, path]) => path);
     expect(localized.sort()).toEqual(expected);
   });

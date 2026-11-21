@@ -3,8 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import type { SeoPage } from "../../shared/seo-pages";
 import { pricingPageFor } from "../../shared/seo-content/pricing";
-import { pricingCopy } from "../../shared/i18n/en/copy/pricing";
-import { pricingCopy as pricingCopyJa } from "../../shared/i18n/ja/copy/pricing";
+import { pricingCopyFor } from "../../shared/i18n/copy";
 import { CostEstimator } from "../cost-estimator";
 import { SiteHeader } from "../site-header";
 import { SiteFooter } from "../site-footer";
@@ -26,9 +25,9 @@ const pageCopyZh = {
 export function PricingPage({ page, children }: { page: SeoPage; children?: ReactNode }) {
   const { hash } = useLocation();
   const { locale } = useLocale();
-  const english = locale === "en";
-  const content = locale === "zh-CN" ? page : pricingPageFor(locale);
-  const copy = english ? pricingCopy.page : locale === "ja" ? pricingCopyJa.page : pageCopyZh;
+  const localized = pricingCopyFor(locale);
+  const content = localized ? pricingPageFor(locale) : page;
+  const copy = localized?.page ?? pageCopyZh;
   const estimator = useRef<HTMLDetailsElement>(null);
   // Keep existing /pricing#estimate links useful while the calculator is collapsed by default.
   useLayoutEffect(() => {

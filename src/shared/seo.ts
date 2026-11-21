@@ -13,9 +13,7 @@ import { EN_DOC_ARTICLES, EN_DOCS_DESCRIPTION, EN_DOCS_TITLE } from "./i18n/en/d
 import { EN_DOC_CONTENT, EN_FAQ_SECTIONS } from "./i18n/en/data/docs-content-en";
 import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
 import { landingFaq } from "./landing-faq";
-import { homeCopy } from "./i18n/en/copy/home";
-import { homeCopy as homeCopyJa } from "./i18n/ja/copy/home";
-import { pricingCopy as pricingCopyJa } from "./i18n/ja/copy/pricing";
+import { homeCopyFor, pricingCopyFor } from "./i18n/copy";
 import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
@@ -145,7 +143,9 @@ function organizationNode(locale: Locale = DEFAULT_LOCALE) {
         ? "An independently maintained service that connects AI models and agents to one-to-one WeChat ClawBot chats. It is not officially affiliated with Tencent or WeChat."
         : locale === "ja"
           ? "AI モデルとエージェントを WeChat ClawBot の 1 対 1 チャットにつなぐ独立運営のサービスです。Tencent および WeChat とは公式な関係はありません。"
-          : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
+          : locale === "ko"
+            ? "AI 모델과 에이전트를 1:1 위챗 ClawBot 대화에 연결하는 독립 운영 서비스입니다. Tencent 및 WeChat과 공식 제휴 관계가 없습니다."
+            : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
     // 站内唯一的方形品牌资源是 favicon.svg（64×64 矢量）；og-image.png 是 1200×630 横幅，不能当 logo。
     logo: {
       "@type": "ImageObject",
@@ -188,18 +188,16 @@ function softwareApplicationRef() {
 function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   const english = locale === "en";
   const japanese = locale === "ja";
+  const korean = locale === "ko";
+  const copy = japanese || korean ? pricingCopyFor(locale)?.plans : undefined;
   const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus").map((offer) => {
     const price = offer.amount / 100;
     const name = offer.interval === "year" ? "Plus Yearly" : "Plus Monthly";
-    const localizedName = japanese
-      ? pricingCopyJa.plans.offerName(offer.interval)
-      : english
-        ? name
-        : offer.name;
+    const localizedName = english ? name : copy?.offerName(offer.interval) ?? offer.name;
     return {
       "@type": "Offer",
       name: localizedName,
-      url: `${SITE_URL}/pricing`,
+      url: `${SITE_URL}${korean ? localizedPath(locale, "/pricing") : "/pricing"}`,
       price,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
@@ -216,8 +214,8 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   return [
     {
       "@type": "Offer",
-      name: english ? "Free" : japanese ? pricingCopyJa.plans.free.name : "免费版",
-      url: `${SITE_URL}/`,
+      name: english ? "Free" : copy?.free.name ?? "免费版",
+      url: `${SITE_URL}${korean ? localizedPath(locale, "/") : "/"}`,
       price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
@@ -225,7 +223,9 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
         ? `Includes daily credits, ${WECHAT_LINK_LIMITS.free} WeChat connection, and ${PLUGIN_LIMITS.free} plugin configuration.`
         : japanese
           ? `毎日クレジットを進呈し、WeChat 接続 ${WECHAT_LINK_LIMITS.free} 件とプラグイン設定 ${PLUGIN_LIMITS.free} 件が含まれます。`
-          : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
+          : korean
+            ? `매일 크레딧을 제공하며 위챗 연결 ${WECHAT_LINK_LIMITS.free}개와 플러그인 ${PLUGIN_LIMITS.free}개를 사용할 수 있습니다.`
+            : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: freePrice,
@@ -282,6 +282,7 @@ function seoLandingPage(
 ): PageSeo {
   const english = locale === "en";
   const japanese = locale === "ja";
+  const korean = locale === "ko";
   const isArticle = page.kind === "article";
   const publisher = organizationNode(locale);
   const webPage = isArticle
@@ -332,12 +333,16 @@ function seoLandingPage(
                   ? "Wechatai Free and Plus"
                   : japanese
                     ? "Wechatai 無料プランと Plus"
-                    : `${SITE_NAME} 免费版与 Plus`,
+                    : korean
+                      ? "Wechatai 무료 및 Plus"
+                      : `${SITE_NAME} 免费版与 Plus`,
                 serviceType: english
                   ? "WeChat AI integration service"
                   : japanese
                     ? "WeChat AI 連携サービス"
-                    : "微信 AI 接入服务",
+                    : korean
+                      ? "위챗 AI 연결 서비스"
+                      : "微信 AI 接入服务",
                 provider: { "@id": ORGANIZATION_ID },
                 offers: softwareApplicationOffers(locale),
               },
@@ -345,7 +350,7 @@ function seoLandingPage(
           : []),
         breadcrumbList([
           {
-            name: english ? "Home" : japanese ? pricingCopyJa.page.home : "首页",
+            name: pricingCopyFor(locale)?.page.home ?? "首页",
             item: `${SITE_URL}${hasRegisteredTranslation(locale, "/") ? localizedPath(locale, "/") : "/"}`,
           },
           { name: page.title, item: canonical },
@@ -575,16 +580,12 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   }
   if (path === "/") {
     const english = locale === "en";
-    const title = english
-      ? homeCopy.seo.title
-      : locale === "ja"
-        ? homeCopyJa.seo.title
-        : `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
-    const description = english
-      ? homeCopy.seo.description
-      : locale === "ja"
-        ? homeCopyJa.seo.description
-        : "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
+    const copy = homeCopyFor(locale);
+    const title =
+      copy?.seo.title ?? `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
+    const description =
+      copy?.seo.description ??
+      "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
     return {
       title,
       description,
@@ -611,42 +612,53 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
             isPartOf: { "@id": `${SITE_URL}/#website` },
             about: { "@id": APPLICATION_ID },
           },
-          organizationNode(),
+          organizationNode(locale),
           {
             ...softwareApplicationRef(),
             description,
             operatingSystem: "Web",
             image: SOCIAL_IMAGE,
             maintainer: maintainerNode(),
-            featureList: english
-              ? [
-                  "Use your own API key and model endpoint",
-                  "Switch models and manage conversations in WeChat",
-                  "Supports OpenAI Chat Completions, Responses, and Anthropic Messages",
-                  "Connect existing Muse, Hermes, and OpenClaw agents",
-                  "Configure an image model to generate and receive AI images in WeChat",
-                  "Customize characters and storylines with the role-play plugin",
-                  "Plus cloud assistant Xiaowei handles files, creates documents, and runs tasks; requires a text model",
-                ]
-              : locale === "ja"
+            featureList:
+              locale === "ko"
                 ? [
-                    "ご自身の API キーとモデルエンドポイントを使用",
-                    "WeChat でモデルを切り替え、会話を管理",
-                    "OpenAI Chat Completions、Responses、Anthropic Messages に対応",
-                    "既存の Muse・Hermes・OpenClaw エージェントを接続",
-                    "画像モデルを設定して WeChat で AI 画像を生成・受信",
-                    "ロールプレイプラグインでキャラクターとストーリーをカスタマイズ",
-                    "Plus のクラウドアシスタント小薇（Xiaowei）がファイル処理・文書作成・タスク実行を担当。テキストモデルが必要",
+                    "자체 API 키와 모델 엔드포인트 사용",
+                    "위챗에서 모델 전환과 대화 관리",
+                    "OpenAI Chat Completions, Responses, Anthropic Messages 지원",
+                    "기존 Muse, Hermes, OpenClaw 에이전트 연결",
+                    "이미지 모델을 설정해 위챗에서 AI 이미지 생성 및 수신",
+                    "역할극 플러그인으로 캐릭터와 스토리 설정",
+                    "Plus 클라우드 어시스턴트 Xiaowei의 파일 처리, 문서 생성, 작업 실행(텍스트 모델 필요)",
                   ]
-                : [
-                  "使用自己的 API Key 与模型服务地址",
-                  "在微信中切换大模型并管理聊天会话",
-                  "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
-                  "连接已有 Muse、Hermes 和 OpenClaw Agent",
-                  "配置图片模型，在微信生成并接收 AI 图片",
-                  "通过角色扮演插件自定义人设与剧情",
-                  "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
-                ],
+                : english
+                ? [
+                    "Use your own API key and model endpoint",
+                    "Switch models and manage conversations in WeChat",
+                    "Supports OpenAI Chat Completions, Responses, and Anthropic Messages",
+                    "Connect existing Muse, Hermes, and OpenClaw agents",
+                    "Configure an image model to generate and receive AI images in WeChat",
+                    "Customize characters and storylines with the role-play plugin",
+                    "Plus cloud assistant Xiaowei handles files, creates documents, and runs tasks; requires a text model",
+                  ]
+                : locale === "ja"
+                  ? [
+                      "ご自身の API キーとモデルエンドポイントを使用",
+                      "WeChat でモデルを切り替え、会話を管理",
+                      "OpenAI Chat Completions、Responses、Anthropic Messages に対応",
+                      "既存の Muse・Hermes・OpenClaw エージェントを接続",
+                      "画像モデルを設定して WeChat で AI 画像を生成・受信",
+                      "ロールプレイプラグインでキャラクターとストーリーをカスタマイズ",
+                      "Plus のクラウドアシスタント小薇（Xiaowei）がファイル処理・文書作成・タスク実行を担当。テキストモデルが必要",
+                    ]
+                  : [
+                    "使用自己的 API Key 与模型服务地址",
+                    "在微信中切换大模型并管理聊天会话",
+                    "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
+                    "连接已有 Muse、Hermes 和 OpenClaw Agent",
+                    "配置图片模型，在微信生成并接收 AI 图片",
+                    "通过角色扮演插件自定义人设与剧情",
+                    "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
+                  ],
             offers: softwareApplicationOffers(locale),
           },
           // 首页折叠问答的 FAQPage 节点，条目与页面上渲染的问答同源。
@@ -779,6 +791,8 @@ export function renderSeoHead(seo: PageSeo) {
       ? "Wechatai: chat with the models you choose in WeChat."
       : seo.htmlLang === LOCALE_DEFINITIONS.ja.htmlLang
         ? "Wechatai：選んだモデルと WeChat でチャットできます。"
+        : seo.htmlLang === LOCALE_DEFINITIONS.ko.htmlLang
+          ? "Wechatai: 위챗에서 직접 고른 모델과 대화하세요."
         : "微伴 Wechatai：在微信里，与自选大模型对话。";
   return [
     `<title data-seo>${escapeHtml(seo.title)}</title>`,

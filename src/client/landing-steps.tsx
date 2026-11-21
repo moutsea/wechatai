@@ -2,8 +2,7 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, Check, QrCode } from "lucide-react";
 import { CHANNEL_PROVIDERS } from "../shared/channel-providers";
-import { homeCopy } from "../shared/i18n/en/copy/home";
-import { homeCopy as homeCopyJa } from "../shared/i18n/ja/copy/home";
+import { homeCopyFor } from "../shared/i18n/copy";
 import { localizedHref, useLocale } from "./locale";
 import "./landing-steps.css";
 
@@ -32,6 +31,17 @@ const steps = [
     guideLabel: "查看微信命令速查",
   },
 ];
+
+const providerLabelsKo: Record<string, string> = {
+  kimi: "Kimi",
+  zhipu: "Zhipu GLM",
+  qwen: "알리바바 클라우드 모델 스튜디오",
+  volcengine: "볼케노 엔진 아크",
+  anthropic: "Anthropic",
+  gemini: "Gemini",
+  xai: "Grok / xAI",
+  siliconflow: "SiliconFlow",
+};
 
 const providerLabels: Record<string, string> = {
   kimi: "Kimi",
@@ -99,15 +109,11 @@ const stepsCopyZh = {
   alternativesEnd: "。",
 };
 
-const stepsEn = steps.map((step, index) => ({ ...step, ...homeCopy.steps.items[index]! }));
-const stepsJa = steps.map((step, index) => ({ ...step, ...homeCopyJa.steps.items[index]! }));
-
 function StepPreview({ step }: { step: number }) {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = (english ? homeCopy.steps : locale === "ja" ? homeCopyJa.steps : stepsCopyZh)
-    .preview;
-  const labels = english || locale === "ja" ? providerLabelsEn : providerLabels;
+  const copy = homeCopyFor(locale)?.steps.preview ?? stepsCopyZh.preview;
+  const labels =
+    locale === "ko" ? providerLabelsKo : locale === "en" || locale === "ja" ? providerLabelsEn : providerLabels;
   if (step === 0)
     return (
       <div className="steps-preview">
@@ -168,9 +174,11 @@ function StepPreview({ step }: { step: number }) {
 
 export function LandingSteps({ startAction }: { startAction: ReactNode }) {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = english ? homeCopy.steps : locale === "ja" ? homeCopyJa.steps : stepsCopyZh;
-  const localizedSteps = english ? stepsEn : locale === "ja" ? stepsJa : steps;
+  const localized = homeCopyFor(locale);
+  const copy = localized?.steps ?? stepsCopyZh;
+  const localizedSteps = localized
+    ? steps.map((step, index) => ({ ...step, ...localized.steps.items[index]! }))
+    : steps;
   const [activeStep, setActiveStep] = useState(0);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   const move = (offset: number) =>

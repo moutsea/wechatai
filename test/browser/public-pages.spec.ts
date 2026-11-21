@@ -1567,6 +1567,55 @@ test("keeps the Chinese guide fallback working from the Japanese homepage", asyn
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 });
 
+test("serves the Korean homepage and pricing page without Chinese page copy", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/ko`);
+  await mounted;
+
+  await expect(page.locator("h1")).toContainText("당신의 AI를");
+  await expect(page.locator("h1")).toContainText("위챗으로");
+  await expect(page.locator('.site-header-nav a[href="/ko/pricing"]')).toHaveText("가격");
+  await expect(page.locator('.site-header-nav a[href="/docs"]')).toHaveText("문서");
+  await expect(
+    page.locator('.landing-plan-year a[href="/ko/pricing?interval=year#plan-year"]').first(),
+  ).toBeVisible();
+  const faq = page.locator(".landing-faq details").first();
+  await faq.locator("summary").click();
+  await expect(faq).toHaveAttribute("open", "");
+  await expect(faq).toContainText("모델 API 키를 직접 준비해야 하나요?");
+  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
+    /\p{Script=Han}/u,
+  );
+
+  await page.goto(`${origin}/pricing`);
+  await page.getByRole("link", { name: "한국어", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/ko/pricing`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
+  await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "ko_KR");
+  await expect(page.locator("h1")).toHaveText(
+    "무료로 시작하고 필요할 때 Plus로 업그레이드하세요",
+  );
+  await expect(page.locator(".plan h3")).toHaveText(["무료", "Plus 월간", "Plus 연간"]);
+  await expect(page.locator(".plan-year .plan-price-unit")).toHaveText("/ 년");
+  const estimate = page.locator(".pricing-estimate");
+  await estimate.locator("summary").click();
+  await expect(estimate).toHaveAttribute("open", "");
+  await expect(estimate.locator(".cost-results")).toContainText("크레딧");
+  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
+    /\p{Script=Han}/u,
+  );
+  const readableAttributes = await page.evaluate(() =>
+    [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
+      .flatMap((element) =>
+        ["alt", "aria-label", "title", "placeholder"].map(
+          (name) => element.getAttribute(name) ?? "",
+        ),
+      )
+      .join(" "),
+  );
+  expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
+});
+
 test("opens the registered English getting-started guide from the homepage", async ({ page }) => {
   await page.goto(`${origin}/en`);
   await page.getByRole("link", { name: "Read the getting-started guide", exact: true }).click();

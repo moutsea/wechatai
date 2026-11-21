@@ -28,7 +28,7 @@ export function LanguageSwitcher({ mobile = false }: { mobile?: boolean }) {
   ) : (
     <nav
       className="site-language"
-      aria-label={locale === "en" ? "Language" : locale === "ja" ? "言語" : "语言"}
+      aria-label={locale === "ko" ? "언어" : locale === "en" ? "Language" : locale === "ja" ? "言語" : "语言"}
     >
       {links}
     </nav>

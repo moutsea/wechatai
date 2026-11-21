@@ -6,7 +6,7 @@ import { useAuth } from "./auth";
 import { LoadErrorBoundary, reloadPage } from "./load-error-boundary";
 import { LanguageSwitcher } from "./language-switcher";
 import { useLocale } from "./locale";
-import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath } from "../shared/i18n";
+import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath, type Locale } from "../shared/i18n";
 
 const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
@@ -22,13 +22,27 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", en: "Home", ja: "ホーム", match: "/" },
-  { to: "/pricing", label: "价格", en: "Pricing", ja: "料金", match: "/pricing" },
-  { to: "/docs", label: "文档", en: "Docs", ja: "ドキュメント", match: "/docs" },
-  { to: "/#how", label: "如何使用", en: "How it works", ja: "使い方", match: "/#how" },
+  { to: "/", label: "首页", en: "Home", ja: "ホーム", ko: "홈", match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", ja: "料金", ko: "가격", match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", ja: "ドキュメント", ko: "문서", match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", ja: "使い方", ko: "사용 방법", match: "/#how" },
 ] as const;
 
-const headerCopyEn = {
+interface HeaderCopy {
+  homeAria: string;
+  topNav: string;
+  account: string;
+  login: string;
+  start: string;
+  workspace: string;
+  workspaceFallback: string;
+  openMenu: string;
+  closeMenu: string;
+  menuFailed: string;
+  reloadMenu: string;
+}
+
+const headerCopyEn: HeaderCopy = {
   homeAria: "Wechatai home",
   topNav: "Main navigation",
   account: "Account",
@@ -70,6 +84,26 @@ const headerCopyZh = {
   reloadMenu: "重新加载账户菜单",
 } as const;
 
+const headerCopyKo: HeaderCopy = {
+  homeAria: "Wechatai 홈",
+  topNav: "주요 메뉴",
+  account: "계정",
+  login: "로그인",
+  start: "무료로 시작",
+  workspace: "워크스페이스 열기",
+  workspaceFallback: "워크스페이스",
+  openMenu: "메뉴 열기",
+  closeMenu: "메뉴 닫기",
+  menuFailed: "계정 메뉴를 불러오지 못했습니다",
+  reloadMenu: "계정 메뉴 새로고침",
+};
+
+const headerCopies: Partial<Record<Locale, HeaderCopy>> = {
+  en: headerCopyEn,
+  ja: headerCopyJa,
+  ko: headerCopyKo,
+};
+
 type SiteHeaderProps = {
   /** 当前页面路径，用于给对应导航项加 aria-current。 */
   active?: string;
@@ -79,8 +113,7 @@ type SiteHeaderProps = {
 
 /**
  * The wordmark is part of the brand, but the Chinese glyphs are page copy on
- * English and Japanese routes. Keep the same mark and typography with the
- * Latin wordmark there.
+ * non-Chinese routes. Keep the same mark and typography with a Latin wordmark.
  */
 export function SiteBrand({ light = false, latin }: { light?: boolean; latin: boolean }) {
   if (!latin) return <Brand light={light} />;
@@ -102,8 +135,9 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { data: session } = useAuth();
   const { pathname, hash } = useLocation();
   const { locale, path } = useLocale();
-  const english = locale === "en";
-  const copy = english ? headerCopyEn : locale === "ja" ? headerCopyJa : headerCopyZh;
+  const copy = headerCopies[locale] ?? headerCopyZh;
+  const latin = locale !== DEFAULT_LOCALE;
+  const navLabelKey = locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : "label";
   const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -126,7 +160,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           to={localeHref(item.to)}
           aria-current={current === item.match ? "page" : undefined}
         >
-          {english ? item.en : locale === "ja" ? item.ja : item.label}
+          {item[navLabelKey]}
         </Link>
       ))}
       {extra}
@@ -190,7 +224,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     <header className="site-header">
       <div className="site-header-inner">
         <Link to={localeHref("/")} aria-label={copy.homeAria}>
-          <SiteBrand latin={locale !== "zh-CN"} />
+          <SiteBrand latin={latin} />
         </Link>
         <nav aria-label={copy.topNav} className="site-header-nav">
           {links}
@@ -229,7 +263,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
             to={localeHref(item.to)}
             aria-current={current === item.match ? "page" : undefined}
           >
-            {english ? item.en : locale === "ja" ? item.ja : item.label}
+            {item[navLabelKey]}
           </Link>
         ))}
         {extra}

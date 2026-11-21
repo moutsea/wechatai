@@ -55,7 +55,7 @@ export const homeCopy = {
       wechatConnections: (count: number) =>
         count === 1 ? "WeChat connection" : "WeChat connections",
       unlimitedPlugins: "Unlimited plugin configurations",
-      unlimitedPluginsEmphasis: null,
+      unlimitedPluginsEmphasis: null as string | null,
       pluginConfigurations: (count: number) =>
         count === 1 ? "plugin configuration" : "plugin configurations",
       imageInput: "Image and file input",
