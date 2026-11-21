@@ -1564,6 +1564,26 @@ test("serves the Japanese homepage and pricing page without Chinese page copy", 
   );
 });
 
+test("shows each Japanese homepage plan allowance once on desktop and mobile", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/ja`);
+  await mounted;
+
+  const allowances = page
+    .locator(".landing-plan:visible li")
+    .filter({ hasText: /WeChat 接続|プラグイン設定/ });
+  const plus = ["WeChat 接続 10 件", "プラグイン設定 無制限"];
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect
+      .soft(allowances, `${width}px`)
+      .toHaveText(
+        ["WeChat 接続 1 件", "プラグイン設定 1 件", ...plus, ...(width === 1280 ? plus : [])],
+        { useInnerText: true },
+      );
+  }
+});
+
 test("opens a Japanese account menu for signed-in pricing visitors", async ({ page }) => {
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
   await page.route("**/api/admin/access", (route) => route.fulfill({ json: { isAdmin: true } }));

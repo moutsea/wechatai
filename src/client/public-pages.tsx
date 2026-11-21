@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { landingFaq } from "../shared/landing-faq";
 import { homeCopyFor } from "../shared/i18n/copy";
+import { homeCopy as homeCopyJa } from "../shared/i18n/ja/copy/home";
 import { PLUGIN_LIMITS } from "../shared/plugin-access";
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN, approxYuan } from "../shared/pricing-copy";
 import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
@@ -141,6 +142,7 @@ const homeCopyZh = {
 function LandingPlanFeatures({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
   const copy = (homeCopyFor(locale) ?? homeCopyZh).plans.features;
+  const ja = locale === "ja" ? homeCopyJa.plans.features : null;
   const links = WECHAT_LINK_LIMITS[plus ? "plus" : "free"];
   const plugins = PLUGIN_LIMITS.free;
   return (
@@ -155,7 +157,8 @@ function LandingPlanFeatures({ plus }: { plus: boolean }) {
       <li>
         <Check size={16} aria-hidden="true" />
         <span>
-          <strong>{links}</strong> {copy.wechatConnections(links)}
+          {ja && `${ja.wechatConnections(links)} `}
+          <strong>{links}</strong> {ja ? ja.countSuffix : copy.wechatConnections(links)}
         </span>
       </li>
       <li>
@@ -173,7 +176,9 @@ function LandingPlanFeatures({ plus }: { plus: boolean }) {
             </>
           ) : (
             <>
-              <strong>{plugins}</strong> {copy.pluginConfigurations(plugins)}
+              {ja && `${ja.pluginConfigurations(plugins)} `}
+              <strong>{plugins}</strong>{" "}
+              {ja ? ja.countSuffix : copy.pluginConfigurations(plugins)}
             </>
           )}
         </span>

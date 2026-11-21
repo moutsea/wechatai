@@ -62,10 +62,11 @@ export const homeCopy = {
     features: {
       creditsPrefix: "毎日",
       creditsSuffix: "クレジット",
-      wechatConnections: (count: number) => `WeChat 接続 ${count} 件`,
+      wechatConnections: (_count: number) => "WeChat 接続",
       unlimitedPlugins: "プラグイン設定",
       unlimitedPluginsEmphasis: "無制限",
-      pluginConfigurations: (count: number) => `プラグイン設定 ${count} 件`,
+      pluginConfigurations: (_count: number) => "プラグイン設定",
+      countSuffix: "件",
       imageInput: "画像・ファイル入力に対応",
       noImageInput: "画像・ファイル入力には非対応",
       xiaoweiName: "小薇（Xiaowei）",
