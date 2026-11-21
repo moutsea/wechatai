@@ -57,7 +57,9 @@ describe("published Korean pages", () => {
     expect(footer?.querySelector('a[href="/ko/pricing"]')?.textContent).toBe(
       "가격 및 무료 크레딧",
     );
-    expect(footer?.querySelector('a[href="/wechat-ai"]')?.textContent).toBe("위챗 AI 어시스턴트");
+    expect(footer?.querySelector('a[href="/ko/wechat-ai"]')?.textContent).toBe(
+      "위챗 AI 어시스턴트",
+    );
 
     expect(document.querySelectorAll(".landing-faq details")).toHaveLength(7);
     expect(document.querySelector(".landing-faq summary")?.textContent).toContain(
@@ -135,13 +137,83 @@ describe("published Korean pages", () => {
     }
   });
 
-  it("publishes only the two registered Korean URLs and 404s the rest", () => {
+  it("renders the Korean WeChat AI landing page with localized chrome and links", () => {
+    const document = parse("/ko/wechat-ai");
+    expect(document.documentElement.lang).toBe("ko-KR");
+    expect(document.title).toBe("위챗 AI 어시스턴트: 내 대형 모델을 위챗에 연결 | Wechatai");
+    expect(document.querySelector("h1")?.textContent).toBe(
+      "위챗 AI: 내 대형 모델을 위챗 대화에 연결",
+    );
+    expect(document.querySelector(".seopage-skip")?.textContent).toBe("본문으로 건너뛰기");
+    expect(document.querySelector(".seopage-breadcrumb a")?.getAttribute("href")).toBe("/ko");
+    expect(document.querySelector("#seopage-faq-title")?.textContent).toBe("자주 묻는 질문");
+    expect(document.querySelector(".seopage-cta h2")?.textContent).toBe(
+      "연결 조건을 확인하고 위챗 AI 설정을 시작하세요",
+    );
+    expect(document.querySelector('.seopage-related a[href="/ko/wechat-deepseek"]')).not.toBeNull();
+    expect(document.querySelector('.seopage-related a[href="/wechat-gpt"]')).not.toBeNull();
+    expect(document.querySelector('.seopage-hero a[href="/ko/pricing#estimate"]')).not.toBeNull();
+    expect(document.querySelectorAll("#faq details")).toHaveLength(6);
+    expect(document.querySelector("#faq summary")?.textContent).toContain(
+      "위챗 AI는 위챗 공식 기능인가요?",
+    );
+    expect(hanResidue(document)).toEqual([]);
+  });
+
+  it("renders the Korean DeepSeek landing page with its CTA and cost estimator link", () => {
+    const document = parse("/ko/wechat-deepseek");
+    expect(document.title).toBe(
+      "위챗에서 DeepSeek 사용하는 방법: 연결 방식, 요금, 가이드 | Wechatai",
+    );
+    expect(document.querySelector("h1")?.textContent).toBe(
+      "위챗에서 DeepSeek을 쓰고 싶다면 여기서 시작하세요",
+    );
+    expect(document.querySelector(".seopage-actions a")?.textContent).toBe(
+      "DeepSeek 위챗 가이드 보기",
+    );
+    expect(document.querySelector(".seopage-actions a")?.getAttribute("href")).toBe(
+      "/docs/deepseek-in-wechat",
+    );
+    const pricing = document.querySelector('.seopage-actions a[href="/ko/pricing#estimate"]');
+    expect(pricing?.textContent).toBe("먼저 사용 비용 예측");
+    expect(document.querySelectorAll("#faq details")).toHaveLength(8);
+    expect(document.querySelector("#faq summary")?.textContent).toContain(
+      "위챗에서 DeepSeek을 어떻게 사용하나요?",
+    );
+    expect(document.body.textContent).toContain("ClawBot 진입점");
+    expect(hanResidue(document)).toEqual([]);
+  });
+
+  it("renders the Korean WeChat bot comparison without Chinese copy", () => {
+    const document = parse("/ko/wechat-bot");
+    expect(document.title).toBe("위챗 봇 만드는 방법: 세 가지 경로와 위험 경계 | Wechatai");
+    expect(document.querySelector("h1")?.textContent).toBe(
+      "위챗 봇 만드는 방법: 먼저 경로를 고르세요",
+    );
+    expect(document.querySelectorAll("#faq details")).toHaveLength(5);
+    expect(document.querySelector('.seopage-related a[href="/wechat-ai-options"]')?.textContent)
+      .toContain("위챗 AI 연결 방식 비교");
+    expect(document.querySelector(".seopage-compare-table")).toBeNull();
+    expect(document.body.textContent).toContain("ClawBot 플러그인");
+    expect(hanResidue(document)).toEqual([]);
+  });
+
+  it("publishes only the five registered Korean URLs and 404s the rest", () => {
     expect(publishedLocalizedPaths().filter((path) => path.startsWith("/ko")).sort()).toEqual([
       "/ko",
       "/ko/pricing",
+      "/ko/wechat-ai",
+      "/ko/wechat-bot",
+      "/ko/wechat-deepseek",
     ]);
     const sitemap = renderSitemap();
-    for (const path of ["/ko", "/ko/pricing"]) {
+    for (const path of [
+      "/ko",
+      "/ko/pricing",
+      "/ko/wechat-ai",
+      "/ko/wechat-bot",
+      "/ko/wechat-deepseek",
+    ]) {
       const lastmod = getPageSeo(path).canonical && "2026-11-21";
       expect(sitemap).toContain(
         `<loc>${SITE_URL}${path}</loc><lastmod>${lastmod}</lastmod>`,

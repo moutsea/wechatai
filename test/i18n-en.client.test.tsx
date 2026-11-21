@@ -239,6 +239,9 @@ describe("published English pages", () => {
       "/ja/wechat-deepseek",
       "/ko",
       "/ko/pricing",
+      "/ko/wechat-ai",
+      "/ko/wechat-bot",
+      "/ko/wechat-deepseek",
     ].sort();
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();

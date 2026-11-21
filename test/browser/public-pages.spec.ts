@@ -1614,6 +1614,20 @@ test("serves the Korean homepage and pricing page without Chinese page copy", as
       .join(" "),
   );
   expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
+
+  await page.goto(`${origin}/ko/wechat-ai`);
+  await expect(page.locator("h1")).toHaveText("위챗 AI: 내 대형 모델을 위챗 대화에 연결");
+  await expect(page.locator(".seopage-related a").first()).toHaveAttribute(
+    "href",
+    "/ko/wechat-deepseek",
+  );
+  const landingFaq = page.locator("#faq details").first();
+  await landingFaq.locator("summary").click();
+  await expect(landingFaq).toHaveAttribute("open", "");
+  await expect(landingFaq).toContainText("위챗 AI는 위챗 공식 기능인가요?");
+  expect((await page.locator("body").innerText()).replaceAll("中文", "")).not.toMatch(
+    /\p{Script=Han}/u,
+  );
 });
 
 test("opens the registered English getting-started guide from the homepage", async ({ page }) => {
