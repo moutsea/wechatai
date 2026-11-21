@@ -26,7 +26,7 @@ const content: SeoPage = {
     "Comece no Free, com as taxas do modelo à parte",
     "Tutorial com capturas e solução de problemas",
   ],
-  ctaLabel: "Ver o tutorial do DeepSeek no WeChat",
+  ctaLabel: "Ver tutorial do DeepSeek",
   ctaHref: "/docs/deepseek-in-wechat",
   sections: [
     {

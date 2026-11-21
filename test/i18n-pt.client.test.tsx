@@ -184,8 +184,6 @@ describe("published Brazilian Portuguese pages", () => {
 
   it("localizes the DeepSeek CTA destinations that have Portuguese pages", () => {
     const document = parse("/pt/wechat-deepseek");
-    expect(document.querySelector(".seopage-actions a[href='/docs/deepseek-in-wechat']")?.textContent)
-      .toContain("Ver o tutorial do DeepSeek no WeChat");
     expect(document.querySelector(".seopage-actions a[href='/pt/pricing#estimate']")?.textContent)
       .toContain("Estime o custo de uso primeiro");
     expect(document.querySelector('.seopage-related a[href="/pt/pricing"]')).not.toBeNull();

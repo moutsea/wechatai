@@ -363,6 +363,24 @@ test("opens Portuguese FAQ answers and the pricing estimator from a DeepSeek CTA
   await expect(page.locator(".cost-estimator h2")).toHaveText("Estime primeiro seu uso de texto");
 });
 
+for (const width of [320, 360]) {
+  test(`fits the Portuguese DeepSeek tutorial button at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/pt/wechat-deepseek`);
+    await mounted;
+    const tutorial = page.locator(".seopage-actions").getByRole("link", { name: /tutorial/i });
+    await expect(tutorial).toBeInViewport({ ratio: 1 });
+    const viewport = await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      contentWidth: document.documentElement.scrollWidth,
+    }));
+    expect(viewport).toEqual({ width, contentWidth: width });
+    await tutorial.click();
+    await expect(page).toHaveURL(`${origin}/docs/deepseek-in-wechat`);
+  });
+}
+
 // An unregistered prefix must not fall back to the Chinese homepage or pricing page.
 for (const path of locale404Probes) {
   test(`shows the built 404 page for the unregistered locale path ${path}`, async ({ page }) => {
