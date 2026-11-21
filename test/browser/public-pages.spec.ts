@@ -94,10 +94,25 @@ for (const group of localePageGroups) {
       const targets = group.filter((target) => target !== expected);
       await expect(switcher).toHaveCount(targets.length ? 1 : 0);
       await expect(switcher.locator("a")).toHaveCount(targets.length);
+      const korean = expected.htmlLang === "ko-KR";
       for (const { htmlLang, label, path } of targets) {
-        const link = switcher.getByRole("link", { name: label, exact: true });
+        const link = korean
+          ? switcher.locator(`a[hreflang="${htmlLang}"]`)
+          : switcher.getByRole("link", { name: label, exact: true });
         await expect(link).toHaveAttribute("href", path);
         await expect(link).toHaveAttribute("hreflang", htmlLang);
+        if (korean && htmlLang === "zh-CN") await expect(link).toHaveText("중국어");
+      }
+      if (korean) {
+        await expect(switcher).not.toContainText(/\p{Script=Han}/u);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
+        const mobile = page.locator(".site-mobile-menu");
+        const chinese = mobile.getByRole("link", { name: "중국어", exact: true });
+        await expect(chinese).toBeVisible();
+        await expect(chinese).toHaveAttribute("href", group[0].path);
+        await expect(chinese).toHaveAttribute("hreflang", "zh-CN");
+        await expect(mobile).not.toContainText(/\p{Script=Han}/u);
       }
     });
   }
@@ -1164,6 +1179,8 @@ for (const [path, interval] of [
   ["/pricing", "month"],
   ["/pricing", "year"],
   ["/ja/pricing", "year"],
+  ["/ko/pricing", "month"],
+  ["/ko/pricing", "year"],
 ]) {
   test(`returns mobile buyers on ${path} to the ${interval} card after signing in`, async ({
     page,
@@ -1601,6 +1618,79 @@ test("keeps the Chinese guide fallback working from the Japanese homepage", asyn
   await page.locator(".steps-heading").getByRole("link", { name: "はじめかたガイドを読む" }).click();
   await expect(page).toHaveURL(`${origin}/docs/getting-started`);
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+});
+
+test("keeps the signed-in Korean pricing account menu in Korean", async ({ page }) => {
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({ json: { plan: "plus", planUntil: Date.UTC(2030, 0, 1), wallet: { balance: 100 } } }),
+  );
+  await page.goto(`${origin}/ko/pricing`);
+  await page.getByRole("button", { name: "사용자 메뉴", exact: true }).click();
+  const menu = page.getByRole("dialog", { name: "계정 메뉴", exact: true });
+  await expect(menu.getByRole("link", { name: "워크스페이스 열기" }))
+    .toHaveAttribute("href", "/app");
+  await expect(menu.getByRole("link", { name: "멤버십 갱신" }))
+    .toHaveAttribute("href", "/app/billing");
+  await expect(menu.getByRole("button", { name: "로그아웃" })).toBeVisible();
+  await expect(menu).not.toContainText(/\p{Script=Han}/u);
+});
+
+test("serves the Korean homepage and pricing page without Chinese page copy", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/ko`);
+  await mounted;
+
+  await expect(page.locator("h1")).toContainText("당신의 AI를");
+  await expect(page.locator("h1")).toContainText("위챗으로");
+  await expect(page.locator('.site-header-nav a[href="/ko/pricing"]')).toHaveText("가격");
+  await expect(page.locator('.site-header-nav a[href="/docs"]')).toHaveText("문서");
+  await expect(
+    page.locator('.landing-plan-year a[href="/ko/pricing?interval=year#plan-year"]').first(),
+  ).toBeVisible();
+  const faq = page.locator(".landing-faq details").first();
+  await faq.locator("summary").click();
+  await expect(faq).toHaveAttribute("open", "");
+  await expect(faq).toContainText("모델 API 키를 직접 준비해야 하나요?");
+  expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
+
+  await page.goto(`${origin}/pricing`);
+  await page.getByRole("link", { name: "한국어", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/ko/pricing`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
+  await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "ko_KR");
+  await expect(page.locator("h1")).toHaveText(
+    "무료로 시작하고 필요할 때 Plus로 업그레이드하세요",
+  );
+  await expect(page.locator(".plan h3")).toHaveText(["무료", "Plus 월간", "Plus 연간"]);
+  await expect(page.locator(".plan-year .plan-price-unit")).toHaveText("/ 년");
+  const estimate = page.locator(".pricing-estimate");
+  await estimate.locator("summary").click();
+  await expect(estimate).toHaveAttribute("open", "");
+  await expect(estimate.locator(".cost-results")).toContainText("크레딧");
+  expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
+  const readableAttributes = await page.evaluate(() =>
+    [...document.querySelectorAll("[alt], [aria-label], [title], [placeholder]")]
+      .flatMap((element) =>
+        ["alt", "aria-label", "title", "placeholder"].map(
+          (name) => element.getAttribute(name) ?? "",
+        ),
+      )
+      .join(" "),
+  );
+  expect(readableAttributes).not.toMatch(/\p{Script=Han}/u);
+
+  await page.goto(`${origin}/ko/wechat-ai`);
+  await expect(page.locator("h1")).toHaveText("위챗 AI: 내 대형 모델을 위챗 대화에 연결");
+  await expect(page.locator(".seopage-related a").first()).toHaveAttribute(
+    "href",
+    "/ko/wechat-deepseek",
+  );
+  const landingFaq = page.locator("#faq details").first();
+  await landingFaq.locator("summary").click();
+  await expect(landingFaq).toHaveAttribute("open", "");
+  await expect(landingFaq).toContainText("위챗 AI는 위챗 공식 기능인가요?");
+  expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
 });
 
 test("opens the registered English getting-started guide from the homepage", async ({ page }) => {

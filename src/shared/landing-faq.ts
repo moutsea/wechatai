@@ -3,8 +3,9 @@
  * 价格与额度来自共享常量，教程链接在可见回答后展示。
  */
 import { DAILY_CREDIT_DEFAULTS } from "./credits";
-import { homeCopy } from "./i18n/en/copy/home";
+import { homeCopy as homeCopyEn } from "./i18n/en/copy/home";
 import { homeCopy as homeCopyJa } from "./i18n/ja/copy/home";
+import { homeCopy as homeCopyKo } from "./i18n/ko/copy/home";
 import type { Locale } from "./i18n";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
@@ -62,12 +63,13 @@ export const LANDING_FAQ: readonly LandingFaqItem[] = [
 ] as const;
 
 /** English questions and answers; links stay identical to the Chinese source. */
-export const LANDING_FAQ_EN: readonly LandingFaqItem[] = homeCopy.faq;
+export const LANDING_FAQ_EN: readonly LandingFaqItem[] = homeCopyEn.faq;
+export const LANDING_FAQ_KO: readonly LandingFaqItem[] = homeCopyKo.faq;
 
 /** Japanese questions and answers; doc links fall back to the Chinese guides. */
 export const LANDING_FAQ_JA: readonly LandingFaqItem[] = homeCopyJa.faq;
 
 /** Selects the FAQ copy used by both the rendered page and its FAQPage JSON-LD. */
 export function landingFaq(locale: Locale): readonly LandingFaqItem[] {
-  return locale === "en" ? LANDING_FAQ_EN : locale === "ja" ? LANDING_FAQ_JA : LANDING_FAQ;
+  return locale === "en" ? LANDING_FAQ_EN : locale === "ja" ? LANDING_FAQ_JA : locale === "ko" ? LANDING_FAQ_KO : LANDING_FAQ;
 }

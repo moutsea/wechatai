@@ -1,4 +1,5 @@
 import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
+import { languageCopy as languageCopyKo } from "../shared/i18n/ko/copy/site-header";
 import { useLocale } from "./locale";
 
 /**
@@ -12,14 +13,15 @@ export function LanguageSwitcher({ mobile = false }: { mobile?: boolean }) {
   if (!targets.length) return null;
   const links = targets.map((target) => {
     const definition = LOCALE_DEFINITIONS[target];
+    const label = locale === "ko" ? languageCopyKo.labels[target] : undefined;
     return (
       <a
         key={target}
         href={localizedPath(target, path)}
         hrefLang={definition.htmlLang}
-        lang={definition.htmlLang}
+        lang={label ? undefined : definition.htmlLang}
       >
-        {definition.label}
+        {label ?? definition.label}
       </a>
     );
   });
@@ -28,7 +30,7 @@ export function LanguageSwitcher({ mobile = false }: { mobile?: boolean }) {
   ) : (
     <nav
       className="site-language"
-      aria-label={locale === "en" ? "Language" : locale === "ja" ? "言語" : "语言"}
+      aria-label={locale === "ko" ? languageCopyKo.navigation : locale === "en" ? "Language" : locale === "ja" ? "言語" : "语言"}
     >
       {links}
     </nav>

@@ -13,8 +13,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
 import { landingFaq } from "../shared/landing-faq";
-import { homeCopy } from "../shared/i18n/en/copy/home";
-import { homeCopy as homeCopyJa } from "../shared/i18n/ja/copy/home";
+import { homeCopyFor } from "../shared/i18n/copy";
 import { PLUGIN_LIMITS } from "../shared/plugin-access";
 import { PLUS_MONTHLY_YUAN, PLUS_YEARLY_YUAN, approxYuan } from "../shared/pricing-copy";
 import { WECHAT_LINK_LIMITS } from "../shared/wechat-links";
@@ -59,46 +58,16 @@ const landingPlans = [
   },
 ] as const;
 
-const landingPlansEn = [
-  {
-    id: "free",
-    ...homeCopy.plans.free,
-    price: 0,
-  },
-  {
-    id: "month",
-    ...homeCopy.plans.month,
-    price: PLUS_MONTHLY_YUAN,
-  },
-  {
-    id: "year",
-    ...homeCopy.plans.year,
-    price: PLUS_YEARLY_YUAN,
-  },
-] as const;
-
-const landingPlansJa = [
-  {
-    id: "free",
-    ...homeCopyJa.plans.free,
-    price: 0,
-  },
-  {
-    id: "month",
-    ...homeCopyJa.plans.month,
-    price: PLUS_MONTHLY_YUAN,
-  },
-  {
-    id: "year",
-    ...homeCopyJa.plans.year,
-    price: PLUS_YEARLY_YUAN,
-  },
-] as const;
-
-type LandingPlan =
-  | (typeof landingPlans)[number]
-  | (typeof landingPlansEn)[number]
-  | (typeof landingPlansJa)[number];
+interface LandingPlan {
+  id: "free" | "month" | "year";
+  name: string;
+  description: string;
+  price: number;
+  unit: string;
+  note: string;
+  badge: string;
+  action: string;
+}
 
 const homeCopyZh = {
   plans: {
@@ -171,8 +140,7 @@ const homeCopyZh = {
 
 function LandingPlanFeatures({ plus }: { plus: boolean }) {
   const { locale } = useLocale();
-  const copy =
-    (locale === "en" ? homeCopy : locale === "ja" ? homeCopyJa : homeCopyZh).plans.features;
+  const copy = (homeCopyFor(locale) ?? homeCopyZh).plans.features;
   const links = WECHAT_LINK_LIMITS[plus ? "plus" : "free"];
   const plugins = PLUGIN_LIMITS.free;
   return (
@@ -274,7 +242,7 @@ function LandingPlanCard({
 }) {
   const { data: session } = useAuth();
   const { locale } = useLocale();
-  const { hero } = locale === "en" ? homeCopy : locale === "ja" ? homeCopyJa : homeCopyZh;
+  const { hero } = homeCopyFor(locale) ?? homeCopyZh;
   return (
     <article
       className={`landing-plan landing-plan-${plan.id}${plan.id === "free" ? "" : " landing-plan-plus"} ${className}`}
@@ -314,12 +282,17 @@ export function Landing() {
   const [mobileInterval, setMobileInterval] = useState<"month" | "year">("year");
   const { data: session } = useAuth();
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = english ? homeCopy : locale === "ja" ? homeCopyJa : homeCopyZh;
-  // The artwork only labels brand names and the WeChat wordmark, so the English
-  // rendering also serves Japanese; only the alt text is localized (copy.hero).
+  const localized = homeCopyFor(locale);
+  const copy = localized ?? homeCopyZh;
+  // The English artwork carries the same brand marks without Chinese glyphs.
   const heroImage = `/images/landing/ai-wechat-connections${locale === "zh-CN" ? "" : "-en"}`;
-  const plans = english ? landingPlansEn : locale === "ja" ? landingPlansJa : landingPlans;
+  const plans = localized
+    ? [
+        { id: "free" as const, ...localized.plans.free, price: 0 },
+        { id: "month" as const, ...localized.plans.month, price: PLUS_MONTHLY_YUAN },
+        { id: "year" as const, ...localized.plans.year, price: PLUS_YEARLY_YUAN },
+      ]
+    : landingPlans;
   const faq = landingFaq(locale);
   return (
     <div className="landing">
@@ -329,7 +302,7 @@ export function Landing() {
           <div className="landing-copy">
             <h1>
               {copy.hero.titleLead}
-              {english && " "}
+              {(locale === "en" || locale === "ko") && " "}
               <span>{copy.hero.titleAccent}</span>
             </h1>
             <p>{copy.hero.body}</p>

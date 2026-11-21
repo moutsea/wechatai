@@ -11,8 +11,7 @@ import {
 } from "../../shared/billing-offers";
 import { approxYuan } from "../../shared/pricing-copy";
 import { DAILY_CREDIT_DEFAULTS } from "../../shared/credits";
-import { pricingCopy } from "../../shared/i18n/en/copy/pricing";
-import { pricingCopy as pricingCopyJa } from "../../shared/i18n/ja/copy/pricing";
+import { pricingCopyFor } from "../../shared/i18n/copy";
 import { PLUGIN_LIMITS } from "../../shared/plugin-access";
 import { WECHAT_LINK_LIMITS } from "../../shared/wechat-links";
 import type { Locale } from "../../shared/i18n";
@@ -64,6 +63,7 @@ const plansCopyZh = {
   ctaBusy: "正在跳转支付…",
   ctaSubscribe: (name: string, price: string) => `开通${name} · ${price}`,
   ctaChoose: (name: string) => `选择${name}`,
+  loginAgain: "重新登录",
   features,
   highlights: ["每天 credits", "微信连接", "插件配置"],
   supported: "支持",
@@ -76,9 +76,7 @@ const plansCopyZh = {
 };
 
 function plansCopy(locale: Locale) {
-  if (locale === "en") return pricingCopy.plans;
-  if (locale === "ja") return pricingCopyJa.plans;
-  return plansCopyZh;
+  return pricingCopyFor(locale)?.plans ?? plansCopyZh;
 }
 
 function PlanValue({ value }: { value: string | number | boolean }) {
@@ -136,10 +134,8 @@ function PlanFeatures({ plus }: { plus: boolean }) {
 export function PricingPlans() {
   const { data: session, isPending, requireSignIn } = useAuth();
   const { locale } = useLocale();
-  const copy = plansCopy(locale);
-  // Chinese keeps the raw API message and offer names; the translations carry their own.
-  const errorCopy =
-    locale === "zh-CN" ? null : locale === "en" ? pricingCopy.plans : pricingCopyJa.plans;
+  const errorCopy = pricingCopyFor(locale)?.plans;
+  const copy = errorCopy ?? plansCopyZh;
   const [params] = useSearchParams();
   const requestedInterval = params.get("interval");
   const [busyOffer, setBusyOffer] = useState<string | null>(null);
@@ -158,7 +154,7 @@ export function PricingPlans() {
       window.location.assign(result.url);
     } catch (e) {
       const code = e instanceof ApiError ? e.code : undefined;
-      const loginRequired = errorCopy !== null && code === "unauthorized";
+      const loginRequired = errorCopy !== undefined && code === "unauthorized";
       if (loginRequired) requireSignIn();
       setError({
         offerId: offer.id,

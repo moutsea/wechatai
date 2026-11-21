@@ -50,7 +50,7 @@ describe("translation registry", () => {
 describe("registered localized pages", () => {
   it.each([
     ["ja", "ja-JP", "ja_JP"],
-    ["ko", "ko", "ko_KR"],
+    ["ko", "ko-KR", "ko_KR"],
     ["es", "es", "es_ES"],
     ["pt", "pt", "pt_BR"],
   ] as const)("publishes %s only after registration", (locale, htmlLang, ogLocale) => {

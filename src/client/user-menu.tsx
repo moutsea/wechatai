@@ -15,6 +15,7 @@ import { useLocale } from "./locale";
 import { membershipExpiry } from "./membership";
 import { formatCredits, type Snapshot } from "../shared/types";
 import { userMenuCopy as userMenuCopyJa } from "../shared/i18n/ja/copy/user-menu";
+import { userMenuCopy as userMenuCopyKo } from "../shared/i18n/ko/copy/user-menu";
 import "./user-menu.css";
 
 type MenuUser = { id: string; name: string; email: string; image?: string | null };
@@ -71,7 +72,11 @@ const userMenuCopyZh = {
 export function UserMenu({ user }: { user: MenuUser }) {
   const { refetch } = useAuth();
   const { locale } = useLocale();
-  const copy = locale === "en" ? userMenuCopyEn : locale === "ja" ? userMenuCopyJa : userMenuCopyZh;
+  const copy =
+    locale === "en" ? userMenuCopyEn
+    : locale === "ja" ? userMenuCopyJa
+    : locale === "ko" ? userMenuCopyKo
+    : userMenuCopyZh;
   const { loadFailed } = copy;
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);

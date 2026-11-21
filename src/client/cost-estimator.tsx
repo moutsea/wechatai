@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { estimateTextCost } from "../shared/cost-estimate";
 import { DAILY_CREDIT_DEFAULTS } from "../shared/credits";
-import { pricingCopy } from "../shared/i18n/en/copy/pricing";
-import { pricingCopy as pricingCopyJa } from "../shared/i18n/ja/copy/pricing";
+import { pricingCopyFor } from "../shared/i18n/copy";
 import { useDocumentInputs } from "./document-handoff";
 import { localizedHref, useLocale } from "./locale";
 import "./cost-estimator.css";
@@ -44,9 +43,8 @@ const estimatorCopyZh = {
 export function CostEstimator() {
   const inputs = useDocumentInputs();
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = english ? pricingCopy.estimator : locale === "ja" ? pricingCopyJa.estimator : estimatorCopyZh;
-  const numberLocale = english ? "en-US" : locale === "ja" ? "ja-JP" : "zh-CN";
+  const copy = pricingCopyFor(locale)?.estimator ?? estimatorCopyZh;
+  const numberLocale = locale === "en" ? "en-US" : locale === "ja" ? "ja-JP" : locale === "ko" ? "ko-KR" : "zh-CN";
   const [values, setValues] = useState(() =>
     ["1000", "1000", "10", "", ""].map(
       (value, index) => inputs?.get(estimateInputIds[index]) ?? value,

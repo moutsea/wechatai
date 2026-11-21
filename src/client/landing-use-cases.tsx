@@ -1,8 +1,6 @@
 import { ArrowDownUp, ArrowUpRight, Check, Drama, FileText, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
-import { homeCopy } from "../shared/i18n/en/copy/home";
-import { homeCopy as homeCopyJa } from "../shared/i18n/ja/copy/home";
-import type { Locale } from "../shared/i18n";
+import { homeCopyFor } from "../shared/i18n/copy";
 import { localizedHref, useLocale } from "./locale";
 import "./landing-use-cases.css";
 
@@ -41,7 +39,7 @@ const useCasesCopyZh = {
 
 function CreativeScene() {
   const { locale } = useLocale();
-  const copy = useCasesCopy(locale).scenes.creative;
+  const copy = (homeCopyFor(locale)?.useCases ?? useCasesCopyZh).scenes.creative;
   return (
     <div className="scene-creative">
       <div className="scene-image-chat">
@@ -84,7 +82,7 @@ function CreativeScene() {
 
 function ModelsScene() {
   const { locale } = useLocale();
-  const copy = useCasesCopy(locale).scenes;
+  const copy = (homeCopyFor(locale)?.useCases ?? useCasesCopyZh).scenes;
   return (
     <Link
       className="scene-model-stack"
@@ -113,7 +111,7 @@ function ModelsScene() {
 
 function AgentsScene() {
   const { locale } = useLocale();
-  const copy = useCasesCopy(locale).scenes;
+  const copy = (homeCopyFor(locale)?.useCases ?? useCasesCopyZh).scenes;
   return (
     <div className="scene-bridge">
       <div className="scene-agent-names">
@@ -163,7 +161,7 @@ function AgentsScene() {
 
 function CloudScene() {
   const { locale } = useLocale();
-  const copy = useCasesCopy(locale).scenes.cloud;
+  const copy = (homeCopyFor(locale)?.useCases ?? useCasesCopyZh).scenes.cloud;
   return (
     <div className="scene-xiaowei">
       <div className="scene-xiaowei-intro">
@@ -242,27 +240,13 @@ const useCases = [
   },
 ];
 
-const useCasesEn = useCases.map((item, index) => ({
-  ...item,
-  ...homeCopy.useCases.items[index]!,
-}));
-
-function useCasesCopy(locale: Locale) {
-  if (locale === "en") return homeCopy.useCases;
-  if (locale === "ja") return homeCopyJa.useCases;
-  return useCasesCopyZh;
-}
-
-const useCasesJa = useCases.map((item, index) => ({
-  ...item,
-  ...homeCopyJa.useCases.items[index]!,
-}));
-
 export function LandingUseCases() {
   const { locale } = useLocale();
-  const english = locale === "en";
-  const copy = useCasesCopy(locale);
-  const cases = english ? useCasesEn : locale === "ja" ? useCasesJa : useCases;
+  const localized = homeCopyFor(locale);
+  const copy = localized?.useCases ?? useCasesCopyZh;
+  const cases = localized
+    ? useCases.map((item, index) => ({ ...item, ...localized.useCases.items[index]! }))
+    : useCases;
   return (
     <section className="landing-use-cases" aria-labelledby="use-cases-title">
       <div className="use-cases-heading">

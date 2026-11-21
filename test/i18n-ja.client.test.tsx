@@ -46,6 +46,7 @@ describe("published Japanese pages", () => {
       ["zh-CN", `${SITE_URL}/`],
       ["en", `${SITE_URL}/en`],
       ["ja-JP", `${SITE_URL}/ja`],
+      ["ko-KR", `${SITE_URL}/ko`],
       ["x-default", `${SITE_URL}/`],
     ]);
     expect(document.body.textContent).not.toMatch(CHINESE_RESIDUE);
@@ -262,7 +263,7 @@ describe("published Japanese pages", () => {
     const chineseAlternates = [...chineseHome.querySelectorAll('link[rel="alternate"][hreflang]')].map(
       (link) => link.getAttribute("hreflang"),
     );
-    expect(chineseAlternates).toEqual(["zh-CN", "en", "ja-JP", "x-default"]);
+    expect(chineseAlternates).toEqual(["zh-CN", "en", "ja-JP", "ko-KR", "x-default"]);
 
     const pricing = parse("/pricing");
     expect(pricing.querySelector("h1")?.textContent).toBe("免费开始，按需升级 Plus");
