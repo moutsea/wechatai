@@ -1298,7 +1298,7 @@ test("serves the English homepage and pricing page without Chinese page copy", a
   await expect(page.locator("h1")).toContainText("Bring your AI");
   await expect(page.locator("h1")).toContainText("into WeChat");
   await expect(page.locator('.site-header-nav a[href="/en/pricing"]')).toHaveText("Pricing");
-  await expect(page.locator('.site-header-nav a[href="/docs"]')).toHaveText("Docs");
+  await expect(page.locator('.site-header-nav a[href="/en/docs"]')).toHaveText("Docs");
   await expect(
     page.locator('.landing-plan-year a[href="/en/pricing?interval=year#plan-year"]').first(),
   ).toBeVisible();

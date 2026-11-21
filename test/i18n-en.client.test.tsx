@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
+import englishDocs from "../src/shared/i18n/en/docs";
 import {
   getPageSeo,
   publishedLocalizedPaths,
@@ -40,12 +41,12 @@ describe("published English pages", () => {
     const header = document.querySelector(".site-header-nav");
     expect(header?.querySelector('a[href="/en"]')?.textContent).toBe("Home");
     expect(header?.querySelector('a[href="/en/pricing"]')?.textContent).toBe("Pricing");
-    expect(header?.querySelector('a[href="/docs"]')?.textContent).toBe("Docs");
+    expect(header?.querySelector('a[href="/en/docs"]')?.textContent).toBe("Docs");
     expect(header?.querySelector('a[href="/en#how"]')).not.toBeNull();
 
     const footer = document.querySelector(".landing-footer");
     expect(footer?.querySelector('a[href="/en/pricing"]')).not.toBeNull();
-    expect(footer?.querySelector('a[href="/docs"]')?.textContent).toBe("Docs and tutorials");
+    expect(footer?.querySelector('a[href="/en/docs"]')?.textContent).toBe("Docs and tutorials");
     expect(footer?.querySelector('a[href="/wechat-ai"]')).not.toBeNull();
 
     expect(document.querySelectorAll(".landing-faq details")).toHaveLength(7);
@@ -183,7 +184,7 @@ describe("published English pages", () => {
     expect(homeFaq.mainEntity[0].name).toBe("Do I need my own API key?");
   });
 
-  it("keeps the existing Chinese pages and publishes only two localized URLs", () => {
+  it("keeps the existing Chinese pages and publishes only the T2 and English docs URLs", () => {
     const home = parse("/");
     expect(home.querySelector("h1")?.textContent).toContain("把你的 AI");
     expect(home.querySelector('.site-header-nav a[href="/pricing"]')?.textContent).toBe("价格");
@@ -197,11 +198,12 @@ describe("published English pages", () => {
       "会员费包含模型费用吗？",
     );
 
-    expect(publishedLocalizedPaths()).toEqual(["/en", "/en/pricing"]);
+    const expected = ["/en", ...englishDocs.map(({ path }) => `/en${path}`), "/en/pricing"].sort();
+    expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
     const localized = [...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/en[^<]*)<\/loc>/g)].map(
       ([, path]) => path,
     );
-    expect(localized).toEqual(["/en", "/en/pricing"]);
+    expect(localized.sort()).toEqual(expected);
   });
 });
