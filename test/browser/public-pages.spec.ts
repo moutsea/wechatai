@@ -1278,6 +1278,8 @@ for (const [path, interval] of [
   ["/ja/pricing", "year"],
   ["/ko/pricing", "month"],
   ["/ko/pricing", "year"],
+  ["/pt/pricing", "month"],
+  ["/pt/pricing", "year"],
 ]) {
   test(`returns mobile buyers on ${path} to the ${interval} card after signing in`, async ({
     page,
