@@ -118,22 +118,31 @@ describe("published Korean pages", () => {
     expect(hanResidue(document)).toEqual([]);
   });
 
-  it("keeps canonical and hreflang self-referential across the page group", () => {
-    const groups = {
-      "/": "/",
-      "/ko": "/",
-      "/pricing": "/pricing",
-      "/ko/pricing": "/pricing",
-    } as const;
-    for (const [path, source] of Object.entries(groups)) {
-      const seo = getPageSeo(path);
-      expect(seo.canonical, path).toBe(`${SITE_URL}${path}`);
-      expect(seo.alternates, path).toEqual([
-        { hreflang: "zh-CN", href: `${SITE_URL}${source}` },
-        { hreflang: "en", href: `${SITE_URL}${source === "/" ? "/en" : "/en/pricing"}` },
-        { hreflang: "ko-KR", href: `${SITE_URL}${source === "/" ? "/ko" : "/ko/pricing"}` },
-        { hreflang: "x-default", href: `${SITE_URL}${source}` },
+  it.each([
+    ["/", "/en", "/ko", "/ja"],
+    ["/pricing", "/en/pricing", "/ko/pricing", "/ja/pricing"],
+    ["/wechat-ai", "/en/wechat-ai", "/ko/wechat-ai", "/ja/wechat-ai"],
+    ["/wechat-bot", "/en/wechat-bot", "/ko/wechat-bot", "/ja/wechat-bot"],
+    ["/wechat-deepseek", "/en/wechat-deepseek", "/ko/wechat-deepseek", "/ja/wechat-deepseek"],
+  ])("publishes self-canonicals and reciprocal hreflang for %s", (zh, en, ko, ja) => {
+    const expected = {
+      "zh-CN": `${SITE_URL}${zh}`,
+      en: `${SITE_URL}${en}`,
+      "ja-JP": `${SITE_URL}${ja}`,
+      "ko-KR": `${SITE_URL}${ko}`,
+      "x-default": `${SITE_URL}${zh}`,
+    };
+    for (const path of [zh, en, ko]) {
+      const head = parse(path).head;
+      const canonical = [...head.querySelectorAll('link[rel="canonical"]')];
+      expect.soft(canonical.map((link) => link.getAttribute("href")), path).toEqual([
+        `${SITE_URL}${path}`,
       ]);
+      for (const [lang, href] of Object.entries(expected)) {
+        const alternates = [...head.querySelectorAll(`link[rel="alternate"][hreflang="${lang}"]`)];
+        expect.soft(alternates.map((link) => link.getAttribute("href")), `${path}: ${lang}`)
+          .toEqual([href]);
+      }
     }
   });
 

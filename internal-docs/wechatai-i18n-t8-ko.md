@@ -15,7 +15,7 @@
 ## 基线、依赖与负责人
 
 - PR base 为 `main`，使用现有 `feature/wechatai-i18n-t8-ko-dzh`。评估时该分支 HEAD、`origin/main` 和经远端查询的 `main` 均为 `a573f3ec61d9fdc977a3ff7de9b2fa4be8999e91`。T1 公开路由和 SEO 骨架、T2 英文营销页均已在该基线。 [T1 PR #12](https://github.com/moutsea/wechatai/pull/12) · [T2 PR #14](https://github.com/moutsea/wechatai/pull/14)
-- 三语互指要求三个英文落地页真实发布。T3 提供 `/en/wechat-ai` 和 `/en/wechat-deepseek` 及通用接线，T4 提供 `/en/wechat-bot`。远端只读检查显示 #13、#18 均为 OPEN，#18 当前以 T3 分支为 base。韩文词典可在本卡分支先独立准备。共享落地页接线和最终验收以 **T3 → T4** 进入 `main` 后的实际提交为基线，确认三条英文路由均已登记，再比较和提交本卡 PR。T8 的 PR 依然直接指向 `main`，不得带入在途英文 PR 的提交或添加英文占位路由。 [T3 PR #13](https://github.com/moutsea/wechatai/pull/13) · [T4 PR #18](https://github.com/moutsea/wechatai/pull/18)
+- T3 提供 `/en/wechat-ai` 和 `/en/wechat-deepseek`，T4 提供 `/en/wechat-bot`，三条英文路由均已登记。整卡返工以合入 T4 和 T7 的 `main`（`94ccdcf`）为基线，保留日语 `ja-JP` 互指；不引入在途提交或英文占位路由。 [T3 PR #13](https://github.com/moutsea/wechatai/pull/13) · [T4 PR #18](https://github.com/moutsea/wechatai/pull/18) · [T7 PR #22](https://github.com/moutsea/wechatai/pull/22)
 - 文件冲突面为 `src/shared/i18n/index.ts`、`src/shared/seo.ts`、`src/client/prerender.tsx`、`src/client/pages/seo-*.tsx`、`src/client/language-switcher.tsx` 和共享 SEO 测试。T3/T4 的共享实现先落地主线。T7 日语与本卡的词典、验收用例可并行。若两卡确认还要同时改同一共享文件，建议该文件由 T7 先落地，T8 基于含该改动的 `main` 补韩语并重跑验收；本卡独占韩语 locale 定义及 `ko/` 文件。首页、价格页、页头页脚等公共文案接线只做所需更动。
 - PR 负责人为本卡「开发中」指派的开发 agent（profile `916bf250-fb21-4262-9419-f9aad4e07699`），负责实现、校对、记录 base/head SHA 和验收证据并跟进反馈。工作流中的「评审通过」提 PR agent（profile `92d67037-1df0-4f19-bf5e-8cb0c4965f2b`）核实最终 HEAD 的评审结果后创建或复用本卡唯一的 OPEN PR。评估、开发和提 PR 阶段禁止合并或部署。
 
