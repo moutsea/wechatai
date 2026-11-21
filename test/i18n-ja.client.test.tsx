@@ -333,6 +333,30 @@ describe("published Japanese pages", () => {
     expect(setup).toContain("自分 → 設定");
   });
 
+  it("uses Japanese WeCom terminology in the bot page, search description and FAQ data", () => {
+    const path = "/ja/wechat-bot";
+    const document = parse(path);
+    const term = "企業内カスタムアプリ";
+    for (const selector of ["#routes table", "#wecom h2", "#wecom strong"]) {
+      expect(document.querySelector(selector)?.textContent, selector).toContain(term);
+    }
+    const description = document.querySelector('meta[name="description"]')?.getAttribute("content");
+    expect(description).toContain(term);
+    expect(description).not.toContain("自建アプリ");
+
+    const faq = Array.from(document.querySelectorAll("#faq details")).find((item) =>
+      item.querySelector("summary")?.textContent?.includes("WeCom"),
+    );
+    const name = faq?.querySelector("summary")?.textContent;
+    const text = faq?.querySelector("p")?.textContent;
+    expect(name).toContain(term);
+    expect(text).toContain(term);
+    expect(graphOf(path).find((node) => node["@type"] === "FAQPage")?.mainEntity).toContainEqual(
+      expect.objectContaining({ name, acceptedAnswer: { "@type": "Answer", text } }),
+    );
+    expect(document.body.textContent).not.toContain("自建アプリ");
+  });
+
   it("keeps the Chinese page group unchanged and adds only the registered Japanese URLs", () => {
     const chineseHome = parse("/");
     expect(chineseHome.querySelector("h1")?.textContent).toContain("把你的 AI");
