@@ -280,15 +280,18 @@ describe("Google and GitHub OAuth", () => {
     ["/pt/pricing?interval=year#plan-year", 987607],
   ])("returns new and existing OAuth users to %s after authorization", async (path, id) => {
     const returnTo = authReturnPath(path);
+    const callback = path.includes("#") ? new URL(returnTo, env.APP_URL).href : returnTo;
     mockGitHub(`upgrade-${crypto.randomUUID()}@example.test`, id);
     for (let i = 0; i < 2; i++) {
       const response = await finish(
         await begin("github", {
-          callbackURL: returnTo,
-          newUserCallbackURL: returnTo,
+          callbackURL: callback,
+          newUserCallbackURL: callback,
         }),
       );
-      expect(response.headers.get("location")).toBe(path);
+      expect(response.headers.get("location")).toBe(
+        path.includes("#") ? new URL(path, env.APP_URL).href : path,
+      );
       expect(cookieHeader(response)).toContain("session_token=");
     }
   });

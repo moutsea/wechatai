@@ -140,10 +140,14 @@ function AuthForm({ register }: { register: boolean }) {
     setSocialBusy(provider);
     setError("");
     try {
+      // Better Auth rejects fragments in relative callback URLs; trust only this origin.
+      const callbackURL = returnTo.includes("#")
+        ? new URL(returnTo, window.location.origin).href
+        : returnTo;
       const response = await authClient.signIn.social({
         provider,
-        callbackURL: returnTo,
-        newUserCallbackURL: returnTo,
+        callbackURL,
+        newUserCallbackURL: callbackURL,
         errorCallbackURL: `/login${returnQuery}`,
         additionalData: browserPageViewReporter().signupAttribution(),
       });

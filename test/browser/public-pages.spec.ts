@@ -1397,6 +1397,23 @@ for (const [path, interval] of [
   });
 }
 
+test("sends a same-origin Portuguese plan callback when starting social login", async ({ page }) => {
+  const destination = "/pt/pricing?interval=year#plan-year";
+  await page.route("**/api/auth/providers", (route) =>
+    route.fulfill({ json: { providers: ["github"] } }),
+  );
+  await page.route("**/api/auth/sign-in/social", (route) =>
+    route.fulfill({ json: { redirect: false, url: "https://github.test/authorize" } }),
+  );
+  await page.goto(`${origin}/login?returnTo=${encodeURIComponent(destination)}`);
+  const request = page.waitForRequest("**/api/auth/sign-in/social");
+  await page.getByRole("button", { name: "使用 GitHub 继续", exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({
+    callbackURL: `${origin}${destination}`,
+    newUserCallbackURL: `${origin}${destination}`,
+  });
+});
+
 const englishBuyer = {
   user: { id: "english-buyer", name: "Buyer", email: "buyer@example.test", emailVerified: true },
   session: {
