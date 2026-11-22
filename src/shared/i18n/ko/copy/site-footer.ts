@@ -1,5 +1,5 @@
 export const footerCopy = {
-  homeAria: "Wechatai 홈",
+  home: "홈",
   intro: "직접 고른 모델과 위챗에서 대화하세요.",
   tagline: "모델과 에이전트를 연결해 아이디어에 언제나 답이 있게 하세요.",
   navigation: "바닥글 탐색",

@@ -237,7 +237,7 @@ function FooterLinks({ links, label }: { links: FooterLink[]; label: LabelKey })
 }
 
 interface FooterCopy {
-  homeAria: string;
+  home: string;
   intro: string;
   tagline: string;
   navigation: string;
@@ -246,7 +246,7 @@ interface FooterCopy {
 }
 
 const footerCopyZh: FooterCopy = {
-  homeAria: "微伴首页",
+  home: "首页",
   intro: "在微信里，与自选的大模型对话。",
   tagline: "连接你的模型与 Agent，让灵感随时有回应。",
   navigation: "页脚导航",
@@ -255,7 +255,7 @@ const footerCopyZh: FooterCopy = {
 };
 
 const footerCopyJa = {
-  homeAria: "Wechatai のホーム",
+  home: "ホーム",
   intro: "選んだモデルと、WeChat の中でそのまま会話できます。",
   tagline: "モデルとエージェントをつないで、アイデアにいつでも応えを。",
   navigation: "フッターナビゲーション",
@@ -265,7 +265,7 @@ const footerCopyJa = {
 };
 
 const footerCopyEn = {
-  homeAria: "Wechatai home",
+  home: "Home",
   intro: "Chat with the models you choose, right inside WeChat.",
   tagline: "Connect your models and agents so ideas always get an answer.",
   navigation: "Footer navigation",
@@ -287,8 +287,9 @@ export function SiteFooter() {
     <footer className="landing-footer">
       <div className="landing-footer-main">
         <div className="landing-footer-brand">
-          <Link to={localizedHref(locale, "/")} aria-label={copy.homeAria}>
+          <Link to={localizedHref(locale, "/")}>
             <SiteBrand light latin={locale !== DEFAULT_LOCALE} />
+            <span className="visually-hidden">{copy.home}</span>
           </Link>
           <p>
             {copy.intro}

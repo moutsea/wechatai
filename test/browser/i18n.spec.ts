@@ -74,26 +74,67 @@ test("the application takes over a registered route and switches back to Chinese
     name: "Start free, upgrade to Plus when you need more",
   });
   await page.goto(`${origin}/pricing`);
-  const english = page.getByRole("link", { name: "English" });
+  const chineseTrigger = page.getByRole("button", { name: "语言：中文", exact: true });
+  await expect(chineseTrigger).toContainText("中文");
+  await expect(chineseTrigger).toHaveAttribute("aria-haspopup", "menu");
+  await expect(chineseTrigger).toHaveAttribute("aria-expanded", "false");
+  await chineseTrigger.click();
+  const english = page.getByRole("menuitem", { name: "English" });
   await expect(english).toHaveAttribute("href", "/en/pricing");
   await expect(english).toHaveAttribute("hreflang", "en");
+  await expect(page.getByRole("menuitem", { name: "中文" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 
   await english.click();
   await expect(page).toHaveURL(`${origin}/en/pricing`);
-  const chinese = page.getByRole("link", { name: "中文" });
   await expect(englishHeading).toBeVisible();
   await expect(page).toHaveTitle("Pricing | Wechatai");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "en_US");
+
+  const englishTrigger = page.getByRole("button", { name: "Language: English", exact: true });
+  await expect(englishTrigger).toContainText("English");
+  await englishTrigger.click();
+  const chinese = page.getByRole("menuitem", { name: "中文" });
   await expect(chinese).toHaveAttribute("href", "/pricing");
   await expect(chinese).toHaveAttribute("hreflang", "zh-CN");
+  await expect(page.getByRole("menuitem", { name: "English" })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
 
   await chinese.click();
   await expect(page).toHaveURL(`${origin}/pricing`);
   await expect(chineseHeading).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "zh_CN");
-  await expect(page.getByRole("link", { name: "English" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "语言：中文", exact: true })).toContainText("中文");
+});
+
+test("the language menu is fully operable from the keyboard", async ({ page }) => {
+  await page.goto(`${origin}/pricing`);
+  const trigger = page.getByRole("button", { name: "语言：中文", exact: true });
+  await trigger.focus();
+  await expect(trigger).toBeFocused();
+
+  await page.keyboard.press("Enter");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "中文" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "English" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(page.getByRole("menuitem", { name: "中文" })).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
+
+  await page.keyboard.press("Space");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
 });
 
 test("an unregistered pricing locale shows 404 without the published language links", async ({

@@ -671,17 +671,33 @@ for (const group of localePageGroups) {
       alternateLinks(group),
       `${path}: hreflang lists exactly the published page group`,
     );
-    const switchTargets = group
-      .filter((target) => target !== expected)
-      .map((target) => [target.path, target.htmlLang]);
-    assert.deepEqual(
-      [...html.matchAll(/<a href="([^"]+)" hreflang="([^"]+)"/gi)].map(([, href, lang]) => [
-        href,
-        lang,
-      ]),
-      [...switchTargets, ...switchTargets], // Desktop header and mobile menu.
-      `${path}: switcher links exactly the other published languages`,
-    );
+    if (group.length === 1) {
+      assert(
+        !html.includes('class="site-language"'),
+        `${path}: no switcher without a published translation`,
+      );
+    } else {
+      const navigation =
+        htmlLang === "ko-KR"
+          ? "언어"
+          : htmlLang === "ja-JP"
+            ? "言語"
+            : htmlLang === "en"
+              ? "Language"
+              : "语言";
+      const separator = htmlLang === "en" ? ": " : "：";
+      const trigger = `<button type="button" class="site-language-trigger" aria-haspopup="menu" aria-expanded="false" aria-label="${navigation}${separator}${expected.label}">`;
+      assert.equal(
+        html.split(trigger).length - 1,
+        2,
+        `${path}: closed switcher trigger in the desktop header and mobile drawer`,
+      );
+      assert(
+        html.includes(`${trigger}<span>${expected.label}</span>`),
+        `${path}: switcher trigger shows the current language`,
+      );
+      assert(!html.includes('class="site-language-menu"'), `${path}: switcher menu starts closed`);
+    }
     if (path.startsWith("/en/wechat-")) {
       const graph = JSON.parse(
         html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],

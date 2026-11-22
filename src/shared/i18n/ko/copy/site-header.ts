@@ -8,7 +8,7 @@ export const navLabels = {
 } as const;
 
 export const headerCopy = {
-  homeAria: "Wechatai 홈",
+  home: "홈",
   topNav: "주요 메뉴",
   account: "계정",
   login: "로그인",
