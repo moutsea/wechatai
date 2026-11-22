@@ -18,8 +18,8 @@ const {
 const portugueseLanguageNames: Record<string, string> = {
   "zh-CN": "Chinês",
   en: "Inglês",
-  ja: "Japonês",
-  ko: "Coreano",
+  "ja-JP": "Japonês",
+  "ko-KR": "Coreano",
   es: "Espanhol",
 };
 
