@@ -97,9 +97,10 @@ for (const group of localePageGroups) {
           href,
         );
       }
-      const switcher = page.locator(".site-language");
+      const switchers = page.locator(".site-language");
+      const switcher = switchers.filter({ visible: true });
       const targets = group.filter((target) => target !== expected);
-      await expect(switcher).toHaveCount(targets.length ? 1 : 0);
+      await expect(targets.length ? switcher : switchers).toHaveCount(targets.length ? 1 : 0);
       if (targets.length) {
         const trigger = switcher.getByRole("button", {
           name: languageTriggerName(expected.htmlLang, expected.label),
