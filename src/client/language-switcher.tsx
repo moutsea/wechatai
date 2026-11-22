@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
 import { languageCopy as languageCopyKo } from "../shared/i18n/ko/copy/site-header";
 import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
+import { languageCopy as languageCopyPt } from "../shared/i18n/pt/copy/site-header";
 import { useLocale } from "./locale";
 
 /**
@@ -14,6 +16,8 @@ import { useLocale } from "./locale";
  */
 export function LanguageSwitcher() {
   const { locale, path, alternates } = useLocale();
+  const { search, hash } = useLocation();
+  const suffix = alternates.includes("pt") ? search + hash : "";
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const rootRef = useRef<HTMLElement>(null);
@@ -50,7 +54,9 @@ export function LanguageSwitcher() {
         ? "Language"
         : locale === "ja"
           ? headerCopyJa.language
-          : "语言";
+          : locale === "pt"
+            ? languageCopyPt.navigation
+            : "语言";
   const currentLabel =
     (locale === "ko" ? languageCopyKo.labels[locale] : undefined) ??
     LOCALE_DEFINITIONS[locale].label;
@@ -135,12 +141,17 @@ export function LanguageSwitcher() {
         >
           {alternates.map((target) => {
             const definition = LOCALE_DEFINITIONS[target];
-            const localized = locale === "ko" ? languageCopyKo.labels[target] : undefined;
+            const localized =
+              locale === "ko"
+                ? languageCopyKo.labels[target]
+                : locale === "pt"
+                  ? languageCopyPt.labels[target]
+                  : undefined;
             return (
               <a
                 key={target}
                 role="menuitem"
-                href={localizedPath(target, path)}
+                href={localizedPath(target, path) + suffix}
                 hrefLang={definition.htmlLang}
                 lang={localized ? undefined : definition.htmlLang}
                 aria-current={target === locale ? "true" : undefined}

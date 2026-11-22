@@ -1,6 +1,7 @@
 import { DEFAULT_LOCALE, type Locale } from "../../shared/i18n";
 import { seoPageLabels as ko } from "../../shared/i18n/ko/copy/seo-page";
 import { seoPageLabels as ja } from "../../shared/i18n/ja/copy/seo-page-labels";
+import { seoPageLabels as pt } from "../../shared/i18n/pt/copy/seo-page";
 
 /** Chrome shared by every landing page rendered through `SeoPageView`. */
 export interface SeoPageLabels {
@@ -84,5 +85,6 @@ export function seoPageLabels(locale: Locale): SeoPageLabels {
   if (locale === DEFAULT_LOCALE) return zh;
   if (locale === "ja") return ja;
   if (locale === "ko") return ko;
+  if (locale === "pt") return pt;
   return en;
 }

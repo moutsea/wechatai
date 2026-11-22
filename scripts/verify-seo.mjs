@@ -289,6 +289,19 @@ for (const [file, , marker] of landingPages) {
     assert(target.includes(`id="${match[2]}"`), `${file}: cross-page anchor ${match[0]}`);
   }
 }
+// The five Portuguese URLs must carry their own prerendered body, not a shell.
+for (const [file, marker] of [
+  ["pt.html", "Leve sua IA"],
+  ["pt/pricing.html", "Comece grátis e faça upgrade para o Plus quando precisar"],
+  ["pt/wechat-ai.html", "WeChat AI: leve seu próprio modelo para o chat do WeChat"],
+  ["pt/wechat-bot.html", "Como criar um bot para WeChat: escolha a rota certa primeiro"],
+  ["pt/wechat-deepseek.html", "Quer usar DeepSeek no WeChat? Comece aqui"],
+]) {
+  const html = await read(file);
+  assert(html.includes(marker), `${file}: Portuguese body before JavaScript`);
+  assert(!html.includes("这个页面没有找到。"), `${file}: not the 404 page`);
+}
+
 const englishClawbot = await read("en/wechat-clawbot.html");
 assert.match(
   englishClawbot.match(/<ul class="seopage-highlights">.*?<\/ul>/s)?.[0] ?? "",
@@ -684,7 +697,9 @@ for (const group of localePageGroups) {
             ? "言語"
             : htmlLang === "en"
               ? "Language"
-              : "语言";
+              : htmlLang === "pt-BR"
+                ? "Idioma"
+                : "语言";
       const separator = htmlLang === "en" ? ": " : "：";
       const trigger = `<button type="button" class="site-language-trigger" aria-haspopup="menu" aria-expanded="false" aria-label="${navigation}${separator}${expected.label}">`;
       assert.equal(
@@ -708,6 +723,21 @@ for (const group of localePageGroups) {
       assert.equal(publisher["@id"], "https://wechatai.app/#organization", `${path}: publisher ID`);
       assert.match(publisher.description, /WeChat ClawBot/, `${path}: publisher description`);
       assert.doesNotMatch(publisher.description, /\p{Script=Han}/u, `${path}: English publisher`);
+    }
+    if (path.startsWith("/pt/")) {
+      const graph = JSON.parse(
+        html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+      )["@graph"];
+      const { publisher } = graph.find(
+        (item) => item["@type"] === "WebPage" || item["@type"] === "Article",
+      );
+      assert.equal(publisher["@id"], "https://wechatai.app/#organization", `${path}: publisher ID`);
+      assert.match(publisher.description, /WeChat ClawBot/, `${path}: publisher description`);
+      assert.doesNotMatch(
+        publisher.description,
+        /\p{Script=Han}/u,
+        `${path}: Portuguese publisher`,
+      );
     }
     if (lastmod) {
       assert(

@@ -276,17 +276,22 @@ describe("Google and GitHub OAuth", () => {
     ["/app/billing", 987603],
     ["/pricing?interval=month", 987604],
     ["/pricing?interval=year", 987605],
+    ["/pt/pricing?interval=month#plan-month", 987606],
+    ["/pt/pricing?interval=year#plan-year", 987607],
   ])("returns new and existing OAuth users to %s after authorization", async (path, id) => {
     const returnTo = authReturnPath(path);
+    const callback = path.includes("#") ? new URL(returnTo, env.APP_URL).href : returnTo;
     mockGitHub(`upgrade-${crypto.randomUUID()}@example.test`, id);
     for (let i = 0; i < 2; i++) {
       const response = await finish(
         await begin("github", {
-          callbackURL: returnTo,
-          newUserCallbackURL: returnTo,
+          callbackURL: callback,
+          newUserCallbackURL: callback,
         }),
       );
-      expect(response.headers.get("location")).toBe(path);
+      expect(response.headers.get("location")).toBe(
+        path.includes("#") ? new URL(path, env.APP_URL).href : path,
+      );
       expect(cookieHeader(response)).toContain("session_token=");
     }
   });
@@ -310,6 +315,10 @@ describe("Google and GitHub OAuth", () => {
       "/ko/pricing-other",
       "/ko/pricing/other",
       "//evil.example/ko/pricing",
+      "/pt",
+      "/pt/pricing-other",
+      "/pt/pricing/../../api/auth/sign-out",
+      "//evil.example/pt/pricing",
       "/pricing/../../api/auth/sign-out",
     ]) {
       expect(authReturnPath(path)).toBe("/app");

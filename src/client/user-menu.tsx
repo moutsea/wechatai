@@ -16,6 +16,7 @@ import { membershipExpiry } from "./membership";
 import { formatCredits, type Snapshot } from "../shared/types";
 import { userMenuCopy as userMenuCopyJa } from "../shared/i18n/ja/copy/user-menu";
 import { userMenuCopy as userMenuCopyKo } from "../shared/i18n/ko/copy/user-menu";
+import { userMenuCopy as userMenuCopyPt } from "../shared/i18n/pt/copy/user-menu";
 import "./user-menu.css";
 
 type MenuUser = { id: string; name: string; email: string; image?: string | null };
@@ -76,7 +77,9 @@ export function UserMenu({ user }: { user: MenuUser }) {
     locale === "en" ? userMenuCopyEn
     : locale === "ja" ? userMenuCopyJa
     : locale === "ko" ? userMenuCopyKo
+    : locale === "pt" ? userMenuCopyPt
     : userMenuCopyZh;
+  const formatLocale = locale === "pt" ? "pt-BR" : undefined;
   const { loadFailed } = copy;
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -231,7 +234,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                     {copy.balance}
                   </span>
                   <strong>
-                    {formatCredits(summary.balance)}
+                    {formatCredits(summary.balance, formatLocale)}
                     <ChevronDown size={13} aria-hidden="true" />
                   </strong>
                 </Link>
@@ -248,7 +251,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                       <>
                         {copy.expiresOn}{" "}
                         <time dateTime={new Date(summary.planUntil).toISOString()}>
-                          {membershipExpiry(summary.planUntil, true)}
+                          {membershipExpiry(summary.planUntil, true, formatLocale)}
                         </time>
                         <small>{copy.timeZone}</small>
                       </>

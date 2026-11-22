@@ -52,7 +52,7 @@ describe("registered localized pages", () => {
     ["ja", "ja-JP", "ja_JP"],
     ["ko", "ko-KR", "ko_KR"],
     ["es", "es", "es_ES"],
-    ["pt", "pt", "pt_BR"],
+    ["pt", "pt-BR", "pt_BR"],
   ] as const)("publishes %s only after registration", (locale, htmlLang, ogLocale) => {
     const path = `/${locale}/pricing`;
     expect(getPageSeo(path).indexable).toBe(false);

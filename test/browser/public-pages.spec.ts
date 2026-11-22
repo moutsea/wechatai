@@ -15,6 +15,14 @@ const {
   fileURLToPath(new URL("../../scripts/locale-expectations.ts", import.meta.url)),
 );
 
+const portugueseLanguageNames: Record<string, string> = {
+  "zh-CN": "Chinês",
+  en: "Inglês",
+  "ja-JP": "Japonês",
+  "ko-KR": "Coreano",
+  es: "Espanhol",
+};
+
 test.beforeEach(async ({ page }) => {
   const fakeApi = createFakeApi();
   await page.route("**/*", async (route) => {
@@ -121,9 +129,10 @@ for (const group of localePageGroups) {
       const korean = expected.htmlLang === "ko-KR";
       if (targets.length) await expect(page.getByRole("menu")).toBeVisible();
       for (const { htmlLang, label, path } of targets) {
+        const name = expected.htmlLang === "pt-BR" ? portugueseLanguageNames[htmlLang] : label;
         const link = korean
           ? switcher.locator(`[role="menuitem"][hreflang="${htmlLang}"]`)
-          : switcher.getByRole("menuitem", { name: label, exact: true });
+          : switcher.getByRole("menuitem", { name, exact: true });
         await expect(link).toHaveAttribute("href", path);
         await expect(link).toHaveAttribute("hreflang", htmlLang);
         if (korean && htmlLang === "zh-CN") await expect(link).toHaveText("중국어");
@@ -142,6 +151,20 @@ for (const group of localePageGroups) {
         await expect(chinese).toHaveAttribute("href", group[0].path);
         await expect(chinese).toHaveAttribute("hreflang", "zh-CN");
         await expect(mobile).not.toContainText(/\p{Script=Han}/u);
+      }
+      if (expected.htmlLang === "pt-BR") {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+        const mobile = page.locator(".site-mobile-menu");
+        await expect(mobile.locator("a[hreflang]")).toHaveCount(targets.length);
+        for (const { htmlLang, path } of targets) {
+          const link = mobile.getByRole("link", {
+            name: portugueseLanguageNames[htmlLang],
+            exact: true,
+          });
+          await expect(link).toHaveAttribute("href", path);
+          await expect(link.and(page.locator(":lang(pt-BR)"))).toBeVisible();
+        }
       }
     });
   }
@@ -178,6 +201,267 @@ for (const { path } of localePageGroups.flat()) {
       "href",
       "/en",
     );
+  });
+}
+
+const portuguesePages: Record<string, string> = {
+  "/pt": "Leve sua IA para o WeChat",
+  "/pt/pricing": "Comece grátis e faça upgrade para o Plus quando precisar",
+  "/pt/wechat-ai": "WeChat AI: leve seu próprio modelo para o chat do WeChat",
+  "/pt/wechat-bot": "Como criar um bot para WeChat: escolha a rota certa primeiro",
+  "/pt/wechat-deepseek": "Quer usar DeepSeek no WeChat? Comece aqui",
+};
+for (const [path, heading] of Object.entries(portuguesePages)) {
+  test(`keeps the Portuguese header usable on a tablet at ${path}`, async ({ page }) => {
+    await page.setViewportSize({ width: 834, height: 1112 });
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}${path}`);
+    await mounted;
+    const header = page.getByRole("banner");
+    const toggle = header.getByRole("button", { name: "Abrir menu" });
+    if (await toggle.isVisible()) await toggle.click();
+    for (const [name, href] of [
+      ["Entrar", "/login"],
+      ["Comece grátis", "/register"],
+      ["Inglês", path.replace("/pt", "/en")],
+    ]) {
+      const link = header.getByRole("link", { name, exact: true });
+      await expect(link).toBeInViewport({ ratio: 1 });
+      await expect(link).toHaveAttribute("href", href);
+      await link.click({ trial: true });
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(834);
+    await header.getByRole("link", { name: "Comece grátis" }).click();
+    await expect(page).toHaveURL(`${origin}/register`);
+  });
+
+  test(`serves ${path} in Portuguese after application takeover`, async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    const response = await page.goto(`${origin}${path}`);
+    expect(response?.status()).toBe(200);
+    await mounted;
+    await expect(page.locator("h1")).toHaveText(heading);
+    await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
+
+    const navigation = page.getByRole("navigation", { name: "Navegação principal" });
+    await expect(navigation.getByRole("link", { name: "Início", exact: true })).toHaveAttribute(
+      "href",
+      "/pt",
+    );
+    await expect(navigation.getByRole("link", { name: "Preços", exact: true })).toHaveAttribute(
+      "href",
+      "/pt/pricing",
+    );
+    await expect(
+      navigation.getByRole("link", { name: "Documentação", exact: true }),
+    ).toHaveAttribute("href", "/docs");
+    await expect(
+      page.locator(".landing-footer").getByRole("link", { name: "Página inicial do Wechatai" }),
+    ).toHaveAttribute("href", "/pt");
+    await expect(page.getByRole("navigation", { name: "Idioma" })).toHaveCount(1);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+    const mobile = page.locator(".site-mobile-menu");
+    await expect(mobile.getByRole("link", { name: "Preços", exact: true })).toHaveAttribute(
+      "href",
+      "/pt/pricing",
+    );
+    await expect(mobile.getByRole("link", { name: "Início", exact: true })).toHaveAttribute(
+      "href",
+      "/pt",
+    );
+  });
+}
+
+test.describe("short touch viewport", () => {
+  test.use({ viewport: { width: 360, height: 540 }, isMobile: true, hasTouch: true });
+
+  for (const path of [...Object.keys(portuguesePages), "/en"]) {
+    test(`swipes the mobile menu to reach registration at ${path}`, async ({ page }) => {
+      const mounted = page.waitForRequest("**/api/auth/get-session");
+      await page.goto(`${origin}${path}`);
+      await mounted;
+      const english = path === "/en";
+      await page.getByRole("button", { name: english ? "Open menu" : "Abrir menu" }).tap();
+      const register = page.locator(".site-mobile-menu").getByRole("link", {
+        name: english ? "Get started" : "Comece grátis",
+        exact: true,
+      });
+
+      const touch = await page.context().newCDPSession(page);
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: 125, y: 480 }],
+      });
+      for (let y = 455; y > 100; y -= 25) {
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: 125, y }],
+        });
+      }
+      await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await touch.detach();
+
+      await expect(register).toBeInViewport({ ratio: 1 });
+      // Tap at its current location; locator.tap() could scroll it into view itself.
+      const box = (await register.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page).toHaveURL(`${origin}/register`);
+    });
+  }
+});
+
+for (const [path, fragment] of [
+  ["", "how"],
+  ["/wechat-ai", "models"],
+  ["/wechat-bot", "routes"],
+  ["/wechat-deepseek", "config"],
+]) {
+  test(`keeps #${fragment} when switching ${path || "home"} from Portuguese to English`, async ({
+    page,
+  }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/pt${path}#${fragment}`);
+    await mounted;
+    const switcher = page.getByRole("navigation", { name: "Idioma" });
+    await switcher.getByRole("link", { name: "Inglês", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/en${path}#${fragment}`);
+    await expect(page.locator(`#${fragment}`)).toBeInViewport();
+  });
+}
+
+test("keeps the selected annual plan when switching Portuguese pricing to English", async ({
+  page,
+}) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  const suffix = "?interval=year#plan-year";
+  await page.goto(`${origin}/pt/pricing${suffix}`);
+  await mounted;
+  await expect(page.locator("#plan-year")).toHaveAttribute("aria-current", "true");
+
+  const switcher = page.getByRole("navigation", { name: "Idioma" });
+  await switcher.getByRole("link", { name: "Inglês", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/en/pricing${suffix}`);
+  await expect(page.locator("#plan-year")).toHaveAttribute("aria-current", "true");
+  await expect(page.locator("#plan-year h3")).toBeInViewport();
+});
+
+test("keeps the pricing estimator open when switching Portuguese to English on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 844 });
+  await page.goto(`${origin}/pt/pricing#estimate`);
+  await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
+
+  await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+  await page.locator(".site-mobile-menu").getByRole("link", { name: "Inglês" }).click();
+  await expect(page).toHaveURL(`${origin}/en/pricing#estimate`);
+  await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
+  await expect(page.locator("#estimate h2")).toBeInViewport();
+});
+
+for (const { format, values, expected } of [
+  {
+    format: "thousands separators",
+    values: ["1000", "500", "1000", "1000", "1000"],
+    expected: ["1.000 créditos", "Cerca de ¥1.500"],
+  },
+  {
+    format: "decimal commas",
+    values: ["1200", "621", "1", "2", "1"],
+    expected: ["1,234 créditos", "Cerca de ¥0,003"],
+  },
+]) {
+  test(`formats Portuguese pricing estimates with ${format}`, async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/pt/pricing#estimate`);
+    await mounted;
+
+    const inputs = page.locator("#estimate .cost-fields input");
+    for (const [index, value] of values.entries()) await inputs.nth(index).fill(value);
+    await expect(page.locator("#estimate .cost-results strong")).toHaveText(expected);
+  });
+}
+
+const pricingUser = {
+  id: "pricing-user",
+  name: "Ana",
+  email: "ana@example.test",
+  emailVerified: true,
+};
+const pricingSession = {
+  user: pricingUser,
+  session: {
+    id: "pricing-session",
+    userId: pricingUser.id,
+    token: "pricing-token",
+    expiresAt: new Date(Date.now() + 86400000).toISOString(),
+  },
+};
+
+test("keeps the signed-in Portuguese account menu usable on mobile", async ({ page }) => {
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: pricingSession }));
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({ json: { plan: "free", planUntil: 0, wallet: { balance: 1234 } } }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${origin}/pt/pricing`);
+
+  const trigger = page.getByRole("button", { name: "Menu do usuário", exact: true });
+  await trigger.click();
+  const menu = page.getByRole("dialog", { name: "Menu da conta", exact: true });
+  await expect(menu.getByRole("link", { name: "Abrir o painel" })).toHaveAttribute("href", "/app");
+  const balance = menu.getByRole("link", { name: /Saldo de créditos/ });
+  await expect(balance).toHaveAttribute("href", "/app/credits");
+  await expect(balance).toContainText("1.234");
+  await expect(menu.getByText("Conta gratuita", { exact: true })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Fazer upgrade para o Plus" })).toHaveAttribute(
+    "href",
+    "/app/billing",
+  );
+  await expect(menu.getByRole("button", { name: "Sair", exact: true })).toBeInViewport();
+  await expect(menu).not.toContainText(/\p{Script=Han}/u);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test("opens Portuguese FAQ answers and the pricing estimator from a DeepSeek CTA", async ({
+  page,
+}) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/pt/wechat-deepseek`);
+  await mounted;
+
+  const faq = page.locator(".seopage-faq details").first();
+  await expect(faq).not.toHaveAttribute("open", "");
+  await faq.locator("summary").click();
+  await expect(faq).toHaveAttribute("open", "");
+  await expect(faq.locator("p")).toContainText("ClawBot");
+
+  await expect(page.locator(".seopage-cta a")).toHaveAttribute("href", "/register");
+  await page.locator(".seopage-actions a[href='/pt/pricing#estimate']").click();
+  await expect(page).toHaveURL(`${origin}/pt/pricing#estimate`);
+  await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
+  await expect(page.locator(".cost-estimator h2")).toHaveText("Estime primeiro seu uso de texto");
+});
+
+for (const width of [320, 360]) {
+  test(`fits the Portuguese DeepSeek tutorial button at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/pt/wechat-deepseek`);
+    await mounted;
+    const tutorial = page.locator(".seopage-actions").getByRole("link", { name: /tutorial/i });
+    await expect(tutorial).toBeInViewport({ ratio: 1 });
+    const viewport = await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      contentWidth: document.documentElement.scrollWidth,
+    }));
+    expect(viewport).toEqual({ width, contentWidth: width });
+    await tutorial.click();
+    await expect(page).toHaveURL(`${origin}/docs/deepseek-in-wechat`);
   });
 }
 
@@ -1211,6 +1495,8 @@ for (const [path, interval] of [
   ["/ja/pricing", "year"],
   ["/ko/pricing", "month"],
   ["/ko/pricing", "year"],
+  ["/pt/pricing", "month"],
+  ["/pt/pricing", "year"],
 ]) {
   test(`returns mobile buyers on ${path} to the ${interval} card after signing in`, async ({
     page,
@@ -1261,6 +1547,23 @@ for (const [path, interval] of [
     await expect(card.locator("button.plan-cta")).toBeEnabled();
   });
 }
+
+test("sends a same-origin Portuguese plan callback when starting social login", async ({ page }) => {
+  const destination = "/pt/pricing?interval=year#plan-year";
+  await page.route("**/api/auth/providers", (route) =>
+    route.fulfill({ json: { providers: ["github"] } }),
+  );
+  await page.route("**/api/auth/sign-in/social", (route) =>
+    route.fulfill({ json: { redirect: false, url: "https://github.test/authorize" } }),
+  );
+  await page.goto(`${origin}/login?returnTo=${encodeURIComponent(destination)}`);
+  const request = page.waitForRequest("**/api/auth/sign-in/social");
+  await page.getByRole("button", { name: "使用 GitHub 继续", exact: true }).click();
+  expect((await request).postDataJSON()).toMatchObject({
+    callbackURL: `${origin}${destination}`,
+    newUserCallbackURL: `${origin}${destination}`,
+  });
+});
 
 const englishBuyer = {
   user: { id: "english-buyer", name: "Buyer", email: "buyer@example.test", emailVerified: true },
