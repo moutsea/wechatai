@@ -258,6 +258,9 @@ func checkSourceLayout(t *testing.T, ctx context.Context, file string) {
 	}
 	// V1 predates both inbound message identity metadata and outbound text receipts.
 	contract["inbox"] = append(contract["inbox"], "wechatRoundedId", "wechatExactId", "wechatSeq", "wechatTextReceipts")
+	// Grok Bot tasks stay in the source DO. The importer does not require them,
+	// and the Worker refuses Grok MCP requests for accounts routed to Go.
+	contract["grok_tasks"] = []string{"ref", "jobId", "userMessage", "answerMessage", "attempts", "due", "expires", "routeId", "outcome", "claimId", "claimedOutputLimit", "claimable"}
 	db, err := sqlite.OpenReadOnly(ctx, file)
 	if err != nil {
 		t.Fatal(err)
