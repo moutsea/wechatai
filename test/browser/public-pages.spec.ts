@@ -274,6 +274,44 @@ for (const [path, heading] of Object.entries(portuguesePages)) {
   });
 }
 
+test.describe("short touch viewport", () => {
+  test.use({ viewport: { width: 360, height: 540 }, isMobile: true, hasTouch: true });
+
+  for (const path of [...Object.keys(portuguesePages), "/en"]) {
+    test(`swipes the mobile menu to reach registration at ${path}`, async ({ page }) => {
+      const mounted = page.waitForRequest("**/api/auth/get-session");
+      await page.goto(`${origin}${path}`);
+      await mounted;
+      const english = path === "/en";
+      await page.getByRole("button", { name: english ? "Open menu" : "Abrir menu" }).tap();
+      const register = page.locator(".site-mobile-menu").getByRole("link", {
+        name: english ? "Get started" : "Comece grátis",
+        exact: true,
+      });
+
+      const touch = await page.context().newCDPSession(page);
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: 125, y: 480 }],
+      });
+      for (let y = 455; y > 100; y -= 25) {
+        await touch.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ x: 125, y }],
+        });
+      }
+      await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await touch.detach();
+
+      await expect(register).toBeInViewport({ ratio: 1 });
+      // Tap at its current location; locator.tap() could scroll it into view itself.
+      const box = (await register.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page).toHaveURL(`${origin}/register`);
+    });
+  }
+});
+
 for (const [path, fragment] of [
   ["", "how"],
   ["/wechat-ai", "models"],

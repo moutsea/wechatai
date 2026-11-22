@@ -1,5 +1,5 @@
 export const footerCopy = {
-  homeAria: "Página inicial do Wechatai",
+  home: "Início",
   intro: "Converse com os modelos que você escolher, direto no WeChat.",
   tagline: "Conecte seus modelos e agentes para que as ideias sempre tenham resposta.",
   navigation: "Navegação do rodapé",

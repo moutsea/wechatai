@@ -697,7 +697,9 @@ for (const group of localePageGroups) {
             ? "言語"
             : htmlLang === "en"
               ? "Language"
-              : "语言";
+              : htmlLang === "pt-BR"
+                ? "Idioma"
+                : "语言";
       const separator = htmlLang === "en" ? ": " : "：";
       const trigger = `<button type="button" class="site-language-trigger" aria-haspopup="menu" aria-expanded="false" aria-label="${navigation}${separator}${expected.label}">`;
       assert.equal(

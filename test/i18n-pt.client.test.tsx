@@ -1,6 +1,37 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { LanguageSwitcher } from "../src/client/language-switcher";
+import { LocaleProvider } from "../src/client/locale";
 import { renderPublicPage } from "../src/client/prerender";
 import { getPageSeo, renderSeoHead, SITE_URL } from "../src/shared/seo";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+async function mountSwitcher(path: string) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[path]}>
+        <LocaleProvider>
+          <LanguageSwitcher />
+        </LocaleProvider>
+      </MemoryRouter>,
+    ),
+  );
+  const trigger = host.querySelector<HTMLButtonElement>(".site-language-trigger")!;
+  await act(async () => trigger.click());
+  return {
+    host,
+    async close() {
+      await act(async () => root.unmount());
+      host.remove();
+    },
+  };
+}
 
 function parse(path: string) {
   const seo = getPageSeo(path);
@@ -55,7 +86,7 @@ describe("published Brazilian Portuguese pages", () => {
     }
   });
 
-  it("renders the complete Portuguese homepage and keeps only registered links under /pt", () => {
+  it("renders the complete Portuguese homepage and keeps only registered links under /pt", async () => {
     const document = parse("/pt");
     expect(document.querySelector("h1")?.textContent).toBe("Leve sua IA para o WeChat");
     expect(document.title).toBe("WeChat AI: DeepSeek, Claude, GPT e agentes | Wechatai");
@@ -90,17 +121,20 @@ describe("published Brazilian Portuguese pages", () => {
       "Ver o repositório moutsea/wechatai no GitHub",
     );
 
-    const switcher = [...document.querySelectorAll(".site-language a")].map((link) => [
+    const switcher = await mountSwitcher("/pt");
+    const items = [...switcher.host.querySelectorAll('[role="menuitem"]')].map((link) => [
       link.textContent,
       link.getAttribute("href"),
       link.getAttribute("hreflang"),
     ]);
-    expect(switcher).toEqual([
+    expect(items).toEqual([
       ["Chinês", "/", "zh-CN"],
       ["Inglês", "/en", "en"],
       ["Japonês", "/ja", "ja-JP"],
       ["Coreano", "/ko", "ko-KR"],
+      ["Português", "/pt", "pt-BR"],
     ]);
+    await switcher.close();
   });
 
   it.each(["/pt", "/pt/pricing"])("explains the Xiaowei activation requirements on %s", (path) => {

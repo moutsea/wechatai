@@ -298,6 +298,7 @@ describe("published Japanese pages", () => {
       "English",
       "日本語",
       "한국어",
+      "Português",
     ]);
     expect(home.host.querySelector('a[href="/en"]')?.textContent).toBe("English");
     expect(home.host.querySelector('a[href="/en"]')?.getAttribute("hreflang")).toBe("en");
@@ -308,7 +309,7 @@ describe("published Japanese pages", () => {
 
     const ai = await mountSwitcher("/ja/wechat-ai");
     await ai.open();
-    expect(ai.host.querySelectorAll('[role="menuitem"]')).toHaveLength(4);
+    expect(ai.host.querySelectorAll('[role="menuitem"]')).toHaveLength(5);
     expect(ai.host.querySelector('a[hreflang="en"]')?.textContent).toBe("English");
     expect(ai.host.querySelector('a[hreflang="en"]')?.getAttribute("href")).toBe("/en/wechat-ai");
     expect(ai.host.querySelector('a[hreflang="zh-CN"]')?.getAttribute("href")).toBe("/wechat-ai");

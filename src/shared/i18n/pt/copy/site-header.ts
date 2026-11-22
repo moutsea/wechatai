@@ -6,7 +6,7 @@ export const navLabels = {
 } as const;
 
 export const headerCopy = {
-  homeAria: "Página inicial do Wechatai",
+  home: "Início",
   topNav: "Navegação principal",
   account: "Conta",
   login: "Entrar",
