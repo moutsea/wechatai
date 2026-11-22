@@ -163,7 +163,7 @@ for (const group of localePageGroups) {
             exact: true,
           });
           await expect(link).toHaveAttribute("href", path);
-          await expect(link).toHaveAttribute("lang", "pt-BR");
+          await expect(link.and(page.locator(":lang(pt-BR)"))).toBeVisible();
         }
       }
     });
