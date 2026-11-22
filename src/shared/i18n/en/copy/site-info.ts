@@ -398,7 +398,7 @@ const contact: ContactCopy = {
       heading: "Make the problem easier to locate",
       blocks: [
         paragraph(
-          "Please explain what happened, the steps you took and the approximate time. For account or payment issues, include the account email and order number; mask personal information in error screenshots first.",
+          "Please explain what happened, the steps you took and the approximate time. For account or payment issues, you may include your account email and order number if applicable. Mask personal information in error screenshots first.",
         ),
       ],
       note: [

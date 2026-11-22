@@ -125,6 +125,13 @@ describe("English terms, privacy and contact pages", () => {
     expect(document.querySelector('.contact-privacy a[href="/en/privacy"]')).not.toBeNull();
   });
 
+  it("makes account email and order number optional when contacting support", () => {
+    const document = parse("/en/contact");
+    expect(document.querySelector(".contact-grid")?.textContent).toContain(
+      "For account or payment issues, you may include your account email and order number if applicable.",
+    );
+  });
+
   it("localizes registered targets and leaves unregistered targets on their real paths", () => {
     const terms = parse("/en/terms");
     for (const href of [
