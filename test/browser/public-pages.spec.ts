@@ -300,6 +300,29 @@ test("keeps the pricing estimator open when switching Portuguese to English on m
   await expect(page.locator("#estimate h2")).toBeInViewport();
 });
 
+for (const { format, values, expected } of [
+  {
+    format: "thousands separators",
+    values: ["1000", "500", "1000", "1000", "1000"],
+    expected: ["1.000 créditos", "Cerca de ¥1.500"],
+  },
+  {
+    format: "decimal commas",
+    values: ["1200", "621", "1", "2", "1"],
+    expected: ["1,234 créditos", "Cerca de ¥0,003"],
+  },
+]) {
+  test(`formats Portuguese pricing estimates with ${format}`, async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/pt/pricing#estimate`);
+    await mounted;
+
+    const inputs = page.locator("#estimate .cost-fields input");
+    for (const [index, value] of values.entries()) await inputs.nth(index).fill(value);
+    await expect(page.locator("#estimate .cost-results strong")).toHaveText(expected);
+  });
+}
+
 const pricingUser = {
   id: "pricing-user",
   name: "Ana",

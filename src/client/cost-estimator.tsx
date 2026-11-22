@@ -44,7 +44,8 @@ export function CostEstimator() {
   const inputs = useDocumentInputs();
   const { locale } = useLocale();
   const copy = pricingCopyFor(locale)?.estimator ?? estimatorCopyZh;
-  const numberLocale = locale === "en" ? "en-US" : locale === "ja" ? "ja-JP" : locale === "ko" ? "ko-KR" : "zh-CN";
+  const numberLocale =
+    locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : locale === "ja" ? "ja-JP" : locale === "ko" ? "ko-KR" : "zh-CN";
   const [values, setValues] = useState(() =>
     ["1000", "1000", "10", "", ""].map(
       (value, index) => inputs?.get(estimateInputIds[index]) ?? value,
