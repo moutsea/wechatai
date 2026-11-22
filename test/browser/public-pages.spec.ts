@@ -60,6 +60,13 @@ function withoutSwitcherLabels(text: string) {
   return text.replaceAll("中文", "").replaceAll("日本語", "");
 }
 
+function languageTriggerName(htmlLang: string, label: string) {
+  if (htmlLang === "ko-KR") return `언어：${label}`;
+  if (htmlLang === "ja-JP") return `言語：${label}`;
+  if (htmlLang === "en") return `Language: ${label}`;
+  return `语言：${label}`;
+}
+
 /** Chinese source strings that must never reach a Japanese page. */
 const CHINESE_RESIDUE =
   /免费开始|价格与方案|常见问题|还有疑问|额度怎么用|会员费|微伴|页面未找到|继续了解|估算我的每日用量/;
@@ -90,25 +97,47 @@ for (const group of localePageGroups) {
           href,
         );
       }
-      const switcher = page.locator(".site-language");
+      const switchers = page.locator(".site-language");
+      const switcher = switchers.filter({ visible: true });
       const targets = group.filter((target) => target !== expected);
-      await expect(switcher).toHaveCount(targets.length ? 1 : 0);
-      await expect(switcher.locator("a")).toHaveCount(targets.length);
+      await expect(targets.length ? switcher : switchers).toHaveCount(targets.length ? 1 : 0);
+      if (targets.length) {
+        const trigger = switcher.getByRole("button", {
+          name: languageTriggerName(expected.htmlLang, expected.label),
+          exact: true,
+        });
+        await expect(trigger).toContainText(expected.label);
+        await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+        await expect(trigger).toHaveAttribute("aria-expanded", "false");
+        // Closed menu items do not exist, so they cannot receive Tab focus.
+        await expect(switcher.locator("a")).toHaveCount(0);
+        await trigger.click();
+        await expect(trigger).toHaveAttribute("aria-expanded", "true");
+        await expect(switcher.locator('[role="menuitem"]')).toHaveCount(group.length);
+        const current = switcher.locator('[role="menuitem"][aria-current="true"]');
+        await expect(current).toHaveCount(1);
+        await expect(current).toHaveAttribute("href", expected.path);
+      }
       const korean = expected.htmlLang === "ko-KR";
+      if (targets.length) await expect(page.getByRole("menu")).toBeVisible();
       for (const { htmlLang, label, path } of targets) {
         const link = korean
-          ? switcher.locator(`a[hreflang="${htmlLang}"]`)
-          : switcher.getByRole("link", { name: label, exact: true });
+          ? switcher.locator(`[role="menuitem"][hreflang="${htmlLang}"]`)
+          : switcher.getByRole("menuitem", { name: label, exact: true });
         await expect(link).toHaveAttribute("href", path);
         await expect(link).toHaveAttribute("hreflang", htmlLang);
         if (korean && htmlLang === "zh-CN") await expect(link).toHaveText("중국어");
       }
       if (korean) {
         await expect(switcher).not.toContainText(/\p{Script=Han}/u);
+        await page.keyboard.press("Escape");
         await page.setViewportSize({ width: 390, height: 844 });
         await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
         const mobile = page.locator(".site-mobile-menu");
-        const chinese = mobile.getByRole("link", { name: "중국어", exact: true });
+        const mobileTrigger = mobile.getByRole("button", { name: "언어：한국어", exact: true });
+        await expect(mobileTrigger).toBeVisible();
+        await mobileTrigger.click();
+        const chinese = mobile.getByRole("menuitem", { name: "중국어", exact: true });
         await expect(chinese).toBeVisible();
         await expect(chinese).toHaveAttribute("href", group[0].path);
         await expect(chinese).toHaveAttribute("hreflang", "zh-CN");
@@ -135,7 +164,7 @@ for (const { path } of localePageGroups.flat()) {
       "/en/pricing",
     );
     await expect(
-      page.locator(".landing-footer").getByRole("link", { name: "Wechatai home" }),
+      page.locator(".landing-footer").getByRole("link", { name: /Wechatai AI IN WECHAT Home/ }),
     ).toHaveAttribute("href", "/en");
 
     await page.setViewportSize({ width: 390, height: 844 });
@@ -893,6 +922,7 @@ test("English docs keep navigation, search, table of contents and pagination in 
   const next = page.locator(".docs-pagination a").last();
   await expect(next).toHaveAttribute("href", "/en/docs/channels-models");
   await expect(next).toContainText("Next");
+  await page.locator(".site-language").getByRole("button", { name: "Language: English", exact: true }).click();
   await expect(page.locator(".site-language a", { hasText: "中文" })).toHaveAttribute(
     "href",
     "/docs/getting-started",
@@ -1500,11 +1530,12 @@ test("serves the Japanese homepage and pricing page without Chinese page copy", 
   );
 
   const switcher = page.locator(".site-language");
-  await expect(switcher.getByRole("link", { name: "English", exact: true })).toHaveAttribute(
+  await switcher.getByRole("button", { name: "言語：日本語", exact: true }).click();
+  await expect(switcher.getByRole("menuitem", { name: "English", exact: true })).toHaveAttribute(
     "href",
     "/en",
   );
-  await expect(switcher.getByRole("link", { name: "中文", exact: true })).toHaveAttribute(
+  await expect(switcher.getByRole("menuitem", { name: "中文", exact: true })).toHaveAttribute(
     "href",
     "/",
   );
@@ -1583,11 +1614,12 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
   await page.goto(`${origin}/ja/wechat-bot`);
   await expect(page.locator("h1")).toHaveText("WeChat ボットの作り方：まず経路を選ぶ");
   const switcher = page.locator(".site-language");
-  await expect(switcher.getByRole("link", { name: "English", exact: true })).toHaveAttribute(
+  await switcher.getByRole("button", { name: "言語：日本語", exact: true }).click();
+  await expect(switcher.getByRole("menuitem", { name: "English", exact: true })).toHaveAttribute(
     "href",
     "/en/wechat-bot",
   );
-  await expect(switcher.getByRole("link", { name: "中文", exact: true })).toHaveAttribute(
+  await expect(switcher.getByRole("menuitem", { name: "中文", exact: true })).toHaveAttribute(
     "href",
     "/wechat-bot",
   );
@@ -1655,7 +1687,8 @@ test("serves the Korean homepage and pricing page without Chinese page copy", as
   expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
 
   await page.goto(`${origin}/pricing`);
-  await page.getByRole("link", { name: "한국어", exact: true }).click();
+  await page.getByRole("button", { name: "语言：中文", exact: true }).click();
+  await page.getByRole("menuitem", { name: "한국어", exact: true }).click();
   await expect(page).toHaveURL(`${origin}/ko/pricing`);
   await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "ko_KR");

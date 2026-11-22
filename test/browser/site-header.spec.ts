@@ -3,9 +3,11 @@ import { build } from "esbuild";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const root = fileURLToPath(new URL("../../", import.meta.url));
+
 const assets = new Map<string, Uint8Array>();
 test.beforeAll(async () => {
-  // Render the real header and styles; only authentication and API data are fixtures.
+  // Render the real header and styles; only authentication, translations and API data are fixtures.
   const result = await build({
     stdin: {
       contents: `
@@ -13,14 +15,25 @@ test.beforeAll(async () => {
         import { createRoot } from 'react-dom/client';
         import { MemoryRouter } from 'react-router-dom';
         import { SiteHeader } from './src/client/site-header';
+        import { LocaleProvider } from './src/client/locale';
+        import { registerTranslations } from './src/shared/i18n';
         import './src/client/styles.css';
+        const pages = [
+          { path: '/', title: 'Home | Wechatai', description: 'Home', updatedAt: '2026-11-20' },
+          { path: '/pricing', title: 'Pricing | Wechatai', description: 'Pricing', updatedAt: '2026-11-20' },
+          { path: '/docs', title: 'Docs | Wechatai', description: 'Docs', updatedAt: '2026-11-20' },
+        ];
+        registerTranslations('en', pages);
+        registerTranslations('ja', pages);
         createRoot(document.getElementById('root')).render(
           <MemoryRouter initialEntries={[window.location.pathname + window.location.hash]}>
-            <SiteHeader /><main style={{height: 2000}}>Page content</main>
+            <LocaleProvider>
+              <SiteHeader /><main style={{height: 2000}}>Page content</main>
+            </LocaleProvider>
           </MemoryRouter>
         );
       `,
-      resolveDir: fileURLToPath(new URL("../../", import.meta.url)),
+      resolveDir: root,
       loader: "tsx",
     },
     outfile: "app.js",
@@ -144,3 +157,113 @@ for (const [path, label] of [
     }
   });
 }
+
+test("language dropdown keeps the desktop header height and closes on outside press", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto("http://layout.test/pricing");
+  const header = page.locator(".site-header");
+  const baseline = (await header.boundingBox())!.height;
+  const trigger = page.getByRole("button", { name: "语言：中文", exact: true });
+  await expect(trigger).toContainText("中文");
+  await expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
+
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: "语言", exact: true });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitem")).toHaveCount(3);
+  await expect(menu.locator('[role="menuitem"][aria-current="true"]')).toHaveText("中文");
+  const expanded = (await header.boundingBox())!.height;
+  expect(expanded).toBe(baseline);
+  expect(expanded).toBeLessThanOrEqual(65);
+
+  await page.locator("main").click({ position: { x: 8, y: 8 } });
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(menu).toHaveCount(0);
+
+  await trigger.click();
+  await expect(menu).toBeVisible();
+  await trigger.click();
+  await expect(menu).toHaveCount(0);
+});
+
+test("language trigger is reachable with Tab and fully operable from the keyboard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.goto("http://layout.test/pricing");
+  const trigger = page.getByRole("button", { name: "语言：中文", exact: true });
+
+  let reached = false;
+  for (let index = 0; index < 12; index += 1) {
+    await page.keyboard.press("Tab");
+    if (await trigger.evaluate((node) => node === document.activeElement)) {
+      reached = true;
+      break;
+    }
+  }
+  expect(reached).toBe(true);
+  expect(await trigger.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe("solid");
+
+  await page.keyboard.press("Enter");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "中文" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("menuitem", { name: "English" })).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(page.getByRole("menuitem", { name: "中文" })).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(trigger).toBeFocused();
+  await expect(page.getByRole("menuitem")).toHaveCount(0);
+
+  await page.keyboard.press("Space");
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+});
+
+test("language menu fits the 390px drawer and the first Escape only closes the menu", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("http://layout.test/pricing");
+  const toggle = page.getByRole("button", { name: "打开菜单", exact: true });
+  await toggle.click();
+  const drawer = page.locator(".site-mobile-menu");
+  const trigger = drawer.getByRole("button", { name: "语言：中文", exact: true });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const menu = drawer.getByRole("menu", { name: "语言", exact: true });
+  await expect(menu).toBeVisible();
+  const items = menu.getByRole("menuitem");
+  await expect(items).toHaveCount(3);
+  for (let index = 0; index < 3; index += 1) {
+    await items.nth(index).scrollIntoViewIfNeeded();
+    await expect(items.nth(index)).toBeInViewport();
+  }
+  const overflow = await page.evaluate(() => {
+    const documentElement = document.documentElement;
+    const drawerElement = document.querySelector(".site-mobile-menu")!;
+    return {
+      page: documentElement.scrollWidth - documentElement.clientWidth,
+      drawer: drawerElement.scrollWidth - drawerElement.clientWidth,
+    };
+  });
+  expect(overflow.page).toBeLessThanOrEqual(0);
+  expect(overflow.drawer).toBeLessThanOrEqual(0);
+
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(drawer).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "关闭菜单", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
