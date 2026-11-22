@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
 import { languageCopy as languageCopyKo } from "../shared/i18n/ko/copy/site-header";
+import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
 import { useLocale } from "./locale";
 
 /**
@@ -48,7 +49,7 @@ export function LanguageSwitcher() {
       : locale === "en"
         ? "Language"
         : locale === "ja"
-          ? "言語"
+          ? headerCopyJa.language
           : "语言";
   const currentLabel =
     (locale === "ko" ? languageCopyKo.labels[locale] : undefined) ??

@@ -234,6 +234,14 @@ describe("published Japanese pages", () => {
     );
   });
 
+  it("publishes the Japanese Organization description in the homepage JSON-LD", () => {
+    const organization = graphOf("/ja").find((node) => node["@type"] === "Organization");
+    expect(organization).toMatchObject({
+      "@id": `${SITE_URL}/#organization`,
+      description: expect.stringContaining("WeChat ClawBot の 1 対 1 チャットにつなぐ"),
+    });
+  });
+
   it.each([
     ["/ja/wechat-ai", "WeChat AI：自分の大規模モデルを WeChat の会話へ"],
     ["/ja/wechat-bot", "WeChat ボットの作り方：まず経路を選ぶ"],
@@ -275,6 +283,11 @@ describe("published Japanese pages", () => {
     }
   });
 
+  it("distinguishes model numbers from provider numbers in the Japanese DeepSeek guide", () => {
+    const usage = parse("/ja/wechat-deepseek").querySelector("#usage")?.textContent;
+    expect(usage).toContain("/wx models で現在のプロバイダーで利用できるモデルの番号を確認");
+  });
+
   it("limits the landing-page switcher to published languages", async () => {
     const home = await mountSwitcher("/ja");
     await home.open();
@@ -311,6 +324,45 @@ describe("published Japanese pages", () => {
     expect(bot.host.querySelector('a[hreflang="en"]')?.getAttribute("href")).toBe("/en/wechat-bot");
     expect(bot.host.querySelector('a[hreflang="zh-CN"]')?.getAttribute("href")).toBe("/wechat-bot");
     await bot.close();
+  });
+
+  it.each(["/ja/wechat-bot", "/ja/wechat-deepseek"])(
+    "describes one-to-one chats in Japanese on %s, including the FAQ",
+    (path) => {
+      const document = parse(path);
+      expect(document.querySelector("table")?.textContent).toContain("1 対 1 のチャット");
+      expect(document.querySelector("#faq")?.textContent).toContain("1 対 1 のチャット");
+      expect(document.body.textContent).not.toContain("単聊");
+    },
+  );
+
+  it("uses the Japanese WeChat settings menu in the ClawBot setup steps", () => {
+    const setup = parse("/ja/wechat-bot").querySelector("#clawbot")?.textContent;
+    expect(setup).toContain("自分 → 設定");
+  });
+
+  it("uses Japanese WeCom terminology in the bot page, search description and FAQ data", () => {
+    const path = "/ja/wechat-bot";
+    const document = parse(path);
+    const term = "企業内カスタムアプリ";
+    for (const selector of ["#routes table", "#wecom h2", "#wecom strong"]) {
+      expect(document.querySelector(selector)?.textContent, selector).toContain(term);
+    }
+    const description = document.querySelector('meta[name="description"]')?.getAttribute("content");
+    expect(description).toContain(term);
+    expect(description).not.toContain("自建アプリ");
+
+    const faq = Array.from(document.querySelectorAll("#faq details")).find((item) =>
+      item.querySelector("summary")?.textContent?.includes("WeCom"),
+    );
+    const name = faq?.querySelector("summary")?.textContent;
+    const text = faq?.querySelector("p")?.textContent;
+    expect(name).toContain(term);
+    expect(text).toContain(term);
+    expect(graphOf(path).find((node) => node["@type"] === "FAQPage")?.mainEntity).toContainEqual(
+      expect.objectContaining({ name, acceptedAnswer: { "@type": "Answer", text } }),
+    );
+    expect(document.body.textContent).not.toContain("自建アプリ");
   });
 
   it("keeps the Chinese page group unchanged and adds only the registered Japanese URLs", () => {

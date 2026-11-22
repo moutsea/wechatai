@@ -1564,6 +1564,26 @@ test("serves the Japanese homepage and pricing page without Chinese page copy", 
   );
 });
 
+test("shows each Japanese homepage plan allowance once on desktop and mobile", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/ja`);
+  await mounted;
+
+  const allowances = page
+    .locator(".landing-plan:visible li")
+    .filter({ hasText: /WeChat 接続|プラグイン設定/ });
+  const plus = ["WeChat 接続 10 件", "プラグイン設定 無制限"];
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect
+      .soft(allowances, `${width}px`)
+      .toHaveText(
+        ["WeChat 接続 1 件", "プラグイン設定 1 件", ...plus, ...(width === 1280 ? plus : [])],
+        { useInnerText: true },
+      );
+  }
+});
+
 test("opens a Japanese account menu for signed-in pricing visitors", async ({ page }) => {
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
   await page.route("**/api/admin/access", (route) => route.fulfill({ json: { isAdmin: true } }));
@@ -1622,6 +1642,17 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
   await expect(switcher.getByRole("menuitem", { name: "中文", exact: true })).toHaveAttribute(
     "href",
     "/wechat-bot",
+  );
+  const englishPath = "/en/wechat-bot";
+  const destination = page.waitForResponse(`${origin}${englishPath}`);
+  await switcher.getByRole("menuitem", { name: "English", exact: true }).click();
+  expect((await destination).status()).toBe(200);
+  await expect(page).toHaveURL(`${origin}${englishPath}`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await switcher.getByRole("button", { name: "Language: English", exact: true }).click();
+  await expect(switcher.getByRole("menuitem", { name: "日本語", exact: true })).toHaveAttribute(
+    "href",
+    "/ja/wechat-bot",
   );
 });
 

@@ -23,6 +23,9 @@ export const pricingCopy = {
   seo: {
     title: `料金：毎日 ${DAILY_CREDIT_DEFAULTS.free} クレジット無料、Plus は${monthlyPrice}`,
     description: `Wechatai の無料プランと Plus を比較：毎日のクレジット、WeChat 接続、プラグイン、添付ファイル、小薇（Xiaowei）。無料プランは毎日 ${DAILY_CREDIT_DEFAULTS.free} クレジット、Plus は${monthlyPrice}、または${yearlyPrice}の 1 回払いで、自動更新はありません。モデルの API 利用料は別途です。`,
+    serviceName: "Wechatai 無料プランと Plus",
+    serviceType: "WeChat AI 連携サービス",
+    freeOfferDescription: `毎日クレジットを進呈し、WeChat 接続 ${WECHAT_LINK_LIMITS.free} 件とプラグイン設定 ${PLUGIN_LIMITS.free} 件が含まれます。`,
     eyebrow: "料金とプラン",
     h1: "無料で始めて、必要に応じて Plus へ",
     lede: "無料プランで日常の質問に対応できます。Plus ではクレジットと小薇（Xiaowei）がさらに充実します。モデルの API キーはご自身で用意し、モデル利用料は各プロバイダーに別途お支払いいただきます。",
