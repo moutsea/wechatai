@@ -115,7 +115,7 @@ export class WechatReceiver {
         fromCursor: string,
         updates: WechatUpdates,
         credentials: WxCredentials,
-      ): string | null;
+      ): string | null | false;
       expired(id: string, generation: string): void;
       wake(): void;
       schedule(): Promise<void>;
@@ -333,7 +333,11 @@ export class WechatReceiver {
       JSON.stringify({
         type: "ack",
         id: batch.id,
-        ...(cursor === null ? { stale: true } : { cursor }),
+        ...(cursor === null
+          ? { stale: true }
+          : cursor === false
+            ? { retryAfterMs: 5000 }
+            : { cursor }),
       }),
     );
   }

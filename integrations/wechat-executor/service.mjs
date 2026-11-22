@@ -55,6 +55,8 @@ export class Executor {
     this.stopController = new AbortController();
     this.metrics = { completed: 0, failed: 0 };
     this.lastDiscovery = 0;
+    this.discoveryRound = 0;
+    this.idleDelay = 2000;
     this.draining = false;
   }
   async api(path, payload) {
@@ -214,11 +216,24 @@ export class Executor {
     for (const [id, at] of this.claimRetryAt) {
       if (at <= Date.now()) this.claimRetryAt.delete(id);
     }
+    const slots = this.options.concurrency - this.running.size - this.claiming.size;
+    if (slots <= 0) {
+      this.idleDelay = 2000;
+      return;
+    }
     const { accounts } = await this.api("accounts");
     this.lastDiscovery = Date.now();
     const candidates = new Set(accounts).values();
-    const slots = this.options.concurrency - this.running.size - this.claiming.size;
-    const claims = Promise.all(Array.from({ length: slots }, () => this.discoverJobs(candidates)));
+    const round = ++this.discoveryRound;
+    const claims = Promise.all(
+      Array.from({ length: slots }, () => this.discoverJobs(candidates)),
+    ).then((results) => {
+      if (round === this.discoveryRound)
+        this.idleDelay =
+          results.some(Boolean) || this.running.size || this.claiming.size
+            ? 2000
+            : Math.min(8000, this.idleDelay * 2);
+    });
     if (waitForClaims) await claims;
     else void claims.catch(() => log("execution.discovery_retry"));
   }
@@ -241,6 +256,7 @@ export class Executor {
       const pending = this.claim(accountId).then((job) => {
         this.claiming.delete(accountId);
         if (!job) return false;
+        this.idleDelay = 2000;
         const execution = this.runAccount(accountId, job)
           .catch(() => log("execution.delivery_pending"))
           .finally(() => this.running.delete(accountId));
@@ -248,7 +264,7 @@ export class Executor {
         return true;
       });
       this.claiming.set(accountId, pending);
-      if (await pending) return;
+      if (await pending) return true;
     }
   }
   hasPendingReport(accountId) {
@@ -284,12 +300,21 @@ export class Executor {
       } catch {
         log("execution.discovery_retry");
       }
-      await sleep(2000, undefined, { signal: this.stopController.signal }).catch(() => {});
+      await sleep(
+        this.pendingReports.size || this.running.size || this.claiming.size ? 2000 : this.idleDelay,
+        undefined,
+        {
+          signal: this.stopController.signal,
+        },
+      ).catch(() => {});
     }
   }
   health() {
     return {
-      ok: this.draining || Date.now() - this.lastDiscovery < 60000,
+      ok:
+        this.draining ||
+        this.running.size + this.claiming.size >= this.options.concurrency ||
+        Date.now() - this.lastDiscovery < 60000,
       draining: this.draining,
       active: this.running.size + this.claiming.size,
       ...this.metrics,

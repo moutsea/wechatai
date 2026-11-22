@@ -18,12 +18,16 @@ export default defineConfig(({ command, isPreview }) => ({
         const { assets, vars } = config;
         if (command === "build" && process.env.CLOUDFLARE_ENV === "production") {
           // Older private configs also serve legacy links with credentials in the path.
-          if (!config.ratelimits?.some((binding) => binding.name === "ANALYTICS_LIMIT")) {
+          for (const [name, namespace_id] of [
+            ["ANALYTICS_LIMIT", "12003"],
+            ["PUBLIC_ENTRY_LIMIT", "12004"],
+          ]) {
+            if (config.ratelimits?.some((binding) => binding.name === name)) continue;
             config.ratelimits = [
               ...(config.ratelimits ?? []),
               {
-                name: "ANALYTICS_LIMIT",
-                namespace_id: "12003",
+                name,
+                namespace_id,
                 simple: { limit: 600, period: 60 },
               },
             ];

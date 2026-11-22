@@ -296,3 +296,31 @@ test("discovery uses a freed slot while a previous poll still has an outstanding
   blocked.resolve();
   await service.stop();
 });
+
+test("backs off empty discovery and skips it at capacity while flushing receipts", async () => {
+  const service = new Executor({ concurrency: 1 });
+  let polls = 0,
+    flushes = 0;
+  service.api = async () => ({ accounts: ++polls > 2 ? ["a".repeat(64)] : [] });
+  service.flushReports = () => {
+    flushes++;
+    return Promise.resolve();
+  };
+  service.claim = async () => ({});
+  service.runAccount = async () => {};
+  await service.tick();
+  assert.equal(service.idleDelay, 4000);
+  await service.tick();
+  assert.equal(service.idleDelay, 8000);
+  service.running.set("busy", Promise.resolve());
+  service.lastDiscovery = 0;
+  await service.tick();
+  assert.equal(polls, 2);
+  assert.equal(flushes, 3);
+  assert.equal(service.health().ok, true);
+  service.running.clear();
+  assert.equal(service.health().ok, false);
+  await service.tick();
+  assert.equal(polls, 3);
+  assert.equal(service.idleDelay, 2000);
+});

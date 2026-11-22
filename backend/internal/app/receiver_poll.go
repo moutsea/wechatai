@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moutsea/wechatai/backend/internal/accounts"
+	"github.com/moutsea/wechatai/backend/internal/delivery"
 	"github.com/moutsea/wechatai/backend/internal/receiver"
 	"github.com/moutsea/wechatai/backend/internal/rpc"
 )
@@ -82,5 +83,8 @@ func (a *App) pollLink(ctx context.Context, key receiver.PollKey) (bool, error) 
 		return true, err
 	}
 	a.schedule.Wake(string(key.Account))
+	if ack != nil && ack.RetryAfterMS > 0 {
+		return true, delivery.ErrInboxFull
+	}
 	return !expired && ack != nil && !ack.Stale, nil
 }

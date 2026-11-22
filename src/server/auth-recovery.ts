@@ -47,12 +47,35 @@ export async function issuePasswordRecovery(env: Env, userId: string, returnTo: 
   return `${env.APP_URL}/api/auth/reset-password/${token}?callbackURL=${encodeURIComponent(callback)}`;
 }
 
+function invalidToken() {
+  return new APIError("BAD_REQUEST", {
+    code: "INVALID_TOKEN",
+    message: "链接无效或已过期，请重新发送邮件。",
+  });
+}
+
 // D1 batch is a transaction. Every mutation checks the still-present credential;
 // concurrent resets cannot both win, even when they use different valid tokens.
 // Keep Better Auth's credential schema/hash and public API, but replace its
 // separate consume -> update -> revoke operations with one atomic batch.
-export async function resetPasswordAtomically(env: Env, token: string, hash: string) {
+export async function resetPasswordAtomically(
+  env: Env,
+  token: string,
+  hashPassword: () => Promise<string>,
+) {
   const identifier = `reset-password:${token}`;
+  const valid = await env.DB.prepare(
+    "SELECT value FROM verification WHERE identifier=? AND expiresAt>unixepoch() LIMIT 1",
+  )
+    .bind(identifier)
+    .first<{ value: string }>();
+  if (!valid) throw invalidToken();
+  if (!(await env.AUTH_LIMIT.limit({ key: "reset-owner:" + valid.value })).success)
+    throw new APIError("TOO_MANY_REQUESTS", {
+      code: "RATE_LIMITED",
+      message: "尝试过于频繁，请稍后再试。",
+    });
+  const hash = await hashPassword();
   // Use one timestamp throughout the batch, even if a token expires between statements.
   const now = Math.floor(Date.now() / 1000);
   const owner = "SELECT value FROM verification WHERE identifier=? AND expiresAt>? LIMIT 1";
@@ -82,11 +105,7 @@ export async function resetPasswordAtomically(env: Env, token: string, hash: str
       message: "暂时无法保存密码，请稍后重试。",
     });
   });
-  if (!results[0].meta.changes)
-    throw new APIError("BAD_REQUEST", {
-      code: "INVALID_TOKEN",
-      message: "链接无效或已过期，请重新发送邮件。",
-    });
+  if (!results[0].meta.changes) throw invalidToken();
   // 同一事务中只有真正由未验证变为已验证的账户会被返回。
   const verifiedId = results[1].results[0]?.id;
   return typeof verifiedId === "string" ? verifiedId : undefined;

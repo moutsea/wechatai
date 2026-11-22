@@ -235,8 +235,10 @@ func legacyZero(ctx context.Context, tx *sql.Tx, prefix string, m WechatMessage,
 	return true, err
 }
 
+func (m WechatMessage) ReceiptID() string { return m.Receipt().value }
+
 // Receive deduplicates in the same transaction that advances the link cursor.
-func Receive(ctx context.Context, tx *sql.Tx, prefix, connection string, m WechatMessage, replay bool, now int64) (bool, error) {
+func Receive(ctx context.Context, tx *sql.Tx, prefix, connection string, m WechatMessage, replay bool, now int64, budget *InboxBudget) (bool, error) {
 	v := m.Receipt()
 	if !v.valid() || m.Type != 1 {
 		return false, nil
@@ -263,5 +265,5 @@ func Receive(ctx context.Context, tx *sql.Tx, prefix, connection string, m Wecha
 			return false, err
 		}
 	}
-	return insertReceipt(ctx, tx, connection, now, m.Token, m.Raw, receiptKey{id: id, rounded: rounded, exact: exact, seq: seq})
+	return insertReceipt(ctx, tx, connection, now, m.Token, m.Raw, receiptKey{id: id, rounded: rounded, exact: exact, seq: seq}, budget)
 }

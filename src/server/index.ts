@@ -67,6 +67,7 @@ import {
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { admitSessionLookup, entryLimited } from "./public-admission";
 import { availableAuthProviders, createAuth } from "./auth";
 import { reserveAuthEmail } from "./auth-email";
 import { authEmailConfig, checkAuthEmailChallenge } from "./auth-email-challenge";
@@ -367,7 +368,15 @@ app.use("/api/auth/*", async (c, next) => {
     !(await c.env.AUTH_LIMIT.limit({ key: c.req.header("cf-connecting-ip") || "local" })).success
   )
     return c.json({ message: "尝试过于频繁，请稍后再试" }, 429);
-  const action = mailActions.get(c.req.path.replace(/\/+$/, ""));
+  const path = c.req.path.replace(/\/+$/, "");
+  if (
+    path === "/api/auth/reset-password" &&
+    c.req.method === "POST" &&
+    !(await c.env.PUBLIC_ENTRY_LIMIT.limit({ key: "reset" })).success
+  )
+    return entryLimited();
+  if (!(await admitSessionLookup(c.env, c.req.raw)).success) return entryLimited();
+  const action = mailActions.get(path);
   if (c.req.method === "POST" && action) {
     if (!trustedAppOrigins(c.env).includes(c.req.header("origin") || ""))
       return c.json({ code: "INVALID_ORIGIN", message: "请求来源无效" }, 403);
@@ -408,6 +417,7 @@ app.get("/api/auth/providers", (c) => {
 });
 app.get("/api/referrals/attribution", async (c) => {
   c.header("Cache-Control", "no-store");
+  if (!(await admitSessionLookup(c.env, c.req.raw)).success) return entryLimited();
   return c.json({ active: Boolean(await registrationReferrer(c.env, c.req.raw.headers)) });
 });
 app.get(emailLinkPath, () => emailLinkPage());
@@ -540,6 +550,7 @@ app.use("/api/*", async (c, next) => {
     !trustedAppOrigins(c.env).includes(c.req.header("origin") || "")
   )
     return c.json({ error: "invalid_origin", message: "请求来源无效" }, 403);
+  if (!(await admitSessionLookup(c.env, c.req.raw)).success) return entryLimited();
   const result = await createAuth(c.env).api.getSession({ headers: c.req.raw.headers });
   if (!result) return c.json({ error: "unauthorized", message: "请先登录" }, 401);
   c.set("user", result.user);

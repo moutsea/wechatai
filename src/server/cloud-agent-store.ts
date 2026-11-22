@@ -196,6 +196,7 @@ export class CloudAgentStore {
         settled INTEGER NOT NULL DEFAULT 0, stale INTEGER NOT NULL DEFAULT 0,
         delivered INTEGER NOT NULL DEFAULT 0, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS cloud_tasks_due ON cloud_tasks(state, nextAt);
+      CREATE INDEX IF NOT EXISTS cloud_tasks_visible ON cloud_tasks(sessionId) WHERE COALESCE(json_extract(data,'$.hidden'),0)=0;
       CREATE INDEX IF NOT EXISTS cloud_tasks_session ON cloud_tasks(sessionId, createdAt);
       CREATE INDEX IF NOT EXISTS cloud_tasks_created ON cloud_tasks(createdAt);
       CREATE INDEX IF NOT EXISTS cloud_tasks_page ON cloud_tasks(createdAt DESC, id DESC);
@@ -396,43 +397,48 @@ export class CloudAgentStore {
   }
 
   hideSession(sessionId?: string) {
-    const rows = this.sql
-      .exec<Row>(
-        sessionId ? "SELECT * FROM cloud_tasks WHERE sessionId=?" : "SELECT * FROM cloud_tasks",
-        ...(sessionId ? [sessionId] : []),
-      )
-      .toArray();
-    for (const row of rows) {
-      const task = this.decode(row);
-      // A completed stale result has no live runs.sessionId. Remove its cached
-      // response by stable task id as well, so clearing the original session
-      // erases every local result copy while retaining the billing ledger.
-      this.sql.exec("DELETE FROM runs WHERE id = ?", task.id);
-      this.patch(task, {
-        hidden: 1,
-        prompt: "",
-        displayPrompt: "",
-        result: "",
-        error: "",
-        stopReason: "",
-        frozen: "",
-        invocation: null,
-        request: "",
-        outcome: null,
-        modelConnection: null,
-        imageIds: [],
-        hasAttachments: false,
-        inputFiles: [],
-        outputFiles: [],
-        fileError: "",
-        fileStartedAt: undefined,
-        fileCancelled: undefined,
-        stale: 1,
-        delivered: 1,
-        deliveryStatus: "stale",
-        stopRequested: cloudTaskTerminal(task.state) ? task.stopRequested : 1,
-        nextAt: cloudTaskTerminal(task.state) ? 0 : Date.now(),
-      });
+    if (sessionId)
+      this.sql.exec(
+        "DELETE FROM runs WHERE id IN (SELECT id FROM cloud_tasks WHERE sessionId=?)",
+        sessionId,
+      );
+    // Keep task JSON bounded in memory. Each scrub removes the row from the visible index.
+    while (true) {
+      const rows = this.sql
+        .exec<Row>(
+          `SELECT * FROM cloud_tasks WHERE COALESCE(json_extract(data,'$.hidden'),0)=0${sessionId ? " AND sessionId=?" : ""} LIMIT 8`,
+          ...(sessionId ? [sessionId] : []),
+        )
+        .toArray();
+      if (!rows.length) break;
+      for (const row of rows) {
+        const task = this.decode(row);
+        this.patch(task, {
+          hidden: 1,
+          prompt: "",
+          displayPrompt: "",
+          result: "",
+          error: "",
+          stopReason: "",
+          frozen: "",
+          invocation: null,
+          request: "",
+          outcome: null,
+          modelConnection: null,
+          imageIds: [],
+          hasAttachments: false,
+          inputFiles: [],
+          outputFiles: [],
+          fileError: "",
+          fileStartedAt: undefined,
+          fileCancelled: undefined,
+          stale: 1,
+          delivered: 1,
+          deliveryStatus: "stale",
+          stopRequested: cloudTaskTerminal(task.state) ? task.stopRequested : 1,
+          nextAt: cloudTaskTerminal(task.state) ? 0 : Date.now(),
+        });
+      }
     }
   }
 

@@ -1,3 +1,4 @@
+import { resetPasswordAtomically } from "../src/server/auth-recovery";
 import { privateAuthResponse } from "../src/server/auth-email-link";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -486,6 +487,21 @@ describe("verified email registration and recovery", () => {
     expect(
       await env.DB.prepare("SELECT id FROM verification WHERE id='unrelated'").first(),
     ).not.toBeNull();
+  });
+  it("rejects missing credentials before hashing and rechecks expiry after hashing", async () => {
+    const hash = vi.fn(async () => "unused");
+    await expect(resetPasswordAtomically(env, "missing-fixture", hash)).rejects.toThrow();
+    expect(hash).not.toHaveBeenCalled();
+    const registered = await signup();
+    const token = await requestReset(registered.address);
+    await expect(
+      resetPasswordAtomically(env, token, async () => {
+        await env.DB.prepare("UPDATE verification SET expiresAt=0 WHERE identifier=?")
+          .bind("reset-password:" + token)
+          .run();
+        return "expired-during-hash";
+      }),
+    ).rejects.toThrow();
   });
   it("allows only one of two different reset tokens to succeed concurrently", async () => {
     const registered = await signup();

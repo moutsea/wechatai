@@ -29,6 +29,10 @@ export async function receiveLink({
     if (state.pending) {
       const ack = await sendBatch(state.pending);
       if (ack.stale) return;
+      if (ack.retryAfterMs === 5000) {
+        await sleep(ack.retryAfterMs, undefined, { signal }).catch(() => {});
+        continue;
+      }
       if (typeof ack.cursor !== "string") throw new Error("invalid_ack");
       metrics.forwarded += state.pending.msgs.length;
       log("batch_accepted", {
