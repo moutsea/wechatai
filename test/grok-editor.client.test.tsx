@@ -51,6 +51,7 @@ it("offers the webhook path without a model, and explains both directions of set
     <GrokEditor plugin="new" onClose={() => {}} onSaved={() => {}} />,
   );
   expect(markup).toContain("生成配置指令");
+  expect(markup).toContain("发送等待提示");
   expect(markup).toContain("Webhook key");
   expect(markup).toContain("wechatai_claim");
   expect(markup).not.toContain("安装命令");

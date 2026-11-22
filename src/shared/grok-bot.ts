@@ -5,6 +5,7 @@ import { pluginShortcutJsonSchema } from "./plugin-shortcut";
 import { pluginManifestSchema } from "./plugins";
 
 export const GROK_ID = "wechatai/grok" as const;
+export const GROK_WAITING_MESSAGE = "任务已加入 Grok Bot 队列，完成后会在这里回复。";
 export const GROK_DISPATCH_UNAVAILABLE = "Grok Bot 派发服务暂不可用，请在服务恢复后再发送新任务。";
 export type GrokPlugin = Omit<OpenClawPlugin, "pluginId"> & {
   pluginId: typeof GROK_ID;
@@ -19,7 +20,7 @@ export const GROK_SETUP_INCOMPLETE =
   "Grok Bot 还没完成配置。请在微伴网页的 Grok Bot 配置中复制配置指令，发给你的 Grok Bot。";
 export const grokInputSchema = openClawInputSchema.safeExtend({
   agentId: z.literal("main").default("main"),
-  ...waitingMessageFields("任务已加入 Grok Bot 队列，完成后会在这里回复。"),
+  ...waitingMessageFields(GROK_WAITING_MESSAGE),
   allowProactive: z.literal(false).default(false),
 });
 export const grokManifest = pluginManifestSchema.parse({
