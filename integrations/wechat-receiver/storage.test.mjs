@@ -70,6 +70,30 @@ test("retains unacknowledged messages across process restarts, before requesting
   });
   assert.equal(JSON.parse(await readFile(f.file, "utf8")).pending, null);
 });
+test("keeps a backpressured batch on disk across shutdown without advancing the accepted cursor", async (t) => {
+  const f = await fixture(t);
+  const abort = new AbortController();
+  let calls = 0;
+  await receiveLink({
+    ...f,
+    config,
+    accountId: "account",
+    signal: abort.signal,
+    sendExpired: () => assert.fail(),
+    fetchImpl: async () => {
+      calls++;
+      return Response.json({ msgs: [{ message_id: "31" }], get_updates_buf: "next" });
+    },
+    sendBatch: async () => {
+      abort.abort();
+      return { retryAfterMs: 5000 };
+    },
+  });
+  const state = await loadState(f.file, config);
+  assert.equal(calls, 1);
+  assert.equal(state.pending.msgs[0].message_id, "31");
+  assert.equal(state.baseCursor, config.cursor);
+});
 test("replays a pre-upgrade pending batch with its original numeric identity", async (t) => {
   const f = await fixture(t);
   const abort = new AbortController();

@@ -187,10 +187,8 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
             code: "PASSWORD_TOO_LONG",
             message: "密码不能超过 128 个字符。",
           });
-        const verifiedId = await resetPasswordAtomically(
-          env,
-          token,
-          await ctx.context.password.hash(body.data.newPassword),
+        const verifiedId = await resetPasswordAtomically(env, token, () =>
+          ctx.context.password.hash(body.data.newPassword),
         );
         if (verifiedId) await recordVerification(verifiedId, ctx.request);
         return ctx.json({ status: true });

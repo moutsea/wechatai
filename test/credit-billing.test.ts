@@ -1,5 +1,6 @@
 import { env, runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { reserveModelTest } from "../src/server/model-test-admission";
 import { Wallet } from "../src/server/wallet";
 import type { WxMessage } from "../src/server/wechat";
 
@@ -101,6 +102,24 @@ describe("postpaid request credits", () => {
       });
     },
   );
+  it("enforces rolling limits across channel replacement and reopens the window exactly at expiry", async () => {
+    const stub = account();
+    await runInDurableObject(stub, (_, state) => {
+      const now = Date.now();
+      for (const channel of ["a", "b"])
+        for (let i = 0; i < 6; i++) {
+          reserveModelTest(state.storage.sql, channel + i, channel, now);
+        }
+      expect(() => reserveModelTest(state.storage.sql, "retry", "a", now + 1)).toThrow();
+      expect(() => reserveModelTest(state.storage.sql, "replacement", "c", now + 1)).toThrow();
+      reserveModelTest(state.storage.sql, "later", "a", now + 3_600_000);
+      expect(
+        state.storage.sql
+          .exec("SELECT json_array_length(value) n FROM settings WHERE key='modelTestAttempts'")
+          .one().n,
+      ).toBe(1);
+    });
+  });
   it("charges connection tests once using actual usage without holds or refunds", async () => {
     const stub = account();
     const a = await model(stub);
@@ -167,6 +186,10 @@ describe("postpaid request credits", () => {
       const after = await stub.snapshot();
       expect(after.wallet.balance).toBe(before);
       expect(after.ledger).toEqual(beforeLedger);
+      const calls = vi.mocked(fetch).mock.calls.length;
+      const retry = JSON.parse(await stub.api("assistant.test", { id: a.id }));
+      expect(retry.error).toBe("model_test_cooldown");
+      expect(vi.mocked(fetch).mock.calls.length).toBe(calls);
     },
   );
   it.each([0, 240000])(

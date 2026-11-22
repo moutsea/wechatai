@@ -50,6 +50,10 @@ it("persists multi-megabyte Unicode checkpoints in account-local chunks and eras
     expect(new PersonalRunStore(state.storage).read("large", "input")).toBeUndefined();
   });
   expect(JSON.parse(await fresh.api("privacy.clear")).ok).toBe(true);
+  expect(JSON.parse(await fresh.api("privacy.clear"))).toMatchObject({
+    status: 429,
+    error: "history_recently_cleared",
+  });
   await runInDurableObject(fresh, (_, state) => {
     expect(state.storage.sql.exec("SELECT count(*) n FROM personal_run_data").one().n).toBe(0);
     expect(state.storage.sql.exec("SELECT count(*) n FROM personal_runs").one().n).toBe(0);

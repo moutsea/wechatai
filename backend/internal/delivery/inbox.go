@@ -23,7 +23,18 @@ CREATE TABLE IF NOT EXISTS inbox (
 		{Version: 6, When: "SELECT NOT EXISTS (SELECT 1 FROM pragma_table_info('inbox') WHERE name='wechatSeq')", SQL: "ALTER TABLE inbox ADD COLUMN wechatSeq TEXT"},
 		{Version: 7, SQL: "CREATE INDEX IF NOT EXISTS inbox_wechat_rounded ON inbox(wechatRoundedId) WHERE wechatRoundedId IS NOT NULL"},
 		{Version: 8, When: "SELECT NOT EXISTS (SELECT 1 FROM pragma_table_info('inbox') WHERE name='wechatTextReceipts')", SQL: "ALTER TABLE inbox ADD COLUMN wechatTextReceipts TEXT"},
+		{Version: 9, SQL: "CREATE INDEX IF NOT EXISTS inbox_active_bytes ON inbox(connectionId,(length(CAST(payload AS BLOB))+length(CAST(reply AS BLOB)))) WHERE state IN ('pending','reply','waiting_context')"},
 	}}
+}
+
+var ErrInboxFull = errors.New("inbound queue at capacity")
+
+type InboxBudget struct{ rows, bytes int64 }
+
+func ReadInboxBudget(ctx context.Context, tx *sql.Tx, connection string) (InboxBudget, error) {
+	var b InboxBudget
+	err := tx.QueryRowContext(ctx, "SELECT 256-count(*),4194304-COALESCE(SUM((length(CAST(payload AS BLOB))+length(CAST(reply AS BLOB)))),0) FROM inbox INDEXED BY inbox_active_bytes WHERE connectionId=? AND state IN ('pending','reply','waiting_context')", connection).Scan(&b.rows, &b.bytes)
+	return b, err
 }
 
 func Migrate(ctx context.Context, db *sql.DB) error { return Schema().Apply(ctx, db) }
@@ -38,7 +49,11 @@ func InsertIncoming(ctx context.Context, tx *sql.Tx, id, connection string, payl
 	if id == "" || connection == "" || json.Unmarshal(payload, &message) != nil || message.Type != 1 {
 		return false, errors.New("invalid incoming WeChat message")
 	}
-	return insertReceipt(ctx, tx, connection, now, message.Token, payload, receiptKey{id: id})
+	budget, err := ReadInboxBudget(ctx, tx, connection)
+	if err != nil {
+		return false, err
+	}
+	return insertReceipt(ctx, tx, connection, now, message.Token, payload, receiptKey{id: id}, &budget)
 }
 
 type receiptKey struct {
@@ -47,7 +62,17 @@ type receiptKey struct {
 }
 
 // Only a newly committed inbound receipt may reopen replies waiting for context.
-func insertReceipt(ctx context.Context, tx *sql.Tx, connection string, now int64, token string, payload json.RawMessage, key receiptKey) (bool, error) {
+func insertReceipt(ctx context.Context, tx *sql.Tx, connection string, now int64, token string, payload json.RawMessage, key receiptKey, budget *InboxBudget) (bool, error) {
+	if budget.rows <= 0 || int64(len(payload)) > budget.bytes {
+		var exists bool
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM inbox WHERE id=?)", key.id).Scan(&exists); err != nil {
+			return false, err
+		}
+		if exists {
+			return false, nil
+		}
+		return false, ErrInboxFull
+	}
 	result, err := tx.ExecContext(ctx, `INSERT INTO inbox(id,payload,createdAt,connectionId,wechatRoundedId,wechatExactId,wechatSeq)
 		VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, key.id, string(payload), now, connection, key.rounded, key.exact, key.seq)
 	if err != nil {
@@ -57,6 +82,8 @@ func insertReceipt(ctx context.Context, tx *sql.Tx, connection string, now int64
 	if err != nil || changed == 0 {
 		return false, err
 	}
+	budget.rows--
+	budget.bytes -= int64(len(payload))
 	if token != "" {
 		_, err = tx.ExecContext(ctx, "UPDATE inbox SET state='reply',attempts=0 WHERE connectionId=? AND state='waiting_context'", connection)
 	}

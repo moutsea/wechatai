@@ -14,6 +14,7 @@ import (
 	"github.com/moutsea/wechatai/backend/internal/accounts"
 	"github.com/moutsea/wechatai/backend/internal/platform/config"
 	"github.com/moutsea/wechatai/backend/internal/platform/sqlite"
+	"github.com/moutsea/wechatai/backend/internal/receiver"
 )
 
 func TestNativeReceiverRecoversAndYieldsToSocket(t *testing.T) {
@@ -108,5 +109,68 @@ func TestNativeReceiverRecoversAndYieldsToSocket(t *testing.T) {
 			t.Fatal("fallback did not resume after disconnect")
 		}
 		time.Sleep(30 * time.Millisecond)
+	}
+}
+
+func TestReceiverBackpressureResumesPartialBatch(t *testing.T) {
+	ctx := t.Context()
+	a, err := New(ctx, config.Config{DataDir: filepath.Join(t.TempDir(), "accounts"), MaxOpenAccounts: 3, RPCSecret: strings.Repeat("s", 32), EncryptionKey: strings.Repeat("e", 32)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	id := accounts.ID(strings.Repeat("c", 64))
+	h, err := a.Accounts.Acquire(ctx, id, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	encrypted, err := a.Box.Encrypt(`{"token":"fixture","botId":"bot","userId":"user","baseUrl":"https://ilinkai.weixin.qq.com"}`, string(id)+":wechat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = sqlite.Within(ctx, h.DB, func(tx *sql.Tx) error {
+		if err := accounts.Bind(ctx, tx, id, "user", 1, "active"); err != nil {
+			return err
+		}
+		return accounts.SetSetting(ctx, tx, "connection", map[string]string{"status": "connected", "generation": "generation", "cursor": "start", "encryptedCredentials": encrypted})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := h.DB.Exec("WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<255) INSERT INTO inbox(id,payload,state,createdAt) SELECT 'old:'||n,'{}','waiting_context',0 FROM seq"); err != nil {
+		t.Fatal(err)
+	}
+	batch := []byte(`{"type":"batch","id":"25f3c41a-3dd9-46cb-a8ae-510f566f21a3","connectionId":"default","generation":"generation","fromCursor":"start","cursor":"end","msgs":[{"message_id":1,"message_type":1,"from_user_id":"user","context_token":"first"},{"message_id":2,"message_type":1,"from_user_id":"user","context_token":"next"}]}`)
+	apply := func() *receiver.Ack {
+		t.Helper()
+		var ack *receiver.Ack
+		if err := sqlite.Within(ctx, h.DB, func(tx *sql.Tx) error {
+			var applyErr error
+			ack, applyErr = receiver.Apply(ctx, tx, a.Box, id, batch, 100)
+			return applyErr
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return ack
+	}
+	for range 2 {
+		ack := apply()
+		if ack.Cursor != nil || ack.RetryAfterMS != 5000 || ack.Stale {
+			t.Fatalf("unexpected partial ack %+v", ack)
+		}
+	}
+	if _, err := h.DB.Exec("UPDATE inbox SET state='done' WHERE id='old:1'"); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		ack := apply()
+		if ack.Cursor == nil || *ack.Cursor != "end" || ack.RetryAfterMS != 0 {
+			t.Fatalf("unexpected replay ack %+v", ack)
+		}
+	}
+	var rows int
+	if err := h.DB.QueryRow("SELECT count(*) FROM inbox").Scan(&rows); err != nil || rows != 257 {
+		t.Fatal(rows, err)
 	}
 }

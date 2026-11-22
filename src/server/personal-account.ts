@@ -1,3 +1,4 @@
+import { failModelTest, reserveModelTest } from "./model-test-admission";
 import { accountForReferral } from "./account-route";
 import {
   CLOUD_AGENT_PLUGIN_ID,
@@ -185,6 +186,7 @@ import {
 import {
   initWechatInbox,
   insertWechatMessage,
+  wechatInboxBudget,
   recordWechatTextReceipt,
   wechatReceiptId,
 } from "./wechat-inbox";
@@ -281,6 +283,7 @@ type Link = Connection & {
   cursor?: string;
   generation: string;
   contextToken?: string;
+  blockedContextId?: string;
   lastPoll?: number;
   pollBaseUrl?: string;
 };
@@ -719,7 +722,7 @@ export class PersonalAccount extends DurableObject<Env> {
     fromCursor: string,
     result: WechatUpdates,
     credentials: WxCredentials,
-  ): string | null {
+  ): string | null | false {
     return this.ctx.storage.transactionSync(() => {
       const link = this.connection(connectionId);
       if (
@@ -743,8 +746,41 @@ export class PersonalAccount extends DurableObject<Env> {
         !!link.cursor &&
         link.cursor !== fromCursor &&
         link.cursor === (result.get_updates_buf ?? result.sync_buf);
-      for (const message of orderedWechatMessages(incoming)) {
-        if (!insertWechatMessage(this.sql, prefix, connectionId, message, replay)) continue;
+      const ordered = orderedWechatMessages(incoming);
+      const budget = ordered.length ? wechatInboxBudget(this.sql, connectionId) : undefined;
+      let full = false;
+      let blockedContextId = link.blockedContextId;
+      for (const message of ordered) {
+        const added = insertWechatMessage(this.sql, prefix, connectionId, message, replay, budget!);
+        if (added === "full") {
+          full = true;
+          // A queue waiting for a fresh reply context must still be able to drain.
+          const fresh = ordered
+            .slice()
+            .reverse()
+            .find((item) => item.context_token);
+          const id = fresh && String(wechatReceiptId(fresh));
+          if (
+            fresh &&
+            id !== blockedContextId &&
+            (link.cursor || "") === fromCursor &&
+            this.sql
+              .exec(
+                "SELECT 1 FROM inbox WHERE connectionId=? AND state='waiting_context' LIMIT 1",
+                connectionId,
+              )
+              .toArray().length
+          ) {
+            blockedContextId = id;
+            token = fresh.context_token;
+            this.sql.exec(
+              "UPDATE inbox SET state='reply',attempts=0 WHERE connectionId=? AND state='waiting_context'",
+              connectionId,
+            );
+          }
+          break;
+        }
+        if (!added) continue;
         received = true;
         token = message.context_token || token;
         if (message.context_token)
@@ -757,12 +793,14 @@ export class PersonalAccount extends DurableObject<Env> {
       // A fallback poll or a lost acknowledgement may race this batch. Merge
       // messages, but never overwrite a cursor advanced by another receiver.
       const cursor =
-        (link.cursor || "") === fromCursor
+        !full && (link.cursor || "") === fromCursor
           ? (result.get_updates_buf ?? result.sync_buf ?? link.cursor ?? "")
           : link.cursor || "";
+      if (full && !received && blockedContextId === link.blockedContextId) return false;
       this.setLinkSetting(connectionId, "connection", {
         ...link,
         cursor,
+        blockedContextId: full ? blockedContextId : undefined,
         contextToken: token,
         lastPoll: Date.now(),
         lastSeen: received ? Date.now() : link.lastSeen,
@@ -775,7 +813,7 @@ export class PersonalAccount extends DurableObject<Env> {
           ? CLOUD_REPLY_WAITING_MESSAGE
           : undefined,
       });
-      return cursor;
+      return full ? false : cursor;
     });
   }
   private validateClawRoute(route: ClawRoute) {
@@ -3001,8 +3039,17 @@ export class PersonalAccount extends DurableObject<Env> {
         .toArray(),
     };
   }
+  private checkHistoryClearInterval() {
+    if (this.getSetting("historyClearedAt", 0) > Date.now() - 60_000)
+      throw new AppError(
+        "history_recently_cleared",
+        "刚刚已清空记录。如需清空新产生的记录，请在一分钟后重试。",
+        429,
+      );
+  }
   async api(action: string, payload: unknown = {}): Promise<string> {
     try {
+      if (action === "privacy.clear") this.checkHistoryClearInterval();
       await this.refreshCloudAccess();
       this.refreshWallet();
       let data: unknown;
@@ -3241,15 +3288,7 @@ export class PersonalAccount extends DurableObject<Env> {
         const query = typeof p.query === "string" ? p.query.trim() : "";
         if (!query || query.length > 2000)
           throw new AppError("invalid_query", "请输入 1–2000 字的测试问题");
-        data = await this.runModel(
-          `test:${crypto.randomUUID()}`,
-          a,
-          [{ role: "user", content: query }],
-          null,
-          Math.min(1024, a.maxOutputTokens),
-          undefined,
-          plugin.id,
-        );
+        data = await this.testModel(a, query, Math.min(1024, a.maxOutputTokens), plugin);
       } else if (action === "channel.save") {
         const channel = await this.prepareChannel(
           typeof p.id === "string" ? p.id : undefined,
@@ -3294,13 +3333,7 @@ export class PersonalAccount extends DurableObject<Env> {
         data = this.snapshot();
       } else if (action === "assistant.test") {
         const a = this.assistant(String(p.id));
-        data = await this.runModel(
-          `test:${crypto.randomUUID()}`,
-          a,
-          [{ role: "user", content: "请只回复：连接成功" }],
-          null,
-          64,
-        );
+        data = await this.testModel(a, "请只回复：连接成功", 64);
         if (!this.getSetting("firstModelTestAt", 0))
           this.setSetting("firstModelTestAt", Date.now());
       } else if (action === "assistant.activate") {
@@ -3411,9 +3444,11 @@ export class PersonalAccount extends DurableObject<Env> {
       } else if (action === "privacy.clear") {
         this.busy();
         this.ctx.storage.transactionSync(() => {
+          this.checkHistoryClearInterval();
+          this.setSetting("historyClearedAt", Date.now());
           this.sql.exec("DELETE FROM messages");
           this.claw.clearHistory();
-          for (const session of this.sessions()) this.claw.cancelSession(session.id);
+          this.claw.cancelAllSessions();
           this.sql.exec("DELETE FROM sessions");
           this.sql.exec("DELETE FROM context_summaries");
           this.personalRecords.forgetContextChanges();
@@ -3421,9 +3456,11 @@ export class PersonalAccount extends DurableObject<Env> {
           this.cloud.hideSession();
           this.sql.exec("DELETE FROM pending_attachments");
           this.revokeMedia();
-          this.sql.exec("UPDATE inbox SET state = 'done', payload = '{}', reply = ''");
+          this.sql.exec(
+            "UPDATE inbox SET state='done',payload='{}',reply='' WHERE state!='done' OR payload!='{}' OR reply!=''",
+          );
           for (const id of new Set([DEFAULT_WECHAT_LINK, ...this.links().map((l) => l.id)]))
-            this.setLinkSetting(id, "current", "");
+            if (this.linkSetting(id, "current", "")) this.setLinkSetting(id, "current", "");
         });
         data = this.snapshot();
       } else if (action === "wechat.bind")
@@ -3909,6 +3946,41 @@ export class PersonalAccount extends DurableObject<Env> {
       else this.setLinkSetting(connectionId, "current", "");
     }
     this.personalRuns.prune();
+  }
+  private async testModel(
+    a: StoredAssistant,
+    query: string,
+    output: number,
+    plugin?: StoredPlugin,
+  ) {
+    this.busy();
+    const id = "test:" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.transactionSync(() =>
+      reserveModelTest(this.sql, id, a.channelId || a.id, now),
+    );
+    try {
+      // Image generation tests include rendering and downloading the image.
+      const duration = plugin?.pluginId === "wechatai/image-generation" ? 90_000 : 20_000;
+      return await this.runModel(
+        id,
+        a,
+        [{ role: "user", content: query }],
+        null,
+        output,
+        now + duration,
+        plugin?.id,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof AppError) ||
+        error.status >= 500 ||
+        error.upstreamStatus !== undefined ||
+        error.code.startsWith("upstream_")
+      )
+        failModelTest(this.sql, id);
+      throw error;
+    }
   }
   private async runModel(
     id: string,

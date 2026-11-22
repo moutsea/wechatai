@@ -3,6 +3,9 @@ import { parseSigned, serializeSigned } from "hono/utils/cookie";
 import { secret } from "./config";
 import { REFERRAL_CREDITS, type ReferralStatus, type ReferralSummary } from "../shared/referrals";
 
+import { entryLimited } from "./public-admission";
+
+const verifiedCodes = new WeakMap<D1Database, Map<string, number>>();
 const COOKIE = "wechatai_referral";
 const WINDOW_MS = 30 * 86400000;
 const validCode = (code: string) => /^[a-f0-9]{32}$/.test(code);
@@ -33,9 +36,25 @@ export async function registrationReferrer(env: Env, headers?: Headers) {
 
 export async function acceptReferral(env: Env, code: string, request: Request) {
   const headers = new Headers({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" });
-  const exists =
-    validCode(code) &&
-    (await env.DB.prepare("SELECT user_id FROM referral_code WHERE code = ?").bind(code).first());
+  let exists = false;
+  if (validCode(code)) {
+    const ip = request.headers.get("cf-connecting-ip") || "local";
+    if (!(await env.AUTH_LIMIT.limit({ key: "invite:" + ip })).success) return entryLimited();
+    const cache = verifiedCodes.get(env.DB) ?? new Map<string, number>();
+    exists = (cache.get(code) ?? 0) > Date.now();
+    if (!exists) {
+      if (!(await env.PUBLIC_ENTRY_LIMIT.limit({ key: "invite:lookup" })).success)
+        return entryLimited();
+      exists = !!(await env.DB.prepare("SELECT 1 FROM referral_code WHERE code=?")
+        .bind(code)
+        .first());
+      if (exists) {
+        if (cache.size >= 256) cache.delete(cache.keys().next().value!);
+        cache.set(code, Date.now() + 60_000);
+        verifiedCodes.set(env.DB, cache);
+      }
+    }
+  }
   headers.set("Location", `${env.APP_URL}/register?invitation=${exists ? "accepted" : "invalid"}`);
   // First valid invitation wins for 30 days, including the trip through an OAuth provider.
   if (exists && !(await cookieCode(env, request.headers.get("cookie") || ""))) {

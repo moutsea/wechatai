@@ -29,10 +29,11 @@ type frame struct {
 	Msgs         *[]json.RawMessage
 }
 type Ack struct {
-	Type   string  `json:"type"`
-	ID     string  `json:"id"`
-	Stale  bool    `json:"stale,omitempty"`
-	Cursor *string `json:"cursor,omitempty"`
+	RetryAfterMS int     `json:"retryAfterMs,omitempty"`
+	Type         string  `json:"type"`
+	ID           string  `json:"id"`
+	Stale        bool    `json:"stale,omitempty"`
+	Cursor       *string `json:"cursor,omitempty"`
 }
 
 var ErrFrame = errors.New("invalid receiver frame")
@@ -53,7 +54,7 @@ func parseFrame(raw []byte) (frame, error) {
 }
 
 type binding struct {
-	Status, Generation, Cursor, EncryptedCredentials, ContextToken string
+	Status, Generation, Cursor, EncryptedCredentials, ContextToken, BlockedContextId string
 }
 
 func settingKey(id string) string {
@@ -152,8 +153,44 @@ func Apply(ctx context.Context, tx *sql.Tx, box *cryptobox.Box, id accounts.ID, 
 	replay := b.Cursor != "" && b.Cursor != *f.FromCursor && b.Cursor == *f.Cursor
 	received := false
 	var token string
+	var budget delivery.InboxBudget
+	if len(messages) > 0 {
+		budget, err = delivery.ReadInboxBudget(ctx, tx, connection)
+		if err != nil {
+			return nil, err
+		}
+	}
+	blockedID := b.BlockedContextId
 	for _, m := range messages {
-		added, err := delivery.Receive(ctx, tx, prefix, connection, m.message, replay, now)
+		added, err := delivery.Receive(ctx, tx, prefix, connection, m.message, replay, now, &budget)
+		if errors.Is(err, delivery.ErrInboxFull) {
+			ack.RetryAfterMS = 5000
+			if b.Cursor == *f.FromCursor {
+				for i := len(messages) - 1; i >= 0; i-- {
+					fresh := messages[i].message
+					if fresh.Token == "" {
+						continue
+					}
+					freshID := fresh.ReceiptID()
+					if freshID != blockedID {
+						rows, err := tx.ExecContext(ctx, "UPDATE inbox SET state='reply',attempts=0 WHERE connectionId=? AND state='waiting_context'", connection)
+						if err != nil {
+							return nil, err
+						}
+						count, err := rows.RowsAffected()
+						if err != nil {
+							return nil, err
+						}
+						if count > 0 {
+							blockedID = freshID
+							token = fresh.Token
+						}
+					}
+					break
+				}
+			}
+			break
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -169,13 +206,19 @@ func Apply(ctx context.Context, tx *sql.Tx, box *cryptobox.Box, id accounts.ID, 
 			return nil, err
 		}
 	}
+	if ack.RetryAfterMS != 0 && !received && blockedID == b.BlockedContextId {
+		return ack, nil
+	}
+	if ack.RetryAfterMS == 0 {
+		blockedID = ""
+	}
 	cursor := b.Cursor
-	if cursor == *f.FromCursor {
+	if ack.RetryAfterMS == 0 && cursor == *f.FromCursor {
 		cursor = *f.Cursor
 	}
 	// Preserve fields unknown to this receiver, including old credentials and
 	// QR state. A replay never changes lastSeen or the last response context.
-	if _, err = tx.ExecContext(ctx, `UPDATE settings SET value=json_set(value,'$.cursor',?,'$.lastPoll',?) WHERE key=?`, cursor, now, key); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE settings SET value=json_set(value,'$.cursor',?,'$.lastPoll',?,'$.blockedContextId',?) WHERE key=?`, cursor, now, blockedID, key); err != nil {
 		return nil, err
 	}
 	if received {
@@ -191,6 +234,8 @@ func Apply(ctx context.Context, tx *sql.Tx, box *cryptobox.Box, id accounts.ID, 
 	if _, err = tx.ExecContext(ctx, `UPDATE settings SET value=CASE WHEN EXISTS(SELECT 1 FROM inbox WHERE connectionId=? AND state='waiting_context' AND id GLOB 'cloud:*') THEN json_set(value,'$.error','云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。') ELSE json_remove(value,'$.error') END WHERE key=?`, connection, key); err != nil {
 		return nil, err
 	}
-	ack.Cursor = &cursor
+	if ack.RetryAfterMS == 0 {
+		ack.Cursor = &cursor
+	}
 	return ack, nil
 }

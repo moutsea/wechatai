@@ -43,6 +43,7 @@
     { "name": "AUTH_LIMIT", "namespace_id": "12001", "simple": { "limit": 20, "period": 60 } },
     { "name": "API_LIMIT", "namespace_id": "12002", "simple": { "limit": 120, "period": 60 } },
     { "name": "ANALYTICS_LIMIT", "namespace_id": "12003", "simple": { "limit": 600, "period": 60 } },
+    { "name": "PUBLIC_ENTRY_LIMIT", "namespace_id": "12004", "simple": { "limit": 600, "period": 60 } },
   ],
   "vars": {
     "APP_NAME": "微伴",
@@ -96,6 +97,7 @@
         { "name": "AUTH_LIMIT", "namespace_id": "12001", "simple": { "limit": 20, "period": 60 } },
         { "name": "API_LIMIT", "namespace_id": "12002", "simple": { "limit": 120, "period": 60 } },
         { "name": "ANALYTICS_LIMIT", "namespace_id": "12003", "simple": { "limit": 600, "period": 60 } },
+        { "name": "PUBLIC_ENTRY_LIMIT", "namespace_id": "12004", "simple": { "limit": 600, "period": 60 } },
       ],
       "vars": {
         "APP_NAME": "微伴",
