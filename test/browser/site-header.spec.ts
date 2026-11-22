@@ -1,15 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { build } from "esbuild";
-import { mkdir } from "node:fs/promises";
 import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const acceptance = fileURLToPath(new URL("../../internal-docs/acceptance/", import.meta.url));
 
 const assets = new Map<string, Uint8Array>();
 test.beforeAll(async () => {
-  await mkdir(acceptance, { recursive: true });
   // Render the real header and styles; only authentication, translations and API data are fixtures.
   const result = await build({
     stdin: {
@@ -182,7 +179,6 @@ test("language dropdown keeps the desktop header height and closes on outside pr
   const expanded = (await header.boundingBox())!.height;
   expect(expanded).toBe(baseline);
   expect(expanded).toBeLessThanOrEqual(65);
-  await page.screenshot({ path: `${acceptance}/language-switcher-desktop.png` });
 
   await page.locator("main").click({ position: { x: 8, y: 8 } });
   await expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -259,7 +255,6 @@ test("language menu fits the 390px drawer and the first Escape only closes the m
   });
   expect(overflow.page).toBeLessThanOrEqual(0);
   expect(overflow.drawer).toBeLessThanOrEqual(0);
-  await page.screenshot({ path: `${acceptance}/language-switcher-390.png` });
 
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
