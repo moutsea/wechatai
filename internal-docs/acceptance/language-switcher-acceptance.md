@@ -3,7 +3,8 @@
 卡号：`e91d3210-4b3d-4a8f-95da-21235a1dd4db`，分支 `feature/wechatai-qvi`，PR base `main`。
 
 - 评估基线 / 开发起点：`80cc35cc9e768390a7177f0af9a56fb074c6335f`（与当时 `origin/main` 相同）
-- 验收 head：本卡 PR 的最新提交，见 PR 页面的 head SHA
+- 功能验收提交（`pnpm check`、Playwright 与 axe 针对该提交树）：`b092f964214cba8bedb02a5cfd6ba3881f3fdd8d`
+- 证据提交（仅 `internal-docs/`）：`aff3ed0517b9b39f90a0e684f95507d73f48b16b`，PR 最终 head 见 PR 页面
 
 ## 改动
 
