@@ -103,6 +103,33 @@ describe("published Brazilian Portuguese pages", () => {
     ]);
   });
 
+  it.each(["/pt", "/pt/pricing"])("explains the Xiaowei activation requirements on %s", (path) => {
+    const document = parse(path);
+    const question = "O que a Xiaowei AI do Plus pode fazer?";
+    const scene = document.querySelector(".use-case-cloud");
+    const answer = path === "/pt"
+      ? scene?.querySelector(".use-case-copy p")?.textContent
+      : [...document.querySelectorAll(".pricing-faq details")]
+          .find((item) => item.querySelector("summary")?.textContent === question)
+          ?.querySelector(".pricing-faq-answer p")?.textContent;
+    expect(answer).toMatch(/serviço estiver disponível/i);
+    expect(answer).toMatch(/Plus/);
+    expect(answer).toMatch(/seu .*modelo de texto/i);
+    expect(answer).toMatch(/chamadas de ferramentas/i);
+    expect(answer).toMatch(/ative a Xiaowei na página de plugins/i);
+    if (path === "/pt") {
+      expect(answer).toContain("<atalho>");
+      expect(scene?.textContent).toContain("@<atalho>");
+    } else {
+      const graph = JSON.parse(document.querySelector("script[data-seo]")!.textContent!)["@graph"];
+      const faq = graph.find((node: { "@type": string }) => node["@type"] === "FAQPage") as {
+        mainEntity: Array<{ name: string; acceptedAnswer: { text: string } }>;
+      };
+      expect(faq.mainEntity.find((item) => item.name === question)?.acceptedAnswer.text).toBe(answer);
+      expect(answer).toMatch(/provedor cobra .* API .* separadamente/i);
+    }
+  });
+
   it("renders Portuguese pricing plans, FAQ, estimator and related links", () => {
     const document = parse("/pt/pricing");
     expect(document.querySelector("h1")?.textContent).toBe(

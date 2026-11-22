@@ -55,7 +55,7 @@ export const pricingCopyPt = {
       {
         question: "O que a Xiaowei AI do Plus pode fazer?",
         answer:
-          "A Xiaowei é uma assistente que roda na nuvem do Wechatai. Ela pode processar arquivos, gerar documentos e executar tarefas, enviando os resultados de volta ao WeChat. Não é preciso instalar nem implantar nada; configure um modelo de texto para habilitá-la. O número de execuções, a cota de armazenamento e o status do serviço aparecem na página do plugin; as taxas de API do modelo são cobradas separadamente.",
+          "A Xiaowei processa arquivos, gera documentos e executa tarefas na nuvem do Wechatai. Você recebe os resultados no WeChat. Quando o serviço estiver disponível para sua conta Plus, configure seu próprio modelo de texto com suporte a chamadas de ferramentas. Depois, adicione e ative a Xiaowei na página de plugins. Consulte ali o limite de execuções, a cota de armazenamento e o status do serviço. O provedor cobra pelo uso da API do modelo separadamente.",
         guide: { label: "Conheça a Xiaowei e seus requisitos", href: "/docs/cloud-agent" },
       },
       {

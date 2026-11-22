@@ -249,7 +249,7 @@ export const homeCopyPt = {
         lead: "Xiaowei, sua assistente em nuvem",
         title: "Processe arquivos e crie documentos",
         description:
-          "Atribua tarefas e receba arquivos no WeChat. Sem instalação ou implantação; basta configurar um modelo. No exemplo, substitua <shortcut> pelo atalho do WeChat que você configurou.",
+          "Envie tarefas e receba arquivos no WeChat sem instalar nada. Quando o serviço estiver disponível para sua conta Plus, configure seu próprio modelo de texto com suporte a chamadas de ferramentas. Depois, adicione e ative a Xiaowei na página de plugins. No exemplo, substitua <atalho> pelo atalho que você configurou.",
         note: "Apenas para membros Plus",
         action: "Conheça a Xiaowei e comece",
       },
