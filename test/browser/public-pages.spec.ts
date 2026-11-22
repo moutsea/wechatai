@@ -212,6 +212,29 @@ const portuguesePages: Record<string, string> = {
   "/pt/wechat-deepseek": "Quer usar DeepSeek no WeChat? Comece aqui",
 };
 for (const [path, heading] of Object.entries(portuguesePages)) {
+  test(`keeps the Portuguese header usable on a tablet at ${path}`, async ({ page }) => {
+    await page.setViewportSize({ width: 834, height: 1112 });
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}${path}`);
+    await mounted;
+    const header = page.getByRole("banner");
+    const toggle = header.getByRole("button", { name: "Abrir menu" });
+    if (await toggle.isVisible()) await toggle.click();
+    for (const [name, href] of [
+      ["Entrar", "/login"],
+      ["Comece grátis", "/register"],
+      ["Inglês", path.replace("/pt", "/en")],
+    ]) {
+      const link = header.getByRole("link", { name, exact: true });
+      await expect(link).toBeInViewport({ ratio: 1 });
+      await expect(link).toHaveAttribute("href", href);
+      await link.click({ trial: true });
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(834);
+    await header.getByRole("link", { name: "Comece grátis" }).click();
+    await expect(page).toHaveURL(`${origin}/register`);
+  });
+
   test(`serves ${path} in Portuguese after application takeover`, async ({ page }) => {
     const mounted = page.waitForRequest("**/api/auth/get-session");
     const response = await page.goto(`${origin}${path}`);
