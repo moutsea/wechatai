@@ -51,6 +51,8 @@ it("offers the webhook path without a model, and explains both directions of set
   expect(markup).toContain("Webhook key");
   expect(markup).toContain("wechatai_claim");
   expect(markup).not.toContain("安装命令");
+  data.grokBotVisible = false;
+  expect(card()).toBeNull();
 });
 it("shows an existing Grok configuration how to proceed when dispatch is unavailable", async () => {
   const data = await setup();

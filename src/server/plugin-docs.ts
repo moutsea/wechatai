@@ -3,7 +3,6 @@ import { notificationManifest, notificationMessageSchema } from "../shared/notif
 import { notificationGuide } from "../shared/notification-docs";
 import { roleplayManifest } from "../shared/roleplay";
 import { museGuide } from "../shared/muse-docs";
-import { grokManifest } from "../shared/grok-bot";
 import { museManifest } from "../shared/muse";
 import { hermesGuide } from "../shared/hermes-docs";
 import { hermesManifest } from "../shared/hermes";
@@ -76,7 +75,6 @@ export const protocolIndex = {
       openClawManifest.id,
       hermesManifest.id,
       museManifest.id,
-      grokManifest.id,
       roleplayManifest.id,
       personalAssistantManifest.id,
       notificationManifest.id,
@@ -100,7 +98,6 @@ export const protocolIndex = {
     openClawManifest,
     hermesManifest,
     museManifest,
-    grokManifest,
     roleplayManifest,
     personalAssistantManifest,
     notificationManifest,

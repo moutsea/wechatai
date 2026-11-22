@@ -74,6 +74,7 @@ import { GrokTasks } from "./grok/tasks";
 import { grokSessionReplyText } from "./grok/delivery";
 import {
   prepareGrokWake,
+  grokBotEnabled,
   grokDispatcherReady,
   requireGrokDispatcher,
   sealGrokWebhook,
@@ -484,7 +485,13 @@ export class PersonalAccount extends DurableObject<Env> {
         return this.publicPlugin(p) as GrokPlugin;
       },
       (id, ref) =>
-        prepareGrokWake(env, this.plugin(id, true).encryptedKey, `${ctx.id}:grok:${id}`, ref),
+        prepareGrokWake(
+          env,
+          ctx.id.toString(),
+          this.plugin(id, true).encryptedKey,
+          `${ctx.id}:grok:${id}`,
+          ref,
+        ),
     );
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.transactionSync(() => this.personalRecords.init());
@@ -1467,7 +1474,12 @@ export class PersonalAccount extends DurableObject<Env> {
         .parse({ ...previous, ...values });
       const replace = !!(values.webhookKey || values.webhookUrl);
       const encryptedKey = replace
-        ? await sealGrokWebhook(this.env, values, `${this.ctx.id}:grok:${id}`)
+        ? await sealGrokWebhook(
+            this.env,
+            this.ctx.id.toString(),
+            values,
+            `${this.ctx.id}:grok:${id}`,
+          )
         : previous?.encryptedKey;
       if (!encryptedKey)
         throw new AppError("grok_webhook_required", "请填写 Routine 的 Webhook URL 和 key");
@@ -3050,7 +3062,11 @@ export class PersonalAccount extends DurableObject<Env> {
       plan: this.plan(),
       onboardingDismissedAt: this.getSetting("dashboardOnboardingDismissedAt", 0),
       plugins: this.plugins().map((p) => this.publicPlugin(p)),
-      grokBotReady: grokDispatcherReady(this.env),
+      grokBotReady: grokDispatcherReady(this.env, this.ctx.id.toString()),
+      // Existing configurations stay manageable after an account leaves the pilot.
+      grokBotVisible:
+        grokBotEnabled(this.env, this.ctx.id.toString()) ||
+        this.plugins().some((p) => p.pluginId === "wechatai/grok"),
       cloudAgent: this.cloudStatus(),
       planUntil: this.getSetting("planUntil", 0),
       channels: this.channels().map((c) => this.publicChannel(c)),
@@ -3349,7 +3365,8 @@ export class PersonalAccount extends DurableObject<Env> {
         const plugin = this.plugin(String(p.id), true);
         if (plugin.pluginId === "wechatai/notification")
           throw new AppError("receive_only", "请使用消息提醒配置页中的 HTTP 示例测试推送");
-        if (plugin.pluginId === "wechatai/grok") requireGrokDispatcher(this.env);
+        if (plugin.pluginId === "wechatai/grok")
+          requireGrokDispatcher(this.env, this.ctx.id.toString());
         if (isRemoteAgent(plugin))
           return JSON.stringify({
             ok: true,
@@ -5164,7 +5181,7 @@ export class PersonalAccount extends DurableObject<Env> {
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
                   ? p.pluginId === "wechatai/grok"
-                    ? grokDispatcherReady(this.env)
+                    ? grokDispatcherReady(this.env, this.ctx.id.toString())
                       ? "之后的文字任务会交给你的 Grok Bot。审批请回到 Grok Bot 完成；微伴命令使用 /wx 前缀。"
                       : GROK_DISPATCH_UNAVAILABLE
                     : p.pluginId === "wechatai/muse"
@@ -5433,7 +5450,8 @@ export class PersonalAccount extends DurableObject<Env> {
           : `请发送 @${handle} 问题 进行单次对话。切换默认模型请用 /wx models 和 /wx model 编号。`;
     }
     // Reject new work before even creating a session for a first @mention.
-    if (messagePlugin?.pluginId === "wechatai/grok") requireGrokDispatcher(this.env);
+    if (messagePlugin?.pluginId === "wechatai/grok")
+      requireGrokDispatcher(this.env, this.ctx.id.toString());
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
       this.createSession(defaultModel.id, "", false, connectionId);
     const active = this.linkSetting(connectionId, "current", "");

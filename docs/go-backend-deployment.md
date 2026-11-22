@@ -34,7 +34,7 @@ Grok Bot 使用个人微信账户原有的任务队列、计量和回复投递�
 Worker 联系不上 VPS、未收到明确回执，或收到可重试的派发失败时，使用同一任务 ID 向 VPS 最多请求三次，重试间隔依次为 1 分钟和 2 分钟。Go 在请求 Routine 前持久化回执。Routine 明确返回 408、429 或 5xx 时，Go 释放本次回执，允许 Worker 重试。如果 POST 发出后没有收到 HTTP 响应，后续对同一 ID 的派发直接返回已有回执。Go 确认受理或 Grok 已领取后，Worker 等待原任务直至 45 分钟期限。反向代理应透传 `X-Wechatai-Grok-Wake` 和 `X-Wechatai-Grok-Receipt`。仅当回执能确认该任务从未被受理时，Worker 才会在先前派发结果未知的情况下提前关闭领取。账户已冻结或已迁至 Go 时，Grok MCP 请求会被拒绝。
 
 1. 在 Go 服务环境配置独立的 `GROK_DISPATCH_SECRET` 或 `GROK_DISPATCH_SECRET_FILE`（至少 32 字节的随机密钥），发布 Go 程序并重启。待命模式也能独立提供这个签名校验接口。
-2. 在既有 TLS 反向代理上将 `POST /internal/v1/grok/wake` 转给 Go 监听地址。在 `edge-production` 的私有 `WRANGLER_CONFIG` 中将 `env.production.vars.GROK_DISPATCH_ORIGIN` 设为该 HTTPS 源，并配置同值的 Worker Secret `GROK_DISPATCH_SECRET`。两项齐备后插件页才开放配置。
+2. 在既有 TLS 反向代理上将 `POST /internal/v1/grok/wake` 转给 Go 监听地址。在 `edge-production` 的私有 `WRANGLER_CONFIG` 中将 `env.production.vars.GROK_DISPATCH_ORIGIN` 设为该 HTTPS 源，并配置同值的 Worker Secret `GROK_DISPATCH_SECRET`。再用 Worker Secret `GROK_BOT_ACCOUNTS` 列出可见的 PersonalAccount ID（逗号分隔），填 `all` 对所有账户开放。未设置时 Grok Bot 对所有账户隐藏。三项齐备后，列出的账户才能在插件页配置。
 3. 在自己的 Grok Bot 桌面端创建 Webhook Routine，把 POST 地址和 key 填入微伴。支持 `https://api2.cursor.sh/automations/webhook/<id>`。微伴生成的 MCP 凭据仅供该插件配置使用，按页面说明通过自定义 Remote HTTPS 连接器传入。团队管理员需允许这个 MCP 服务。[Routine 官方说明](https://docs.x.ai/grok-bot/skills-routines-and-automations) · [自定义连接器官方说明](https://docs.x.ai/grok-bot/computer-and-apps)
 4. 从微信发一条任务和一条追问，核对回复进入原微信、上下文和扣费。Webhook 成功表示已受理，每个任务只交给一个 Routine 运行。每次运行独立生成随机 `claimId`，首次领取响应丢失时，用同一个 `claimId` 取回原凭据。已有 Routine 可从配置页重新复制指令。45 分钟到期时平台关闭回传，不扣平台 credits。已领取的任务仍可能在 Grok 运行，重发前应先核对 Grok 运行记录。
 

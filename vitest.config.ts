@@ -14,6 +14,7 @@ export default defineConfig({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
         bindings: {
+          GROK_BOT_ACCOUNTS: "all",
           GROK_DISPATCH_ORIGIN: "https://grok-wake.example.test",
           GROK_DISPATCH_SECRET: "test-only-grok-dispatch-key-32-characters",
           GOOGLE_CLIENT_ID: "",

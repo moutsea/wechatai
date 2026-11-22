@@ -19,7 +19,15 @@ const credentials = z.object({
     .max(2048)
     .regex(/^[\x21-\x7e]+$/, "请复制 Webhook key，不含 Bearer 前缀"),
 });
-export function grokDispatcherReady(env: Env) {
+// Comma-separated PersonalAccount IDs, or "all". Unset keeps Grok Bot hidden.
+export function grokBotEnabled(env: Env, accountId: string) {
+  const allowed = secret(env, "GROK_BOT_ACCOUNTS", false)
+    .split(",")
+    .map((v) => v.trim());
+  return allowed.includes("all") || allowed.includes(accountId);
+}
+export function grokDispatcherReady(env: Env, accountId: string) {
+  if (!grokBotEnabled(env, accountId)) return false;
   const origin = secret(env, "GROK_DISPATCH_ORIGIN", false);
   if (
     !origin ||
@@ -33,12 +41,17 @@ export function grokDispatcherReady(env: Env) {
     return false;
   }
 }
-export function requireGrokDispatcher(env: Env) {
-  if (!grokDispatcherReady(env))
+export function requireGrokDispatcher(env: Env, accountId: string) {
+  if (!grokDispatcherReady(env, accountId))
     throw new AppError("grok_unavailable", GROK_DISPATCH_UNAVAILABLE, 503);
 }
-export async function sealGrokWebhook(env: Env, input: unknown, binding: string) {
-  requireGrokDispatcher(env);
+export async function sealGrokWebhook(
+  env: Env,
+  accountId: string,
+  input: unknown,
+  binding: string,
+) {
+  requireGrokDispatcher(env, accountId);
   const parsed = credentials.safeParse(input);
   if (!parsed.success)
     throw new AppError(
@@ -47,8 +60,14 @@ export async function sealGrokWebhook(env: Env, input: unknown, binding: string)
     );
   return encrypt(env, JSON.stringify(parsed.data), binding);
 }
-export async function prepareGrokWake(env: Env, sealed: string, binding: string, taskId: string) {
-  requireGrokDispatcher(env);
+export async function prepareGrokWake(
+  env: Env,
+  accountId: string,
+  sealed: string,
+  binding: string,
+  taskId: string,
+) {
+  requireGrokDispatcher(env, accountId);
   const auth = credentials.parse(JSON.parse(await decrypt(env, sealed, binding)));
   const body = JSON.stringify({ ...auth, taskId });
   const target = new URL(

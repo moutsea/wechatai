@@ -397,6 +397,32 @@ it("cancels rejected wakes without charging, and rejects untrusted webhook URLs"
   expect((await deliverQueuedReplies(c.stub)).map((x) => x.text).join("")).toContain("未扣费");
 });
 
+it("shows Grok Bot only to the configured accounts", async () => {
+  const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
+  accounts.push(stub.id);
+  await runInDurableObject(stub, (_, s) => useManualAlarms(s));
+  const api = async (action: string, input: unknown = {}) =>
+    JSON.parse(await stub.api(action, input));
+  const allow = (value: string) =>
+    runInDurableObject(stub, (instance) => {
+      (instance as unknown as { env: { GROK_BOT_ACCOUNTS: string } }).env.GROK_BOT_ACCOUNTS = value;
+    });
+  const config = { pluginId: "wechatai/grok", name: "测试 Bot", shortcut: "grok", webhookUrl };
+  await allow("another-account");
+  try {
+    expect(await stub.snapshot()).toMatchObject({ grokBotVisible: false, grokBotReady: false });
+    expect((await api("plugin.save", { ...config, webhookKey })).error).toBe("grok_unavailable");
+    await allow(` another-account, ${stub.id.toString()} `);
+    expect(await stub.snapshot()).toMatchObject({ grokBotVisible: true, grokBotReady: true });
+    expect((await api("plugin.save", { ...config, webhookKey })).ok).toBe(true);
+    await allow("");
+    // A saved configuration stays visible so its owner can review or delete it.
+    expect(await stub.snapshot()).toMatchObject({ grokBotVisible: true, grokBotReady: false });
+  } finally {
+    await allow("all");
+  }
+});
+
 it("drains accepted work and rejects new WeChat messages while dispatch is disabled", async () => {
   const c = await setup();
   await c.send("/use grok");

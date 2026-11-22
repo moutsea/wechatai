@@ -239,6 +239,7 @@ export function createFakeApi({
   const snapshot = (): Snapshot => ({
     plan: "plus",
     plugins,
+    grokBotVisible: true,
     cloudAgent: {
       ready: true,
       maxActive: 1,

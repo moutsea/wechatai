@@ -153,9 +153,10 @@ export function PluginLibrary({
   const availableIds = availablePluginIds(data.plan, data.plugins ?? []);
   const shortcutConflicts = conflictingShortcuts([...data.assistants, ...(data.plugins ?? [])]);
   const cloudAvailability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
+  const visible = library.filter(({ id }) => id !== "wechatai/grok" || data.grokBotVisible);
   return (
     <div className="plugin-library">
-      {library.map(({ id, name, description, tags }) => {
+      {visible.map(({ id, name, description, tags }) => {
         const configs = (data.plugins ?? []).filter((p) => p.pluginId === id);
         const conflicts = configs.filter((p) => shortcutConflicts.has(p.shortcut.toLowerCase()));
         const usable = configs.filter((p) => availableIds.has(p.id));
