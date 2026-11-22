@@ -1,4 +1,9 @@
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { LanguageSwitcher } from "../src/client/language-switcher";
+import { LocaleProvider } from "../src/client/locale";
 import { renderPublicPage } from "../src/client/prerender";
 import {
   getPageSeo,
@@ -7,6 +12,8 @@ import {
   renderSitemap,
   SITE_URL,
 } from "../src/shared/seo";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 function parse(path: string) {
   const seo = getPageSeo(path);
@@ -19,6 +26,34 @@ function parse(path: string) {
 function graphOf(path: string) {
   const json = parse(path).querySelector('script[type="application/ld+json"]')!.textContent!;
   return JSON.parse(json)["@graph"] as Array<Record<string, unknown>>;
+}
+
+async function mountSwitcher(path: string) {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={[path]}>
+        <LocaleProvider>
+          <LanguageSwitcher />
+        </LocaleProvider>
+      </MemoryRouter>,
+    ),
+  );
+  return {
+    host,
+    trigger: host.querySelector<HTMLButtonElement>(".site-language-trigger")!,
+    async open() {
+      await act(async () =>
+        host.querySelector<HTMLButtonElement>(".site-language-trigger")!.click(),
+      );
+    },
+    async close() {
+      await act(async () => root.unmount());
+      host.remove();
+    },
+  };
 }
 
 /** Chinese source strings that must never reach a Japanese page. */
@@ -74,8 +109,11 @@ describe("published Japanese pages", () => {
 
     const switcher = document.querySelector(".site-language");
     expect(switcher?.getAttribute("aria-label")).toBe("言語");
-    expect(switcher?.querySelector('a[href="/en"]')?.textContent).toBe("English");
-    expect(switcher?.querySelector('a[href="/"]')?.textContent).toBe("中文");
+    const trigger = switcher?.querySelector(".site-language-trigger");
+    expect(trigger?.textContent).toContain("日本語");
+    expect(trigger?.getAttribute("aria-haspopup")).toBe("menu");
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(switcher?.querySelector('[role="menu"]')).toBeNull();
 
     const footer = document.querySelector(".landing-footer");
     expect(footer?.querySelector('a[href="/ja/pricing"]')?.textContent).toBe(
@@ -237,23 +275,42 @@ describe("published Japanese pages", () => {
     }
   });
 
-  it("limits the landing-page switcher to published languages", () => {
-    const ai = parse("/ja/wechat-ai");
-    expect(ai.querySelector(".site-language a[hreflang='en']")?.textContent).toBe("English");
-    expect(ai.querySelector(".site-language a[hreflang='en']")?.getAttribute("href")).toBe(
-      "/en/wechat-ai",
-    );
-    expect(ai.querySelector(".site-language a[hreflang='zh-CN']")?.getAttribute("href")).toBe(
-      "/wechat-ai",
-    );
+  it("limits the landing-page switcher to published languages", async () => {
+    const home = await mountSwitcher("/ja");
+    await home.open();
+    const homeItems = [...home.host.querySelectorAll('[role="menuitem"]')];
+    expect(homeItems.map((item) => item.textContent)).toEqual([
+      "中文",
+      "English",
+      "日本語",
+      "한국어",
+    ]);
+    expect(home.host.querySelector('a[href="/en"]')?.textContent).toBe("English");
+    expect(home.host.querySelector('a[href="/en"]')?.getAttribute("hreflang")).toBe("en");
+    expect(home.host.querySelector('a[href="/"]')?.textContent).toBe("中文");
+    expect(home.host.querySelector('a[href="/"]')?.getAttribute("hreflang")).toBe("zh-CN");
+    expect(home.host.querySelector('a[href="/ja"]')?.getAttribute("aria-current")).toBe("true");
+    await home.close();
 
-    const bot = parse("/ja/wechat-bot");
-    expect(bot.querySelector(".site-language a[hreflang='en']")?.getAttribute("href")).toBe(
-      "/en/wechat-bot",
+    const ai = await mountSwitcher("/ja/wechat-ai");
+    await ai.open();
+    expect(ai.host.querySelectorAll('[role="menuitem"]')).toHaveLength(4);
+    expect(ai.host.querySelector('a[hreflang="en"]')?.textContent).toBe("English");
+    expect(ai.host.querySelector('a[hreflang="en"]')?.getAttribute("href")).toBe("/en/wechat-ai");
+    expect(ai.host.querySelector('a[hreflang="zh-CN"]')?.getAttribute("href")).toBe("/wechat-ai");
+    expect(ai.host.querySelector('a[hreflang="ko-KR"]')?.getAttribute("href")).toBe(
+      "/ko/wechat-ai",
     );
-    expect(bot.querySelector(".site-language a[hreflang='zh-CN']")?.getAttribute("href")).toBe(
-      "/wechat-bot",
+    expect(ai.host.querySelector('a[href="/ja/wechat-ai"]')?.getAttribute("aria-current")).toBe(
+      "true",
     );
+    await ai.close();
+
+    const bot = await mountSwitcher("/ja/wechat-bot");
+    await bot.open();
+    expect(bot.host.querySelector('a[hreflang="en"]')?.getAttribute("href")).toBe("/en/wechat-bot");
+    expect(bot.host.querySelector('a[hreflang="zh-CN"]')?.getAttribute("href")).toBe("/wechat-bot");
+    await bot.close();
   });
 
   it("keeps the Chinese page group unchanged and adds only the registered Japanese URLs", () => {

@@ -1,4 +1,5 @@
 import { INFO_PAGES, INFO_PAGE_UPDATED_AT, SITE_MAINTAINER, type InfoPageKind } from "./site-info";
+import { EN_SITE_INFO_PAGES } from "./i18n/en/site-info";
 import {
   DOC_ARTICLES,
   DOCS_TITLE,
@@ -494,18 +495,27 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
       },
     };
   }
-  const info = Object.values(INFO_PAGES).find((page) => page.path === path);
-  if (info) {
+  const infoKind = (Object.keys(INFO_PAGES) as InfoPageKind[]).find(
+    (kind) => INFO_PAGES[kind].path === path,
+  );
+  const info = infoKind ? INFO_PAGES[infoKind] : undefined;
+  if (info && infoKind) {
+    // The visible English page and its registration own the page name and
+    // summary; Chinese remains the source for the unprefixed routes. Keep the
+    // ContactPage structure and entity IDs exactly as they are.
+    const localized = locale === "en" ? EN_SITE_INFO_PAGES[infoKind] : undefined;
+    const name = localized?.name ?? info.title;
+    const description = localized?.description ?? info.description;
     return {
-      title: `${info.title} | ${SITE_NAME}`,
-      description: info.description,
+      title: `${name} | ${localized ? "Wechatai" : SITE_NAME}`,
+      description,
       indexable: true,
       canonical,
       structuredData: {
         "@context": "https://schema.org",
         "@type": path === "/contact" ? "ContactPage" : "WebPage",
-        name: info.title,
-        description: info.description,
+        name,
+        description,
         url: canonical,
         inLanguage: htmlLang,
         ...(path === "/contact"

@@ -32,7 +32,7 @@ test.beforeAll(async () => {
               import { registerTranslations } from './src/shared/i18n';
               const description =
                 'Compare Wechatai hosted chat with a self-hosted OpenClaw: keys, devices, deployment, group chat, and fees.';
-              registerTranslations('en', [{
+              const englishPage = {
                 path: '${path}',
                 title: 'Wechatai vs Self-Hosted OpenClaw | Wechatai',
                 description,
@@ -70,6 +70,21 @@ test.beforeAll(async () => {
                   },
                   updatedAt: '2026-11-19',
                 },
+              };
+              registerTranslations('en', [englishPage]);
+
+              const japaneseTitle = '微伴と自前運用の OpenClaw を比較';
+              const japaneseDescription = '微伴のホスト型チャットと自前運用の OpenClaw を比較します。';
+              registerTranslations('ja', [{
+                ...englishPage,
+                title: japaneseTitle + ' | Wechatai',
+                description: japaneseDescription,
+                content: {
+                  ...englishPage.content,
+                  title: japaneseTitle,
+                  description: japaneseDescription,
+                  h1: japaneseTitle,
+                },
               }]);
             `,
           }));
@@ -102,11 +117,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("the compare route renders registered English copy and its comparison table", async ({
+test("the compare route renders registered English copy and switches through the language menu", async ({
   page,
 }) => {
-  const english = page.getByRole("link", { name: "English" });
+  const chineseTrigger = page.getByRole("button", { name: "语言：中文", exact: true });
+  const english = page.getByRole("menuitem", { name: "English" });
   await page.goto(`${origin}${path}`);
+  await chineseTrigger.click();
   await expect(english).toHaveAttribute("href", `/en${path}`);
   await english.click();
 
@@ -136,8 +153,20 @@ test("the compare route renders registered English copy and its comparison table
     page.getByRole("heading", { name: "Check the requirements, then set up your WeChat AI" }),
   ).toBeVisible();
 
-  await page.getByRole("link", { name: "中文" }).click();
+  await page.getByRole("button", { name: "Language: English", exact: true }).click();
+  await page.getByRole("menuitem", { name: "中文" }).click();
   await expect(page).toHaveURL(origin + path);
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await expect(page.getByRole("link", { name: "English" })).toBeVisible();
+  await chineseTrigger.click();
+  await expect(english).toBeVisible();
+
+  const japanese = page.getByRole("menuitem", { name: "日本語" });
+  await expect(japanese).toHaveAttribute("href", `/ja${path}`);
+  await expect(japanese).toHaveAttribute("hreflang", "ja-JP");
+  await japanese.click();
+  await expect(page).toHaveURL(origin + `/ja${path}`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "ja-JP");
+  await expect(
+    page.getByRole("heading", { name: "微伴と自前運用の OpenClaw を比較", level: 1 }),
+  ).toBeVisible();
 });

@@ -30,7 +30,7 @@ const NAV = [
 ] as const;
 
 interface HeaderCopy {
-  homeAria: string;
+  home: string;
   topNav: string;
   account: string;
   login: string;
@@ -44,7 +44,7 @@ interface HeaderCopy {
 }
 
 const headerCopyEn: HeaderCopy = {
-  homeAria: "Wechatai home",
+  home: "Home",
   topNav: "Main navigation",
   account: "Account",
   login: "Log in",
@@ -58,7 +58,7 @@ const headerCopyEn: HeaderCopy = {
 } as const;
 
 const headerCopyJa = {
-  homeAria: "Wechatai のホーム",
+  home: "ホーム",
   topNav: "メインナビゲーション",
   account: "アカウント",
   login: "ログイン",
@@ -72,7 +72,7 @@ const headerCopyJa = {
 } as const;
 
 const headerCopyZh = {
-  homeAria: "微伴首页",
+  home: "首页",
   topNav: "顶部导航",
   account: "账户",
   login: "登录",
@@ -210,8 +210,9 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link to={localeHref("/")} aria-label={copy.homeAria}>
+        <Link to={localeHref("/")}>
           <SiteBrand latin={latin} />
+          <span className="visually-hidden">{copy.home}</span>
         </Link>
         <nav aria-label={copy.topNav} className="site-header-nav">
           {links}
@@ -254,7 +255,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           </Link>
         ))}
         {extra}
-        <LanguageSwitcher mobile />
+        <LanguageSwitcher />
         {!session && (
           <>
             <Link to="/login">{copy.login}</Link>
