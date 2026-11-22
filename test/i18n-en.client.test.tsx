@@ -84,6 +84,18 @@ describe("published English pages", () => {
     expect(image?.getAttribute("srcset")).toBe(`${asset}-640.webp 640w, ${asset}.webp 1280w`);
   });
 
+  it("documents how generated image sizes affect metering, retries and old configurations", () => {
+    const text = parse("/en/developers/plugins").querySelector(
+      'section[id="AI 生图插件 1.0"] h2 + p',
+    )?.textContent;
+    expect(text).toMatch(/automatically added size .*not counted toward input tokens/i);
+    expect(text).toMatch(
+      /if the upstream rejects the size, Wechatai does not retry without the parameter/i,
+    );
+    expect(text).toMatch(/fixed size values from older clients are ignored/i);
+    expect(text).toMatch(/fixed sizes are still removed automatically from older configurations/i);
+  });
+
   it("limits the English homepage privacy statement to proactive review", () => {
     const document = parse("/en");
     const statements = [...document.querySelectorAll(".landing-privacy-item p")];
