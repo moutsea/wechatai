@@ -7,12 +7,15 @@ import {
   GROK_ID,
   GROK_DISPATCH_UNAVAILABLE,
   GROK_SETUP_MINUTES,
+  GROK_WAITING_MESSAGE,
   grokRoutineInstructions,
   grokSetupPrompt,
   type GrokPlugin,
 } from "../../shared/grok-bot";
 import { PLUGIN_SHORTCUT_PATTERN, PLUGIN_SHORTCUT_HINT } from "../../shared/plugin-shortcut";
 import { remoteAgentConnection } from "../remote-agent-status";
+import { WaitingMessageField } from "./waiting-message-field";
+import { waitingMessageDefaults, type WaitingMessageSettings } from "../../shared/waiting-message";
 
 type GrokStatus = {
   hasKey: boolean;
@@ -36,6 +39,11 @@ export function GrokEditor({
   const [name, setName] = useState(saved?.name ?? "Grok Bot");
   const [shortcut, setShortcut] = useState(saved?.shortcut ?? "grok");
   const [enabled, setEnabled] = useState(saved?.enabled ?? true);
+  const [waiting, setWaiting] = useState<WaitingMessageSettings>(() =>
+    saved
+      ? { waitingMessageEnabled: saved.waitingMessageEnabled, waitingMessage: saved.waitingMessage }
+      : waitingMessageDefaults(GROK_WAITING_MESSAGE),
+  );
   const [setup, setSetup] = useState<Setup | null>(null);
   const [copied, setCopied] = useState("");
   const [url, setUrl] = useState("");
@@ -104,7 +112,10 @@ export function GrokEditor({
   async function persist(extra: Record<string, unknown> = {}) {
     const p = await request<GrokPlugin>(
       saved ? `/plugins/${saved.id}` : "/plugins",
-      json({ pluginId: GROK_ID, name, shortcut, enabled, ...extra }, saved ? "PATCH" : "POST"),
+      json(
+        { pluginId: GROK_ID, name, shortcut, enabled, ...waiting, ...extra },
+        saved ? "PATCH" : "POST",
+      ),
     );
     setSaved(p);
     onSaved(p.id);
@@ -295,6 +306,11 @@ export function GrokEditor({
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           启用此配置
         </label>
+        <WaitingMessageField
+          value={waiting}
+          defaultMessage={GROK_WAITING_MESSAGE}
+          onChange={setWaiting}
+        />
         <details>
           <summary>Bot 读取不到 Webhook 时手动填写</summary>
           <p>

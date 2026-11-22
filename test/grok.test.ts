@@ -7,7 +7,11 @@ import { readGrokHistory } from "../src/server/grok/history";
 import { countTextTokens } from "../src/server/tokenizer";
 import { creditUnits } from "../src/server/wallet";
 import { grokMcp } from "../src/server/grok/mcp";
-import { GROK_DISPATCH_UNAVAILABLE, GROK_SETUP_INCOMPLETE } from "../src/shared/grok-bot";
+import {
+  GROK_DISPATCH_UNAVAILABLE,
+  GROK_SETUP_INCOMPLETE,
+  GROK_WAITING_MESSAGE,
+} from "../src/shared/grok-bot";
 import type { GrokTasks } from "../src/server/grok/tasks";
 import {
   connectForManualDelivery,
@@ -475,6 +479,21 @@ it("asks to finish setup before queueing work, and keeps the Bot's connector on 
   // Replacing an existing Routine may move to another Bot, so the old credential stops.
   expect((await api("plugin.save", { id, webhookUrl, webhookKey: "rotated" })).ok).toBe(true);
   expect(await status()).toMatchObject({ hasKey: false, webhookReady: true });
+});
+
+it("sends, customizes or skips the Grok waiting notice as configured", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  expect(await c.send("第一件事")).toBe(GROK_WAITING_MESSAGE);
+  const save = (input: object) => c.api("plugin.save", { id: c.id, ...input });
+  expect((await save({ waitingMessage: "收到，稍等" })).ok).toBe(true);
+  expect(await c.send("第二件事")).toBe("收到，稍等");
+  expect((await save({ waitingMessageEnabled: false })).ok).toBe(true);
+  expect(await c.send("第三件事")).toBe("");
+  // Changing the notice keeps the saved Webhook and the Bot's MCP connector.
+  expect(
+    (await c.stub.snapshot()).plugins?.find((p: { id: string }) => p.id === c.id),
+  ).toMatchObject({ hasKey: true, webhookReady: true, waitingMessageEnabled: false });
 });
 
 it("lists only known MCP tools", async () => {
