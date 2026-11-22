@@ -29,6 +29,10 @@ test.beforeAll(async () => {
             resolveDir: root,
             contents: `
               import { registerTranslations } from './src/shared/i18n';
+              import developerPages from './src/shared/i18n/en/developer-pages';
+              import docsPages from './src/shared/i18n/en/docs';
+              registerTranslations('en', developerPages);
+              registerTranslations('en', docsPages);
               registerTranslations('en', [{
                 path: '/pricing',
                 title: 'Pricing | Wechatai',
@@ -94,6 +98,47 @@ test("the application takes over a registered route and switches back to Chinese
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "zh_CN");
   await expect(page.getByRole("link", { name: "English" })).toBeVisible();
+});
+
+test("developer pages render English bodies and localized links after takeover", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/developers/plugins`);
+  await expect(page.getByRole("heading", { name: /插件协议/ })).toBeVisible();
+  await page.getByRole("link", { name: "English" }).click();
+  await expect(page).toHaveURL(`${origin}/en/developers/plugins`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { name: /The plugin protocol/ })).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Plugin protocol contents" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /Muse connection guide/ })).toHaveAttribute(
+    "href",
+    "/en/developers/muse",
+  );
+  await expect(page.getByRole("link", { name: /Read the documentation/ })).toHaveAttribute(
+    "href",
+    "/en/docs",
+  );
+  await expect(page.getByRole("button", { name: /Copy for your AI agent/ })).toBeVisible();
+
+  await page.getByRole("link", { name: "中文" }).click();
+  await expect(page).toHaveURL(`${origin}/developers/plugins`);
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.getByRole("heading", { name: /插件协议/ })).toBeVisible();
+
+  await page.goto(`${origin}/en/developers/openclaw`);
+  await expect(
+    page.getByRole("heading", { name: "OpenClaw connection guide" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Markdown version" })).toHaveAttribute(
+    "href",
+    "/developers/openclaw.md",
+  );
+  await expect(page.getByRole("link", { name: "中文" })).toHaveAttribute(
+    "href",
+    "/developers/openclaw",
+  );
 });
 
 test("an unregistered pricing locale shows 404 without the published language links", async ({
