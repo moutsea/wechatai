@@ -296,7 +296,7 @@ This implementation references the public Character Card V2 format and implement
 
 Manifest.capabilities.commands may be "platform" (default, compatible with older manifests) or "native". The built-in OpenClaw / Hermes declare "native". This declaration describes command ownership and grants no extra execution permission.
 
-- /wx <command> always calls a Wechatai command; /use and /exit remain the global switch shortcuts.
+- \`/wx <command>\` always calls a Wechatai command; /use and /exit remain the global switch shortcuts.
 - When the current plugin supports native, other input beginning with / is passed through verbatim; platform plugins keep using Wechatai short commands.
 - @shortcut /command explicitly invokes the plugin once, performs no second Wechatai command parse and does not change the default plugin.
 - Only an \`@\` at the start of the message is recognized (full-width \`＠\` is also accepted); after the shortcut, whitespace, a Chinese or English comma or a colon may separate it, such as \`@助理，5 分钟后提醒我喝水\`. After removing the shortcut and separator, punctuation in the body is retained, and matching is exact by shortcut; a name without a separator is not guessed.
