@@ -59,8 +59,6 @@ const headerCopyEn: HeaderCopy = {
   reloadMenu: "Reload the account menu",
 } as const;
 
-} as const;
-
 const headerCopyZh = {
   home: "首页",
   topNav: "顶部导航",
