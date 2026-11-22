@@ -1,6 +1,7 @@
 import { DEFAULT_LOCALE, type Locale } from "../../shared/i18n";
 import { seoPageLabels as ko } from "../../shared/i18n/ko/copy/seo-page";
 import { seoPageLabels as ja } from "../../shared/i18n/ja/copy/seo-page-labels";
+import { seoPageLabels as pt } from "../../shared/i18n/pt/copy/seo-page";
 
 /** Chrome shared by every landing page rendered through `SeoPageView`. */
 export interface SeoPageLabels {
@@ -79,32 +80,6 @@ const en: SeoPageLabels = {
   setupGuide: "Read the setup guide",
 };
 
-const pt: SeoPageLabels = {
-  skipToContent: "Pular para o conteúdo",
-  home: "Início",
-  breadcrumb: "Navegação estrutural",
-  comparisonTable: "Tabela comparativa",
-  compareMissing:
-    "Nenhuma fonte pública pôde ser verificada; isso não significa que o outro lado não ofereça suporte",
-  commands: "Comandos comuns do WeChat",
-  copyCommand: (command) => `Copiar comando ${command}`,
-  copy: "Copiar",
-  copied: "Copiado",
-  copyFailed: "Falha ao copiar",
-  faq: "Perguntas frequentes",
-  contents: "Nesta página",
-  tableOfContents: "Conteúdo da página",
-  ctaTitle: "Confira os requisitos e configure seu WeChat AI",
-  ctaBody:
-    "Comece pela entrada do ClawBot no WeChat e depois configure um modelo, um agente ou notificações. O uso do modelo é cobrado à parte.",
-  ctaAction: "Comece grátis",
-  updated: "Atualizado em",
-  checkRequirements: "Confira os requisitos de acesso antes de se cadastrar",
-  estimateCosts: "Estime os custos da plataforma e do modelo",
-  startFree: "Comece grátis",
-  estimateFirst: "Estime o custo de uso primeiro",
-  setupGuide: "Leia o guia de configuração",
-};
 /** Locales without a dedicated dictionary use English. */
 export function seoPageLabels(locale: Locale): SeoPageLabels {
   if (locale === DEFAULT_LOCALE) return zh;

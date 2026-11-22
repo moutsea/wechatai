@@ -16,6 +16,7 @@ import { membershipExpiry } from "./membership";
 import { formatCredits, type Snapshot } from "../shared/types";
 import { userMenuCopy as userMenuCopyJa } from "../shared/i18n/ja/copy/user-menu";
 import { userMenuCopy as userMenuCopyKo } from "../shared/i18n/ko/copy/user-menu";
+import { userMenuCopy as userMenuCopyPt } from "../shared/i18n/pt/copy/user-menu";
 import "./user-menu.css";
 
 type MenuUser = { id: string; name: string; email: string; image?: string | null };
@@ -43,30 +44,6 @@ const userMenuCopyEn = {
   signingOut: "Logging out…",
   signOut: "Log out",
   signOutFailed: "Could not log out. Please try again.",
-} as const;
-
-const userMenuCopyPt = {
-  avatarFallback: "?",
-  userMenu: "Menu do usuário",
-  accountMenu: "Menu da conta",
-  account: "Minha conta",
-  workspace: "Abrir o painel",
-  loading: "Carregando plano e créditos…",
-  loadFailed: "Não foi possível carregar os dados da conta",
-  reload: "Recarregar",
-  balance: "Saldo de créditos",
-  plus: "Plano Plus",
-  free: "Conta gratuita",
-  expiresOn: "Válido até",
-  timeZone: " (horário de Pequim)",
-  expired: "Seu plano expirou. Assine novamente para recuperar os benefícios do Plus.",
-  upgradeBenefits: "Faça upgrade para usar todos os plugins e conectar mais contas do WeChat.",
-  renew: "Renovar o Plus",
-  upgrade: "Fazer upgrade para o Plus",
-  admin: "Painel administrativo",
-  signingOut: "Saindo…",
-  signOut: "Sair",
-  signOutFailed: "Não foi possível sair. Tente novamente.",
 } as const;
 
 const userMenuCopyZh = {

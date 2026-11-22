@@ -4,16 +4,8 @@ import { useLocation } from "react-router-dom";
 import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
 import { languageCopy as languageCopyKo } from "../shared/i18n/ko/copy/site-header";
 import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
+import { languageCopy as languageCopyPt } from "../shared/i18n/pt/copy/site-header";
 import { useLocale } from "./locale";
-
-const portugueseLabels = {
-  "zh-CN": "Chinês",
-  en: "Inglês",
-  ja: "Japonês",
-  ko: "Coreano",
-  es: "Espanhol",
-  pt: "Português",
-} as const;
 
 /**
  * One trigger plus a menu of the languages published for this exact page.
@@ -63,7 +55,7 @@ export function LanguageSwitcher() {
         : locale === "ja"
           ? headerCopyJa.language
           : locale === "pt"
-            ? "Idioma"
+            ? languageCopyPt.navigation
             : "语言";
   const currentLabel =
     (locale === "ko" ? languageCopyKo.labels[locale] : undefined) ??
@@ -153,7 +145,7 @@ export function LanguageSwitcher() {
               locale === "ko"
                 ? languageCopyKo.labels[target]
                 : locale === "pt"
-                  ? portugueseLabels[target]
+                  ? languageCopyPt.labels[target]
                   : undefined;
             return (
               <a

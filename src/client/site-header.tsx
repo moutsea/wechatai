@@ -9,6 +9,7 @@ import { useLocale } from "./locale";
 import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath, type Locale } from "../shared/i18n";
 import { headerCopy as headerCopyKo, navLabels as navLabelsKo } from "../shared/i18n/ko/copy/site-header";
 import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
+import { headerCopy as headerCopyPt, navLabels as navLabelsPt } from "../shared/i18n/pt/copy/site-header";
 
 const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
@@ -24,10 +25,10 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], pt: "Início", match: "/" },
-  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], pt: "Preços", match: "/pricing" },
-  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], pt: "Documentação", match: "/docs" },
-  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], pt: "Como funciona", match: "/#how" },
+  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], pt: navLabelsPt["/"], match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], pt: navLabelsPt["/pricing"], match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], pt: navLabelsPt["/docs"], match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], pt: navLabelsPt["/#how"], match: "/#how" },
 ] as const;
 
 interface HeaderCopy {
@@ -58,18 +59,6 @@ const headerCopyEn: HeaderCopy = {
   reloadMenu: "Reload the account menu",
 } as const;
 
-const headerCopyPt = {
-  home: "Página inicial do Wechatai",
-  topNav: "Navegação principal",
-  account: "Conta",
-  login: "Entrar",
-  start: "Comece grátis",
-  workspace: "Abrir o painel",
-  workspaceFallback: "Abrir o painel",
-  openMenu: "Abrir menu",
-  closeMenu: "Fechar menu",
-  menuFailed: "Não foi possível carregar o menu da conta",
-  reloadMenu: "Recarregar o menu da conta",
 } as const;
 
 const headerCopyZh = {
