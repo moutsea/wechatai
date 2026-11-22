@@ -318,7 +318,7 @@ export class OpenClawRelay {
       throw new AppError(
         "claw_unpaired",
         plugin.pluginId === "wechatai/grok"
-          ? "请先在 Grok Bot 配置中生成 MCP 凭据并添加到 Bot。"
+          ? "Grok Bot 还没完成配置。请在微伴网页的 Grok Bot 配置中复制配置指令，发给你的 Grok Bot。"
           : `请先在网页的 ${remoteAgentName(plugin.pluginId)} 插件中生成并执行连接命令`,
       );
     const previous = this.sql.exec<Job>("SELECT * FROM claw_jobs WHERE id = ?", id).toArray()[0];

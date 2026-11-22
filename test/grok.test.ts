@@ -7,7 +7,7 @@ import { readGrokHistory } from "../src/server/grok/history";
 import { countTextTokens } from "../src/server/tokenizer";
 import { creditUnits } from "../src/server/wallet";
 import { grokMcp } from "../src/server/grok/mcp";
-import { GROK_DISPATCH_UNAVAILABLE } from "../src/shared/grok-bot";
+import { GROK_DISPATCH_UNAVAILABLE, GROK_SETUP_INCOMPLETE } from "../src/shared/grok-bot";
 import type { GrokTasks } from "../src/server/grok/tasks";
 import {
   connectForManualDelivery,
@@ -27,7 +27,8 @@ afterEach(async () => {
     await runInDurableObject(env.ACCOUNTS.get(id), (_, s) => s.storage.deleteAlarm());
   vi.restoreAllMocks();
 });
-async function setup() {
+// viaPrompt saves no Webhook; the Bot registers it through MCP with the setup prompt.
+async function setup({ viaPrompt = false } = {}) {
   let stub = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(stub.id);
   await runInDurableObject(stub, (_, s) => useManualAlarms(s));
@@ -44,10 +45,9 @@ async function setup() {
     pluginId: "wechatai/grok",
     name: "测试 Bot",
     shortcut: "grok",
-    webhookUrl,
-    webhookKey,
+    ...(viaPrompt ? {} : { webhookUrl, webhookKey }),
   });
-  expect(config).toMatchObject({ ok: true, data: { hasKey: false } });
+  expect(config).toMatchObject({ ok: true, data: { hasKey: false, webhookReady: !viaPrompt } });
   expect(JSON.stringify(config)).not.toContain(webhookKey);
   const id = config.data.id;
   const {
@@ -70,6 +70,11 @@ async function setup() {
     if (reply.result.isError) throw Error(reply.result.content[0].text);
     return JSON.parse(reply.result.content[0].text);
   };
+  if (viaPrompt)
+    // Bots may copy the routine's ready-made header value instead of the bare key.
+    expect(
+      await tool("wechatai_register_webhook", { webhookUrl, webhookKey: `Bearer ${webhookKey}` }),
+    ).toMatchObject({ registered: true });
   const send = (text: string, msg = crypto.randomUUID()) =>
     runInDurableObject(stub, (instance) =>
       (
@@ -395,6 +400,95 @@ it("cancels rejected wakes without charging, and rejects untrusted webhook URLs"
   expect(await c.tool("wechatai_claim", { taskId: ref })).toEqual({ claimed: false });
   expect((await c.stub.snapshot()).wallet.balance).toBe(before);
   expect((await deliverQueuedReplies(c.stub)).map((x) => x.text).join("")).toContain("未扣费");
+});
+
+it("lets the Bot register its own Webhook once, within the prompt window", async () => {
+  const c = await setup({ viaPrompt: true });
+  const grok = async () =>
+    (await c.stub.snapshot()).plugins?.find((p: { id: string }) => p.id === c.id) as {
+      hasKey: boolean;
+      webhookReady: boolean;
+      setupPending: boolean;
+    };
+  expect(await grok()).toMatchObject({ hasKey: true, webhookReady: true, setupPending: false });
+  const register = { webhookUrl, webhookKey: "another-key" };
+  await expect(c.tool("wechatai_register_webhook", register)).rejects.toThrow("已过期或已使用");
+  // The registered Routine receives tasks with the normalized key (checked by wake).
+  await c.send("/use grok");
+  await c.send("用一句话问好");
+  const taskId = await c.wake();
+  const claim = await c.tool("wechatai_claim", { taskId });
+  expect(claim).toMatchObject({ claimed: true, text: "用一句话问好" });
+  // An expired prompt cannot replace the Routine either.
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  expect(data.setupUntil).toBeGreaterThan(Date.now());
+  await runInDurableObject(c.stub, (_, s) =>
+    s.storage.sql.exec("UPDATE settings SET value='1' WHERE key=?", `grokSetup:${c.id}`),
+  );
+  await expect(c.tool("wechatai_register_webhook", register, data.token)).rejects.toThrow(
+    "已过期或已使用",
+  );
+  const malformed = { webhookUrl: "https://example.com/hook", webhookKey: "k" };
+  expect((await c.api("plugin.grokToken", { id: c.id })).ok).toBe(true);
+  const { data: fresh } = await c.api("plugin.grokToken", { id: c.id });
+  await expect(c.tool("wechatai_register_webhook", malformed, fresh.token)).rejects.toThrow(
+    "Webhook URL",
+  );
+  expect(await grok()).toMatchObject({ webhookReady: true, setupPending: true });
+  expect((await c.api("plugin.grokRevoke", { id: c.id })).ok).toBe(true);
+  expect(await grok()).toMatchObject({ hasKey: false, setupPending: false });
+});
+
+it("asks to finish setup before queueing work, and keeps the Bot's connector on a first manual Webhook", async () => {
+  const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
+  accounts.push(stub.id);
+  await runInDurableObject(stub, (_, s) => useManualAlarms(s));
+  const api = async (action: string, input: unknown = {}) =>
+    JSON.parse(await stub.api(action, input));
+  await api("wechat.create", { name: "微信" });
+  const config = await api("plugin.save", {
+    pluginId: "wechatai/grok",
+    name: "Bot",
+    shortcut: "grok",
+  });
+  const id = config.data.id;
+  const send = (text: string) =>
+    runInDurableObject(stub, (instance) =>
+      (
+        instance as unknown as {
+          processWechat(id: string, m: WxMessage, link: string): Promise<string>;
+        }
+      ).processWechat(
+        crypto.randomUUID(),
+        { item_list: [{ type: 1, text_item: { text } }] },
+        "default",
+      ),
+    );
+  expect(await send("/use grok")).toContain(GROK_SETUP_INCOMPLETE);
+  await expect(send("帮我订会议室")).rejects.toThrow(GROK_SETUP_INCOMPLETE);
+  await expect(send("@grok 帮我订会议室")).rejects.toThrow(GROK_SETUP_INCOMPLETE);
+  expect((await api("plugin.grokToken", { id })).ok).toBe(true);
+  const status = async () => (await api("plugin.grokStatus", { id })).data;
+  expect(await status()).toMatchObject({ hasKey: true, webhookReady: false, setupPending: true });
+  expect((await api("plugin.save", { id, webhookUrl, webhookKey })).ok).toBe(true);
+  expect(await status()).toMatchObject({ hasKey: true, webhookReady: true, setupPending: false });
+  // Replacing an existing Routine may move to another Bot, so the old credential stops.
+  expect((await api("plugin.save", { id, webhookUrl, webhookKey: "rotated" })).ok).toBe(true);
+  expect(await status()).toMatchObject({ hasKey: false, webhookReady: true });
+});
+
+it("lists only known MCP tools", async () => {
+  const c = await setup();
+  const listed = await (
+    await c.rpc("tools/list")
+  ).json<{ result: { tools: { name: string }[] } }>();
+  expect(listed.result.tools.map((t) => t.name)).toEqual([
+    "wechatai_claim",
+    "wechatai_finish",
+    "wechatai_register_webhook",
+  ]);
+  const res = await c.rpc("tools/call", { name: "toString", arguments: {} });
+  expect(await res.json()).toMatchObject({ error: { code: -32602 } });
 });
 
 it("shows Grok Bot only to the configured accounts", async () => {

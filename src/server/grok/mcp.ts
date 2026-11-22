@@ -4,6 +4,7 @@ import { z } from "zod";
 import { accountForGrok } from "../account-route";
 import { parseOpenClawToken } from "../openclaw-token";
 import { trustedAppOrigins } from "../config";
+import { GROK_SETUP_MINUTES } from "../../shared/grok-bot";
 
 const versions = ["2025-11-25", "2025-06-18", "2025-03-26"];
 const uuid = { type: "string", format: "uuid" };
@@ -35,7 +36,25 @@ const tools = [
       additionalProperties: false,
     },
   },
+  {
+    name: "wechatai_register_webhook",
+    description: `仅在配置时调用：提交本 Bot 中接收微伴任务的 Routine 的 Webhook POST 地址和 key，key 不含 Bearer 前缀。须在微伴网页生成配置指令后 ${GROK_SETUP_MINUTES} 分钟内调用，成功一次后关闭；需要更换时请用户在网页重新生成指令。`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        webhookUrl: { type: "string", format: "uri" },
+        webhookKey: { type: "string", maxLength: 2048 },
+      },
+      required: ["webhookUrl", "webhookKey"],
+      additionalProperties: false,
+    },
+  },
 ];
+const actions: Record<string, string> = {
+  wechatai_claim: "grok.claim",
+  wechatai_finish: "grok.finish",
+  wechatai_register_webhook: "grok.register",
+};
 const message = z.object({
   jsonrpc: z.literal("2.0"),
   id: z.union([z.string(), z.number().int()]).optional(),
@@ -79,12 +98,13 @@ grokMcp.post("/", async (c) => {
   const error = (code: number, msg: string) =>
     c.json({ jsonrpc: "2.0", id: id ?? null, error: { code, message: msg } });
   const call =
-    method === "tools/call" && id !== undefined && tools.some((t) => t.name === params?.name);
-  const action = call
-    ? params?.name === "wechatai_claim"
-      ? "grok.claim"
-      : "grok.finish"
-    : "grok.auth";
+    method === "tools/call" &&
+    id !== undefined &&
+    typeof params?.name === "string" &&
+    Object.hasOwn(actions, params.name)
+      ? actions[params.name]
+      : null;
+  const action = call ?? "grok.auth";
   const account = await accountForGrok(c.env, token.accountId);
   const reply = JSON.parse(
     await account.openClawRequest(
