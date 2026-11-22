@@ -17,7 +17,8 @@ import { encrypt } from "../src/server/security";
 import { parseNotificationToken, createNotificationToken } from "../src/server/notification-token";
 import type { PersonalAccount } from "../src/server/personal-account";
 import { ReminderScheduler } from "../src/server/reminder-scheduler";
-import { notificationGuide } from "../src/shared/notification-docs";
+import { notificationGuide, notificationSections } from "../src/shared/notification-docs";
+import { EN_NOTIFICATION_SECTIONS } from "../src/shared/i18n/en/data/notification-content-en";
 
 const accounts: DurableObjectStub<PersonalAccount>[] = [];
 const schedulers = env.REMINDERS as DurableObjectNamespace<ReminderScheduler>;
@@ -407,6 +408,27 @@ describe("receive-only notification plugin", () => {
     expect(await retry.json()).toMatchObject({ status: "sent", duplicate: true });
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it.each(["send", "build-notification"] as const)(
+    "accepts an English guide request as a retry of the Chinese %s example",
+    async (sectionId) => {
+      const { token } = await setup();
+      const [chinese, english] = [notificationSections, EN_NOTIFICATION_SECTIONS].map((sections) => {
+        const section = sections.find(({ id }) => id === sectionId)!;
+        const example = sectionId === "send" ? section.body : section.details![0].body;
+        const [, key] = example.match(/-H ['"]Idempotency-Key: ([^'"]+)['"]/)!;
+        return {
+          key: key.replace("$GITHUB_RUN_ID", "123").replace("$GITHUB_RUN_ATTEMPT", "1"),
+          payload: JSON.parse(example.match(/-d '([^']+)'/)![1]),
+        };
+      });
+      const first = await send(token, chinese.payload, chinese.key);
+      expect(first.status).toBe(202);
+      const { id } = await first.json<{ id: string }>();
+      const retry = await send(token, english.payload, english.key);
+      expect(retry.status).toBe(202);
+      expect(await retry.json()).toMatchObject({ id, duplicate: true });
+    },
+  );
   it("keeps tokens out of snapshots, rotates immediately, and revokes queued work", async () => {
     const { stub, plugin, token } = await setup();
     const snapshot = JSON.stringify((await api(stub, "snapshot")).data);

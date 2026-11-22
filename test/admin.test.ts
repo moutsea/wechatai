@@ -1,3 +1,4 @@
+import budgetMigration from "../migrations/0020_analytics_budget.sql?raw";
 import accountRoutes from "../migrations/0019_account_backend_routes.sql?raw";
 import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import { env, runInDurableObject, createExecutionContext } from "cloudflare:test";
@@ -39,6 +40,7 @@ beforeAll(async () => {
     authEmailMigration,
     serverStatusMigration,
     pageViewsMigration,
+    budgetMigration,
     signupMigration,
     funnelMigration,
     adminExpiryMigration,

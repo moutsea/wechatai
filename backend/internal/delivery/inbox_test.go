@@ -24,7 +24,7 @@ func TestLegacyInboxGainsLinkColumnsWithoutReplacingMessages(t *testing.T) {
 		}
 	}
 	var link, payload string
-	if err := db.QueryRow("SELECT connectionId,payload FROM inbox WHERE id='old' AND sessionId IS NULL").Scan(&link, &payload); err != nil || link != "default" || payload != "{}" {
+	if err := db.QueryRow("SELECT connectionId,payload FROM inbox WHERE id='old' AND sessionId IS NULL AND wechatTextReceipts IS NULL").Scan(&link, &payload); err != nil || link != "default" || payload != "{}" {
 		t.Fatalf("old message: %s %s %v", link, payload, err)
 	}
 }

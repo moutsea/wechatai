@@ -1,0 +1,23 @@
+[Unit]
+Description=WeChatAI single-account WeChat sender
+After=network-online.target wechatai-backend.service
+Wants=network-online.target
+PartOf=wechatai-backend.service
+
+[Service]
+DynamicUser=yes
+EnvironmentFile=/etc/wechatai/wechat-sender%i.env
+ExecStart=/opt/wechatai/current/wechatai wechat-sender
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitCORE=0
+MemoryMax=256M
+
+[Install]
+WantedBy=wechatai-backend.service

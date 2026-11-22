@@ -5,7 +5,10 @@ export function authReturnPath(value: string | null): string {
     const url = new URL(value, "https://wechatai.app");
     return url.pathname === "/app" ||
       url.pathname.startsWith("/app/") ||
-      url.pathname === "/pricing"
+      url.pathname === "/pricing" ||
+      url.pathname === "/en/pricing" ||
+      url.pathname === "/ja/pricing" ||
+      url.pathname === "/ko/pricing"
       ? `${url.pathname}${url.search}${url.hash}`
       : "/app";
   } catch {
@@ -15,6 +18,14 @@ export function authReturnPath(value: string | null): string {
 export const PASSWORD_MIN_LENGTH = 10;
 export const PASSWORD_MAX_LENGTH = 128;
 export const AUTH_EMAIL_COOLDOWN_SECONDS = 60;
+
+export const AUTH_EMAIL_TOKEN_HEADER = "X-Turnstile-Token";
+export const authEmailActions = {
+  signup: "email_signup",
+  resend: "email_resend",
+  reset: "email_reset",
+} as const;
+export type AuthEmailAction = (typeof authEmailActions)[keyof typeof authEmailActions];
 
 export function passwordValidationError(password: string, confirmation: string): string {
   if (password.length < PASSWORD_MIN_LENGTH) return "密码至少需要 10 个字符。";
@@ -39,6 +50,8 @@ export function authErrorMessage(error: { code?: string; status?: number } | nul
     INVALID_TOKEN: "链接无效或已过期，请重新发送邮件。",
     TOKEN_EXPIRED: "链接已过期，请重新发送邮件。",
     EMAIL_SERVICE_UNAVAILABLE: "邮件服务暂时不可用，请稍后再试。",
+    EMAIL_CHALLENGE_INVALID: "人机验证未通过或已过期，请重新验证后提交。",
+    EMAIL_CHALLENGE_UNAVAILABLE: "人机验证服务暂时不可用，请稍后重试。",
     AUTH_EMAIL_RATE_LIMITED: "邮件发送太频繁，请稍后再试。",
   };
   return messages[error?.code || ""] || "操作未完成，请稍后重试。";

@@ -1,6 +1,9 @@
 import { OpenClawGuide } from "./pages/openclaw-guide";
 import { renderToString } from "react-dom/server";
 import { StaticRouter } from "react-router-dom";
+import "../shared/i18n/load";
+import { DEFAULT_LOCALE, normalizePath, resolveLocalizedPath } from "../shared/i18n";
+import { LocaleProvider } from "./locale";
 import { AnonymousAuthProvider } from "./auth";
 import { Landing } from "./public-pages";
 import { Guide } from "./pages/guide";
@@ -17,42 +20,48 @@ export {
   PRIVATE_PATHS,
   LEGACY_PATHS,
   PUBLIC_PATHS,
+  publishedLocalizedPaths,
   replaceSeoHead,
   renderSitemap,
 } from "../shared/seo";
 
 export function renderPublicPage(path: string) {
+  const localized = resolveLocalizedPath(path);
+  const pagePath = localized?.path ?? normalizePath(path);
+  const locale = localized?.locale ?? DEFAULT_LOCALE;
   const infoKind = (Object.keys(INFO_PAGES) as Array<keyof typeof INFO_PAGES>).find(
-    (kind) => INFO_PAGES[kind].path === path,
+    (kind) => INFO_PAGES[kind].path === pagePath,
   );
-  const landing = findSeoPage(path);
+  const landing = localized?.translation.content ?? findSeoPage(pagePath);
   return renderToString(
-    <StaticRouter location={path}>
-      <AnonymousAuthProvider>
-        {landing ? (
-          <SeoPageView page={landing} />
-        ) : infoKind ? (
-          <SiteInfoPage kind={infoKind} />
-        ) : path === "/" ? (
-          <Landing />
-        ) : path === "/guide" ? (
-          <Guide />
-        ) : path === "/docs" ? (
-          <DocsIndex />
-        ) : path.startsWith("/docs/") && findDocArticle(path.slice(6)) ? (
-          <DocArticlePage slug={path.slice(6)} />
-        ) : path === "/developers/muse" ? (
-          <OpenClawGuide kind="muse" />
-        ) : path === "/developers/hermes" ? (
-          <OpenClawGuide kind="hermes" />
-        ) : path === "/developers/openclaw" ? (
-          <OpenClawGuide />
-        ) : path === "/developers/plugins" ? (
-          <PluginProtocol />
-        ) : (
-          <NotFound />
-        )}
-      </AnonymousAuthProvider>
+    <StaticRouter location={pagePath}>
+      <LocaleProvider locale={locale} path={pagePath}>
+        <AnonymousAuthProvider>
+          {landing ? (
+            <SeoPageView page={landing} />
+          ) : infoKind ? (
+            <SiteInfoPage kind={infoKind} />
+          ) : pagePath === "/" ? (
+            <Landing />
+          ) : pagePath === "/guide" ? (
+            <Guide />
+          ) : pagePath === "/docs" ? (
+            <DocsIndex />
+          ) : pagePath.startsWith("/docs/") && findDocArticle(pagePath.slice(6)) ? (
+            <DocArticlePage slug={pagePath.slice(6)} />
+          ) : pagePath === "/developers/muse" ? (
+            <OpenClawGuide kind="muse" />
+          ) : pagePath === "/developers/hermes" ? (
+            <OpenClawGuide kind="hermes" />
+          ) : pagePath === "/developers/openclaw" ? (
+            <OpenClawGuide />
+          ) : pagePath === "/developers/plugins" ? (
+            <PluginProtocol />
+          ) : (
+            <NotFound />
+          )}
+        </AnonymousAuthProvider>
+      </LocaleProvider>
     </StaticRouter>,
   );
 }

@@ -1,3 +1,4 @@
+import { failModelTest, reserveModelTest } from "./model-test-admission";
 import { accountForReferral } from "./account-route";
 import {
   CLOUD_AGENT_PLUGIN_ID,
@@ -192,7 +193,13 @@ import {
   type ImageGenerationPlugin,
   type UserPlugin,
 } from "../shared/image-generation";
-import { initWechatInbox, insertWechatMessage, wechatReceiptId } from "./wechat-inbox";
+import {
+  initWechatInbox,
+  insertWechatMessage,
+  wechatInboxBudget,
+  recordWechatTextReceipt,
+  wechatReceiptId,
+} from "./wechat-inbox";
 import { uploadWechatImage, sendUploadedWechatImage, type UploadedWechatImage } from "./wechat";
 import {
   webResearchInputSchema,
@@ -202,6 +209,7 @@ import {
 import { DEFAULT_OUTPUT_TOKENS, modelInputBudget } from "../shared/context";
 import { wechatHelp, welcomeGuide } from "../shared/guide";
 import { leadingMention, nativeCommand, platformCommand } from "../shared/command-routing";
+import { WechatSender, SENDER_TAG } from "./wechat-sender";
 import { watchdogHeader } from "./receiver-watchdog";
 import { referralRecipient } from "./referral-reward";
 import { REFERRAL_CREDITS } from "../shared/referrals";
@@ -211,9 +219,12 @@ import {
   orderedWechatMessages,
   sendUploadedWechatFile,
   sendText,
+  WechatRequestError,
+  type WechatTextReceipt,
   validateWechatHost,
   wxRequest,
   type WxCredentials,
+  type WechatOutbound,
   type WxMessage,
 } from "./wechat";
 import { AttachmentQueue, attachmentRetryError } from "./attachments";
@@ -283,6 +294,7 @@ type Link = Connection & {
   cursor?: string;
   generation: string;
   contextToken?: string;
+  blockedContextId?: string;
   lastPoll?: number;
   pollBaseUrl?: string;
 };
@@ -312,10 +324,13 @@ export class PersonalAccount extends DurableObject<Env> {
   private membershipDelivery: Promise<void> | null = null;
   private wechatPolls = new Set<AbortController>();
   private wechatWakeVersion = 0;
+  private qrRequests = new Map<string, { generation: string; request: Promise<void> }>();
   private receiver: WechatReceiver;
+  private sender: WechatSender;
   private execution: ExecutionStore;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.sender = new WechatSender(ctx, env);
     this.execution = new ExecutionStore(ctx.storage, env, ctx.id.toString());
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(RECEIVER_PING, RECEIVER_PONG));
     this.receiver = new WechatReceiver(ctx, env, {
@@ -619,6 +634,7 @@ export class PersonalAccount extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket")
       return new Response("WebSocket required", { status: 426 });
     const path = new URL(request.url).pathname;
+    if (path === "/wechat-sender") return this.sender.connect();
     if (path === "/wechat-receiver")
       return this.receiver.connect(request.headers.get(watchdogHeader) === "1");
     if (path !== "/connector-wait") return new Response("Not found", { status: 404 });
@@ -643,20 +659,40 @@ export class PersonalAccount extends DurableObject<Env> {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer) {
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
+    if (this.ctx.getTags(socket).includes(SENDER_TAG)) this.sender.message(socket, message);
+    else if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
       await this.receiver.message(socket, message);
     else socket.close(1008, "receive-only socket");
   }
   async webSocketClose(socket: WebSocket) {
     socket.close(1000, "closed");
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.receiver.disconnected(socket);
+    if (this.ctx.getTags(socket).includes(SENDER_TAG)) this.sender.disconnected(socket);
+    else if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
+      await this.receiver.disconnected(socket);
   }
   async webSocketError(socket: WebSocket) {
     socket.close(1011, "connection error");
-    if (this.ctx.getTags(socket).includes(RECEIVER_TAG)) await this.receiver.disconnected(socket);
+    if (this.ctx.getTags(socket).includes(SENDER_TAG)) this.sender.disconnected(socket);
+    else if (this.ctx.getTags(socket).includes(RECEIVER_TAG))
+      await this.receiver.disconnected(socket);
   }
   async recoverReceiverWatchdog(session: string) {
     await this.receiver.recoverWatchdog(session);
+  }
+  async senderStatus() {
+    return this.sender.status();
+  }
+
+  async forwardWechat(...args: Parameters<WechatOutbound>): Promise<Response | null> {
+    return this.sender.forward(...args);
+  }
+
+  private async deliveryCredentials(encrypted: string): Promise<WxCredentials> {
+    const credentials = JSON.parse(
+      await decrypt(this.env, encrypted, `${this.ctx.id}:wechat`),
+    ) as WxCredentials;
+    credentials.outbound = this.sender.outbound();
+    return credentials;
   }
   async receiverStatus() {
     const socket = this.receiver.socket();
@@ -716,7 +752,7 @@ export class PersonalAccount extends DurableObject<Env> {
     fromCursor: string,
     result: WechatUpdates,
     credentials: WxCredentials,
-  ): string | null {
+  ): string | null | false {
     return this.ctx.storage.transactionSync(() => {
       const link = this.connection(connectionId);
       if (
@@ -740,8 +776,41 @@ export class PersonalAccount extends DurableObject<Env> {
         !!link.cursor &&
         link.cursor !== fromCursor &&
         link.cursor === (result.get_updates_buf ?? result.sync_buf);
-      for (const message of orderedWechatMessages(incoming)) {
-        if (!insertWechatMessage(this.sql, prefix, connectionId, message, replay)) continue;
+      const ordered = orderedWechatMessages(incoming);
+      const budget = ordered.length ? wechatInboxBudget(this.sql, connectionId) : undefined;
+      let full = false;
+      let blockedContextId = link.blockedContextId;
+      for (const message of ordered) {
+        const added = insertWechatMessage(this.sql, prefix, connectionId, message, replay, budget!);
+        if (added === "full") {
+          full = true;
+          // A queue waiting for a fresh reply context must still be able to drain.
+          const fresh = ordered
+            .slice()
+            .reverse()
+            .find((item) => item.context_token);
+          const id = fresh && String(wechatReceiptId(fresh));
+          if (
+            fresh &&
+            id !== blockedContextId &&
+            (link.cursor || "") === fromCursor &&
+            this.sql
+              .exec(
+                "SELECT 1 FROM inbox WHERE connectionId=? AND state='waiting_context' LIMIT 1",
+                connectionId,
+              )
+              .toArray().length
+          ) {
+            blockedContextId = id;
+            token = fresh.context_token;
+            this.sql.exec(
+              "UPDATE inbox SET state='reply',attempts=0 WHERE connectionId=? AND state='waiting_context'",
+              connectionId,
+            );
+          }
+          break;
+        }
+        if (!added) continue;
         received = true;
         token = message.context_token || token;
         if (message.context_token)
@@ -754,12 +823,14 @@ export class PersonalAccount extends DurableObject<Env> {
       // A fallback poll or a lost acknowledgement may race this batch. Merge
       // messages, but never overwrite a cursor advanced by another receiver.
       const cursor =
-        (link.cursor || "") === fromCursor
+        !full && (link.cursor || "") === fromCursor
           ? (result.get_updates_buf ?? result.sync_buf ?? link.cursor ?? "")
           : link.cursor || "";
+      if (full && !received && blockedContextId === link.blockedContextId) return false;
       this.setLinkSetting(connectionId, "connection", {
         ...link,
         cursor,
+        blockedContextId: full ? blockedContextId : undefined,
         contextToken: token,
         lastPoll: Date.now(),
         lastSeen: received ? Date.now() : link.lastSeen,
@@ -772,7 +843,7 @@ export class PersonalAccount extends DurableObject<Env> {
           ? CLOUD_REPLY_WAITING_MESSAGE
           : undefined,
       });
-      return cursor;
+      return full ? false : cursor;
     });
   }
   private validateClawRoute(route: ClawRoute) {
@@ -1716,7 +1787,7 @@ export class PersonalAccount extends DurableObject<Env> {
               : command.action === "complete"
                 ? await this.completeKimiseek(command.id, command.result)
                 : command.action === "fail"
-                  ? this.failKimiseek(command.id, command.message)
+                  ? this.failKimiseek(command.id, command.message, command.errorCode)
                   : await this.kimiseekBalance(command.identity);
       return JSON.stringify({ ok: true, data: data ?? null });
     } catch (e) {
@@ -1763,10 +1834,10 @@ export class PersonalAccount extends DurableObject<Env> {
     this.setSetting("kimiseekFlow", { ...flow, status: "working" });
     return flow;
   }
-  private failKimiseek(id: string, message: string) {
+  private failKimiseek(id: string, message: string, errorCode?: KimiseekFlow["errorCode"]) {
     const flow = this.getSetting<KimiseekFlow | null>("kimiseekFlow", null);
     if (flow?.id === id && flow.status === "working")
-      this.setSetting("kimiseekFlow", { ...flow, status: "failed", message });
+      this.setSetting("kimiseekFlow", { ...flow, status: "failed", message, errorCode });
   }
   private async completeKimiseek(id: string, raw: KimiseekResponse) {
     const flow = this.kimiseekFlow(id);
@@ -2376,9 +2447,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (!claimed) continue;
       job = claimed;
       try {
-        const credentials = JSON.parse(
-          await decrypt(this.env, target.encryptedCredentials!, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(target.encryptedCredentials!);
         if (
           this.getSetting("planUntil", 0) !== job.planUntil ||
           !this.membershipReminders.isCurrent(job)
@@ -2544,9 +2613,7 @@ export class PersonalAccount extends DurableObject<Env> {
       }
       if (!this.notifications.claim(job.id)) continue;
       try {
-        const credentials = JSON.parse(
-          await decrypt(this.env, link.encryptedCredentials, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials);
         const current = this.notifications.get(job.id);
         const latest = this.notificationPlugin(job.pluginId);
         const target = this.connection(job.connectionId);
@@ -2732,9 +2799,7 @@ export class PersonalAccount extends DurableObject<Env> {
         const target = this.personalReminderDeliveryTarget(reminder);
         if (!target) continue;
         const { plugin, link } = target;
-        const credentials = JSON.parse(
-          await decrypt(this.env, link.encryptedCredentials!, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials!);
         if (!this.personalRecords.isCurrent(reminder)) continue;
         if (this.expirePersonalReminder(reminder, record)) continue;
         // Reuse every prerequisite check after async preparation, immediately
@@ -2895,13 +2960,7 @@ export class PersonalAccount extends DurableObject<Env> {
         status: "disconnected",
         generation: crypto.randomUUID(),
       });
-      this.cloud.stopConnection(id);
-      this.grok.cancelConnection(id);
-      this.attachments.clear(id);
-      this.sql.exec(
-        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
-        id,
-      );
+      this.stopLinkWork(id);
       if (remove) {
         this.sql.exec("DELETE FROM wechat_links WHERE id = ?", id);
         if (id === DEFAULT_WECHAT_LINK) this.setSetting("legacyLinkDeleted", true);
@@ -3066,8 +3125,17 @@ export class PersonalAccount extends DurableObject<Env> {
         .toArray(),
     };
   }
+  private checkHistoryClearInterval() {
+    if (this.getSetting("historyClearedAt", 0) > Date.now() - 60_000)
+      throw new AppError(
+        "history_recently_cleared",
+        "刚刚已清空记录。如需清空新产生的记录，请在一分钟后重试。",
+        429,
+      );
+  }
   async api(action: string, payload: unknown = {}): Promise<string> {
     try {
+      if (action === "privacy.clear") this.checkHistoryClearInterval();
       await this.refreshCloudAccess();
       this.refreshWallet();
       let data: unknown;
@@ -3312,15 +3380,7 @@ export class PersonalAccount extends DurableObject<Env> {
         const query = typeof p.query === "string" ? p.query.trim() : "";
         if (!query || query.length > 2000)
           throw new AppError("invalid_query", "请输入 1–2000 字的测试问题");
-        data = await this.runModel(
-          `test:${crypto.randomUUID()}`,
-          a,
-          [{ role: "user", content: query }],
-          null,
-          Math.min(1024, a.maxOutputTokens),
-          undefined,
-          plugin.id,
-        );
+        data = await this.testModel(a, query, Math.min(1024, a.maxOutputTokens), plugin);
       } else if (action === "channel.save") {
         const channel = await this.prepareChannel(
           typeof p.id === "string" ? p.id : undefined,
@@ -3365,13 +3425,7 @@ export class PersonalAccount extends DurableObject<Env> {
         data = this.snapshot();
       } else if (action === "assistant.test") {
         const a = this.assistant(String(p.id));
-        data = await this.runModel(
-          `test:${crypto.randomUUID()}`,
-          a,
-          [{ role: "user", content: "请只回复：连接成功" }],
-          null,
-          64,
-        );
+        data = await this.testModel(a, "请只回复：连接成功", 64);
         if (!this.getSetting("firstModelTestAt", 0))
           this.setSetting("firstModelTestAt", Date.now());
       } else if (action === "assistant.activate") {
@@ -3482,9 +3536,11 @@ export class PersonalAccount extends DurableObject<Env> {
       } else if (action === "privacy.clear") {
         this.busy();
         this.ctx.storage.transactionSync(() => {
+          this.checkHistoryClearInterval();
+          this.setSetting("historyClearedAt", Date.now());
           this.sql.exec("DELETE FROM messages");
           this.claw.clearHistory();
-          for (const session of this.sessions()) this.claw.cancelSession(session.id);
+          this.claw.cancelAllSessions();
           this.sql.exec("DELETE FROM sessions");
           this.sql.exec("DELETE FROM context_summaries");
           this.personalRecords.forgetContextChanges();
@@ -3492,13 +3548,18 @@ export class PersonalAccount extends DurableObject<Env> {
           this.cloud.hideSession();
           this.sql.exec("DELETE FROM pending_attachments");
           this.revokeMedia();
-          this.sql.exec("UPDATE inbox SET state = 'done', payload = '{}', reply = ''");
+          this.sql.exec(
+            "UPDATE inbox SET state='done',payload='{}',reply='' WHERE state!='done' OR payload!='{}' OR reply!=''",
+          );
           for (const id of new Set([DEFAULT_WECHAT_LINK, ...this.links().map((l) => l.id)]))
-            this.setLinkSetting(id, "current", "");
+            if (this.linkSetting(id, "current", "")) this.setLinkSetting(id, "current", "");
         });
         data = this.snapshot();
       } else if (action === "wechat.bind")
-        data = await this.bind(typeof p.id === "string" ? p.id : this.selectedLink());
+        data = await this.bind(
+          typeof p.id === "string" ? p.id : this.selectedLink(),
+          p.regenerate === true,
+        );
       else if (action === "wechat.create") {
         this.createLink(p.name);
         data = this.snapshot();
@@ -3977,6 +4038,41 @@ export class PersonalAccount extends DurableObject<Env> {
       else this.setLinkSetting(connectionId, "current", "");
     }
     this.personalRuns.prune();
+  }
+  private async testModel(
+    a: StoredAssistant,
+    query: string,
+    output: number,
+    plugin?: StoredPlugin,
+  ) {
+    this.busy();
+    const id = "test:" + crypto.randomUUID();
+    const now = Date.now();
+    this.ctx.storage.transactionSync(() =>
+      reserveModelTest(this.sql, id, a.channelId || a.id, now),
+    );
+    try {
+      // Image generation tests include rendering and downloading the image.
+      const duration = plugin?.pluginId === "wechatai/image-generation" ? 90_000 : 20_000;
+      return await this.runModel(
+        id,
+        a,
+        [{ role: "user", content: query }],
+        null,
+        output,
+        now + duration,
+        plugin?.id,
+      );
+    } catch (error) {
+      if (
+        !(error instanceof AppError) ||
+        error.status >= 500 ||
+        error.upstreamStatus !== undefined ||
+        error.code.startsWith("upstream_")
+      )
+        failModelTest(this.sql, id);
+      throw error;
+    }
   }
   private async runModel(
     id: string,
@@ -4745,51 +4841,94 @@ export class PersonalAccount extends DurableObject<Env> {
     else await sendUploadedWechatImage(credentials, token, clientId, uploaded);
   }
 
-  private async bind(connectionId = this.selectedLink()) {
-    this.busy();
+  private async bind(connectionId = this.selectedLink(), regenerate = false) {
     const needsLink = !this.links().length && connectionId === DEFAULT_WECHAT_LINK;
-    if (!needsLink) this.requireLink(connectionId, true);
-    // Binding only establishes the transport. Model, plugin and billing checks
-    // happen when a task is submitted; notifications do not require a model.
     if (needsLink) connectionId = this.createLink("我的微信");
-    const generation = crypto.randomUUID();
-    this.ctx.storage.transactionSync(() => {
-      this.setLinkSetting(connectionId, "connection", { status: "waiting", generation });
-      // Starting a new binding invalidates old work even if fetching the QR fails.
-      this.cloud.stopConnection(connectionId);
-      this.grok.cancelConnection(connectionId);
-      this.attachments.clear(connectionId);
-      this.sql.exec(
-        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE connectionId = ?",
-        connectionId,
-      );
-    });
-    await this.scheduleCloudRecovery();
-    let qr: { qrcode: string; qrcode_img_content: string };
-    try {
-      qr = await wxRequest("get_bot_qrcode?bot_type=3", undefined, undefined, 15000);
-    } catch (error) {
-      if (this.connection(connectionId).generation === generation)
-        this.setLinkSetting(connectionId, "connection", {
-          status: "error",
-          generation,
-          error: "二维码获取失败，请重新绑定",
-        });
-      throw error;
+    else this.requireLink(connectionId, true);
+    const link = this.connection(connectionId);
+    const active = this.qrRequests.get(connectionId);
+    if (active?.generation === link.generation) {
+      await active.request;
+      return this.snapshot();
     }
+    const validQr =
+      (link.status === "waiting" || link.status === "scanned") &&
+      link.qrCode &&
+      link.qrUrl &&
+      (link.qrExpires ?? 0) > Date.now();
+    if (!regenerate && (validQr || link.status === "connected")) return this.snapshot();
+    this.busy();
+    this.reserveQrRequest(connectionId);
+    const request = this.replaceBinding(connectionId, link);
+    this.qrRequests.set(connectionId, { generation: link.generation, request });
+    try {
+      await request;
+    } finally {
+      if (this.qrRequests.get(connectionId)?.request === request)
+        this.qrRequests.delete(connectionId);
+    }
+    return this.snapshot();
+  }
+
+  private reserveQrRequest(connectionId: string) {
+    const now = Date.now();
+    const recent = this.getSetting<{ id: string; at: number }[]>("wechatQrRequests", []).filter(
+      (entry) => entry.at > now - 3_600_000,
+    );
+    if (recent.some((entry) => entry.id === connectionId && entry.at + 30_000 > now))
+      throw new AppError("qr_cooldown", "二维码刚刚申请过，请稍等 30 秒再重新获取。", 429);
+    // Account-level history survives deletion of a link and Durable Object restarts.
+    if (recent.length >= 12)
+      throw new AppError(
+        "qr_rate_limited",
+        "这个账号最近一小时申请二维码次数过多，请稍后再试。",
+        429,
+      );
+    this.setSetting("wechatQrRequests", [...recent, { id: connectionId, at: now }]);
+  }
+
+  private async replaceBinding(connectionId: string, previous: Link) {
+    const qr = await wxRequest<{ qrcode: string; qrcode_img_content: string }>(
+      "get_bot_qrcode?bot_type=3",
+      undefined,
+      undefined,
+      15000,
+    );
     if (!qr.qrcode || !qr.qrcode_img_content)
       throw new AppError("qr_missing", "未能获取微信二维码，请重试", 502);
-    if (this.connection(connectionId).generation !== generation || !this.linkEnabled(connectionId))
-      throw new AppError("bind_canceled", "绑定已取消", 409);
-    this.setLinkSetting(connectionId, "connection", {
-      status: "waiting",
-      generation,
-      qrCode: qr.qrcode,
-      qrUrl: qr.qrcode_img_content,
-      qrExpires: Date.now() + 240000,
+    const current = this.connection(connectionId);
+    if (
+      current.generation !== previous.generation ||
+      !this.linkEnabled(connectionId) ||
+      (previous.status !== "connected" && current.status === "connected")
+    )
+      throw new AppError("bind_canceled", "微信连接状态已改变，请刷新后再试。", 409);
+    this.busy();
+    this.ctx.storage.transactionSync(() => {
+      this.setLinkSetting(connectionId, "connection", {
+        status: "waiting",
+        generation: crypto.randomUUID(),
+        qrCode: qr.qrcode,
+        qrUrl: qr.qrcode_img_content,
+        qrExpires: Date.now() + 240_000,
+      });
+      this.stopLinkWork(connectionId);
     });
-    await this.ctx.storage.setAlarm(Date.now() + 1000);
-    return this.snapshot();
+    this.wakeWechat();
+    const wake = Date.now() + 1000;
+    const alarm = await this.ctx.storage.getAlarm();
+    if (alarm === null || alarm > wake) await this.ctx.storage.setAlarm(wake);
+    await this.scheduleCloudRecovery();
+  }
+
+  private stopLinkWork(connectionId: string) {
+    this.cloud.stopConnection(connectionId);
+    this.grok.cancelConnection(connectionId);
+    this.attachments.clear(connectionId);
+    this.sql.exec(
+      "UPDATE inbox SET state='done',payload='{}',reply='' WHERE connectionId=? AND state IN ('pending','reply','waiting_context')",
+      connectionId,
+    );
   }
   private async resumePersonalRun(
     id: string,
@@ -5702,9 +5841,7 @@ export class PersonalAccount extends DurableObject<Env> {
           });
         }
       } else {
-        const credentials = JSON.parse(
-          await decrypt(this.env, link.encryptedCredentials!, `${this.ctx.id}:wechat`),
-        ) as WxCredentials;
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials!);
         if (
           this.connection(connectionId).generation !== link.generation ||
           !this.linkReceivable(connectionId)
@@ -5878,6 +6015,7 @@ export class PersonalAccount extends DurableObject<Env> {
               ? ((JSON.parse(completedRun.response) as { images?: string[] }).images ?? [])
               : [];
             let parts: string[] = [];
+            let textReceipt: WechatTextReceipt | undefined;
             const token = this.connection(connectionId).contextToken || message.context_token;
             const sendStartedAt = Date.now();
             // A deletion or disconnect can cancel this row while network I/O is
@@ -5966,7 +6104,7 @@ export class PersonalAccount extends DurableObject<Env> {
                   link.generation,
                 );
               else
-                await sendText(
+                textReceipt = await sendText(
                   credentials,
                   token,
                   `${pending.id}:${pending.part}`,
@@ -5975,7 +6113,11 @@ export class PersonalAccount extends DurableObject<Env> {
               if (!replyIsPending()) return;
               console.info(
                 JSON.stringify({
-                  event: "wechat.reply_sent",
+                  event:
+                    textReceipt?.outcome === "unconfirmed"
+                      ? "wechat.reply_unconfirmed"
+                      : "wechat.reply_sent",
+                  ...textReceipt,
                   durationMs: Date.now() - sendStartedAt,
                   sinceReceivedMs: Math.max(0, Date.now() - pending.createdAt),
                   part: pending.part,
@@ -5986,6 +6128,20 @@ export class PersonalAccount extends DurableObject<Env> {
               if (!replyIsPending()) return;
               let waitingContext = false;
               this.ctx.storage.transactionSync(() => {
+                if (
+                  (error instanceof WechatRequestError ||
+                    (error instanceof AppError && error.code === "wechat_sender_unavailable")) &&
+                  !images.length &&
+                  pending.part < parts.length
+                )
+                  recordWechatTextReceipt(this.sql, pending, {
+                    ...(credentials.outbound ? { transport: "vps" as const } : {}),
+                    outcome: "error",
+                    httpStatus: error.upstreamStatus ?? null,
+                    ret: error instanceof WechatRequestError ? (error.ret ?? null) : null,
+                    errcode: error instanceof WechatRequestError ? (error.errcode ?? null) : null,
+                    hasMessageId: null,
+                  });
                 this.sql.exec("UPDATE inbox SET attempts = attempts + 1 WHERE id = ?", pending.id);
                 if (
                   pending.attempts >= 4 ||
@@ -6049,6 +6205,7 @@ export class PersonalAccount extends DurableObject<Env> {
                   : null;
               this.ctx.storage.transactionSync(() => {
                 if (!replyIsPending()) return;
+                recordWechatTextReceipt(this.sql, pending, textReceipt);
                 if (cloudTaskId) {
                   if (!this.cloudDelivery.acknowledge(cloudTaskId, pending.part)) return;
                 } else
@@ -6075,11 +6232,15 @@ export class PersonalAccount extends DurableObject<Env> {
                     retryAt: 0,
                   } satisfies ReferralUse);
               });
-            } else
-              this.sql.exec(
-                "UPDATE inbox SET part = part + 1, attempts = 0 WHERE id = ?",
-                pending.id,
-              );
+            } else {
+              this.ctx.storage.transactionSync(() => {
+                recordWechatTextReceipt(this.sql, pending, textReceipt);
+                this.sql.exec(
+                  "UPDATE inbox SET part = part + 1, attempts = 0 WHERE id = ?",
+                  pending.id,
+                );
+              });
+            }
           }
         } else {
           // An inbound hibernating socket delegates receive-only polling to the

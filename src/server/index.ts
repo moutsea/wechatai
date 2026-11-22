@@ -1,3 +1,11 @@
+import { routePath } from "hono/route";
+import {
+  emailLinkPage,
+  emailLinkPath,
+  emailActionRequest,
+  privateEmailLink,
+  privateAuthResponse,
+} from "./auth-email-link";
 import {
   listUserNotices,
   readAllNotices,
@@ -32,12 +40,15 @@ import {
   receiverStatus,
 } from "./account-route";
 import { Hono } from "hono";
+import { html } from "hono/html";
+import { kimiseekEmailError } from "../shared/kimiseek-errors";
 import {
   receiverAuthorized,
   receiverEnabled,
   receiverPoolHeader,
   receiverPoolMatches,
 } from "./wechat-receiver";
+import { senderAccess } from "./wechat-sender";
 import { watchdogHeader, fallbackWatchdogs } from "./receiver-watchdog";
 import { watchdogRoutes } from "./receiver-watchdog-routes";
 import { grokMcp } from "./grok/mcp";
@@ -57,8 +68,11 @@ import {
 import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { admitSessionLookup, entryLimited } from "./public-admission";
 import { availableAuthProviders, createAuth } from "./auth";
-import { authEmailDelivery, reserveAuthEmail } from "./auth-email";
+import { reserveAuthEmail } from "./auth-email";
+import { authEmailConfig, checkAuthEmailChallenge } from "./auth-email-challenge";
+import { authEmailActions, authErrorMessage } from "../shared/auth";
 import { z } from "zod";
 import { AppError, trustedAppOrigins } from "./config";
 import { catalog, checkout, checkoutStatus, subscriptionInfo, portal, webhook } from "./billing";
@@ -85,7 +99,14 @@ const app = new Hono<App>();
 function dispatchBillingNotices(env: Env, ctx: Parameters<typeof app.fetch>[2]) {
   return dispatchPaymentNotices(env, (url, init) => app.fetch(new Request(url, init), env, ctx));
 }
-app.use("*", secureHeaders());
+const defaultHeaders = secureHeaders();
+const emailPageHeaders = secureHeaders({ referrerPolicy: "same-origin" });
+app.use("*", (c, next) =>
+  (c.req.path === emailLinkPath && c.req.method === "GET" ? emailPageHeaders : defaultHeaders)(
+    c,
+    next,
+  ),
+);
 // AGT callbacks use their own stream cap and signed credentials, so register
 // before the general body limit and browser session/Origin middleware.
 app.post(`${CLOUD_CALLBACK_PATH}/:token`, async (c) => {
@@ -187,8 +208,16 @@ async function analyticsPrecheck(c: import("hono").Context<App>): Promise<Respon
   if (origin && origin !== requestOrigin && !trustedAppOrigins(c.env).includes(origin))
     return c.json({ error: "origin_not_allowed" }, 403);
   const ip = c.req.header("cf-connecting-ip") || "local";
-  if (!(await c.env.API_LIMIT.limit({ key: `analytics-page-view:${ip}` })).success)
-    return c.json({ error: "rate_limited" }, 429);
+  try {
+    if (!(await c.env.API_LIMIT.limit({ key: `analytics-page-view:${ip}` })).success)
+      return c.json({ error: "rate_limited" }, 429);
+    // Rate limiting is local to a Cloudflare location. D1 leases enforce the daily global cap.
+    if (!(await c.env.ANALYTICS_LIMIT.limit({ key: "analytics:public" })).success)
+      return c.body(null, 204);
+  } catch {
+    // Optional telemetry stops before D1 if edge admission is unavailable.
+    return c.body(null, 204);
+  }
   return null;
 }
 // First-party page-view collection; the client ignores reporting failures.
@@ -237,6 +266,27 @@ app.post("/api/internal/server-status", async (c) => {
   if (!(await c.env.API_LIMIT.limit({ key: "server-monitor" })).success)
     return c.json({ error: "rate_limited" }, 429);
   return c.json(await saveServerStatus(c.env, await c.req.json().catch(() => null)));
+});
+app.get("/api/internal/wechat-sender/:action", async (c) => {
+  c.header("Cache-Control", "no-store");
+  const access = senderAccess(c.env, c.req.header("authorization") || "");
+  if (!access) return c.body(null, 401);
+  const action = c.req.param("action");
+  if (action === "pool") return access.pool ? c.json({ ids: access.ids }) : c.body(null, 403);
+  const id = c.req.header("X-Wechatai-Account") || "";
+  if (!access.ids.includes(id)) return c.body(null, 403);
+  const account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(id));
+  if (action === "status") return c.json(await account.senderStatus());
+  if (action !== "connect") return c.body(null, 404);
+  if (c.req.header("upgrade")?.toLowerCase() !== "websocket") return c.body(null, 426);
+  const response = await account.fetch("https://internal/wechat-sender", {
+    headers: { Upgrade: "websocket" },
+  });
+  return new Response(response.body, {
+    status: response.status,
+    headers: response.headers,
+    ...(response.webSocket ? { webSocket: response.webSocket } : {}),
+  });
 });
 // Operator-only receiver discovery/transport; never authenticated by a user cookie.
 app.use("/api/internal/wechat-receiver/*", async (c, next) => {
@@ -306,6 +356,11 @@ app.get("/api/internal/wechat-receiver/connect/:accountId", async (c) => {
 });
 app.route("/", publicPluginDocs);
 app.get("/invite/:code", (c) => acceptReferral(c.env, c.req.param("code"), c.req.raw));
+const mailActions = new Map([
+  ["/api/auth/sign-up/email", authEmailActions.signup],
+  ["/api/auth/send-verification-email", authEmailActions.resend],
+  ["/api/auth/request-password-reset", authEmailActions.reset],
+]);
 app.use("/api/auth/*", async (c, next) => {
   c.header("Cache-Control", "no-store");
   c.header("Referrer-Policy", "no-referrer");
@@ -314,23 +369,22 @@ app.use("/api/auth/*", async (c, next) => {
     !(await c.env.AUTH_LIMIT.limit({ key: c.req.header("cf-connecting-ip") || "local" })).success
   )
     return c.json({ message: "尝试过于频繁，请稍后再试" }, 429);
-  const mailPaths = [
-    "/api/auth/sign-up/email",
-    "/api/auth/send-verification-email",
-    "/api/auth/request-password-reset",
-  ];
-  if (c.req.method === "POST" && mailPaths.includes(c.req.path.replace(/\/+$/, ""))) {
+  const path = c.req.path.replace(/\/+$/, "");
+  if (
+    path === "/api/auth/reset-password" &&
+    c.req.method === "POST" &&
+    !(await c.env.PUBLIC_ENTRY_LIMIT.limit({ key: "reset" })).success
+  )
+    return entryLimited();
+  if (!(await admitSessionLookup(c.env, c.req.raw)).success) return entryLimited();
+  const action = mailActions.get(path);
+  if (c.req.method === "POST" && action) {
     if (!trustedAppOrigins(c.env).includes(c.req.header("origin") || ""))
       return c.json({ code: "INVALID_ORIGIN", message: "请求来源无效" }, 403);
     // Match the format parsed below so Better Auth cannot accept a body that bypasses the limit.
     const mediaType = c.req.header("content-type")?.split(";", 1)[0].trim().toLowerCase();
     if (mediaType !== "application/json")
       return c.json({ code: "UNSUPPORTED_MEDIA_TYPE", message: "请使用 JSON 格式提交请求。" }, 415);
-    if (authEmailDelivery(c.env) === "unavailable")
-      return c.json(
-        { code: "EMAIL_SERVICE_UNAVAILABLE", message: "邮件服务暂时不可用，请稍后再试。" },
-        503,
-      );
     const body = z.object({ email: z.string() }).safeParse(
       await c.req.raw
         .clone()
@@ -340,6 +394,12 @@ app.use("/api/auth/*", async (c, next) => {
     const email = body.success ? body.data.email.trim().toLowerCase() : "";
     if (!z.email().safeParse(email).success)
       return c.json({ code: "INVALID_EMAIL", message: "请填写有效的邮箱地址。" }, 400);
+    const code = await checkAuthEmailChallenge(c.env, c.req.raw, action);
+    if (code)
+      return c.json(
+        { code, message: authErrorMessage({ code }) },
+        code === "EMAIL_CHALLENGE_INVALID" ? 403 : 503,
+      );
     // Applied before looking up an account: unknown and registered emails have the same limits.
     if (!(await reserveAuthEmail(c.env, email))) {
       c.header("Retry-After", "60");
@@ -351,27 +411,32 @@ app.use("/api/auth/*", async (c, next) => {
   }
   return next();
 });
-app.get("/api/auth/email-config", (c) => c.json({ delivery: authEmailDelivery(c.env) }));
+app.get("/api/auth/email-config", (c) => c.json(authEmailConfig(c.env)));
 app.get("/api/auth/providers", (c) => {
   c.header("Cache-Control", "no-store");
   return c.json({ providers: availableAuthProviders(c.env) });
 });
 app.get("/api/referrals/attribution", async (c) => {
   c.header("Cache-Control", "no-store");
+  if (!(await admitSessionLookup(c.env, c.req.raw)).success) return entryLimited();
   return c.json({ active: Boolean(await registrationReferrer(c.env, c.req.raw.headers)) });
 });
-app.on(["GET", "POST"], "/api/auth/*", async (c) => {
-  const response = await createAuth(c.env, c.executionCtx).handler(c.req.raw);
-  // Better Auth redirects may have immutable headers; clone before adding policies.
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", "no-store");
-  headers.set("Referrer-Policy", "no-referrer");
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+app.get(emailLinkPath, () => emailLinkPage());
+app.post(emailLinkPath, async (c) => {
+  const request = await emailActionRequest(c.req.raw, c.env.APP_URL);
+  if (!request) return c.text("邮件链接无效，请重新打开邮件中的完整链接。", 400);
+  return privateAuthResponse(await createAuth(c.env, c.executionCtx).handler(request), request);
 });
+// Previously issued reset emails used the token in the path. Do no database or
+// authentication work (which could log errors) until the clean POST arrives.
+app.get("/api/auth/reset-password/:token", (c) => {
+  const url = new URL(c.req.url);
+  if (!/^[A-Za-z0-9_-]+$/.test(c.req.param("token"))) return c.text("重置链接无效。", 400);
+  return c.redirect(privateEmailLink(new URL(url.pathname + url.search, c.env.APP_URL)), 302);
+});
+app.on(["GET", "POST"], "/api/auth/*", async (c) =>
+  privateAuthResponse(await createAuth(c.env, c.executionCtx).handler(c.req.raw), c.req.raw),
+);
 app.post("/api/billing/webhook", async (c) => {
   await webhook(c.env, await c.req.text(), c.req.header("stripe-signature") || "");
   c.executionCtx.waitUntil(dispatchBillingNotices(c.env, c.executionCtx));
@@ -487,6 +552,7 @@ app.use("/api/*", async (c, next) => {
     !trustedAppOrigins(c.env).includes(c.req.header("origin") || "")
   )
     return c.json({ error: "invalid_origin", message: "请求来源无效" }, 403);
+  if (!(await admitSessionLookup(c.env, c.req.raw)).success) return entryLimited();
   const result = await createAuth(c.env).api.getSession({ headers: c.req.raw.headers });
   if (!result) return c.json({ error: "unauthorized", message: "请先登录" }, 401);
   c.set("user", result.user);
@@ -641,7 +707,63 @@ app.get("/api/kimiseek/callback", async (c) => {
     return c.redirect(target.toString(), 303);
   } catch (e) {
     const message = e instanceof AppError ? e.message : "关联未完成，请返回微伴重新尝试";
-    await callKimiseek(account, { action: "fail", id, message });
+    const policy = kimiseekEmailError(e instanceof AppError ? e.code : undefined);
+    await callKimiseek(account, { action: "fail", id, message, errorCode: policy?.code });
+    if (policy) {
+      deleteCookie(c, "wx_kimiseek_flow", { path: "/api/kimiseek" });
+      return c.html(
+        html`<!doctype html>
+          <html lang="zh-CN">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width,initial-scale=1" />
+              <title>完成邮箱设置 · 微伴</title>
+              <style>
+                body {
+                  margin: 0;
+                  padding: 24px;
+                  background: #f7f8f5;
+                  color: #26382d;
+                  font:
+                    16px/1.8 system-ui,
+                    sans-serif;
+                }
+                main {
+                  max-width: 520px;
+                  margin: 8vh auto;
+                  padding: 28px;
+                  background: white;
+                  border: 1px solid #dce3da;
+                  border-radius: 16px;
+                }
+                h1 {
+                  font-size: 24px;
+                  line-height: 1.4;
+                }
+                a {
+                  display: inline-block;
+                  padding: 10px 0;
+                  color: #315f46;
+                  text-underline-offset: 4px;
+                }
+                a:focus-visible {
+                  outline: 2px solid currentColor;
+                  outline-offset: 4px;
+                }
+              </style>
+            </head>
+            <body>
+              <main>
+                <h1>KimiSeek 关联未完成</h1>
+                <p>${message}</p>
+                <a href="${policy.href}">${policy.label}</a><br />
+                <a href="/app/channels?new=1">返回渠道与模型</a>
+              </main>
+            </body>
+          </html>`,
+        403,
+      );
+    }
     return c.text(`${message}。你可以关闭此页面，回微伴重新操作。`, 400);
   }
 });
@@ -910,6 +1032,10 @@ for (const action of ["bind", "disconnect", "select"] as const)
     `/api/wechat/links/:id/${action}`,
     invoke(`wechat.${action}`, (c) => ({ id: c.req.param("id") })),
   );
+app.post(
+  "/api/wechat/links/:id/rebind",
+  invoke("wechat.bind", (c) => ({ id: c.req.param("id"), regenerate: true })),
+);
 app.post("/api/wechat/bind", invoke("wechat.bind"));
 app.post("/api/wechat/disconnect", invoke("wechat.disconnect"));
 app.get("/api/billing/catalog", async (c) => c.json(await catalog(c.env)));
@@ -937,8 +1063,16 @@ app.onError((error, c) => {
       { error: error.code, message: error.message },
       error.status as ContentfulStatusCode,
     );
+  const requestId = crypto.randomUUID();
+  c.header("X-Request-Id", requestId);
   console.error(
-    JSON.stringify({ event: "request.failed", path: c.req.path, errorType: error.name }),
+    JSON.stringify({
+      event: "request.failed",
+      route: routePath(c),
+      method: c.req.method,
+      status: 500,
+      requestId,
+    }),
   );
   return c.json({ error: "internal_error", message: "服务暂时不可用，请稍后重试" }, 500);
 });

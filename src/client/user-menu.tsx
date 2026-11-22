@@ -11,15 +11,73 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
+import { useLocale } from "./locale";
 import { membershipExpiry } from "./membership";
 import { formatCredits, type Snapshot } from "../shared/types";
+import { userMenuCopy as userMenuCopyJa } from "../shared/i18n/ja/copy/user-menu";
+import { userMenuCopy as userMenuCopyKo } from "../shared/i18n/ko/copy/user-menu";
 import "./user-menu.css";
 
 type MenuUser = { id: string; name: string; email: string; image?: string | null };
 type AccountSummary = Pick<Snapshot, "plan" | "planUntil"> & { balance: number };
 
+const userMenuCopyEn = {
+  avatarFallback: "?",
+  userMenu: "User menu",
+  accountMenu: "Account menu",
+  account: "My account",
+  workspace: "Open workspace",
+  loading: "Loading membership and credits…",
+  loadFailed: "Could not load account details",
+  reload: "Reload",
+  balance: "Credit balance",
+  plus: "Plus membership",
+  free: "Free account",
+  expiresOn: "Expires on",
+  timeZone: " (Beijing time)",
+  expired: "Your membership has expired. Upgrade to regain Plus benefits.",
+  upgradeBenefits: "Upgrade to use all plugins and more WeChat connections.",
+  renew: "Renew membership",
+  upgrade: "Upgrade membership",
+  admin: "Admin console",
+  signingOut: "Logging out…",
+  signOut: "Log out",
+  signOutFailed: "Could not log out. Please try again.",
+} as const;
+
+const userMenuCopyZh = {
+  avatarFallback: "你",
+  userMenu: "用户菜单",
+  accountMenu: "账户菜单",
+  account: "我的账户",
+  workspace: "进入工作台",
+  loading: "正在加载会员与 credits…",
+  loadFailed: "账户信息暂时未能加载",
+  reload: "重新加载",
+  balance: "Credits 余额",
+  plus: "Plus 会员",
+  free: "Free 免费账户",
+  expiresOn: "有效期至",
+  timeZone: "（北京时间）",
+  expired: "会员已到期，升级后继续使用 Plus 权益。",
+  upgradeBenefits: "升级后使用全部插件与更多微信链接。",
+  renew: "续费会员",
+  upgrade: "升级会员",
+  admin: "管理后台",
+  signingOut: "正在退出…",
+  signOut: "退出登录",
+  signOutFailed: "退出登录失败，请重试",
+} as const;
+
 export function UserMenu({ user }: { user: MenuUser }) {
   const { refetch } = useAuth();
+  const { locale } = useLocale();
+  const copy =
+    locale === "en" ? userMenuCopyEn
+    : locale === "ja" ? userMenuCopyJa
+    : locale === "ko" ? userMenuCopyKo
+    : userMenuCopyZh;
+  const { loadFailed } = copy;
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [summary, setSummary] = useState<AccountSummary | null>(null);
@@ -52,13 +110,13 @@ export function UserMenu({ user }: { user: MenuUser }) {
           setSummary({ plan: data.plan, planUntil: data.planUntil, balance: data.wallet.balance });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError("账户信息暂时未能加载");
+        if (!controller.signal.aborted) setError(loadFailed);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [open, retry, user.id]);
+  }, [open, retry, user.id, loadFailed]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,7 +147,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           onError={() => setImageFailed(true)}
         />
       ) : (
-        Array.from(user.name.trim() || user.email || "你")[0].toLocaleUpperCase()
+        Array.from(user.name.trim() || user.email || copy.avatarFallback)[0].toLocaleUpperCase()
       )}
     </span>
   );
@@ -107,7 +165,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
         type="button"
         className="account-menu-trigger"
         ref={trigger}
-        aria-label="用户菜单"
+        aria-label={copy.userMenu}
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-haspopup="dialog"
@@ -124,11 +182,16 @@ export function UserMenu({ user }: { user: MenuUser }) {
         <ChevronDown size={14} aria-hidden="true" />
       </button>
       {open && (
-        <div className="account-dropdown" id={menuId} role="dialog" aria-label="账户菜单">
+        <div
+          className="account-dropdown"
+          id={menuId}
+          role="dialog"
+          aria-label={copy.accountMenu}
+        >
           <div className="account-dropdown-profile">
             {avatar}
             <div>
-              <strong>{user.name || "我的账户"}</strong>
+              <strong>{user.name || copy.account}</strong>
               <span title={user.email}>{user.email}</span>
             </div>
           </div>
@@ -139,12 +202,12 @@ export function UserMenu({ user }: { user: MenuUser }) {
             onClick={() => setOpen(false)}
           >
             <LayoutDashboard size={17} aria-hidden="true" />
-            进入工作台
+            {copy.workspace}
             <ArrowUpRight size={15} className="account-menu-arrow" aria-hidden="true" />
           </Link>
           <div className="account-dropdown-summary" aria-busy={loading} aria-live="polite">
             {loading ? (
-              <p className="account-menu-loading">正在加载会员与 credits…</p>
+              <p className="account-menu-loading">{copy.loading}</p>
             ) : error ? (
               <div className="account-menu-error">
                 <span>{error}</span>
@@ -153,7 +216,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                   className="text-link"
                   onClick={() => setRetry((value) => value + 1)}
                 >
-                  重新加载
+                  {copy.reload}
                 </button>
               </div>
             ) : summary ? (
@@ -165,7 +228,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                 >
                   <span>
                     <Coins size={16} aria-hidden="true" />
-                    Credits 余额
+                    {copy.balance}
                   </span>
                   <strong>
                     {formatCredits(summary.balance)}
@@ -176,23 +239,23 @@ export function UserMenu({ user }: { user: MenuUser }) {
                   <div className="account-membership-heading">
                     <span>
                       <Crown size={17} aria-hidden="true" />
-                      {plus ? "Plus 会员" : "Free 免费账户"}
+                      {plus ? copy.plus : copy.free}
                     </span>
                     <span className="account-plan-badge">{plus ? "PLUS" : "FREE"}</span>
                   </div>
                   <p>
                     {plus ? (
                       <>
-                        有效期至{" "}
+                        {copy.expiresOn}{" "}
                         <time dateTime={new Date(summary.planUntil).toISOString()}>
                           {membershipExpiry(summary.planUntil, true)}
                         </time>
-                        <small>（北京时间）</small>
+                        <small>{copy.timeZone}</small>
                       </>
                     ) : summary.planUntil > 0 ? (
-                      "会员已到期，升级后继续使用 Plus 权益。"
+                      copy.expired
                     ) : (
-                      "升级后使用全部插件与更多微信链接。"
+                      copy.upgradeBenefits
                     )}
                   </p>
                   <Link
@@ -200,7 +263,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                     to="/app/billing"
                     onClick={() => setOpen(false)}
                   >
-                    {plus ? "续费会员" : "升级会员"}
+                    {plus ? copy.renew : copy.upgrade}
                     <ArrowUpRight size={15} aria-hidden="true" />
                   </Link>
                 </div>
@@ -210,7 +273,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           {isAdmin && (
             <Link className="account-menu-item" to="/app/admin" onClick={() => setOpen(false)}>
               <ShieldCheck size={17} />
-              管理后台
+              {copy.admin}
               <ArrowUpRight size={15} className="account-menu-arrow" />
             </Link>
           )}
@@ -225,14 +288,14 @@ export function UserMenu({ user }: { user: MenuUser }) {
                 if (result.error) throw new Error("Sign out failed");
                 await refetch();
               } catch {
-                setError("退出登录失败，请重试");
+                setError(copy.signOutFailed);
               } finally {
                 setSigningOut(false);
               }
             }}
           >
             <LogOut size={16} aria-hidden="true" />
-            {signingOut ? "正在退出…" : "退出登录"}
+            {signingOut ? copy.signingOut : copy.signOut}
           </button>
         </div>
       )}

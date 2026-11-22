@@ -139,29 +139,32 @@ it.each(["month", "year"])(
   },
 );
 
-it("leaves recovery completion recording to the verified server transition", async () => {
-  await mount(<ResetPasswordPage />, "/reset-password?recovery=1&token=review-token");
-  await act(async () => {
-    for (const input of container.querySelectorAll<HTMLInputElement>('input[type="password"]')) {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-        input,
-        "review-password-123",
-      );
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-  });
-  await act(async () => {
-    container
-      .querySelector("form")!
-      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-  });
-  expect(state.resetPassword).toHaveBeenCalledWith({
-    token: "review-token",
-    newPassword: "review-password-123",
-  });
-  expect(container.textContent).toContain("密码已更新");
-  expect(events).toEqual([]);
-});
+it.each(["&token=review-token", "#token=review-token"])(
+  "completes recovery with legacy or private tokens (%s)",
+  async (suffix) => {
+    await mount(<ResetPasswordPage />, "/reset-password?recovery=1" + suffix);
+    await act(async () => {
+      for (const input of container.querySelectorAll<HTMLInputElement>('input[type="password"]')) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+          input,
+          "review-password-123",
+        );
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    await act(async () => {
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(state.resetPassword).toHaveBeenCalledWith({
+      token: "review-token",
+      newPassword: "review-password-123",
+    });
+    expect(container.textContent).toContain("密码已更新");
+    expect(events).toEqual([]);
+  },
+);
 
 function paidBilling() {
   state.request.mockImplementation(async (path: string) => {

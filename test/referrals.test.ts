@@ -47,6 +47,33 @@ const post = (path: string, body: unknown, cookie = "") =>
     },
     body: JSON.stringify(body),
   });
+it("rejects limited session and referral lookups before reading D1", async () => {
+  const noRead = {
+    prepare: vi.fn(() => {
+      throw new Error("unexpected D1 read");
+    }),
+  };
+  const bindings = {
+    ...env,
+    DB: noRead as unknown as D1Database,
+    PUBLIC_ENTRY_LIMIT: { limit: async () => ({ success: false }) },
+  };
+  for (const path of [
+    "/invite/" + "a".repeat(32),
+    "/api/auth/get-session",
+    "/api/referrals/attribution",
+    "/api/me",
+  ]) {
+    const result = await worker.fetch(
+      new Request(env.APP_URL + path),
+      bindings,
+      createExecutionContext(),
+    );
+    expect(result.status).toBe(429);
+    expect(result.headers.get("retry-after")).toBe("60");
+  }
+  expect(noRead.prepare).not.toHaveBeenCalled();
+});
 beforeAll(async () => {
   await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   await env.DB.exec(authMigration);

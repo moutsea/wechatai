@@ -209,12 +209,10 @@ export class MediaStore {
     );
   }
   revoke(sessionId?: string) {
-    if (sessionId)
-      this.sql.exec(
-        "UPDATE output_assets SET committed = -1, expiresAt = 0, wechat = '' WHERE sessionId = ?",
-        sessionId,
-      );
-    else this.sql.exec("UPDATE output_assets SET committed = -1, expiresAt = 0, wechat = ''");
+    this.sql.exec(
+      `UPDATE output_assets SET committed=-1,expiresAt=0,wechat='' WHERE (committed!=-1 OR expiresAt!=0 OR wechat!='')${sessionId ? " AND sessionId=?" : ""}`,
+      ...(sessionId ? [sessionId] : []),
+    );
   }
   nextExpiry() {
     return this.sql

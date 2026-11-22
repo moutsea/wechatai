@@ -2475,6 +2475,63 @@ code {
   color: var(--ink);
   font-weight: 600;
 }
+.site-language {
+  position: relative;
+  display: flex;
+  align-items: center;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.site-language-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: inherit;
+  font-weight: inherit;
+}
+.site-language-trigger:hover,
+.site-language-trigger[aria-expanded="true"] {
+  color: var(--green);
+}
+.site-language-trigger[aria-expanded="true"] {
+  border-color: var(--line);
+  background: #fff;
+}
+.site-language-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 144px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px #101a121f;
+}
+.site-language-menu a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.site-language-menu a:hover {
+  color: var(--green);
+  background: var(--surface-soft);
+}
+.site-language-menu a[aria-current="true"] {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--surface-soft);
+}
 .site-menu-toggle {
   display: none;
   align-items: center;
@@ -2508,6 +2565,9 @@ code {
   }
   .site-header-nav,
   .site-header-account:not(.is-authenticated) {
+    display: none;
+  }
+  .site-header-aside > .site-language {
     display: none;
   }
   .site-menu-toggle {
@@ -2548,6 +2608,43 @@ code {
     border-radius: 10px;
     background: var(--lime);
     color: var(--on-lime);
+    font-weight: 600;
+  }
+  .site-mobile-menu.is-open .site-language {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    font-size: var(--text-base);
+  }
+  .site-mobile-menu.is-open .site-language-trigger {
+    width: 100%;
+    min-height: 52px;
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink);
+    justify-content: space-between;
+    font-size: var(--text-base);
+    font-weight: 500;
+  }
+  .site-mobile-menu.is-open .site-language-menu {
+    position: static;
+    min-width: 0;
+    padding: 0 0 4px;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .site-mobile-menu.is-open .site-language-menu a {
+    padding: 0 16px;
+    color: var(--muted);
+  }
+  .site-mobile-menu.is-open .site-language-menu a[aria-current="true"] {
+    background: transparent;
+    color: var(--green);
     font-weight: 600;
   }
 }

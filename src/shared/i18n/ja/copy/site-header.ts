@@ -1,0 +1,20 @@
+export const headerCopy = {
+  home: "ホーム",
+  topNav: "メインナビゲーション",
+  account: "アカウント",
+  login: "ログイン",
+  start: "無料で始める",
+  workspace: "ワークスペースを開く",
+  workspaceFallback: "ワークスペース",
+  openMenu: "メニューを開く",
+  closeMenu: "メニューを閉じる",
+  menuFailed: "アカウントメニューを読み込めませんでした",
+  reloadMenu: "アカウントメニューを再読み込み",
+  language: "言語",
+  nav: {
+    home: "ホーム",
+    pricing: "料金",
+    docs: "ドキュメント",
+    how: "使い方",
+  },
+} as const;

@@ -104,6 +104,9 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
   };
   return betterAuth({
     appName: env.APP_NAME,
+    // Some Better Auth error paths bypass custom log handlers. The HTTP boundary
+    // records sanitized server failures without exception text or SQL arguments.
+    logger: { disabled: true },
     baseURL: env.APP_URL,
     secret: secret(env, "BETTER_AUTH_SECRET"),
     trustedOrigins: trustedAppOrigins(env),
@@ -125,7 +128,8 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      // Email/password registration sends its first message through requireEmailVerification.
+      // Opting in here would also send from OAuth callbacks without a mail challenge.
       sendOnSignIn: false,
       autoSignInAfterVerification: true,
       expiresIn: 60 * 60,
@@ -183,10 +187,8 @@ export function createAuth(env: Env, context?: Pick<ExecutionContext, "waitUntil
             code: "PASSWORD_TOO_LONG",
             message: "密码不能超过 128 个字符。",
           });
-        const verifiedId = await resetPasswordAtomically(
-          env,
-          token,
-          await ctx.context.password.hash(body.data.newPassword),
+        const verifiedId = await resetPasswordAtomically(env, token, () =>
+          ctx.context.password.hash(body.data.newPassword),
         );
         if (verifiedId) await recordVerification(verifiedId, ctx.request);
         return ctx.json({ status: true });

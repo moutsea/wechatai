@@ -1,11 +1,23 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { runnerImport } from "vite";
+import { splitLocalePath } from "../src/shared/i18n/index.ts";
 import { museGuide } from "../src/shared/muse-docs.ts";
 
 // Verify the actual deployable output; metadata-only tests cannot catch an empty SPA shell.
 const dir = new URL("../dist/client/", import.meta.url);
 const read = (name) => readFile(new URL(name, dir), "utf8");
-const museIndexLinks = ["(https://wechatai.app/wechat-muse)", "(https://wechatai.app/developers/muse)"];
+const {
+  module: { alternateLinks, defaultLocale, locale404Probes, localePageGroups },
+} = await runnerImport(fileURLToPath(new URL("./locale-expectations.ts", import.meta.url)));
+const localeByPath = new Map(localePageGroups.flat().map((page) => [page.path, page]));
+const publicPaths = [...localeByPath.keys()];
+const htmlFile = (path) => (path === "/" ? "index.html" : `${path.slice(1)}.html`);
+const museIndexLinks = [
+  "(https://wechatai.app/wechat-muse)",
+  "(https://wechatai.app/developers/muse)",
+];
 const workerDocuments = [
   ["/developers/plugins.md", "text/markdown", "给 AI agent 的起点"],
   ["/developers/openclaw.md", "text/markdown", "# OpenClaw 接入指南"],
@@ -111,7 +123,11 @@ const landingPages = [
   ],
   ["wechat-claude.html", "https://wechatai.app/wechat-claude", "微信接入 Claude：绕开桥接的那条路"],
   ["wechat-gpt.html", "https://wechatai.app/wechat-gpt", "微信接入 GPT：跳过部署这一步"],
-  ["wechat-kimi.html", "https://wechatai.app/wechat-kimi", "微信接入 Kimi：从 KimiSeek 一键导入开始"],
+  [
+    "wechat-kimi.html",
+    "https://wechatai.app/wechat-kimi",
+    "微信接入 Kimi：从 KimiSeek 一键导入开始",
+  ],
   ["wechat-qwen.html", "https://wechatai.app/wechat-qwen", "微信接入通义千问：用硅基流动渠道跑通"],
   ["wechat-glm.html", "https://wechatai.app/wechat-glm", "微信接入 GLM：用硅基流动渠道配置"],
   ["wechat-agent.html", "https://wechatai.app/wechat-agent", "把 Agent 接进微信，而不只是模型"],
@@ -119,6 +135,11 @@ const landingPages = [
     "wechat-ai-options.html",
     "https://wechatai.app/wechat-ai-options",
     "微信 AI 怎么选：四类方案的真实取舍",
+  ],
+  [
+    "compare.html",
+    "https://wechatai.app/compare",
+    "微信 AI 对比：先看三类方案再选",
   ],
   [
     "compare/wechatai-vs-wechat-official-ai.html",
@@ -268,6 +289,65 @@ for (const [file, , marker] of landingPages) {
     assert(target.includes(`id="${match[2]}"`), `${file}: cross-page anchor ${match[0]}`);
   }
 }
+const englishClawbot = await read("en/wechat-clawbot.html");
+assert.match(
+  englishClawbot.match(/<ul class="seopage-highlights">.*?<\/ul>/s)?.[0] ?? "",
+  /Binding takes about 30 seconds/,
+  "ClawBot: binding duration, not link expiry",
+);
+
+const englishClawbotModels = await read("en/wechat-clawbot-models.html");
+const featureTestStep = englishClawbotModels.match(
+  /<li><strong>Test other features as needed<\/strong>:[\s\S]*?<\/li>/,
+)?.[0] ?? "";
+assert.match(featureTestStep, /you need Plus/i, "ClawBot models: Plus required to test attachments");
+assert.match(
+  featureTestStep,
+  /text chat, skip the attachment test/i,
+  "ClawBot models: text-only users skip attachment testing",
+);
+
+const englishWechatAi = await read("en/wechat-ai.html");
+const aiDescription = englishWechatAi.match(/<meta name="description" content="([^"]+)"/)?.[1];
+assert(aiDescription, "WeChat AI: English meta description");
+assert.match(aiDescription, /Xiaowei uses your own model/, "WeChat AI: bring-your-own model");
+assert.match(aiDescription, /consumes credits/, "WeChat AI: Xiaowei credit usage");
+assert.match(aiDescription, /limits task runs/, "WeChat AI: Xiaowei execution limit");
+assert(
+  englishWechatAi.includes(`<meta property="og:description" content="${aiDescription}"`),
+  "WeChat AI: OG description matches meta description",
+);
+const aiGraph = JSON.parse(
+  englishWechatAi.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+)["@graph"];
+assert.equal(
+  aiGraph.find((item) => item["@type"] === "WebPage")?.description,
+  aiDescription,
+  "WeChat AI: JSON-LD description matches meta description",
+);
+
+const englishQwen = await read("en/wechat-qwen.html");
+const qwenAnswer = englishQwen.match(/<section[^>]+id="faq"[^>]*>.*?<details>.*?<p>(.*?)<\/p>/s)?.[1];
+assert(qwenAnswer, "Qwen: first visible FAQ answer");
+assert.match(
+  qwenAnswer,
+  /preset fills in the Beijing endpoint\. Enter your own API key and save the channel, then sync available models or add a model manually/,
+  "Qwen: preset supplies the endpoint; enter a key, save, and sync or add a model",
+);
+assert.match(
+  qwenAnswer,
+  /another region or a dedicated endpoint, choose Custom first and enter the endpoint from the provider documentation/,
+  "Qwen: other endpoints require Custom mode",
+);
+const qwenGraph = JSON.parse(
+  englishQwen.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+)["@graph"];
+assert.equal(
+  qwenGraph.find((item) => item["@type"] === "FAQPage")?.mainEntity[0]?.acceptedAnswer.text,
+  qwenAnswer,
+  "Qwen: first FAQ JSON-LD answer matches the visible answer",
+);
+
 // /pricing must ship plan offers and a machine-readable price check date in the
 // static HTML, not only after client JavaScript runs.
 const pricingHtml = await read("pricing.html");
@@ -297,7 +377,8 @@ assert(
 assert(legacy.includes('rel="canonical" href="https://wechatai.app/docs/getting-started"'));
 assert(legacy.includes("四、启动插件（可选）"), "legacy guide has a usable no-JS fallback");
 assert(legacy.includes('href="/docs/commands"'), "legacy guide exposes command reference");
-assert(!(await read("sitemap.xml")).includes("https://wechatai.app/guide"));
+const sitemap = await read("sitemap.xml");
+assert(!sitemap.includes("https://wechatai.app/guide"));
 const redirectRules = await read("_redirects");
 // Cloudflare counts every rule after the first splat or placeholder as dynamic and
 // drops whatever exceeds 100 of them, so the canonical aliases must stay static.
@@ -315,8 +396,7 @@ for (const path of ["/guide", "/guide/", "/guide.html"]) {
     `${path}: permanent guide redirect without overriding fragment`,
   );
 }
-for (const [, canonical] of publicPages) {
-  const path = new URL(canonical).pathname;
+for (const path of publicPaths) {
   for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`]) {
     assert(
       redirectRules.includes(`${alias} ${path} 301`),
@@ -335,6 +415,41 @@ for (const [file] of publicPages.filter(([file]) => file.startsWith("docs/"))) {
     `${file}: discoverable from docs index`,
   );
 }
+// Every registered English article is prerendered with its own English body, not
+// a shell that resolves client-side, and the English index links all of them.
+const englishIndex = await read("en/docs.html");
+assert(englishIndex.includes("Put your AI to work in WeChat."), "en/docs: English index heading");
+for (const [slug, marker] of [
+  ["getting-started", "1. How Wechatai works"],
+  ["channels-models", "1. Add a model channel"],
+  ["model-providers", "KimiSeek one-click import"],
+  ["wechat-connection", "1. Connect WeChat by QR code"],
+  ["commands", "Command list"],
+  ["sessions", "Create, switch and clean up"],
+  ["attachments", "1. Send the attachment first"],
+  ["credits", "1. Free or Plus?"],
+  ["faq", "It connects, but why do I get no reply?"],
+  ["cloud-agent", "1. Enable Xiaowei"],
+  ["ds-chat", "1. Configure the model and search service"],
+  ["image-generation", "1. Configure an image service"],
+  ["roleplay", "How can I play?"],
+  ["personal-assistant", "1. Configure and start"],
+  ["notifications", "1. Connect WeChat and generate a dedicated token"],
+  ["wechat-ai-assistant", "What can an AI assistant in WeChat do for you?"],
+  ["deepseek-in-wechat", "Before starting, confirm two things"],
+  ["multiple-openclaw-in-wechat", "First decide where the two assistants come from"],
+  ["hermes-in-wechat", "Step 1: prepare Hermes"],
+]) {
+  const file = `en/docs/${slug}.html`;
+  const html = await read(file);
+  assert(html.includes('<html lang="en">'), `${file}: English document language`);
+  assert(html.includes(marker), `${file}: English article body before JavaScript`);
+  assert(
+    html.includes(`rel="canonical" href="https://wechatai.app/en/docs/${slug}"`),
+    `${file}: English canonical`,
+  );
+  assert(englishIndex.includes(`href="/en/docs/${slug}"`), `${file}: listed in English index`);
+}
 // 文档导航与开发者索引都要直达同一份 Muse 指南，且正文包含全部章节与 FAQ；
 // `/developers/muse.md` 由同一份 museGuide 提供，Worker 测试按同一清单断言。
 assert(docsIndex.includes('href="/developers/muse"'), "docs navigation links the Muse guide");
@@ -344,7 +459,8 @@ const museSections = museGuide
   .slice(1)
   .map((section) => section.split("\n")[0]);
 assert.equal(museSections.length, 8, "Muse guide has seven content sections and an FAQ section");
-for (const heading of museSections) assert(museHtml.includes(heading), `Muse guide HTML: ${heading}`);
+for (const heading of museSections)
+  assert(museHtml.includes(heading), `Muse guide HTML: ${heading}`);
 const museFaqQuestions = [...museGuide.split("## 8. 常见问题")[1].matchAll(/^### (.+)$/gm)].map(
   (match) => match[1],
 );
@@ -352,10 +468,7 @@ assert.equal(museFaqQuestions.length, 6, "Muse guide has six FAQs");
 for (const question of museFaqQuestions)
   assert(museHtml.includes(question), `Muse guide HTML: ${question}`);
 const pluginsIndex = await read("developers/plugins.html");
-assert(
-  pluginsIndex.includes('href="/developers/muse"'),
-  "plugins index links the Muse guide",
-);
+assert(pluginsIndex.includes('href="/developers/muse"'), "plugins index links the Muse guide");
 // Muse 承接页与指南必须双向可达；主题页、对比页、定价页和首页都要有明确入口。
 for (const [file, marker] of [
   ["index.html", "homepage"],
@@ -523,7 +636,90 @@ assert(
   ),
   "wildcard: protocol API allowed",
 );
-assert.equal(((await read("sitemap.xml")).match(/<loc>/g) || []).length, publicPages.length);
+const translations = localePageGroups.flatMap(([, ...translated]) => translated);
+assert.deepEqual(
+  [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map(([, url]) => url).sort(),
+  [
+    ...publicPages.map(([, canonical]) => canonical),
+    ...translations.map(({ canonical }) => canonical),
+  ].sort(),
+  "sitemap: exactly the public Chinese and registered localized URLs",
+);
+const localizedFiles = (await readdir(dir, { recursive: true })).filter(
+  (file) => file.endsWith(".html") && splitLocalePath(`/${file.slice(0, -5)}`),
+);
+assert.deepEqual(
+  localizedFiles.sort(),
+  translations.map(({ path }) => htmlFile(path)).sort(),
+  "localized HTML: exactly the registered public URLs",
+);
+for (const group of localePageGroups) {
+  for (const expected of group) {
+    const { path, htmlLang, ogLocale, canonical, lastmod } = expected;
+    const html = await read(htmlFile(path));
+    assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
+    assert(html.includes(`property="og:locale" content="${ogLocale}"`), `${path}: og:locale`);
+    assert.deepEqual(
+      [...html.matchAll(/<link rel="canonical" href="([^"]+)"/g)].map(([, href]) => href),
+      [canonical],
+      `${path}: single self canonical`,
+    );
+    assert.deepEqual(
+      [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g)].map(
+        ([, lang, href]) => [lang, href],
+      ),
+      alternateLinks(group),
+      `${path}: hreflang lists exactly the published page group`,
+    );
+    if (group.length === 1) {
+      assert(
+        !html.includes('class="site-language"'),
+        `${path}: no switcher without a published translation`,
+      );
+    } else {
+      const navigation =
+        htmlLang === "ko-KR"
+          ? "언어"
+          : htmlLang === "ja-JP"
+            ? "言語"
+            : htmlLang === "en"
+              ? "Language"
+              : "语言";
+      const separator = htmlLang === "en" ? ": " : "：";
+      const trigger = `<button type="button" class="site-language-trigger" aria-haspopup="menu" aria-expanded="false" aria-label="${navigation}${separator}${expected.label}">`;
+      assert.equal(
+        html.split(trigger).length - 1,
+        2,
+        `${path}: closed switcher trigger in the desktop header and mobile drawer`,
+      );
+      assert(
+        html.includes(`${trigger}<span>${expected.label}</span>`),
+        `${path}: switcher trigger shows the current language`,
+      );
+      assert(!html.includes('class="site-language-menu"'), `${path}: switcher menu starts closed`);
+    }
+    if (path.startsWith("/en/wechat-")) {
+      const graph = JSON.parse(
+        html.match(/<script type="application\/ld\+json" data-seo>(.*?)<\/script>/)[1],
+      )["@graph"];
+      const { publisher } = graph.find(
+        (item) => item["@type"] === "WebPage" || item["@type"] === "Article",
+      );
+      assert.equal(publisher["@id"], "https://wechatai.app/#organization", `${path}: publisher ID`);
+      assert.match(publisher.description, /WeChat ClawBot/, `${path}: publisher description`);
+      assert.doesNotMatch(publisher.description, /\p{Script=Han}/u, `${path}: English publisher`);
+    }
+    if (lastmod) {
+      assert(
+        sitemap.includes(`<loc>${canonical}</loc><lastmod>${lastmod}</lastmod>`),
+        `${path}: lastmod`,
+      );
+      assert.equal((html.match(/<h1\b/g) || []).length, 1, `${path}: rendered page heading`);
+      assert(!html.includes("这个页面没有找到。"), `${path}: not the 404 page`);
+      assert(html.includes('content="index, follow, max-image-preview:large"'), `${path}: indexable`);
+    }
+  }
+}
 const image = await readFile(new URL("og-image.png", dir));
 assert.equal(image.subarray(1, 4).toString(), "PNG");
 assert.equal(image.readUInt32BE(16), 1200);
@@ -547,7 +743,7 @@ if (process.argv[2]) {
     }
   }
   for (const path of [
-    ...publicPages.map(([, canonical]) => new URL(canonical).pathname),
+    ...publicPaths,
     "/login",
     "/register",
     "/app",
@@ -566,14 +762,20 @@ if (process.argv[2]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);
     const html = await response.text();
-    assert(html.includes('<html lang="zh-CN">'), `${path}: HTML`);
-    if (!publicPages.some(([, canonical]) => new URL(canonical).pathname === path)) {
+    const expectedLocale = localeByPath.get(new URL(path, origin).pathname);
+    const { htmlLang } = expectedLocale ?? defaultLocale;
+    assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
+    if (expectedLocale) {
+      assert(
+        html.includes(`property="og:locale" content="${expectedLocale.ogLocale}"`),
+        `${path}: og locale`,
+      );
+    } else {
       assert.match(response.headers.get("x-robots-tag") || "", /noindex/, `${path}: header`);
       assert(html.includes('content="noindex, follow"'), `${path}: noindex HTML`);
     }
   }
-  for (const [, canonical] of publicPages) {
-    const path = new URL(canonical).pathname;
+  for (const path of publicPaths) {
     for (const alias of path === "/" ? ["/index.html"] : [`${path}/`, `${path}.html`]) {
       const response = await fetch(new URL(alias, origin), { redirect: "manual" });
       assert.equal(response.status, 301, `${alias}: permanent canonical redirect`);
@@ -593,10 +795,20 @@ if (process.argv[2]) {
     assert.equal(destination.hash, "", "Location must not replace historical section fragments");
     await response.body?.cancel();
   }
-  for (const path of ["/not-a-real-page", "/nested/not-a-real-page", "/docs/not-a-real-article"]) {
-    const response = await fetch(new URL(path, origin));
+  for (const path of [
+    "/not-a-real-page",
+    "/nested/not-a-real-page",
+    "/docs/not-a-real-article",
+    ...locale404Probes,
+  ]) {
+    const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 404, `${path}: real 404`);
-    assert((await response.text()).includes("这个页面没有找到。"));
+    assert.equal(response.headers.get("location"), null, `${path}: no redirect to Chinese`);
+    const body = await response.text();
+    assert(body.includes("这个页面没有找到。"), `${path}: 404 body`);
+    for (const marker of ["把你的 AI", "免费开始，按需升级 Plus"]) {
+      assert(!body.includes(marker), `${path}: does not render Chinese page ${marker}`);
+    }
   }
   for (const path of ["/sitemap.xml", "/robots.txt", "/og-image.png", "/favicon.svg"]) {
     const response = await fetch(new URL(path, origin));

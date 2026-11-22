@@ -4,6 +4,7 @@ import { useApp } from "../context";
 import { json } from "../api";
 import { trackChannelModelImport, trackFunnel } from "../analytics-client";
 import type { ModelImportResult } from "../../shared/types";
+import { kimiseekEmailError } from "../../shared/kimiseek-errors";
 
 export function useKimiseekConnect(onComplete: () => void) {
   const { request, refresh, notify } = useApp();
@@ -15,6 +16,7 @@ export function useKimiseekConnect(onComplete: () => void) {
   } | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState<string>();
   const complete = useRef(onComplete);
   complete.current = onComplete;
   useEffect(() => {
@@ -26,6 +28,7 @@ export function useKimiseekConnect(onComplete: () => void) {
         const result = await request<{
           status: string;
           message?: string;
+          errorCode?: string;
           modelImport?: ModelImportResult;
         }>(`/kimiseek/status/${pending.id}`);
         if (stopped) return;
@@ -41,7 +44,10 @@ export function useKimiseekConnect(onComplete: () => void) {
           window.dispatchEvent(new Event("kimiseek-balance-refresh"));
           return;
         }
-        if (result.status === "failed") throw new Error(result.message ?? "关联未完成，请重试");
+        if (result.status === "failed") {
+          setErrorCode(result.errorCode);
+          throw new Error(result.message ?? "关联未完成，请重试");
+        }
         if (Date.now() > pending.expires) throw new Error("关联已超时，请重新点击导入");
         timer = setTimeout(() => void poll(), 1500);
       } catch (e) {
@@ -59,8 +65,9 @@ export function useKimiseekConnect(onComplete: () => void) {
     };
   }, [pending, request, refresh, notify]);
   const start = async (operation: "connect" | "recharge") => {
-    setError("");
     if (pending || starting) return;
+    setError("");
+    setErrorCode(undefined);
     const popup = window.open("about:blank", "_blank");
     if (popup) {
       popup.opener = null;
@@ -83,7 +90,24 @@ export function useKimiseekConnect(onComplete: () => void) {
       setStarting(false);
     }
   };
-  return { busy: starting || Boolean(pending), start, pendingUrl: pending?.url, error };
+  return { busy: starting || Boolean(pending), start, pendingUrl: pending?.url, error, errorCode };
+}
+
+export function KimiseekConnectError({ message, code }: { message: string; code?: string }) {
+  const policy = kimiseekEmailError(code);
+  return (
+    <span className="form-error" role="alert">
+      {message}
+      {policy && (
+        <>
+          {" "}
+          <a className="text-link" href={policy.href} target="_blank" rel="noopener noreferrer">
+            {policy.label}
+          </a>
+        </>
+      )}
+    </span>
+  );
 }
 
 export function KimiseekBalance({

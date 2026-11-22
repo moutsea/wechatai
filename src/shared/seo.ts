@@ -1,4 +1,5 @@
 import { INFO_PAGES, INFO_PAGE_UPDATED_AT, SITE_MAINTAINER, type InfoPageKind } from "./site-info";
+import { EN_SITE_INFO_PAGES } from "./i18n/en/site-info";
 import {
   DOC_ARTICLES,
   DOCS_TITLE,
@@ -8,12 +9,32 @@ import {
   findDocArticle,
 } from "./docs";
 import { SEO_PATHS, findSeoPage, type SeoPage } from "./seo-pages";
-import { FAQ_DOC_SECTIONS, faqAnswerText } from "./faq-doc";
+import { FAQ_DOC_SECTIONS, faqAnswerText, type FaqDocSection } from "./faq-doc";
+import { EN_DOC_ARTICLES, EN_DOCS_DESCRIPTION, EN_DOCS_TITLE } from "./i18n/en/docs";
+import { EN_DOC_CONTENT, EN_FAQ_SECTIONS } from "./i18n/en/data/docs-content-en";
 import { BILLING_OFFERS, FREE_PLAN_AMOUNT_CENTS } from "./billing-offers";
-import { LANDING_FAQ } from "./landing-faq";
+import { landingFaq } from "./landing-faq";
+import { homeCopyFor, pricingCopyFor } from "./i18n/copy";
+import { seoCopy as seoCopyKo } from "./i18n/ko/copy/seo";
+import { seoCopy as seoCopyJa } from "./i18n/ja/copy/seo";
+import { homeCopy as homeCopyJa } from "./i18n/ja/copy/home";
+import { pricingCopy as pricingCopyJa } from "./i18n/ja/copy/pricing";
+import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
 import { MUSE_FAQ } from "./muse-faq";
+import {
+  DEFAULT_LOCALE,
+  hasRegisteredTranslation,
+  LOCALE_DEFINITIONS,
+  localizedPath,
+  normalizePath,
+  registeredTranslation,
+  registeredTranslationsForPath,
+  splitLocalePath,
+  type Locale,
+  type RegisteredTranslation,
+} from "./i18n";
 
 // Public search URLs always use the production domain, including local builds.
 export const SITE_URL = "https://wechatai.app";
@@ -33,6 +54,7 @@ export const PUBLIC_PATHS = [
   ...Object.values(INFO_PAGES).map((page) => page.path),
 ] as const;
 export const LEGACY_PATHS = ["/guide"] as const;
+const publicPathSet = new Set<string>(PUBLIC_PATHS);
 export const PRIVATE_PATHS = [
   "/app/admin",
   "/login",
@@ -114,14 +136,21 @@ function findDeveloperPage(path: string) {
 }
 
 /** Organization 只写这一处：logo 与 sameAs 不会因为某个分支漏改而不一致。 */
-function organizationNode() {
+function organizationNode(locale: Locale = DEFAULT_LOCALE) {
   return {
     "@type": "Organization",
     "@id": ORGANIZATION_ID,
     name: SITE_NAME,
     alternateName: ["Wechatai", "微伴"],
     url: `${SITE_URL}/`,
-    description: "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
+    description:
+      locale === "en"
+        ? "An independently maintained service that connects AI models and agents to one-to-one WeChat ClawBot chats. It is not officially affiliated with Tencent or WeChat."
+        : locale === "ja"
+          ? seoCopyJa.organizationDescription
+          : locale === "ko"
+            ? seoCopyKo.organizationDescription
+            : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
     // 站内唯一的方形品牌资源是 favicon.svg（64×64 矢量）；og-image.png 是 1200×630 横幅，不能当 logo。
     logo: {
       "@type": "ImageObject",
@@ -161,13 +190,19 @@ function softwareApplicationRef() {
  * `PLUGIN_LIMITS` / `WECHAT_LINK_LIMITS`。
  * credits 加油包是加购项而不是软件本身的订阅，因此没有放进 offers。
  */
-function softwareApplicationOffers() {
+function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
+  const english = locale === "en";
+  const japanese = locale === "ja";
+  const korean = locale === "ko";
+  const copy = japanese || korean ? pricingCopyFor(locale)?.plans : undefined;
   const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus").map((offer) => {
     const price = offer.amount / 100;
+    const name = offer.interval === "year" ? "Plus Yearly" : "Plus Monthly";
+    const localizedName = english ? name : copy?.offerName(offer.interval) ?? offer.name;
     return {
       "@type": "Offer",
-      name: offer.name,
-      url: `${SITE_URL}/pricing`,
+      name: localizedName,
+      url: `${SITE_URL}${korean ? localizedPath(locale, "/pricing") : "/pricing"}`,
       price,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
@@ -184,12 +219,18 @@ function softwareApplicationOffers() {
   return [
     {
       "@type": "Offer",
-      name: "免费版",
-      url: `${SITE_URL}/`,
+      name: english ? "Free" : copy?.free.name ?? "免费版",
+      url: `${SITE_URL}${korean ? localizedPath(locale, "/") : "/"}`,
       price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
-      description: `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
+      description: english
+        ? `Includes daily credits, ${WECHAT_LINK_LIMITS.free} WeChat connection, and ${PLUGIN_LIMITS.free} plugin configuration.`
+        : japanese
+          ? pricingCopyJa.seo.freeOfferDescription
+          : korean
+            ? seoCopyKo.freeOfferDescription(WECHAT_LINK_LIMITS.free, PLUGIN_LIMITS.free)
+            : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: freePrice,
@@ -213,6 +254,11 @@ function breadcrumbList(entries: ReadonlyArray<{ name: string; item: string }>) 
   };
 }
 
+export interface PageAlternate {
+  hreflang: string;
+  href: string;
+}
+
 export interface PageSeo {
   title: string;
   description: string;
@@ -220,6 +266,12 @@ export interface PageSeo {
   canonical?: string;
   ogType?: "website" | "article";
   structuredData?: Record<string, unknown>;
+  /** HTML `lang`; defaults to the Chinese source locale. */
+  htmlLang?: string;
+  /** `og:locale`; defaults to the Chinese source locale. */
+  ogLocale?: string;
+  /** Present only for page groups with at least one registered translation. */
+  alternates?: readonly PageAlternate[];
 }
 
 /**
@@ -227,10 +279,17 @@ export interface PageSeo {
  * breadcrumb trail and, when present, the FAQ block. Keeping it in one builder
  * stops the eight pages from drifting apart as they are edited.
  */
-function seoLandingPage(page: SeoPage): PageSeo {
-  const canonical = `${SITE_URL}${page.path}`;
+function seoLandingPage(
+  page: SeoPage,
+  canonical: string,
+  htmlLang: string,
+  locale: Locale = DEFAULT_LOCALE,
+): PageSeo {
+  const english = locale === "en";
+  const japanese = locale === "ja";
+  const korean = locale === "ko";
   const isArticle = page.kind === "article";
-  const publisher = organizationNode();
+  const publisher = organizationNode(locale);
   const webPage = isArticle
     ? {
         "@type": "Article",
@@ -239,7 +298,7 @@ function seoLandingPage(page: SeoPage): PageSeo {
         mainEntityOfPage: canonical,
         headline: page.h1,
         description: page.description,
-        inLanguage: "zh-CN",
+        inLanguage: htmlLang,
         image: SOCIAL_IMAGE,
         dateModified: page.updatedAt,
         author: {
@@ -256,7 +315,7 @@ function seoLandingPage(page: SeoPage): PageSeo {
         url: canonical,
         name: page.h1,
         description: page.description,
-        inLanguage: "zh-CN",
+        inLanguage: htmlLang,
         about: softwareApplicationRef(),
         publisher,
       };
@@ -274,16 +333,31 @@ function seoLandingPage(page: SeoPage): PageSeo {
           ? [
               {
                 "@type": "Service",
-                "@id": `${canonical}#plans`,
-                name: `${SITE_NAME} 免费版与 Plus`,
-                serviceType: "微信 AI 接入服务",
+                "@id": `${SITE_URL}${page.path}#plans`,
+                name: english
+                  ? "Wechatai Free and Plus"
+                  : japanese
+                    ? pricingCopyJa.seo.serviceName
+                    : korean
+                      ? seoCopyKo.serviceName
+                      : `${SITE_NAME} 免费版与 Plus`,
+                serviceType: english
+                  ? "WeChat AI integration service"
+                  : japanese
+                    ? pricingCopyJa.seo.serviceType
+                    : korean
+                      ? seoCopyKo.serviceType
+                      : "微信 AI 接入服务",
                 provider: { "@id": ORGANIZATION_ID },
-                offers: softwareApplicationOffers(),
+                offers: softwareApplicationOffers(locale),
               },
             ]
           : []),
         breadcrumbList([
-          { name: "首页", item: `${SITE_URL}/` },
+          {
+            name: pricingCopyFor(locale)?.page.home ?? "首页",
+            item: `${SITE_URL}${hasRegisteredTranslation(locale, "/") ? localizedPath(locale, "/") : "/"}`,
+          },
           { name: page.title, item: canonical },
         ]),
         ...(page.faq.length
@@ -308,11 +382,11 @@ function seoLandingPage(page: SeoPage): PageSeo {
  * `/docs/faq` 的 FAQPage 节点。问答正文与页面共用 `FAQ_DOC_SECTIONS`，
  * 答案在这里被还原成纯文本（Markdown 链接标记原样输出会被当成乱码）。
  */
-function faqPageNode(canonical: string) {
+function faqPageNode(canonical: string, sections: readonly FaqDocSection[] = FAQ_DOC_SECTIONS) {
   return {
     "@type": "FAQPage",
     "@id": `${canonical}#faq`,
-    mainEntity: FAQ_DOC_SECTIONS.map((section) => ({
+    mainEntity: sections.map((section) => ({
       "@type": "Question",
       name: section.title,
       acceptedAnswer: {
@@ -323,43 +397,60 @@ function faqPageNode(canonical: string) {
   };
 }
 
-export function getPageSeo(pathname: string): PageSeo {
-  const path = pathname.split(/[?#]/, 1)[0].replace(/\/+$/, "") || "/";
+function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   // Production redirects this route at the edge. The fallback HTML has the
   // destination canonical without a conflicting noindex instruction.
   if (path === "/guide") return getPageSeo("/docs/getting-started");
+  const canonical = `${SITE_URL}${locale === DEFAULT_LOCALE ? path : localizedPath(locale, path)}`;
+  const { htmlLang } = LOCALE_DEFINITIONS[locale];
   const landing = findSeoPage(path);
-  if (landing) return seoLandingPage(landing);
+  if (landing)
+    return seoLandingPage(
+      path === "/pricing" ? pricingPageFor(locale) : landing,
+      canonical,
+      htmlLang,
+      locale,
+    );
+  const englishDocs = locale === "en";
   const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
-  if (path === "/docs" || article) {
-    const canonical = `${SITE_URL}${path}`;
-    const title = article?.title ?? DOCS_TITLE;
-    const description = article?.description ?? DOCS_DESCRIPTION;
+  const englishArticle = englishDocs
+    ? EN_DOC_ARTICLES.find((item) => item.path === path)
+    : undefined;
+  const docEntry = englishDocs ? englishArticle : article;
+  if (path === "/docs" || docEntry) {
+    const title = docEntry?.title ?? (englishDocs ? EN_DOCS_TITLE : DOCS_TITLE);
+    const description =
+      docEntry?.description ?? (englishDocs ? EN_DOCS_DESCRIPTION : DOCS_DESCRIPTION);
+    const docsIndex = `${SITE_URL}${localizedPath(locale, "/docs")}`;
     const breadcrumbs = [
-      { name: "首页", item: `${SITE_URL}/` },
-      { name: "文档", item: `${SITE_URL}/docs` },
-      ...(article ? [{ name: title, item: canonical }] : []),
+      { name: englishDocs ? "Home" : "首页", item: `${SITE_URL}/` },
+      { name: englishDocs ? "Documentation" : "文档", item: docEntry ? docsIndex : canonical },
+      ...(docEntry ? [{ name: title, item: canonical }] : []),
     ];
+    const sections =
+      englishDocs && docEntry
+        ? EN_DOC_CONTENT[docEntry.slug as keyof typeof EN_DOC_CONTENT].sections
+        : undefined;
     return {
-      title: `${article?.seoTitle ?? title} | ${SITE_NAME}`,
+      title: `${docEntry?.seoTitle ?? title} | ${englishDocs ? "Wechatai" : SITE_NAME}`,
       description,
       indexable: true,
       canonical,
-      ogType: article ? "article" : "website",
+      ogType: docEntry ? "article" : "website",
       structuredData: {
         "@context": "https://schema.org",
         "@graph": [
-          article
+          docEntry
             ? {
                 "@type": "Article",
                 "@id": `${canonical}#article`,
                 url: canonical,
                 mainEntityOfPage: canonical,
-                headline: article.seoTitle ?? title,
+                headline: docEntry.seoTitle ?? title,
                 description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 image: SOCIAL_IMAGE,
-                dateModified: article.updatedAt,
+                dateModified: docEntry.updatedAt,
                 author: {
                   "@id": ORGANIZATION_ID,
                   "@type": "Organization",
@@ -367,8 +458,17 @@ export function getPageSeo(pathname: string): PageSeo {
                   url: `${SITE_URL}/`,
                 },
                 publisher: organizationNode(),
-                articleSection: article.category,
-                isPartOf: { "@id": `${SITE_URL}/docs` },
+                articleSection: docEntry.category,
+                isPartOf: { "@id": docsIndex },
+                ...(sections
+                  ? {
+                      hasPart: sections.map((section) => ({
+                        "@type": "WebPageElement",
+                        name: section.title,
+                        url: `${canonical}#${section.id}`,
+                      })),
+                    }
+                  : {}),
               }
             : {
                 "@type": "CollectionPage",
@@ -376,38 +476,50 @@ export function getPageSeo(pathname: string): PageSeo {
                 url: canonical,
                 name: title,
                 description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 mainEntity: {
                   "@type": "ItemList",
-                  itemListElement: DOC_ARTICLES.map((item, index) => ({
-                    "@type": "ListItem",
-                    position: index + 1,
-                    name: item.title,
-                    url: `${SITE_URL}${docPath(item.slug)}`,
-                  })),
+                  itemListElement: (englishDocs ? EN_DOC_ARTICLES : DOC_ARTICLES).map(
+                    (item, index) => ({
+                      "@type": "ListItem",
+                      position: index + 1,
+                      name: item.title,
+                      url: `${SITE_URL}${localizedPath(locale, docPath(item.slug))}`,
+                    }),
+                  ),
                 },
               },
           breadcrumbList(breadcrumbs),
-          ...(article?.slug === "faq" ? [faqPageNode(canonical)] : []),
+          ...(docEntry?.slug === "faq"
+            ? [faqPageNode(canonical, englishDocs ? EN_FAQ_SECTIONS : FAQ_DOC_SECTIONS)]
+            : []),
         ],
       },
     };
   }
-  const info = Object.values(INFO_PAGES).find((page) => page.path === path);
-  if (info) {
-    const canonical = `${SITE_URL}${path}`;
+  const infoKind = (Object.keys(INFO_PAGES) as InfoPageKind[]).find(
+    (kind) => INFO_PAGES[kind].path === path,
+  );
+  const info = infoKind ? INFO_PAGES[infoKind] : undefined;
+  if (info && infoKind) {
+    // The visible English page and its registration own the page name and
+    // summary; Chinese remains the source for the unprefixed routes. Keep the
+    // ContactPage structure and entity IDs exactly as they are.
+    const localized = locale === "en" ? EN_SITE_INFO_PAGES[infoKind] : undefined;
+    const name = localized?.name ?? info.title;
+    const description = localized?.description ?? info.description;
     return {
-      title: `${info.title} | ${SITE_NAME}`,
-      description: info.description,
+      title: `${name} | ${localized ? "Wechatai" : SITE_NAME}`,
+      description,
       indexable: true,
       canonical,
       structuredData: {
         "@context": "https://schema.org",
         "@type": path === "/contact" ? "ContactPage" : "WebPage",
-        name: info.title,
-        description: info.description,
+        name,
+        description,
         url: canonical,
-        inLanguage: "zh-CN",
+        inLanguage: htmlLang,
         ...(path === "/contact"
           ? { about: softwareApplicationRef(), mainEntity: maintainerNode() }
           : {}),
@@ -416,7 +528,6 @@ export function getPageSeo(pathname: string): PageSeo {
   }
   const developer = findDeveloperPage(path);
   if (developer) {
-    const canonical = `${SITE_URL}${path}`;
     const isArticle = "article" in developer && developer.article === true;
     const faq = "faq" in developer ? developer.faq : undefined;
     return {
@@ -436,7 +547,7 @@ export function getPageSeo(pathname: string): PageSeo {
                 mainEntityOfPage: canonical,
                 headline: developer.name,
                 description: developer.description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 image: SOCIAL_IMAGE,
                 dateModified: developer.updatedAt,
                 author: {
@@ -453,7 +564,7 @@ export function getPageSeo(pathname: string): PageSeo {
                 url: canonical,
                 name: developer.name,
                 description: developer.description,
-                inLanguage: "zh-CN",
+                inLanguage: htmlLang,
                 dateModified: developer.updatedAt,
                 about: softwareApplicationRef(),
                 publisher: organizationNode(),
@@ -482,9 +593,12 @@ export function getPageSeo(pathname: string): PageSeo {
     };
   }
   if (path === "/") {
-    const canonical = `${SITE_URL}/`;
-    const title = `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
+    const english = locale === "en";
+    const copy = homeCopyFor(locale);
+    const title =
+      copy?.seo.title ?? `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
     const description =
+      copy?.seo.description ??
       "微伴 Wechatai 把模型和 Agent 接入微信：DeepSeek、Claude、GPT 聊天，AI 生图，连接 Muse、Hermes、OpenClaw，Plus 云端助手小薇处理文件与任务。免费开始，自备模型 API Key，费用另付服务商。";
     return {
       title,
@@ -508,33 +622,48 @@ export function getPageSeo(pathname: string): PageSeo {
             url: canonical,
             name: title,
             description,
-            inLanguage: "zh-CN",
+            inLanguage: htmlLang,
             isPartOf: { "@id": `${SITE_URL}/#website` },
             about: { "@id": APPLICATION_ID },
           },
-          organizationNode(),
+          organizationNode(locale),
           {
             ...softwareApplicationRef(),
             description,
             operatingSystem: "Web",
             image: SOCIAL_IMAGE,
             maintainer: maintainerNode(),
-            featureList: [
-              "使用自己的 API Key 与模型服务地址",
-              "在微信中切换大模型并管理聊天会话",
-              "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
-              "连接已有 Muse、Hermes 和 OpenClaw Agent",
-              "配置图片模型，在微信生成并接收 AI 图片",
-              "通过角色扮演插件自定义人设与剧情",
-              "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
-            ],
-            offers: softwareApplicationOffers(),
+            featureList:
+              locale === "ko"
+                ? seoCopyKo.featureList
+                : english
+                ? [
+                    "Use your own API key and model endpoint",
+                    "Switch models and manage conversations in WeChat",
+                    "Supports OpenAI Chat Completions, Responses, and Anthropic Messages",
+                    "Connect existing Muse, Hermes, and OpenClaw agents",
+                    "Configure an image model to generate and receive AI images in WeChat",
+                    "Customize characters and storylines with the role-play plugin",
+                    "Plus cloud assistant Xiaowei handles files, creates documents, and runs tasks; requires a text model",
+                  ]
+                : locale === "ja"
+                  ? homeCopyJa.seo.featureList
+                  : [
+                    "使用自己的 API Key 与模型服务地址",
+                    "在微信中切换大模型并管理聊天会话",
+                    "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
+                    "连接已有 Muse、Hermes 和 OpenClaw Agent",
+                    "配置图片模型，在微信生成并接收 AI 图片",
+                    "通过角色扮演插件自定义人设与剧情",
+                    "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
+                  ],
+            offers: softwareApplicationOffers(locale),
           },
-          // 首页折叠问答的 FAQPage 节点，条目与页面上渲染的 `LANDING_FAQ` 同源。
+          // 首页折叠问答的 FAQPage 节点，条目与页面上渲染的问答同源。
           {
             "@type": "FAQPage",
             "@id": `${canonical}#faq`,
-            mainEntity: LANDING_FAQ.map((item) => ({
+            mainEntity: landingFaq(locale).map((item) => ({
               "@type": "Question",
               name: item.question,
               acceptedAnswer: { "@type": "Answer", text: item.answer },
@@ -565,6 +694,80 @@ export function getPageSeo(pathname: string): PageSeo {
   };
 }
 
+function notFoundPageSeo(): PageSeo {
+  return {
+    title: `页面未找到 | ${SITE_NAME}`,
+    description: "微伴 Wechatai 个人微信 AI 工作台。",
+    indexable: false,
+  };
+}
+
+/**
+ * One page group lists every published language, including itself, plus an
+ * x-default that points at the unprefixed Chinese source.
+ */
+function pageAlternates(path: string): PageAlternate[] {
+  const locales = [
+    DEFAULT_LOCALE,
+    ...registeredTranslationsForPath(path).map((page) => page.locale),
+  ];
+  if (locales.length < 2) return [];
+  return [
+    ...locales.map((locale) => ({
+      hreflang: LOCALE_DEFINITIONS[locale].htmlLang,
+      href: `${SITE_URL}${localizedPath(locale, path)}`,
+    })),
+    { hreflang: "x-default", href: `${SITE_URL}${localizedPath(DEFAULT_LOCALE, path)}` },
+  ];
+}
+
+function withAlternates(seo: PageSeo, path: string): PageSeo {
+  if (!seo.indexable) return seo;
+  const alternates = pageAlternates(path);
+  return alternates.length ? { ...seo, alternates } : seo;
+}
+
+function translatedPageSeo(path: string, translation: RegisteredTranslation): PageSeo {
+  const { locale, title, description, content } = translation;
+  const { htmlLang, ogLocale } = LOCALE_DEFINITIONS[locale];
+  const canonical = `${SITE_URL}${localizedPath(locale, path)}`;
+  // A complete translation feeds the same builder as the Chinese page, so the
+  // visible body and page-owned JSON-LD cannot drift apart.
+  const base = content
+    ? seoLandingPage(content, canonical, htmlLang, locale)
+    : basePageSeo(path, locale);
+  if (!base.indexable) return notFoundPageSeo();
+  return {
+    ...base,
+    title,
+    description,
+    htmlLang,
+    ogLocale,
+    alternates: pageAlternates(path),
+  };
+}
+
+/**
+ * `locale` is authoritative for unprefixed paths. A locale prefix in the URL is
+ * always resolved first so `/en/pricing` can never fall back to the Chinese page
+ * while no English translation is registered.
+ */
+export function getPageSeo(pathname: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
+  const normalized = normalizePath(pathname);
+  const split = splitLocalePath(normalized);
+  if (split) {
+    const translation = registeredTranslation(split.locale, split.path);
+    if (!translation || !publicPathSet.has(split.path)) return notFoundPageSeo();
+    return translatedPageSeo(split.path, translation);
+  }
+  if (locale !== DEFAULT_LOCALE) {
+    const translation = registeredTranslation(locale, normalized);
+    if (!translation || !publicPathSet.has(normalized)) return notFoundPageSeo();
+    return translatedPageSeo(normalized, translation);
+  }
+  return withAlternates(basePageSeo(normalized), normalized);
+}
+
 function escapeHtml(value: string) {
   return value.replace(
     /[&<>"']/g,
@@ -580,6 +783,15 @@ export function serializeStructuredData(data: Record<string, unknown>) {
 export function renderSeoHead(seo: PageSeo) {
   const meta = (name: string, content: string, property = false) =>
     `<meta ${property ? "property" : "name"}="${name}" content="${escapeHtml(content)}" data-seo />`;
+  const defaultLocale = LOCALE_DEFINITIONS[DEFAULT_LOCALE];
+  const imageAlt =
+    seo.htmlLang === LOCALE_DEFINITIONS.en.htmlLang
+      ? "Wechatai: chat with the models you choose in WeChat."
+      : seo.htmlLang === LOCALE_DEFINITIONS.ja.htmlLang
+        ? seoCopyJa.imageAlt
+        : seo.htmlLang === LOCALE_DEFINITIONS.ko.htmlLang
+          ? seoCopyKo.imageAlt
+          : "微伴 Wechatai：在微信里，与自选大模型对话。";
   return [
     `<title data-seo>${escapeHtml(seo.title)}</title>`,
     meta("description", seo.description),
@@ -587,23 +799,27 @@ export function renderSeoHead(seo: PageSeo) {
     ...(seo.canonical
       ? [`<link rel="canonical" href="${escapeHtml(seo.canonical)}" data-seo />`]
       : []),
+    ...(seo.alternates?.map(
+      (alternate) =>
+        `<link rel="alternate" hreflang="${escapeHtml(alternate.hreflang)}" href="${escapeHtml(alternate.href)}" data-seo />`,
+    ) ?? []),
     ...(seo.indexable
       ? [
           meta("og:type", seo.ogType ?? "website", true),
           meta("og:site_name", SITE_NAME, true),
-          meta("og:locale", "zh_CN", true),
+          meta("og:locale", seo.ogLocale ?? defaultLocale.ogLocale, true),
           meta("og:title", seo.title, true),
           meta("og:description", seo.description, true),
           meta("og:url", seo.canonical!, true),
           meta("og:image", SOCIAL_IMAGE, true),
           meta("og:image:width", "1200", true),
           meta("og:image:height", "630", true),
-          meta("og:image:alt", "微伴 Wechatai：在微信里，与自选大模型对话。", true),
+          meta("og:image:alt", imageAlt, true),
           meta("twitter:card", "summary_large_image"),
           meta("twitter:title", seo.title),
           meta("twitter:description", seo.description),
           meta("twitter:image", SOCIAL_IMAGE),
-          meta("twitter:image:alt", "微伴 Wechatai：在微信里，与自选大模型对话。"),
+          meta("twitter:image:alt", imageAlt),
         ]
       : []),
     ...(seo.structuredData
@@ -617,13 +833,18 @@ export function renderSeoHead(seo: PageSeo) {
 export function replaceSeoHead(html: string, seo: PageSeo) {
   const marker = /<!-- SEO:START -->[\s\S]*?<!-- SEO:END -->/;
   if (!marker.test(html)) throw new Error("Missing SEO head markers in HTML template");
-  return html.replace(
+  const htmlLang = seo.htmlLang ?? LOCALE_DEFINITIONS[DEFAULT_LOCALE].htmlLang;
+  const withLang = html.replace(/<html lang="[^"]*">/, `<html lang="${htmlLang}">`);
+  return withLang.replace(
     marker,
     () => `<!-- SEO:START -->\n    ${renderSeoHead(seo)}\n    <!-- SEO:END -->`,
   );
 }
 
-export function pageLastModified(path: string): string | undefined {
+export function pageLastModified(pathname: string): string | undefined {
+  const path = normalizePath(pathname);
+  const split = splitLocalePath(path);
+  if (split) return registeredTranslation(split.locale, split.path)?.updatedAt;
   if (path === "/") return HOME_UPDATED_AT;
   if (path === "/docs") return DOCS_INDEX_UPDATED_AT;
   const article = path.startsWith("/docs/") ? findDocArticle(path.slice(6)) : undefined;
@@ -640,10 +861,25 @@ export function pageLastModified(path: string): string | undefined {
   return undefined;
 }
 
+/** Every registered translation that belongs to a known public Chinese page. */
+export function publishedLocalizedPaths(): string[] {
+  return PUBLIC_PATHS.flatMap((path) =>
+    registeredTranslationsForPath(path).map((translation) =>
+      localizedPath(translation.locale, path),
+    ),
+  );
+}
+
 export function renderSitemap() {
-  const entries = PUBLIC_PATHS.map((path) => {
+  const entries = PUBLIC_PATHS.flatMap((path) => {
     const modified = pageLastModified(path);
-    return `  <url><loc>${SITE_URL}${path}</loc>${modified ? `<lastmod>${modified}</lastmod>` : ""}</url>`;
+    return [
+      `  <url><loc>${SITE_URL}${path}</loc>${modified ? `<lastmod>${modified}</lastmod>` : ""}</url>`,
+      ...registeredTranslationsForPath(path).map(
+        (translation) =>
+          `  <url><loc>${SITE_URL}${localizedPath(translation.locale, path)}</loc><lastmod>${translation.updatedAt}</lastmod></url>`,
+      ),
+    ];
   });
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join("\n")}\n</urlset>\n`;
 }

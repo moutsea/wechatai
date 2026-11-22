@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AnonymousAuthProvider } from "../src/client/auth";
+import { LocaleProvider } from "../src/client/locale";
 import { ComparePage } from "../src/client/pages/compare-page";
 import { SeoLandingPage } from "../src/client/pages/seo-landing";
 
@@ -26,13 +27,15 @@ async function renderAt(path: string) {
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={[path]}>
-        <AnonymousAuthProvider>
-          <Routes>
-            <Route path="/compare/:pair" element={<ComparePage />} />
-            <Route path="/:slug" element={<SeoLandingPage />} />
-            <Route path="*" element={<p>这个页面没有找到。</p>} />
-          </Routes>
-        </AnonymousAuthProvider>
+        <LocaleProvider>
+          <AnonymousAuthProvider>
+            <Routes>
+              <Route path="/compare/:pair" element={<ComparePage />} />
+              <Route path="/:slug" element={<SeoLandingPage />} />
+              <Route path="*" element={<p>这个页面没有找到。</p>} />
+            </Routes>
+          </AnonymousAuthProvider>
+        </LocaleProvider>
       </MemoryRouter>,
     ),
   );
@@ -58,6 +61,32 @@ it("falls back to not found for an unknown pair", async () => {
   await renderAt("/compare/not-a-pair");
   expect(container.querySelector("h1")?.textContent).toBe("这个页面没有找到。");
   expect(container.querySelector(".seopage-compare-table")).toBeNull();
+});
+
+it("renders the comparison index with links to every pair", async () => {
+  await renderAt("/compare");
+  expect(container.querySelector("h1")?.textContent).toBe("微信 AI 对比：先看三类方案再选");
+  const hrefs = [...container.querySelectorAll("a")]
+    .map((link) => link.getAttribute("href"))
+    .filter((href): href is string => Boolean(href));
+  for (const pair of [
+    "/compare/wechatai-vs-wechat-official-ai",
+    "/compare/wechatai-vs-openclaw",
+    "/compare/wechatai-vs-commercial-wechat-ai",
+  ]) {
+    expect(hrefs, pair).toContain(pair);
+  }
+  expect(hrefs).toContain("/wechat-ai-options");
+  expect(hrefs).toContain("/wechat-ai-ban-risk");
+  expect(container.querySelectorAll(".seopage-compare-table")).toHaveLength(0);
+});
+
+it("presents Wechatai separately from the three alternatives in the comparison index", async () => {
+  await renderAt("/compare");
+  const scope = /微伴[与和]另外三类微信 AI 方案/;
+  expect.soft(container.querySelector(".seopage-lede")?.textContent, "intro").toMatch(scope);
+  expect.soft(container.querySelector(".seopage-answer")?.textContent, "direct answer").toMatch(scope);
+  expect.soft(container.querySelector("#faq summary")?.textContent, "first FAQ question").toMatch(scope);
 });
 
 it.each(["wechatai-vs-wechat-official-ai", "wechatai-vs-openclaw", "wechatai-vs-commercial-wechat-ai"])(
@@ -105,6 +134,12 @@ it("leaves unverified device requirements unknown and separates local and cloud 
   const [, , , selfHostedCost, relayCost] = cellsFor("费用结构");
   expect(selfHostedCost).toMatch(/运行环境[^；]*维护.*本地[^；]*不产生[^；]*API 费.*云 API[^；]*服务商/);
   expect(relayCost).toMatch(/中转费.*使用云 API[^；]*模型费[^；]*另付服务商/);
+});
+
+it("renders the WeChat bot guide with its full link label on the options page", async () => {
+  await renderAt("/wechat-ai-options");
+  const link = container.querySelector('.seopage-related a[href="/wechat-bot"]');
+  expect(link?.textContent).toBe("微信机器人怎么弄：先选对路线");
 });
 
 it("distinguishes text usage from per-image credits in the commercial comparison", async () => {

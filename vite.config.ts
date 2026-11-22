@@ -14,7 +14,55 @@ export default defineConfig(({ command, isPreview }) => ({
               ? "wrangler.production.local.jsonc"
               : "wrangler.jsonc")
           : "wrangler.jsonc",
-      config: ({ assets }) => {
+      config: (config) => {
+        const { assets, vars } = config;
+        if (command === "build" && process.env.CLOUDFLARE_ENV === "production") {
+          // Older private configs also serve legacy links with credentials in the path.
+          for (const [name, namespace_id] of [
+            ["ANALYTICS_LIMIT", "12003"],
+            ["PUBLIC_ENTRY_LIMIT", "12004"],
+          ]) {
+            if (config.ratelimits?.some((binding) => binding.name === name)) continue;
+            config.ratelimits = [
+              ...(config.ratelimits ?? []),
+              {
+                name,
+                namespace_id,
+                simple: { limit: 600, period: 60 },
+              },
+            ];
+          }
+          const obs = config.observability;
+          config.observability = {
+            ...obs,
+            redact_query_string: true,
+            logs: {
+              ...obs?.logs,
+              enabled: obs?.logs?.enabled ?? obs?.enabled ?? true,
+              invocation_logs: false,
+            },
+            traces: { enabled: false },
+          };
+        }
+        if (
+          command === "build" &&
+          process.env.CLOUDFLARE_ENV === "production" &&
+          vars?.AUTH_EMAIL_MODE === "cloudflare"
+        ) {
+          // Apply the guard to private deployment configs created before Turnstile as well.
+          const required = new Set(config.secrets?.required);
+          required.add("TURNSTILE_SECRET_KEY");
+          if (vars.TURNSTILE_SITE_KEY === undefined) required.add("TURNSTILE_SITE_KEY");
+          else if (
+            typeof vars.TURNSTILE_SITE_KEY !== "string" ||
+            !vars.TURNSTILE_SITE_KEY.trim() ||
+            /^[1-3]x0{8}/.test(vars.TURNSTILE_SITE_KEY.trim())
+          )
+            throw new Error(
+              "Configure a live TURNSTILE_SITE_KEY before deploying email authentication.",
+            );
+          config.secrets = { required: [...required] };
+        }
         if (!assets) return;
         // Development serves source routes; production uses the generated HTML files.
         if (command === "serve" && !isPreview)
@@ -53,6 +101,7 @@ export default defineConfig(({ command, isPreview }) => ({
                   test: /node_modules[\\/](?:react|react-dom|react-router|react-router-dom|scheduler|nanostores)[\\/]/,
                 },
                 { name: "auth", test: /node_modules[\\/](?:better-auth|@better-auth)[\\/]/ },
+                { name: "i18n", test: /src[\\/]shared[\\/]i18n[\\/]/ },
               ],
             },
           },

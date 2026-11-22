@@ -233,7 +233,9 @@ export class PersonalRecordsStore {
     };
   }
   forgetContextChanges() {
-    this.sql.exec("UPDATE personal_record_state SET changes='[]',revision=revision+1");
+    this.sql.exec(
+      "UPDATE personal_record_state SET changes='[]',revision=revision+1 WHERE changes!='[]'",
+    );
   }
   scopes(pluginId: string) {
     // State survives deletion of the last record, so an emptied historical

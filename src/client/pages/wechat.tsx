@@ -80,7 +80,7 @@ export function Wechat() {
     setupIssue &&
     ["cloud_plus_required", "cloud_agent_unavailable", "plugin_disabled"].includes(setupIssue.code);
   const action = async (
-    type: "bind" | "disconnect" | "select" | "create" | "rename" | "delete",
+    type: "bind" | "rebind" | "disconnect" | "select" | "create" | "rename" | "delete",
     id = data.selectedConnectionId,
   ) => {
     setBusy(true);
@@ -89,9 +89,12 @@ export function Wechat() {
       else if (type === "rename") await request(`/wechat/links/${id}`, json({ name }, "PATCH"));
       else if (type === "delete") await request(`/wechat/links/${id}`, { method: "DELETE" });
       else
-        await request(selected ? `/wechat/links/${id}/${type}` : `/wechat/${type}`, {
-          method: "POST",
-        });
+        await request(
+          selected || type === "rebind" ? `/wechat/links/${id}/${type}` : `/wechat/${type}`,
+          {
+            method: "POST",
+          },
+        );
       await refresh();
       setLimitCode(undefined);
       setDisconnect(false);
@@ -370,7 +373,7 @@ export function Wechat() {
               <button
                 className="button secondary"
                 disabled={busy}
-                onClick={() => void action("bind")}
+                onClick={() => void action("rebind")}
               >
                 <RefreshCw size={15} />
                 重新生成二维码

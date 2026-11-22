@@ -42,6 +42,8 @@
   "ratelimits": [
     { "name": "AUTH_LIMIT", "namespace_id": "12001", "simple": { "limit": 20, "period": 60 } },
     { "name": "API_LIMIT", "namespace_id": "12002", "simple": { "limit": 120, "period": 60 } },
+    { "name": "ANALYTICS_LIMIT", "namespace_id": "12003", "simple": { "limit": 600, "period": 60 } },
+    { "name": "PUBLIC_ENTRY_LIMIT", "namespace_id": "12004", "simple": { "limit": 600, "period": 60 } },
   ],
   "vars": {
     "APP_NAME": "微伴",
@@ -50,6 +52,7 @@
     "AUTH_EMAIL_FROM": "",
     "PUBLIC_SITE_URL": "https://wechatai.app",
     "FREE_DAILY_CREDITS": "100",
+    "ANALYTICS_DAILY_EVENT_BUDGET": "10000",
     "PLUS_DAILY_CREDITS": "1000",
     "FREE_ASSISTANTS": "3",
     "PLUS_ASSISTANTS": "20",
@@ -93,14 +96,18 @@
       "ratelimits": [
         { "name": "AUTH_LIMIT", "namespace_id": "12001", "simple": { "limit": 20, "period": 60 } },
         { "name": "API_LIMIT", "namespace_id": "12002", "simple": { "limit": 120, "period": 60 } },
+        { "name": "ANALYTICS_LIMIT", "namespace_id": "12003", "simple": { "limit": 600, "period": 60 } },
+        { "name": "PUBLIC_ENTRY_LIMIT", "namespace_id": "12004", "simple": { "limit": 600, "period": 60 } },
       ],
       "vars": {
         "APP_NAME": "微伴",
         "APP_URL": "https://example.com",
         "AUTH_EMAIL_MODE": "cloudflare",
         "AUTH_EMAIL_FROM": "",
+        // "TURNSTILE_SITE_KEY": "your-public-site-key",
         "PUBLIC_SITE_URL": "https://example.com",
         "FREE_DAILY_CREDITS": "100",
+        "ANALYTICS_DAILY_EVENT_BUDGET": "10000",
         "PLUS_DAILY_CREDITS": "1000",
         "FREE_ASSISTANTS": "3",
         "PLUS_ASSISTANTS": "20",
@@ -121,5 +128,11 @@
       },
     },
   },
-  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": false },
+    "traces": { "enabled": false }
+  },
 }

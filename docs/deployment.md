@@ -24,7 +24,7 @@ pnpm exec wrangler r2 bucket create wechatai-media
 - 将 `routes`、`APP_URL`、`PUBLIC_SITE_URL` 改成自己的 HTTPS 域名。
 - 保留账户对象的 `v1` 迁移；不要把顶层的本地 `v2-local-reminders` 迁移复制进生产环境。
 - 确认 `REMINDERS.script_name` 对应提醒 Worker 名称。
-- 配置 `AUTH_EMAIL` 发信绑定、`AUTH_EMAIL_MODE=cloudflare` 和 `AUTH_EMAIL_FROM`；先完成发信域名验证，见[邮箱注册配置](configuration.md#邮箱注册与找回密码)。不要将本地 `preview` 模式复制进生产。
+- 启用生产发信时，先验证发信域名，再配置 `AUTH_EMAIL` 绑定、`AUTH_EMAIL_MODE=cloudflare` 和 `AUTH_EMAIL_FROM`。在 Cloudflare 为站点创建 Turnstile 小组件并配置密钥。[邮箱注册配置](configuration.md#邮箱注册与找回密码)
 
 编辑 `wrangler.reminders.local.jsonc`：使用相同 Cloudflare 账户，确认 `ACCOUNTS.script_name` 是主 Worker 名称。若改名，两个配置须成对修改。通常保留 `wechatai` / `wechatai-reminders` 即可。
 
@@ -36,7 +36,7 @@ pnpm exec wrangler r2 bucket create wechatai-media
 
 ## 2. 密钥和数据库
 
-准备 `.production-secrets.local` JSON，至少包含不同的随机 `BETTER_AUTH_SECRET`、`ENCRYPTION_KEY`，每个不少于 32 字符。需要 OAuth 或 Stripe 时再加入对应配置，参考 `.dev.vars.example`。不要把生成的密钥粘贴到 README 或提交到 Git。
+准备 `.production-secrets.local` JSON，至少包含不同的随机 `BETTER_AUTH_SECRET`、`ENCRYPTION_KEY`，每个不少于 32 字符。启用生产发信时，加入 `TURNSTILE_SECRET_KEY`。如果公开的 `TURNSTILE_SITE_KEY` 未写入生产 `vars`，也将它加入此文件。需要 OAuth 或 Stripe 时再加入对应配置，参考 `.dev.vars.example`。不要把生成的密钥粘贴到 README 或提交到 Git。
 
 以下命令用于全新数据库；已有站点的迁移顺序见第 4 节。
 
@@ -54,6 +54,8 @@ pnpm db:migrate:remote
 本地数据不会自动迁移到生产。D1 迁移和账户 SQLite 升级是两套机制，均需保持兼容。
 
 访问统计使用 `0014_page_views.sql` 与 `0015_signup_attributions.sql` 建表。没有这张表时页面照常工作（上报接口的失败不会影响页面），只是数据不会写入，`pnpm analytics` 会提示先执行迁移。迁移后可用 `pnpm analytics --days 7` 查看 PV、去重访客、会话数、来源深度和「落地页 → 注册」的转化；采集口径与隐私边界见 `design/analytics.md`。这套统计不依赖第三方脚本，也不需要额外配置项。
+
+匿名 PV 和浏览器漏斗事件共用每天 10,000 次写入许可，北京时间零点重置。可用 Worker 变量 `ANALYTICS_DAILY_EVENT_BUDGET` 调整，设为 `0` 可停采。配额按批预留，用量紧张、请求并发或实例回收时，实际统计数可能偏低。账号验证和支付成功的服务端事件独立记录。`publish:edge` 在发布前幂等创建 `0020_analytics_budget.sql` 的预算表。
 
 后台关键事件触达新增 `0016_funnel_events.sql`，仅创建事件表和索引，与旧版兼容。升级时先执行该迁移，再发布依赖此表的 Worker；报表展示访客日和事件次数。`/demo` 演示工作台已下线，上一版按路径过滤（`name='demo_view'` 或 `/demo` 前缀）的口径随之删除；历史 `demo_view` 行留在表里也不会进报表——`summarizeFunnel` 只按已知事件名取值，未知名字静默忽略。
 

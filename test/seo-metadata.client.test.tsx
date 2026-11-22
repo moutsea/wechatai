@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PageMetadata } from "../src/client/seo";
+import { LocaleProvider } from "../src/client/locale";
 
 vi.mock("../src/shared/seo", () => {
   throw new Error("Failed to fetch metadata chunk");
@@ -50,7 +51,9 @@ it("keeps matching prerendered metadata without depending on the deferred module
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/"]}>
-        <PageMetadata />
+        <LocaleProvider>
+          <PageMetadata />
+        </LocaleProvider>
       </MemoryRouter>,
     ),
   );
@@ -65,10 +68,12 @@ it("removes the previous page's public metadata on failure without destroying co
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/login"]}>
-        <PageMetadata />
-        <main>
-          <h1>Login</h1>
-        </main>
+        <LocaleProvider>
+          <PageMetadata />
+          <main>
+            <h1>Login</h1>
+          </main>
+        </LocaleProvider>
       </MemoryRouter>,
     ),
   );

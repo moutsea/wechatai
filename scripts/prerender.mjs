@@ -21,13 +21,16 @@ try {
     getPageSeo,
     replaceSeoHead,
     renderSitemap,
+    publishedLocalizedPaths,
     PUBLIC_PATHS,
     PRIVATE_PATHS,
     LEGACY_PATHS,
   } = await server.ssrLoadModule("/src/client/prerender.tsx");
-  for (const path of [...PUBLIC_PATHS, ...LEGACY_PATHS, ...PRIVATE_PATHS, "/404"]) {
+  const localizedPaths = publishedLocalizedPaths();
+  const renderedPublicPaths = [...PUBLIC_PATHS, ...localizedPaths];
+  for (const path of [...renderedPublicPaths, ...LEGACY_PATHS, ...PRIVATE_PATHS, "/404"]) {
     const body =
-      PUBLIC_PATHS.includes(path) || LEGACY_PATHS.includes(path) || path === "/404"
+      renderedPublicPaths.includes(path) || LEGACY_PATHS.includes(path) || path === "/404"
         ? renderPublicPage(path)
         : '<main aria-busy="true">正在加载微伴工作台…</main>';
     const html = replaceSeoHead(template, getPageSeo(path)).replace(
@@ -61,7 +64,7 @@ try {
     comments = [];
   }
   staticRules.push(...comments);
-  const canonicalRedirects = PUBLIC_PATHS.flatMap((path) =>
+  const canonicalRedirects = renderedPublicPaths.flatMap((path) =>
     path === "/" ? ["/index.html / 301"] : [`${path}/ ${path} 301`, `${path}.html ${path} 301`],
   );
   await writeFile(
@@ -69,7 +72,7 @@ try {
     `${staticRules.join("\n").trimEnd()}\n\n# Generated canonical public URLs\n${canonicalRedirects.join("\n")}\n\n# Dynamic rules go last: Cloudflare treats each rule after the first splat or\n# placeholder as dynamic and keeps only the first 100 of them.\n${dynamicRules.join("\n").trimEnd()}\n`,
   );
   console.log(
-    `Prerendered ${PUBLIC_PATHS.length} public pages, private route shells and a 404 page.`,
+    `Prerendered ${renderedPublicPaths.length} public pages, private route shells and a 404 page.`,
   );
 } finally {
   await server.close();

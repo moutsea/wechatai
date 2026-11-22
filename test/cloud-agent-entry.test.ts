@@ -1760,7 +1760,7 @@ describe("cloud Agent user entry", () => {
         qrcode_img_content: "https://wechat.example.test/qr",
       });
     });
-    expect((await api(stub, "wechat.bind", { id: "default" })).ok).toBe(true);
+    expect((await api(stub, "wechat.bind", { id: "default", regenerate: true })).ok).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 

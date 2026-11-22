@@ -4,6 +4,11 @@ import { ArrowUpRight, Menu, RefreshCw, X } from "lucide-react";
 import { Brand } from "./ui";
 import { useAuth } from "./auth";
 import { LoadErrorBoundary, reloadPage } from "./load-error-boundary";
+import { LanguageSwitcher } from "./language-switcher";
+import { useLocale } from "./locale";
+import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath, type Locale } from "../shared/i18n";
+import { headerCopy as headerCopyKo, navLabels as navLabelsKo } from "../shared/i18n/ko/copy/site-header";
+import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
 
 const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
@@ -19,11 +24,59 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", match: "/" },
-  { to: "/pricing", label: "价格", match: "/pricing" },
-  { to: "/docs", label: "文档", match: "/docs" },
-  { to: "/#how", label: "如何使用", match: "/#how" },
+  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], match: "/" },
+  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], match: "/pricing" },
+  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], match: "/docs" },
+  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], match: "/#how" },
 ] as const;
+
+interface HeaderCopy {
+  home: string;
+  topNav: string;
+  account: string;
+  login: string;
+  start: string;
+  workspace: string;
+  workspaceFallback: string;
+  openMenu: string;
+  closeMenu: string;
+  menuFailed: string;
+  reloadMenu: string;
+}
+
+const headerCopyEn: HeaderCopy = {
+  home: "Home",
+  topNav: "Main navigation",
+  account: "Account",
+  login: "Log in",
+  start: "Get started",
+  workspace: "Open workspace",
+  workspaceFallback: "Open workspace",
+  openMenu: "Open menu",
+  closeMenu: "Close menu",
+  menuFailed: "The account menu could not load",
+  reloadMenu: "Reload the account menu",
+} as const;
+
+const headerCopyZh = {
+  home: "首页",
+  topNav: "顶部导航",
+  account: "账户",
+  login: "登录",
+  start: "免费开始",
+  workspace: "进入工作台",
+  workspaceFallback: "工作台",
+  openMenu: "打开菜单",
+  closeMenu: "关闭菜单",
+  menuFailed: "账户菜单未能加载",
+  reloadMenu: "重新加载账户菜单",
+} as const;
+
+const headerCopies: Partial<Record<Locale, HeaderCopy>> = {
+  en: headerCopyEn,
+  ja: headerCopyJa,
+  ko: headerCopyKo,
+};
 
 type SiteHeaderProps = {
   /** 当前页面路径，用于给对应导航项加 aria-current。 */
@@ -32,12 +85,61 @@ type SiteHeaderProps = {
   extra?: ReactNode;
 };
 
+/**
+ * The wordmark is part of the brand, but the Chinese glyphs are page copy on
+ * non-Chinese routes. Keep the same mark and typography with a Latin wordmark.
+ */
+export function SiteBrand({ light = false, latin }: { light?: boolean; latin: boolean }) {
+  if (!latin) return <Brand light={light} />;
+  return (
+    <span className={`brand ${light ? "light" : ""}`}>
+      <span className="brand-mark">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <path d="M4 7h6l5 18H9zm10 0h6l5 18h-6zm12 0h5l-6 18h-6z" fill="currentColor" />
+        </svg>
+      </span>
+      <span>
+        Wechatai<small>AI IN WECHAT</small>
+      </span>
+    </span>
+  );
+}
+
 export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { data: session } = useAuth();
   const { pathname, hash } = useLocation();
-  const current = active ?? (pathname === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
+  const { locale, path } = useLocale();
+  const copy = headerCopies[locale] ?? headerCopyZh;
+  const latin = locale !== DEFAULT_LOCALE;
+  const navLabelKey = locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : "label";
+  const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
+
+  // Prefer the translated target only when that exact page is published;
+  // otherwise keep the existing Chinese link instead of producing a 404 prefix.
+  const localeHref = (to: string) => {
+    if (locale === DEFAULT_LOCALE) return to;
+    const [targetPath, targetHash] = to.split("#");
+    const base = targetPath || "/";
+    if (!hasRegisteredTranslation(locale, base)) return to;
+    return `${localizedPath(locale, base)}${targetHash ? `#${targetHash}` : ""}`;
+  };
+
+  const links = (
+    <>
+      {NAV.map((item) => (
+        <Link
+          key={item.to}
+          to={localeHref(item.to)}
+          aria-current={current === item.match ? "page" : undefined}
+        >
+          {item[navLabelKey]}
+        </Link>
+      ))}
+      {extra}
+    </>
+  );
 
   // 路由变化后收起抽屉，避免导航到新页面时菜单还盖在上面。
   useEffect(() => setOpen(false), [pathname, hash]);
@@ -51,31 +153,20 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
-  const links = (
-    <>
-      {NAV.map((item) => (
-        <Link key={item.to} to={item.to} aria-current={current === item.match ? "page" : undefined}>
-          {item.label}
-        </Link>
-      ))}
-      {extra}
-    </>
-  );
-
   const account = session ? (
     <LoadErrorBoundary
       key={session.user.id}
       fallback={
         <>
           <span className="visually-hidden" role="alert">
-            账户菜单未能加载
+            {copy.menuFailed}
           </span>
-          <a href="/app">工作台</a>
+          <a href="/app">{copy.workspaceFallback}</a>
           <button
             type="button"
             className="icon-button"
-            aria-label="重新加载账户菜单"
-            title="重新加载账户菜单"
+            aria-label={copy.reloadMenu}
+            title={copy.reloadMenu}
             onClick={reloadPage}
           >
             <RefreshCw size={16} aria-hidden="true" />
@@ -86,7 +177,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
       <Suspense
         fallback={
           <Link className="button small" to="/app">
-            进入工作台
+            {copy.workspace}
           </Link>
         }
       >
@@ -95,9 +186,9 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     </LoadErrorBoundary>
   ) : (
     <>
-      <Link to="/login">登录</Link>
+      <Link to="/login">{copy.login}</Link>
       <Link className="button small" to="/register">
-        免费开始
+        {copy.start}
         <ArrowUpRight size={15} aria-hidden="true" />
       </Link>
     </>
@@ -106,15 +197,17 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link to="/" aria-label="微伴首页">
-          <Brand />
+        <Link to={localeHref("/")}>
+          <SiteBrand latin={latin} />
+          <span className="visually-hidden">{copy.home}</span>
         </Link>
-        <nav aria-label="顶部导航" className="site-header-nav">
+        <nav aria-label={copy.topNav} className="site-header-nav">
           {links}
         </nav>
         <div className="site-header-aside">
+          <LanguageSwitcher />
           <nav
-            aria-label="账户"
+            aria-label={copy.account}
             className={`site-header-account${session ? " is-authenticated" : ""}`}
           >
             {account}
@@ -124,7 +217,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
             className="site-menu-toggle"
             aria-expanded={open}
             aria-controls={menuId}
-            aria-label={open ? "关闭菜单" : "打开菜单"}
+            aria-label={open ? copy.closeMenu : copy.openMenu}
             onClick={() => setOpen((value) => !value)}
           >
             {open ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
@@ -142,18 +235,19 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
         {NAV.map((item) => (
           <Link
             key={item.to}
-            to={item.to}
+            to={localeHref(item.to)}
             aria-current={current === item.match ? "page" : undefined}
           >
-            {item.label}
+            {item[navLabelKey]}
           </Link>
         ))}
         {extra}
+        <LanguageSwitcher />
         {!session && (
           <>
-            <Link to="/login">登录</Link>
+            <Link to="/login">{copy.login}</Link>
             <Link className="button site-mobile-cta" to="/register">
-              免费开始
+              {copy.start}
               <ArrowUpRight size={16} aria-hidden="true" />
             </Link>
           </>

@@ -103,10 +103,12 @@ pnpm deploy:backend
 
 推送到 `main` 会触发 `CI`。`check`、`secrets` 和 `backend` 三个任务全部成功后，先部署 Go。只有该提交的 Go 程序发布并通过健康检查后，才会自动部署 Worker。每个工作流发布前会核对提交是否仍是远端 `main` 的最新版本。每一端串行发布，进行中的生产操作会执行到结束。需要单独重试时，可在 Actions 中选择对应工作流，选 `main` 并点 **Run workflow**。
 
-| Workflow / Environment | Variables | Secrets |
-| --- | --- | --- |
-| `Deploy Go backend` / `backend-production` | `VPS_HOST`、`VPS_USER` | `VPS_SSH_PRIVATE_KEY`、`VPS_KNOWN_HOSTS` |
-| `Deploy Cloudflare edge` / `edge-production` | `CLOUDFLARE_ACCOUNT_ID` | `WRANGLER_CONFIG`（完整私有 JSONC 配置）、`CLOUDFLARE_API_TOKEN` |
+| Workflow / Environment | Environment Secrets |
+| --- | --- |
+| `Deploy Go backend` / `backend-production` | `VPS_HOST`、`VPS_USER`、`VPS_SSH_PRIVATE_KEY`、`VPS_KNOWN_HOSTS` |
+| `Deploy Cloudflare edge` / `edge-production` | `CLOUDFLARE_ACCOUNT_ID`、`WRANGLER_CONFIG`（完整私有 JSONC 配置）、`CLOUDFLARE_API_TOKEN` |
+
+需要暂停 VPS 发布时，将仓库变量 `VPS_DEPLOY_PAUSED` 设为 `true`。恢复前先核验目标主机和部署凭据。
 
 环境限制为受信任的 main，按项目需要设置环境审核人。PR 检查没有生产凭据；不使用 `pull_request_target` 执行外部代码。Cloudflare 已有应用 Secrets 在常规发布中保留，不把它们写入 JSONC 或构建产物。
 

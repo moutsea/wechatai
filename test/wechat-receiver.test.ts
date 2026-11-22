@@ -480,6 +480,51 @@ describe("external WeChat receiver", () => {
       expect(Number(alarm)).toBeGreaterThan(Date.now() + 55000);
     });
   });
+  it("accounts for outstanding UTF-8 reply bytes before inserting a fresh receipt", async () => {
+    const stub = await setup();
+    const { socket, next } = await connect(stub);
+    await runInDurableObject(stub, (_, state) => {
+      for (let i = 0; i < 4; i++)
+        state.storage.sql.exec(
+          "INSERT INTO inbox(id,payload,state,reply,createdAt) VALUES(?,'{}','reply',?,0)",
+          "large:" + i,
+          "🐟".repeat(262144),
+        );
+    });
+    const request = batch();
+    socket.send(JSON.stringify(request));
+    expect(await next("ack")).toEqual({ type: "ack", id: request.id, retryAfterMs: 5000 });
+    await runInDurableObject(stub, (_, state) =>
+      state.storage.sql.exec("UPDATE inbox SET state='done',reply='' WHERE id='large:0'").toArray(),
+    );
+    socket.send(JSON.stringify(request));
+    expect(await next("ack")).toMatchObject({ id: request.id, cursor: request.cursor });
+  });
+  it("holds a partial batch cursor, accepts duplicates at capacity and resumes without a second receipt", async () => {
+    const stub = await setup();
+    const { socket, next } = await connect(stub);
+    await runInDurableObject(stub, (_, state) => {
+      state.storage.sql.exec(
+        "WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<255) INSERT INTO inbox (id,payload,state,createdAt) SELECT 'old:'||n,'{}','waiting_context',0 FROM seq",
+      );
+    });
+    const first = batch();
+    first.msgs.push({ ...first.msgs[0], message_id: 2 });
+    socket.send(JSON.stringify(first));
+    expect(await next("ack")).toEqual({ type: "ack", id: first.id, retryAfterMs: 5000 });
+    expect((await inspect(stub)).inbox).toHaveLength(256);
+    socket.send(JSON.stringify(first));
+    expect((await next("ack")).retryAfterMs).toBe(5000);
+    expect((await inspect(stub)).connection.cursor || "").toBe("");
+    await runInDurableObject(stub, (_, state) =>
+      state.storage.sql.exec("UPDATE inbox SET state='done' WHERE id='old:1'").toArray(),
+    );
+    socket.send(JSON.stringify(first));
+    expect(await next("ack")).toMatchObject({ id: first.id, cursor: first.cursor });
+    socket.send(JSON.stringify(first));
+    expect(await next("ack")).toMatchObject({ id: first.id, cursor: first.cursor });
+    expect((await inspect(stub)).inbox).toHaveLength(257);
+  });
   it("commits batches before ack, isolates senders and safely replays a lost acknowledgement", async () => {
     const stub = await setup();
     const { socket, next } = await connect(stub);

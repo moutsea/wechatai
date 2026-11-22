@@ -572,6 +572,16 @@ describe("cloud Agent plugin interactions", () => {
     expect(dialog.textContent).toContain("删除配置");
   });
 
+  it("only requests a replacement QR when the user selects regenerate", async () => {
+    data.connection = { status: "waiting", qrUrl: "https://example.test/qr" };
+    await render(<Wechat />);
+    const button = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("重新生成二维码"),
+    )!;
+    await act(async () => button.click());
+    expect(request).toHaveBeenCalledWith("/wechat/links/default/rebind", { method: "POST" });
+  });
+
   it("permits QR binding with a configured user model and eligible cloud plugin", async () => {
     data.plugins = [plugin()];
     data.currentSession = { ...data.currentSession!, pluginInstanceId: "cloud" };

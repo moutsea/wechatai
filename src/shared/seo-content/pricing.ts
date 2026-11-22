@@ -1,6 +1,8 @@
 import type { SeoPage } from "../seo-pages";
 import { BILLING_OFFERS } from "../billing-offers";
 import { DAILY_CREDIT_DEFAULTS } from "../credits";
+import { DEFAULT_LOCALE, type Locale } from "../i18n";
+import { pricingCopyFor } from "../i18n/copy";
 import { approxYuan } from "../pricing-copy";
 
 const monthly = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")!;
@@ -70,3 +72,25 @@ export const pricingPage: SeoPage = {
   related: [{ label: "微信接入 Muse 托管助理", href: "/wechat-muse" }],
   updatedAt: "2026-11-19",
 };
+
+/**
+ * Page-owned copy for the rendered pricing page and its JSON-LD. Structure,
+ * paths, amounts and links stay on `pricingPage`; only wording changes.
+ */
+export function pricingPageFor(locale: Locale = DEFAULT_LOCALE): SeoPage {
+  const copy = pricingCopyFor(locale);
+  if (!copy) return pricingPage;
+  return {
+    ...pricingPage,
+    title: copy.seo.title,
+    description: copy.seo.description,
+    eyebrow: copy.seo.eyebrow,
+    h1: copy.seo.h1,
+    lede: copy.seo.lede,
+    answer: copy.seo.answer,
+    primaryKeyword: copy.seo.primaryKeyword,
+    secondaryKeywords: copy.seo.secondaryKeywords,
+    faq: copy.seo.faq,
+    related: copy.seo.related,
+  };
+}

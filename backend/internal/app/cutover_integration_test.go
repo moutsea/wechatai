@@ -138,6 +138,10 @@ func TestLocalCutoverRehearsal(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer h.Close()
+	var outcome string
+	if err := h.DB.QueryRowContext(ctx, `SELECT json_extract(wechatTextReceipts,'$."0".outcome') FROM inbox WHERE id='fixture-text-receipt' AND state='done'`).Scan(&outcome); err != nil || outcome != "unconfirmed" {
+		t.Fatalf("imported WeChat text receipt: %q, %v", outcome, err)
+	}
 	var balance, granted, paymentCount int64
 	if err := h.DB.QueryRowContext(ctx, "SELECT remaining FROM credit_buckets WHERE id='payment:fixture-payment-42'").Scan(&balance); err != nil || balance != 42000 {
 		t.Fatal("payment bucket mismatch", balance, err)
@@ -252,9 +256,8 @@ func checkSourceLayout(t *testing.T, ctx context.Context, file string) {
 	if err := json.Unmarshal(data, &contract); err != nil {
 		t.Fatal(err)
 	}
-	// V1 exports predate the optional 64-bit WeChat receipt metadata. The
-	// current source must export all three, while the importer accepts V1.
-	contract["inbox"] = append(contract["inbox"], "wechatRoundedId", "wechatExactId", "wechatSeq")
+	// V1 predates both inbound message identity metadata and outbound text receipts.
+	contract["inbox"] = append(contract["inbox"], "wechatRoundedId", "wechatExactId", "wechatSeq", "wechatTextReceipts")
 	db, err := sqlite.OpenReadOnly(ctx, file)
 	if err != nil {
 		t.Fatal(err)

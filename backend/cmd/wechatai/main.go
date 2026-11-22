@@ -20,6 +20,7 @@ import (
 	"github.com/moutsea/wechatai/backend/internal/grokwake"
 	"github.com/moutsea/wechatai/backend/internal/platform/config"
 	"github.com/moutsea/wechatai/backend/internal/receiverwatchdog"
+	"github.com/moutsea/wechatai/backend/internal/wechatsender"
 )
 
 var version = "development"
@@ -38,6 +39,10 @@ func checkReady() error {
 func run() error {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "wechat-sender":
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			return wechatsender.Run(ctx)
 		case "receiver-watchdog":
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
@@ -140,7 +145,7 @@ func run() error {
 			return json.NewEncoder(os.Stdout).Encode(map[string]any{"ok": true, "accounts": len(manifest.Accounts), "destination": os.Args[3]})
 		case "serve":
 		default:
-			return errors.New("usage: wechatai [serve|receiver-watchdog|version|check-ready|check-deployment|check-standby|deployment-settings|check-data|inspect-data|backup-data|prepare-legacy|recover-unbound|upgrade-account]")
+			return errors.New("usage: wechatai [serve|wechat-sender|receiver-watchdog|version|check-ready|check-deployment|check-standby|deployment-settings|check-data|inspect-data|backup-data|prepare-legacy|recover-unbound|upgrade-account]")
 		}
 	}
 	configuration, err := config.Load()

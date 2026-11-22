@@ -1,3 +1,5 @@
+import { resetPasswordAtomically } from "../src/server/auth-recovery";
+import { privateAuthResponse } from "../src/server/auth-email-link";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHmac } from "node:crypto";
@@ -5,6 +7,11 @@ import authMigration from "../migrations/0001_auth.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
 import emailMigration from "../migrations/0007_auth_email_limits.sql?raw";
 import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
+import {
+  challengeHeaders,
+  mockSiteverify,
+  testChallengeKeys,
+} from "./helpers/auth-email-challenge";
 import worker from "../src/server/index";
 import {
   authEmailContent,
@@ -22,6 +29,7 @@ const send = vi.fn(async (message: EmailMessage | EmailMessageBuilder) => {
 });
 const bindings = {
   ...env,
+  ...testChallengeKeys,
   AUTH_EMAIL_MODE: "cloudflare",
   AUTH_EMAIL_FROM: "verify@example.test",
   AUTH_EMAIL: { send },
@@ -52,12 +60,25 @@ async function request(
   extra: Record<string, string> = {},
   config: Env = bindings,
 ) {
+  const entry = new URL(path, env.APP_URL);
+  if (!body && entry.pathname === "/api/auth/email-link" && entry.hash) {
+    return rawRequest(
+      entry.pathname,
+      {
+        method: "POST",
+        headers: extra,
+        body: new URLSearchParams({ link: new URLSearchParams(entry.hash.slice(1)).get("link")! }),
+      },
+      config,
+    );
+  }
   return rawRequest(
     path,
     {
       method: body ? "POST" : "GET",
       headers: {
         "content-type": "application/json",
+        ...challengeHeaders(path),
         ...extra,
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
@@ -86,6 +107,9 @@ function mailLink() {
   if (!link) throw new Error("No link in captured mail");
   return link;
 }
+function mailTarget() {
+  return new URL(new URLSearchParams(new URL(mailLink()).hash.slice(1)).get("link")!, env.APP_URL);
+}
 async function unlock() {
   await env.DB.prepare("UPDATE auth_email_limit SET last_sent_at=0").run();
 }
@@ -99,8 +123,60 @@ async function requestReset(address: string) {
       })
     ).status,
   ).toBe(200);
-  return new URL(mailLink()).pathname.split("/").at(-1)!;
+  return mailTarget().pathname.split("/").at(-1)!;
 }
+it("keeps new and legacy reset tokens out of subsequent request URLs, and restricts the form relay", async () => {
+  const registered = await signup();
+  const outer = new URL(registered.link);
+  expect(outer.pathname + outer.search).toBe("/api/auth/email-link");
+  const landing = await rawRequest(outer.pathname);
+  expect(landing.headers.get("referrer-policy")).toBe("same-origin");
+  expect(landing.headers.get("cache-control")).toBe("no-store");
+  expect(await landing.text()).not.toContain(mailTarget().searchParams.get("token"));
+  for (const [origin, link] of [
+    ["https://other.example", mailTarget().pathname + mailTarget().search],
+    [env.APP_URL, "/api/auth/sign-out"],
+    [env.APP_URL, "//other.example/api/auth/verify-email?token=example"],
+    [env.APP_URL, "/api/auth/verify-email?token=x&callbackURL=https://other.example/"],
+  ]) {
+    expect(
+      (
+        await rawRequest(outer.pathname, {
+          method: "POST",
+          headers: { origin },
+          body: new URLSearchParams({ link }),
+        })
+      ).status,
+    ).toBe(400);
+  }
+  const token = await requestReset(registered.address);
+  const old = await rawRequest(mailTarget().href);
+  const entry = new URL(old.headers.get("location")!);
+  expect(entry.pathname + entry.search).toBe("/api/auth/email-link");
+  const reset = await request(entry.href);
+  const next = new URL(reset.headers.get("location")!, env.APP_URL);
+  expect(next.pathname + next.search).not.toContain(token);
+  expect(new URLSearchParams(next.hash.slice(1)).get("token")).toBe(token);
+});
+it("logs only a route template, status and request ID when an auth handler fails", () => {
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const request = new Request(
+      env.APP_URL + "/api/auth/reset-password/private-token?private-query",
+    );
+    const response = privateAuthResponse(new Response(null, { status: 503 }), request);
+    expect(JSON.parse(error.mock.calls[0][0])).toEqual({
+      event: "auth.handler_error",
+      route: "/api/auth/*",
+      status: 503,
+      requestId: response.headers.get("x-request-id"),
+    });
+    expect(response.headers.get("x-request-id")).toBeTruthy();
+  } finally {
+    error.mockRestore();
+  }
+});
+
 beforeAll(async () => {
   for (const migration of [authMigration, referralMigration, emailMigration, funnelMigration])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
@@ -109,10 +185,7 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM funnel_events").run();
   messages = [];
   send.mockClear();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(() => Promise.reject(new Error("Unexpected external request"))),
-  );
+  vi.stubGlobal("fetch", vi.fn(mockSiteverify(env.APP_URL)));
 });
 
 const verificationEvents = async () =>
@@ -138,7 +211,7 @@ describe("verification success analytics", () => {
     expect(
       (await request("/api/auth/send-verification-email", { email: registered.address })).status,
     ).toBe(200);
-    const token = new URL(mailLink()).pathname.split("/").at(-1)!;
+    const token = mailTarget().pathname.split("/").at(-1)!;
     expect(
       (await request("/api/auth/reset-password", { token: "bad", newPassword: password })).status,
     ).toBe(400);
@@ -240,7 +313,7 @@ describe("verified email registration and recovery", () => {
     const replay = await request(registered.link);
     expect(cookie(replay)).not.toContain("session_token=");
     expect((await login()).status).toBe(200);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1); // Only registration calls Siteverify.
   });
   it.each(["short", "p".repeat(129)])("enforces password length on the server", async (value) => {
     const response = await request("/api/auth/sign-up/email", {
@@ -332,7 +405,7 @@ describe("verified email registration and recovery", () => {
     expect(
       (
         await request("/api/auth/reset-password", {
-          token: target.searchParams.get("token"),
+          token: new URLSearchParams(target.hash.slice(1)).get("token"),
           newPassword: "mailbox-owner-confirmed-password",
         })
       ).status,
@@ -367,7 +440,7 @@ describe("verified email registration and recovery", () => {
         })
       ).status,
     ).toBe(200);
-    expect(mailLink()).toContain("/api/auth/reset-password/");
+    expect(mailTarget().pathname).toContain("/api/auth/reset-password/");
     expect((await request(registered.link)).headers.get("location")).toContain(
       "PASSWORD_RESET_REQUIRED",
     );
@@ -414,6 +487,21 @@ describe("verified email registration and recovery", () => {
     expect(
       await env.DB.prepare("SELECT id FROM verification WHERE id='unrelated'").first(),
     ).not.toBeNull();
+  });
+  it("rejects missing credentials before hashing and rechecks expiry after hashing", async () => {
+    const hash = vi.fn(async () => "unused");
+    await expect(resetPasswordAtomically(env, "missing-fixture", hash)).rejects.toThrow();
+    expect(hash).not.toHaveBeenCalled();
+    const registered = await signup();
+    const token = await requestReset(registered.address);
+    await expect(
+      resetPasswordAtomically(env, token, async () => {
+        await env.DB.prepare("UPDATE verification SET expiresAt=0 WHERE identifier=?")
+          .bind("reset-password:" + token)
+          .run();
+        return "expired-during-hash";
+      }),
+    ).rejects.toThrow();
   });
   it("allows only one of two different reset tokens to succeed concurrently", async () => {
     const registered = await signup();
@@ -646,7 +734,8 @@ describe("verified email registration and recovery", () => {
     const location = new URL(landing.headers.get("location")!, env.APP_URL);
     expect(location.pathname).toBe("/reset-password");
     expect(location.searchParams.get("returnTo")).toBe("/app/billing");
-    const token = location.searchParams.get("token");
+    expect(location.searchParams.has("token")).toBe(false);
+    const token = new URLSearchParams(location.hash.slice(1)).get("token");
     expect(
       (await request("/api/auth/reset-password", { token, newPassword: "short" })).status,
     ).toBe(400);
@@ -692,12 +781,16 @@ describe("verified email registration and recovery", () => {
       email: registered.address,
       redirectTo: "/reset-password",
     });
-    const url = new URL(mailLink());
+    const url = mailTarget();
     const token = url.pathname.split("/").at(-1);
     await env.DB.prepare("UPDATE verification SET expiresAt=0 WHERE identifier=?")
       .bind(`reset-password:${token}`)
       .run();
-    expect((await request(url.href)).headers.get("location")).toContain("error=INVALID_TOKEN");
+    const oldLink = await rawRequest(url.href);
+    expect(oldLink.status).toBe(302);
+    const entry = new URL(oldLink.headers.get("location")!);
+    expect(entry.pathname).toBe("/api/auth/email-link");
+    expect((await request(entry.href)).headers.get("location")).toContain("error=INVALID_TOKEN");
     expect(
       (await request("/api/auth/reset-password", { token, newPassword: password })).status,
     ).toBe(400);
@@ -747,6 +840,89 @@ describe("verified email registration and recovery", () => {
     expect(JSON.stringify(logs.mock.calls)).not.toMatch(
       /private-recipient|private-token|auth-.*example/,
     );
+  });
+});
+
+describe("email challenge", () => {
+  const limits = () =>
+    env.DB.prepare("SELECT SUM(day_count) AS used FROM auth_email_limit").first();
+  const registration = () => ({ name: "Test", email: email(), password });
+
+  it.each(["sign-up/email", "send-verification-email", "request-password-reset"])(
+    "requires a challenge before any side effects on %s",
+    async (path) => {
+      const body = registration();
+      const before = await limits();
+      for (const token of [undefined, "x".repeat(2049)]) {
+        const headers = new Headers({ "content-type": "application/json" });
+        if (token) headers.set("X-Turnstile-Token", token);
+        const res = await rawRequest("/api/auth/" + path, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+        });
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({ code: "EMAIL_CHALLENGE_INVALID" });
+      }
+      expect(fetch).not.toHaveBeenCalled();
+      expect(await limits()).toEqual(before);
+      expect(send).not.toHaveBeenCalled();
+      expect(
+        await env.DB.prepare("SELECT id FROM user WHERE email=?").bind(body.email).first(),
+      ).toBeNull();
+    },
+  );
+  it.each([
+    [{ success: true, hostname: "unrelated.example", action: "email_signup" }, 403],
+    [{ success: true, hostname: new URL(env.APP_URL).hostname, action: "email_reset" }, 403],
+    [{ success: false, "error-codes": ["invalid-input-response"] }, 403],
+    [{ success: false, "error-codes": ["internal-error"] }, 503],
+    [{ success: false, "error-codes": ["invalid-input-secret"] }, 503],
+  ] as const)("rejects an unverified result %# before reserving quota", async (result, status) => {
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json(result));
+    const before = await limits();
+    expect((await request("/api/auth/sign-up/email", registration())).status).toBe(status);
+    expect(await limits()).toEqual(before);
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("fails closed for provider outages and missing or test keys", async () => {
+    const path = "/api/auth/request-password-reset";
+    const body = { email: email() };
+    const before = await limits();
+    vi.mocked(fetch)
+      .mockRejectedValueOnce(new Error("Timed out"))
+      .mockResolvedValueOnce(new Response(null, { status: 502 }));
+    for (let i = 0; i < 2; i++) expect((await request(path, body)).status).toBe(503);
+    for (const keys of [
+      { TURNSTILE_SITE_KEY: "" },
+      { TURNSTILE_SECRET_KEY: "" },
+      { TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" },
+    ]) {
+      const config = { ...bindings, ...keys };
+      expect((await request(path, body, {}, config)).status).toBe(503);
+      expect(await (await request("/api/auth/email-config", undefined, {}, config)).json()).toEqual(
+        { delivery: "unavailable" },
+      );
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(await limits()).toEqual(before);
+    expect(send).not.toHaveBeenCalled();
+    expect(await (await request("/api/auth/email-config")).json()).toEqual({
+      delivery: "email",
+      siteKey: testChallengeKeys.TURNSTILE_SITE_KEY,
+    });
+  });
+  it("consumes a valid token once across recipients, without reserving the second address", async () => {
+    const path = "/api/auth/sign-up/email";
+    const headers = challengeHeaders(path);
+    expect((await request(path, registration(), headers)).status).toBe(200);
+    const second = registration();
+    const before = await limits();
+    expect((await request(path, second, headers)).status).toBe(403);
+    expect(await limits()).toEqual(before);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((await request(path, second)).status).toBe(200);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -1,15 +1,48 @@
-import type { WxMessage } from "./wechat";
+import type { WechatTextReceipt, WxMessage } from "./wechat";
+
+const activeInbox = "state IN ('pending','reply','waiting_context')";
+export function wechatInboxBudget(sql: SqlStorage, connectionId: string) {
+  const { rows, bytes } = sql
+    .exec<{ rows: number; bytes: number }>(
+      `SELECT count(*) AS rows, COALESCE(SUM((length(CAST(payload AS BLOB))+length(CAST(reply AS BLOB)))),0) AS bytes FROM inbox INDEXED BY inbox_active_bytes WHERE connectionId=? AND ${activeInbox}`,
+      connectionId,
+    )
+    .one();
+  return { rows: 256 - rows, bytes: 4 * 1024 * 1024 - bytes };
+}
 
 // The original inbox primary key is also used by replies, runs and billing.
 // Preserve it when connecting an old rounded receipt to an exact WeChat ID.
 export function initWechatInbox(sql: SqlStorage) {
+  sql.exec(
+    "CREATE INDEX IF NOT EXISTS inbox_clearable ON inbox(connectionId) WHERE state!='done' OR payload!='{}' OR reply!=''",
+  );
+  sql.exec(
+    `CREATE INDEX IF NOT EXISTS inbox_active_bytes ON inbox(connectionId,(length(CAST(payload AS BLOB))+length(CAST(reply AS BLOB)))) WHERE ${activeInbox}`,
+  );
   const columns = sql.exec<{ name: string }>("PRAGMA table_info(inbox)").toArray();
-  for (const name of ["wechatRoundedId", "wechatExactId", "wechatSeq"]) {
+  for (const name of ["wechatRoundedId", "wechatExactId", "wechatSeq", "wechatTextReceipts"]) {
     if (!columns.some((c) => c.name === name))
       sql.exec(`ALTER TABLE inbox ADD COLUMN ${name} TEXT`);
   }
   sql.exec(
     "CREATE INDEX IF NOT EXISTS inbox_wechat_rounded ON inbox(wechatRoundedId) WHERE wechatRoundedId IS NOT NULL",
+  );
+}
+
+// Keep only the last attempt for each text part. A historical row without receipts
+// predates diagnostics. Never store upstream bodies, message IDs or recipient IDs here.
+export function recordWechatTextReceipt(
+  sql: SqlStorage,
+  pending: { id: string; part: number; attempts: number },
+  receipt: WechatTextReceipt | undefined,
+) {
+  if (!receipt) return;
+  sql.exec(
+    "UPDATE inbox SET wechatTextReceipts=json_set(COALESCE(wechatTextReceipts,'{}'),?,json(?)) WHERE id=?",
+    `$."${pending.part}"`,
+    JSON.stringify({ ...receipt, attempt: pending.attempts + 1, at: Date.now() }),
+    pending.id,
   );
 }
 
@@ -93,6 +126,7 @@ export function insertWechatMessage(
   connectionId: string,
   message: WxMessage,
   replay: boolean,
+  budget: ReturnType<typeof wechatInboxBudget>,
 ) {
   const value = wechatReceiptId(message);
   if (value === undefined) return false;
@@ -140,18 +174,26 @@ export function insertWechatMessage(
   }
   if (!nonzero(message.message_id) && claimLegacyZero(sql, prefix, message, replay, id))
     return false;
-  return (
+  const payload = JSON.stringify(message);
+  const bytes = Buffer.byteLength(payload);
+  if (budget.rows <= 0 || bytes > budget.bytes)
+    return sql.exec("SELECT 1 FROM inbox WHERE id=?", id).toArray().length ? false : "full";
+  const inserted =
     sql
       .exec(
         "INSERT OR IGNORE INTO inbox (id,payload,createdAt,connectionId,wechatRoundedId,wechatExactId,wechatSeq) VALUES (?,?,?,?,?,?,?) RETURNING id",
         id,
-        JSON.stringify(message),
+        payload,
         Date.now(),
         connectionId,
         rounded,
         exact,
         seq,
       )
-      .toArray().length > 0
-  );
+      .toArray().length > 0;
+  if (inserted) {
+    budget.rows--;
+    budget.bytes -= bytes;
+  }
+  return inserted;
 }

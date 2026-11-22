@@ -263,7 +263,10 @@ async function blockedPoll(
       paths.push(path);
       if (path.startsWith("/api/agent/")) return Response.json(outcome("running"));
       if (path.endsWith("/get_bot_qrcode"))
-        return Response.json({ error: "unavailable" }, { status: 503 });
+        return Response.json({
+          qrcode: "replacement",
+          qrcode_img_content: "https://example.test/qr",
+        });
       if (path.endsWith(`/${kind}`) && !blocked) {
         blocked = true;
         return new Promise<Response>((resolve, reject) => {
@@ -347,8 +350,8 @@ describe("account AGT recovery alarm", () => {
                       enabled: false,
                       ...(target === "plugin-full" ? { name: "新的助手名称" } : {}),
                     }
-                  : { id: task.connectionId };
-          expect(JSON.parse(await instance.api(action, body)).ok).toBe(target !== "bind");
+                  : { id: task.connectionId, regenerate: target === "bind" };
+          expect(JSON.parse(await instance.api(action, body)).ok).toBe(true);
           expect(signal.aborted).toBe(true);
           await finished;
           expect(new CloudAgentStore(storage).get(task.id)!.stopRequested).toBe(1);
@@ -360,8 +363,7 @@ describe("account AGT recovery alarm", () => {
               .toArray(),
           ).toEqual([]);
           const error = (await instance.snapshot()).connection.error;
-          if (target === "bind") expect(error).toBe("二维码获取失败，请重新绑定");
-          else expect(error).toBeUndefined();
+          expect(error).toBeUndefined();
         });
       },
     );

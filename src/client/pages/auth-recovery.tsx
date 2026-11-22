@@ -3,10 +3,11 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowRight, Check, Mail, KeyRound } from "lucide-react";
 import { authClient, useAuth } from "../auth";
 import { AuthLayout } from "../auth-layout";
-import { api } from "../api";
+import { useAuthEmailChallenge } from "./auth-email-challenge";
 import { trackFunnel } from "../analytics-client";
 import {
   AUTH_EMAIL_COOLDOWN_SECONDS,
+  authEmailActions,
   PASSWORD_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
   authReturnPath,
@@ -14,32 +15,6 @@ import {
   passwordValidationError,
 } from "../../shared/auth";
 import "./auth-recovery.css";
-
-export function AuthEmailNotice() {
-  const [delivery, setDelivery] = useState("");
-  useEffect(() => {
-    const controller = new AbortController();
-    void api<{ delivery: string }>("/auth/email-config", { signal: controller.signal })
-      .then((result) => {
-        if (!controller.signal.aborted) setDelivery(result.delivery);
-      })
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
-  if (delivery === "preview")
-    return (
-      <p className="auth-delivery-note">
-        本地开发模式：邮件不会实际发送，验证或重置链接会输出到本地服务终端。
-      </p>
-    );
-  if (delivery === "unavailable")
-    return (
-      <p className="form-error" role="alert">
-        邮件服务暂时不可用，请稍后再试。
-      </p>
-    );
-  return null;
-}
 
 export function verificationCallback(returnTo: string) {
   return `/verify-email?verified=1&returnTo=${encodeURIComponent(authReturnPath(returnTo))}`;
@@ -70,18 +45,23 @@ export function VerifyEmailPage() {
   );
   const cooldown = useCooldown(pending?.sent ? AUTH_EMAIL_COOLDOWN_SECONDS : 0);
   const verified = params.get("verified") === "1" && !tokenError;
+  const challenge = useAuthEmailChallenge(
+    authEmailActions.resend,
+    !verified && !cooldown.remaining,
+  );
   // 这里曾经放过一个「用 Google 登录，跳过邮箱验证」的按钮，后来去掉了：
   // `accountLinking.requireLocalEmailVerified = true`（src/server/auth.ts）意味着
   // 本账号邮箱还没验证时，同邮箱的第三方登录会被拒绝（account_not_linked），
   // 不同邮箱则会另建一个账号——两条路都不是坐在这个页面上的人想要的。
   async function resend(event: FormEvent) {
     event.preventDefault();
-    if (busy || cooldown.remaining) return;
+    if (busy || cooldown.remaining || !challenge.ready) return;
     setBusy(true);
     setError("");
     try {
       const result = await authClient.sendVerificationEmail({
         email: email.trim(),
+        fetchOptions: { headers: challenge.headers },
         callbackURL: verificationCallback(returnTo),
       });
       if (result.error) {
@@ -95,6 +75,7 @@ export function VerifyEmailPage() {
     } catch {
       setError("暂时无法发送邮件，请检查网络后重试。");
     } finally {
+      challenge.reset();
       setBusy(false);
     }
   }
@@ -150,7 +131,11 @@ export function VerifyEmailPage() {
               请按邮件中的提示操作；已有未验证账号需要重新设置密码。也请检查垃圾邮件文件夹。
             </div>
           )}
-          <button className="button full" disabled={busy || cooldown.remaining > 0}>
+          {challenge.field}
+          <button
+            className="button full"
+            disabled={busy || cooldown.remaining > 0 || !challenge.ready}
+          >
             {busy
               ? "正在发送…"
               : cooldown.remaining
@@ -159,7 +144,6 @@ export function VerifyEmailPage() {
                   ? "重新发送验证邮件"
                   : "发送验证邮件"}
           </button>
-          <AuthEmailNotice />
           <div className="auth-next-steps">
             <p>验证完成后，接下来只有三步：</p>
             <ol>
@@ -192,14 +176,16 @@ export function ForgotPasswordPage() {
   const [params] = useSearchParams();
   const returnTo = authReturnPath(params.get("returnTo"));
   const cooldown = useCooldown(0);
+  const challenge = useAuthEmailChallenge(authEmailActions.reset, !cooldown.remaining);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (busy || cooldown.remaining) return;
+    if (busy || cooldown.remaining || !challenge.ready) return;
     setBusy(true);
     setError("");
     try {
       const response = await authClient.requestPasswordReset({
         email: email.trim(),
+        fetchOptions: { headers: challenge.headers },
         redirectTo: `/reset-password?returnTo=${encodeURIComponent(returnTo)}`,
       });
       if (response.error) {
@@ -212,6 +198,7 @@ export function ForgotPasswordPage() {
     } catch {
       setError("暂时无法发送邮件，请检查网络后重试。");
     } finally {
+      challenge.reset();
       setBusy(false);
     }
   }
@@ -247,7 +234,11 @@ export function ForgotPasswordPage() {
             如果该邮箱已注册，你会收到重置邮件。没有收到的话，也请检查垃圾邮件文件夹。
           </div>
         )}
-        <button className="button full" disabled={busy || cooldown.remaining > 0}>
+        {challenge.field}
+        <button
+          className="button full"
+          disabled={busy || cooldown.remaining > 0 || !challenge.ready}
+        >
           {busy
             ? "正在发送…"
             : cooldown.remaining
@@ -257,7 +248,6 @@ export function ForgotPasswordPage() {
                 : "发送重置邮件"}
           <ArrowRight size={17} />
         </button>
-        <AuthEmailNotice />
         <p className="auth-switch">
           <Link to={`/login?returnTo=${encodeURIComponent(returnTo)}`}>返回登录</Link>
         </p>
@@ -269,7 +259,10 @@ export function ForgotPasswordPage() {
 export function ResetPasswordPage() {
   const [params, setParams] = useSearchParams();
   const recovery = params.get("recovery") === "1";
-  const [token] = useState(() => params.get("token") || "");
+  const { hash } = useLocation();
+  const [token] = useState(
+    () => new URLSearchParams(hash.slice(1)).get("token") || params.get("token") || "",
+  );
   const returnTo = authReturnPath(params.get("returnTo"));
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -279,12 +272,12 @@ export function ResetPasswordPage() {
   const [error, setError] = useState("");
   const { refetch } = useAuth();
   useEffect(() => {
-    if (done && params.has("token")) {
+    if (done && (hash || params.has("token"))) {
       const clean = new URLSearchParams(params);
       clean.delete("token");
       setParams(clean, { replace: true });
     }
-  }, [done, params, setParams]);
+  }, [done, hash, params, setParams]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy || done) return;

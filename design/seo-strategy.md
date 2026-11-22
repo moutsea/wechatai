@@ -120,6 +120,7 @@
 
 /wechat-ai（hub）──▶ 其余 6 个场景页 + /pricing
 /wechat-clawbot ──#no-reply 被 /wechat-deepseek 与 /wechat-clawbot-models 引用
+/wechat-ai-options ──「微信机器人怎么弄：先选对路线」──▶ /wechat-bot
 每个落地页 ──related 3 条──▶ 兄弟落地页 + 对应文档
 /developers/openclaw|hermes ──▶ 新增页脚（原来只有 1 条出链，死胡同）
 ```

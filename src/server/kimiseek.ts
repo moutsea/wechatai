@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppError, secret } from "./config";
 import { readJson } from "./security";
 import type { ModelImportResult } from "../shared/types";
+import { kimiseekEmailError, type KimiseekEmailErrorCode } from "../shared/kimiseek-errors";
 
 export type KimiseekIdentity = { id: string; email: string; emailVerified: boolean; name: string };
 export type KimiseekFlow = {
@@ -11,6 +12,7 @@ export type KimiseekFlow = {
   status: "pending" | "working" | "complete" | "failed";
   operation: "connect" | "recharge";
   message?: string;
+  errorCode?: KimiseekEmailErrorCode;
   channelId?: string;
   modelImport?: ModelImportResult;
 };
@@ -34,7 +36,7 @@ export type KimiseekCommand =
   | { action: "status"; id: string }
   | { action: "claim"; id: string }
   | { action: "complete"; id: string; result: KimiseekResponse }
-  | { action: "fail"; id: string; message: string }
+  | { action: "fail"; id: string; message: string; errorCode?: KimiseekEmailErrorCode }
   | { action: "balance"; identity: KimiseekIdentity };
 export async function callKimiseek<T>(
   account: { kimiseek(command: KimiseekCommand): Promise<string> },
@@ -92,7 +94,15 @@ export async function kimiseekRequest(
     });
     const response = await (binding ? binding.fetch(request) : fetch(request));
     if (!response.ok) {
-      await response.body?.cancel();
+      if (response.status === 403) {
+        const body = await readJson(response, 4096).catch(() => null);
+        const policy = kimiseekEmailError(
+          body && typeof body === "object" && "code" in body ? body.code : undefined,
+        );
+        if (policy) throw new AppError(policy.code, policy.message, 403);
+      } else {
+        await response.body?.cancel();
+      }
       throw new AppError(
         "kimiseek_unavailable",
         response.status === 404

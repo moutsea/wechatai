@@ -149,6 +149,7 @@ export const wechataiVsOpenclawPage: SeoPage = {
     { label: "微信接入 Muse 托管助理", href: "/wechat-muse" },
     { label: "把 Agent 接进微信", href: "/wechat-agent" },
     { label: "OpenClaw 接入指南", href: "/developers/openclaw" },
+    { label: "全部对比", href: "/compare" },
     { label: "微伴 vs 微信官方内置 AI", href: "/compare/wechatai-vs-wechat-official-ai" },
     { label: "微伴 vs 商业微信 AI 平台", href: "/compare/wechatai-vs-commercial-wechat-ai" },
     { label: "微信 AI 的几种接入方案对比", href: "/wechat-ai-options" },

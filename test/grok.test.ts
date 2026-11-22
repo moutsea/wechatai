@@ -959,7 +959,12 @@ it.each(["disconnect", "bind", "changed generation"])(
           .spyOn(globalThis, "fetch")
           .mockResolvedValue(Response.json({ qrcode: "mock", qrcode_img_content: "mock" }));
         try {
-          return JSON.parse(await instance.api("wechat." + operation, { id: "default" }));
+          return JSON.parse(
+            await instance.api("wechat." + operation, {
+              id: "default",
+              regenerate: operation === "bind",
+            }),
+          );
         } finally {
           spy.mockRestore();
         }

@@ -113,6 +113,9 @@ export class OpenClawRelay {
       )
         this.sql.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
+    this.sql.exec(
+      "CREATE INDEX IF NOT EXISTS claw_events_clearable ON claw_events(sessionId) WHERE json_type(receipt,'$.acceptedText')='text' AND (json_extract(receipt,'$.acceptedText')!='' OR COALESCE(json_extract(receipt,'$.historyCleared'),0)=0)",
+    );
   }
 
   status(pluginId: string) {
@@ -271,6 +274,12 @@ export class OpenClawRelay {
     );
     this.sql.exec("DELETE FROM claw_routes WHERE sessionId = ?", sessionId);
   }
+  cancelAllSessions() {
+    this.sql.exec(
+      "UPDATE claw_jobs SET state='cancelled',text='' WHERE state IN ('pending','claimed')",
+    );
+    this.sql.exec("DELETE FROM claw_routes");
+  }
   clearHistory(sessionId?: string) {
     // Keep settlement/dedupe metadata, but never replay deleted conversation text.
     // Session ownership survives route resets, revocation and re-pairing.
@@ -278,13 +287,14 @@ export class OpenClawRelay {
     const bindings = sessionId ? [sessionId] : [];
     // Proactive/failed runs intentionally have no sessionId (they do not qualify
     // for referral rewards), so remove their response cache through the receipt.
-    this.sql.exec(
-      `DELETE FROM runs WHERE id IN (SELECT 'claw:' || id FROM claw_events${scope})`,
-      ...bindings,
-    );
+    if (sessionId)
+      this.sql.exec(
+        `DELETE FROM runs WHERE id IN (SELECT 'claw:' || id FROM claw_events${scope})`,
+        ...bindings,
+      );
     this.sql.exec(
       `UPDATE claw_events SET receipt = json_set(receipt, '$.acceptedText', '', '$.historyCleared', json('true'))
-       WHERE json_type(receipt, '$.acceptedText') = 'text'${sessionId ? " AND sessionId = ?" : ""}`,
+       WHERE json_type(receipt,'$.acceptedText')='text' AND (json_extract(receipt,'$.acceptedText')!='' OR COALESCE(json_extract(receipt,'$.historyCleared'),0)=0)${sessionId ? " AND sessionId = ?" : ""}`,
       ...bindings,
     );
   }
