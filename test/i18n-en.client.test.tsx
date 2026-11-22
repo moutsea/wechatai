@@ -192,6 +192,19 @@ describe("published English pages", () => {
     expect(homeFaq.mainEntity[0].name).toBe("Do I need my own API key?");
   });
 
+  it("documents that clearing Muse history removes bodies without deleting receipts", () => {
+    const paragraph = [...parse("/en/developers/muse").querySelectorAll("main p")].find((p) =>
+      p.textContent?.includes("delete all session records"),
+    );
+    expect(paragraph?.textContent).toMatch(
+      /(?:reply |response )?bodies from (?:the )?corresponding receipts and (?:the )?result cache/i,
+    );
+    expect(paragraph?.textContent).toMatch(/retain\w* .*settlement and deduplication/i);
+    expect(paragraph?.textContent).toMatch(
+      /does not synchronously delete Muse's existing local records, long-term memory or files/i,
+    );
+  });
+
   it("keeps the existing Chinese pages and publishes only the approved localized URLs", () => {
     const home = parse("/");
     expect(home.querySelector("h1")?.textContent).toContain("把你的 AI");
