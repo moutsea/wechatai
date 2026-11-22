@@ -16,7 +16,12 @@ export function SeoRelated({ links }: { links: SeoPage["related"] }) {
       <h2 id="seopage-related-title">{heading}</h2>
       <div className="seopage-related-grid">
         {links.map((link) => (
-          <Link to={localizedHref(locale, link.href)} key={link.href}>
+          // Portuguese dictionaries keep unprefixed hrefs, so the pt pages localize here;
+          // other locales already carry their own prefixes in the page data.
+          <Link
+            to={locale === "pt" ? localizedHref(locale, link.href) : link.href}
+            key={link.href}
+          >
             <span>{link.label}</span>
             <ArrowRight size={16} aria-hidden="true" />
           </Link>

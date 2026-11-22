@@ -103,7 +103,7 @@ function StepPreview({ step }: { step: number }) {
   const { locale } = useLocale();
   const copy = homeCopyFor(locale)?.steps.preview ?? stepsCopyZh.preview;
   const labels =
-    locale === "ko" ? providerLabelsKo : locale === "en" || locale === "ja" ? providerLabelsEn : providerLabels;
+    locale === "ko" ? providerLabelsKo : locale === "en" || locale === "ja" || locale === "pt" ? providerLabelsEn : providerLabels;
   if (step === 0)
     return (
       <div className="steps-preview">

@@ -29,6 +29,7 @@ describe("published Brazilian Portuguese pages", () => {
       { path: source, lang: "zh-CN", ogLocale: "zh_CN" },
       { path: `/en${suffix}`, lang: "en", ogLocale: "en_US" },
       { path: `/ja${suffix}`, lang: "ja-JP", ogLocale: "ja_JP" },
+      { path: `/ko${suffix}`, lang: "ko-KR", ogLocale: "ko_KR" },
       { path: `/pt${suffix}`, lang: "pt-BR", ogLocale: "pt_BR" },
     ];
     const expected = [
@@ -98,6 +99,7 @@ describe("published Brazilian Portuguese pages", () => {
       ["Chinês", "/", "zh-CN"],
       ["Inglês", "/en", "en"],
       ["Japonês", "/ja", "ja-JP"],
+      ["Coreano", "/ko", "ko-KR"],
     ]);
   });
 
