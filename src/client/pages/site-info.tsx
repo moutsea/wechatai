@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { ArrowUpRight, BookOpen, Mail, MessageSquareText } from "lucide-react";
 import { Link, NavLink } from "react-router-dom";
 import {
@@ -7,6 +8,14 @@ import {
   SITE_MAINTAINER,
   type InfoPageKind,
 } from "../../shared/site-info";
+import {
+  enSiteInfo,
+  enSiteInfoLabels,
+  type InfoBlock,
+  type InfoInline,
+} from "../../shared/i18n/en/site-info";
+import type { ContactCopy, InfoDocumentCopy } from "../../shared/i18n/en/copy/site-info";
+import { localizedHref, useLocale } from "../locale";
 import { SiteFooter } from "../site-footer";
 import { SiteHeader } from "../site-header";
 import { OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
@@ -15,6 +24,146 @@ import { OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-c
 function formatUpdatedAt(iso: string) {
   const [year, month, day] = iso.split("-");
   return `${year} 年 ${Number(month)} 月 ${Number(day)} 日`;
+}
+
+const ENGLISH_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+/** Same ISO constants as Chinese, formatted without relying on the host timezone. */
+function formatUpdatedAtEn(iso: string) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return `${ENGLISH_MONTHS[month - 1]} ${day}, ${year}`;
+}
+
+function InlineText({ parts }: { parts: readonly InfoInline[] }) {
+  const { locale } = useLocale();
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (typeof part === "string") return part;
+        const content = part.code ? (
+          <code>{part.text}</code>
+        ) : part.strong ? (
+          <strong>{part.text}</strong>
+        ) : part.href ? (
+          part.href.startsWith("http") || part.href.startsWith("mailto:") ? (
+            <a
+              href={part.href}
+              {...(part.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+            >
+              {part.text}
+            </a>
+          ) : (
+            <Link to={localizedHref(locale, part.href)}>{part.text}</Link>
+          )
+        ) : (
+          part.text
+        );
+        return <Fragment key={index}>{content}</Fragment>;
+      })}
+    </>
+  );
+}
+
+function InfoBlocks({ blocks }: { blocks: readonly InfoBlock[] }) {
+  return (
+    <>
+      {blocks.map((block, index) =>
+        block.kind === "list" ? (
+          <ul key={index}>
+            {block.items.map((item, itemIndex) => (
+              <li key={itemIndex}>
+                <InlineText parts={item} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={index}>
+            <InlineText parts={block.content} />
+          </p>
+        ),
+      )}
+    </>
+  );
+}
+
+function EnglishDocument({ copy }: { copy: InfoDocumentCopy }) {
+  return (
+    <article className="info-document" aria-label={copy.articleLabel}>
+      {copy.sections.map((section) => (
+        <section key={section.heading}>
+          <h2>{section.heading}</h2>
+          <InfoBlocks blocks={section.blocks} />
+        </section>
+      ))}
+    </article>
+  );
+}
+
+function EnglishContact({ copy }: { copy: ContactCopy }) {
+  const { locale } = useLocale();
+  return (
+    <div className="contact-content">
+      <section className="contact-email">
+        <span className="contact-icon">
+          <Mail size={24} aria-hidden="true" />
+        </span>
+        <h2>{copy.email.heading}</h2>
+        <p>{copy.email.intro}</p>
+        <a
+          className="contact-address"
+          href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(copy.email.subject)}`}
+        >
+          {SUPPORT_EMAIL}
+          <ArrowUpRight size={20} aria-hidden="true" />
+        </a>
+        <span>{copy.email.hint}</span>
+      </section>
+      <section id={copy.maintainer.id}>
+        <h2>{copy.maintainer.heading}</h2>
+        <InfoBlocks blocks={copy.maintainer.blocks} />
+      </section>
+      <div className="contact-grid">
+        {copy.sections.map((section) => (
+          <section key={section.heading}>
+            {section.icon === "message" ? (
+              <MessageSquareText size={22} aria-hidden="true" />
+            ) : (
+              <BookOpen size={22} aria-hidden="true" />
+            )}
+            <h2>{section.heading}</h2>
+            <InfoBlocks blocks={section.blocks} />
+            {section.note && (
+              <p className="contact-note">
+                <InlineText parts={section.note} />
+              </p>
+            )}
+            {section.link && (
+              <Link className="text-link" to={localizedHref(locale, section.link.href)}>
+                {section.link.label}
+                <ArrowUpRight size={16} aria-hidden="true" />
+              </Link>
+            )}
+          </section>
+        ))}
+      </div>
+      <p className="contact-privacy">
+        <InlineText parts={copy.privacyNote} />
+      </p>
+    </div>
+  );
 }
 
 function Terms() {
@@ -375,29 +524,52 @@ function Contact() {
 }
 
 export function SiteInfoPage({ kind }: { kind: InfoPageKind }) {
+  const { locale } = useLocale();
+  const english = locale === "en" ? enSiteInfo[kind] : undefined;
   const page = INFO_PAGES[kind];
   return (
     <div className="site-info-page">
       <SiteHeader />
       <main className="info-main">
         <div className="info-intro">
-          <span className="eyebrow">{page.eyebrow}</span>
-          <h1>{page.title}</h1>
-          <p>{page.description}</p>
+          <span className="eyebrow">{english?.eyebrow ?? page.eyebrow}</span>
+          <h1>{english?.name ?? page.title}</h1>
+          <p>{english?.description ?? page.description}</p>
           {kind !== "contact" && (
             <time dateTime={INFO_PAGE_UPDATED_AT[kind]}>
-              更新日期：{formatUpdatedAt(INFO_PAGE_UPDATED_AT[kind])}
+              {english
+                ? `${enSiteInfoLabels.updated} ${formatUpdatedAtEn(INFO_PAGE_UPDATED_AT[kind])}`
+                : `更新日期：${formatUpdatedAt(INFO_PAGE_UPDATED_AT[kind])}`}
             </time>
           )}
         </div>
-        <nav className="info-navigation" aria-label="支持与政策导航">
-          {Object.values(INFO_PAGES).map((item) => (
-            <NavLink key={item.path} to={item.path}>
-              {item.title}
+        <nav
+          className="info-navigation"
+          aria-label={english ? enSiteInfoLabels.navigation : "支持与政策导航"}
+        >
+          {Object.entries(INFO_PAGES).map(([navKind, item]) => (
+            <NavLink key={item.path} to={localizedHref(locale, item.path)}>
+              {english ? enSiteInfo[navKind as InfoPageKind].name : item.title}
             </NavLink>
           ))}
         </nav>
-        {kind === "terms" ? <Terms /> : kind === "privacy" ? <Privacy /> : <Contact />}
+        {kind === "terms" ? (
+          english ? (
+            <EnglishDocument copy={enSiteInfo.terms} />
+          ) : (
+            <Terms />
+          )
+        ) : kind === "privacy" ? (
+          english ? (
+            <EnglishDocument copy={enSiteInfo.privacy} />
+          ) : (
+            <Privacy />
+          )
+        ) : english ? (
+          <EnglishContact copy={enSiteInfo.contact} />
+        ) : (
+          <Contact />
+        )}
       </main>
       <SiteFooter />
     </div>
