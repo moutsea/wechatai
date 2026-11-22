@@ -5,6 +5,7 @@ import type { NotificationPlugin } from "./notification";
 import { pluginManifestSchema } from "./plugins";
 import type { OpenClawPlugin } from "./openclaw";
 import type { HermesPlugin } from "./hermes";
+import type { GrokPlugin } from "./grok-bot";
 import type { MusePlugin } from "./muse";
 import type { PersonalAssistantPlugin } from "./personal-assistant";
 import type { RoleplayPlugin } from "./roleplay";
@@ -41,6 +42,7 @@ export type UserPlugin =
   | ImageGenerationPlugin
   | OpenClawPlugin
   | HermesPlugin
+  | GrokPlugin
   | MusePlugin
   | RoleplayPlugin
   | PersonalAssistantPlugin;

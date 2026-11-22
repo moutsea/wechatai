@@ -106,6 +106,8 @@ export type WechatLink = Connection & {
 export type Snapshot = {
   onboardingDismissedAt?: number;
   plugins?: UserPlugin[];
+  grokBotReady?: boolean;
+  grokBotVisible?: boolean;
   cloudAgent: CloudAgentStatus;
   plan: "free" | "plus";
   planUntil: number;

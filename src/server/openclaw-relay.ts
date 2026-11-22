@@ -29,6 +29,7 @@ type Job = {
   command: string;
   lane: "message" | "control";
 };
+type QueuedReplies = "preserve" | "discard";
 type Hooks = {
   wake?: (pluginId: string) => void;
   plugin: (id: string) => RemoteAgentPlugin;
@@ -36,6 +37,7 @@ type Hooks = {
   balance: () => number;
   selectAgent: (pluginId: string, agentId: string) => void;
   deliver: (event: {
+    plugin: RemoteAgentPlugin;
     id: string;
     route: ClawRoute;
     text: string;
@@ -147,11 +149,11 @@ export class OpenClawRelay {
       agents: agents ? (JSON.parse(agents.agents) as OpenClawAgent[]) : [],
     };
   }
-  rotate(pluginId: string, accountId: string) {
+  rotate(pluginId: string, accountId: string, queuedReplies: QueuedReplies) {
     this.hooks.plugin(pluginId);
     const secret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
     this.storage.transactionSync(() => {
-      this.revoke(pluginId);
+      this.revoke(pluginId, queuedReplies);
       this.sql.exec(
         "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0)",
         pluginId,
@@ -199,7 +201,7 @@ export class OpenClawRelay {
       const selected =
         this.status(pluginId).agents.length && agents.find((a) => a.id === plugin.agentId);
       const agentId = (selected || agents.find((a) => a.isDefault) || agents[0]).id;
-      this.clearRoutes(pluginId);
+      this.clearRoutes(pluginId, "discard");
       this.sql.exec(
         "INSERT INTO claw_connectors (pluginId,tokenHash,lastSeen) VALUES (?,?,0) ON CONFLICT(pluginId) DO UPDATE SET tokenHash=excluded.tokenHash,lastSeen=0,nativeCommands=0,connectorVersion='',versionSeenAt=0",
         pluginId,
@@ -230,18 +232,26 @@ export class OpenClawRelay {
       JSON.stringify(agents),
     );
   }
-  revoke(pluginId: string) {
-    this.sql.exec("DELETE FROM claw_pairings WHERE pluginId = ?", pluginId);
-    this.sql.exec("DELETE FROM claw_agents WHERE pluginId = ?", pluginId);
-    this.sql.exec("DELETE FROM claw_connectors WHERE pluginId = ?", pluginId);
-    this.clearRoutes(pluginId);
+  revoke(pluginId: string, queuedReplies: QueuedReplies) {
+    this.storage.transactionSync(() => {
+      this.sql.exec("DELETE FROM claw_pairings WHERE pluginId = ?", pluginId);
+      this.sql.exec("DELETE FROM claw_agents WHERE pluginId = ?", pluginId);
+      this.sql.exec("DELETE FROM claw_connectors WHERE pluginId = ?", pluginId);
+      this.clearRoutes(pluginId, queuedReplies);
+    });
   }
-  clearRoutes(pluginId: string) {
-    this.sql.exec(
-      "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id LIKE ?",
-      `claw:${pluginId}:%`,
-    );
+  clearRoutes(pluginId: string, queuedReplies: QueuedReplies) {
+    // Grok hands settled replies to the WeChat outbox. Credential changes only
+    // invalidate future work, so leave its delivery state and part cursor intact.
+    if (queuedReplies === "discard")
+      this.sql.exec(
+        "UPDATE inbox SET state = 'done', payload = '{}', reply = '' WHERE id LIKE ?",
+        `claw:${pluginId}:%`,
+      );
     this.sql.exec("DELETE FROM claw_routes WHERE pluginId = ?", pluginId);
+    this.cancelPluginJobs(pluginId);
+  }
+  cancelPluginJobs(pluginId: string) {
     this.sql.exec(
       "UPDATE claw_jobs SET state = 'cancelled', text = '' WHERE pluginId = ? AND state IN ('pending','claimed')",
       pluginId,
@@ -249,6 +259,13 @@ export class OpenClawRelay {
     this.pollWaiters.get(`${pluginId}:message`)?.();
     this.pollWaiters.get(`${pluginId}:control`)?.();
     this.hooks.wake?.(pluginId);
+  }
+  requireRoute(routeId: string) {
+    const route = this.sql
+      .exec<ClawRoute>("SELECT * FROM claw_routes WHERE id=?", routeId)
+      .toArray()[0];
+    if (!route) throw new AppError("claw_route_gone", "会话已重置或断开", 409);
+    this.hooks.validateRoute(route);
   }
   cancelSession(sessionId: string) {
     this.sql.exec(
@@ -281,7 +298,7 @@ export class OpenClawRelay {
       ...bindings,
     );
   }
-  authenticate(pluginId: string, secret: string) {
+  requireCredential(pluginId: string, secret: string) {
     const row = this.sql
       .exec<{ tokenHash: string }>(
         "SELECT tokenHash FROM claw_connectors WHERE pluginId = ?",
@@ -290,6 +307,9 @@ export class OpenClawRelay {
       .toArray()[0];
     if (!row || !timingSafeEqual(Buffer.from(row.tokenHash), Buffer.from(hash(secret))))
       throw new AppError("unauthorized", "连接凭证无效或已撤销", 401);
+  }
+  authenticate(pluginId: string, secret: string) {
+    this.requireCredential(pluginId, secret);
     return this.hooks.plugin(pluginId);
   }
   enqueue(id: string, pluginId: string, route: Omit<ClawRoute, "id" | "pluginId">, text: string) {
@@ -297,15 +317,19 @@ export class OpenClawRelay {
     if (!this.status(pluginId).hasKey)
       throw new AppError(
         "claw_unpaired",
-        `请先在网页的 ${remoteAgentName(plugin.pluginId)} 插件中生成并执行连接命令`,
+        plugin.pluginId === "wechatai/grok"
+          ? "请先在 Grok Bot 配置中生成 MCP 凭据并添加到 Bot。"
+          : `请先在网页的 ${remoteAgentName(plugin.pluginId)} 插件中生成并执行连接命令`,
       );
     const previous = this.sql.exec<Job>("SELECT * FROM claw_jobs WHERE id = ?", id).toArray()[0];
     if (previous) return previous;
     const command = nativeCommand(text) ?? "";
-    if (command && plugin.pluginId === "wechatai/muse")
+    if (command && (plugin.pluginId === "wechatai/muse" || plugin.pluginId === "wechatai/grok"))
       throw new AppError(
-        "muse_command_unsupported",
-        "Muse 暂不支持通过微信执行原生命令。请用文字描述要求；微伴命令使用 /wx 前缀。",
+        plugin.pluginId === "wechatai/grok"
+          ? "grok_command_unsupported"
+          : "muse_command_unsupported",
+        `${remoteAgentName(plugin.pluginId)} 暂不支持通过微信执行原生命令。请用文字描述要求；微伴命令使用 /wx 前缀。`,
         422,
       );
     if (command && !this.status(pluginId).nativeCommands)
@@ -398,12 +422,26 @@ export class OpenClawRelay {
   }
   handle(pluginId: string, secret: string, action: string, raw: unknown) {
     const plugin = this.authenticate(pluginId, secret);
+    return this.handleTask(plugin, action, raw, { fromConnector: true });
+  }
+  markSeen(pluginId: string) {
+    this.sql.exec("UPDATE claw_connectors SET lastSeen=? WHERE pluginId=?", Date.now(), pluginId);
+  }
+  // Internal callers already checked the plugin and task scope.
+  handleTask(
+    plugin: RemoteAgentPlugin,
+    action: string,
+    raw: unknown,
+    options: {
+      fromConnector?: boolean;
+      failureMessage?: string;
+      historyInputTokens?: number;
+      claimedOutputLimit?: number;
+    } = {},
+  ) {
+    const pluginId = plugin.id;
     return this.storage.transactionSync(() => {
-      this.sql.exec(
-        "UPDATE claw_connectors SET lastSeen = ? WHERE pluginId = ?",
-        Date.now(),
-        pluginId,
-      );
+      if (options.fromConnector) this.markSeen(pluginId);
       if (action === "poll") {
         const { runnerId, waitMs, nativeCommands, lane } = pollSchema.parse(raw);
         // Expired jobs cannot execute later, but retain the tombstone for dedupe.
@@ -466,15 +504,12 @@ export class OpenClawRelay {
           throw new AppError("claw_job_gone", "任务已结束或取消", 409);
         if (job.command && !nativeCommands)
           throw new AppError("connector_upgrade_required", "连接器需要升级才能执行原生命令", 409);
-        const route = this.sql
-          .exec<ClawRoute>("SELECT * FROM claw_routes WHERE id = ?", job.routeId)
-          .toArray()[0];
-        if (!route) throw new AppError("claw_route_gone", "会话已重置或断开", 409);
-        this.hooks.validateRoute(route);
+        this.requireRoute(job.routeId);
         if (job.state === "claimed") return { claimed: false };
         this.sql.exec(
-          "UPDATE claw_jobs SET state = 'claimed', runnerId = ? WHERE id = ?",
+          "UPDATE claw_jobs SET state = 'claimed', runnerId = ?, inputTokens = inputTokens + ? WHERE id = ?",
           runnerId,
+          options.historyInputTokens ?? 0,
           id,
         );
         console.info(
@@ -486,7 +521,7 @@ export class OpenClawRelay {
         );
         return {
           claimed: true,
-          ...(plugin.pluginId === "wechatai/muse"
+          ...(plugin.pluginId === "wechatai/muse" || plugin.pluginId === "wechatai/grok"
             ? { maxOutputTokens: Math.min(plugin.maxOutputTokens, job.outputLimit) }
             : {}),
         };
@@ -551,24 +586,28 @@ export class OpenClawRelay {
       const failed = event.status === "failed";
       if (!failed && !job && !event.text.trim()) throw new AppError("empty_result", "结果不能为空");
       const outputLimit = Math.min(
-        plugin.maxOutputTokens,
+        options.claimedOutputLimit ?? plugin.maxOutputTokens,
         job?.outputLimit ?? plugin.maxOutputTokens,
         job?.lane === "control" ? 256 : Infinity,
       );
       const text = failed
-        ? `${remoteAgentName(plugin.pluginId)} 未完成这次任务，本次未扣费。请检查 Agent 运行状态后重新发送；为避免重复执行工具，中断的任务不会自动重跑。`
+        ? (options.failureMessage ??
+          `${remoteAgentName(plugin.pluginId)} 未完成这次任务，本次未扣费。请检查 Agent 运行状态后重新发送；为避免重复执行工具，中断的任务不会自动重跑。`)
         : limitTextTokens(event.text.trim(), outputLimit);
       const truncated = !failed && text !== event.text.trim();
       // Platform guidance is displayed and recorded, but is not model output to bill.
       const displayText =
         plugin.pluginId === "wechatai/muse" && truncated
           ? `【回复已截断】以下仅为部分结果，已达到此任务的 ${outputLimit} tokens 回复上限。请让 Muse 每次只回复一部分，或在网页 Muse 配置的「更多设置」中调高「回复上限」后重新请求。此提示不计 credits。\n\n${text}`
-          : text;
+          : plugin.pluginId === "wechatai/grok" && truncated
+            ? `【回复已截断】已达到此任务的 ${outputLimit} tokens 回复上限。请让 Grok Bot 分段回复。此提示不计 credits。\n\n${text}`
+            : text;
       const inputTokens = failed ? 0 : (job?.inputTokens ?? 0);
       const outputTokens = failed ? 0 : countTextTokens(text);
       const units = job?.lane === "control" ? 0 : creditUnits(inputTokens, outputTokens);
       const id = `claw:${receiptId}`;
       this.hooks.deliver({
+        plugin,
         id,
         route,
         text: displayText,

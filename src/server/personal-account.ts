@@ -62,12 +62,23 @@ import {
 } from "./plugins/personal-assistant";
 import {
   isRemoteAgent,
+  remoteAgentKind,
   remoteAgentName,
   remoteAgentManifest,
   type RemoteAgentPlugin,
   type RemoteAgentKind,
 } from "../shared/remote-agent";
 import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
+import { grokInputSchema, GROK_DISPATCH_UNAVAILABLE, type GrokPlugin } from "../shared/grok-bot";
+import { GrokTasks } from "./grok/tasks";
+import { grokSessionReplyText } from "./grok/delivery";
+import {
+  prepareGrokWake,
+  grokBotEnabled,
+  grokDispatcherReady,
+  requireGrokDispatcher,
+  sealGrokWebhook,
+} from "./grok/dispatch";
 import { museInputSchema, type MusePlugin } from "../shared/muse";
 import {
   signOpenClawToken,
@@ -256,6 +267,7 @@ type StoredPlugin = (
   | Omit<ImageGenerationPlugin, "hasKey">
   | Omit<OpenClawPlugin, "hasKey">
   | Omit<HermesPlugin, "hasKey">
+  | Omit<GrokPlugin, "hasKey">
   | Omit<MusePlugin, "hasKey">
 ) & {
   encryptedKey: string;
@@ -290,7 +302,7 @@ type Link = Connection & {
 // Server-created metadata for remote replies awaiting their first send attempt.
 // Once prepared, the final delivery text replaces this metadata so retries and
 // multipart delivery retain identical content and offsets across restarts.
-type RemoteReplySource = { pluginId: string; proactive: boolean };
+type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: string };
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -300,6 +312,7 @@ export class PersonalAccount extends DurableObject<Env> {
   private attachments: AttachmentQueue;
   private media: MediaStore;
   private claw: OpenClawRelay;
+  private grok: GrokTasks;
   private cloud: CloudAgentStore;
   private cloudDelivery: CloudAgentDelivery;
   private cloudRuntime: CloudAgentRuntime;
@@ -397,7 +410,8 @@ export class PersonalAccount extends DurableObject<Env> {
         return this.wallet.balance();
       },
       deliver: (event) => {
-        const { id, route, text, units, inputTokens, outputTokens, failed, proactive } = event;
+        const { id, plugin, route, text, units, inputTokens, outputTokens, failed, proactive } =
+          event;
         this.refreshWallet();
         if (!failed) this.wallet.charge(id, units, units);
         else recordCallFailure(this.sql, id, new AppError("remote_agent_failed", ""));
@@ -425,14 +439,14 @@ export class PersonalAccount extends DurableObject<Env> {
               inputTokens,
               outputTokens,
               units / 1000,
-              remoteAgentName(this.plugin(route.pluginId).pluginId),
+              remoteAgentName(plugin.pluginId),
             );
           const boundary = ["new", "reset"].includes(event.command);
           if (boundary)
             this.sql.exec(
               "INSERT INTO messages (sessionId,role,content,createdAt) VALUES (?, 'system', ?,?)",
               route.sessionId,
-              `${remoteAgentName(this.plugin(route.pluginId).pluginId)} 原生命令 /${event.command} 已返回；微伴历史记录保留。`,
+              `${remoteAgentName(plugin.pluginId)} 原生命令 /${event.command} 已返回；微伴历史记录保留。`,
               Date.now(),
             );
           const session = this.session(route.sessionId);
@@ -447,7 +461,11 @@ export class PersonalAccount extends DurableObject<Env> {
             "INSERT INTO inbox (id,payload,state,reply,createdAt,sessionId,connectionId) VALUES (?, ?, 'reply', ?,?,?,?)",
             id,
             JSON.stringify({
-              remoteReply: { pluginId: route.pluginId, proactive } satisfies RemoteReplySource,
+              remoteReply: {
+                pluginId: route.pluginId,
+                proactive,
+                ...(plugin.pluginId === "wechatai/grok" ? { grokName: plugin.name } : {}),
+              } satisfies RemoteReplySource,
             }),
             text,
             Date.now(),
@@ -457,6 +475,24 @@ export class PersonalAccount extends DurableObject<Env> {
         }
       },
     });
+    this.grok = new GrokTasks(
+      ctx.storage,
+      this.claw,
+      (id) => {
+        const p = this.plugin(id, true);
+        if (p.pluginId !== "wechatai/grok")
+          throw new AppError("plugin_type", "需要 Grok Bot 配置", 403);
+        return this.publicPlugin(p) as GrokPlugin;
+      },
+      (id, ref) =>
+        prepareGrokWake(
+          env,
+          ctx.id.toString(),
+          this.plugin(id, true).encryptedKey,
+          `${ctx.id}:grok:${id}`,
+          ref,
+        ),
+    );
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.transactionSync(() => this.personalRecords.init());
       this.attachments.init();
@@ -517,6 +553,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.cloud.init();
       this.membershipReminders.init();
       this.claw.init();
+      this.grok.init();
       ctx.storage.transactionSync(() => initCallFailures(this.sql));
       if (
         !ctx.storage.sql
@@ -837,7 +874,8 @@ export class PersonalAccount extends DurableObject<Env> {
     message: WxMessage,
   ) {
     const connectionId = session.connectionId ?? DEFAULT_WECHAT_LINK;
-    const agentName = remoteAgentName(this.plugin(pluginId).pluginId);
+    const plugin = this.plugin(pluginId);
+    const agentName = remoteAgentName(plugin.pluginId);
     const command = nativeCommand(text);
     if (
       message.item_list?.some((i) => i.type === 2 || i.type === 4) ||
@@ -856,7 +894,7 @@ export class PersonalAccount extends DurableObject<Env> {
       );
     if (!text.trim()) return `请发送文字，或带微信转写文本的语音，再交给 ${agentName}。`;
     return this.ctx.storage.transactionSync(() => {
-      this.claw.enqueue(
+      const job = this.claw.enqueue(
         id,
         pluginId,
         {
@@ -867,7 +905,6 @@ export class PersonalAccount extends DurableObject<Env> {
         },
         text,
       );
-      const plugin = this.plugin(pluginId);
       const reply =
         !command && isRemoteAgent(plugin) && plugin.waitingMessageEnabled
           ? plugin.waitingMessage
@@ -878,13 +915,19 @@ export class PersonalAccount extends DurableObject<Env> {
         JSON.stringify({ text: reply, cost: 0 }),
         Date.now(),
       );
-      this.sql.exec(
-        "INSERT INTO messages (sessionId,role,content,createdAt,model) VALUES (?,'user',?,?, ?)",
-        session.id,
-        text,
-        Date.now(),
-        agentName,
-      );
+      const userMessage = this.sql
+        .exec<{ id: number }>(
+          "INSERT INTO messages (sessionId,role,content,createdAt,model) VALUES (?,'user',?,?, ?) RETURNING id",
+          session.id,
+          text,
+          Date.now(),
+          agentName,
+        )
+        .one();
+      if (plugin.pluginId === "wechatai/grok") {
+        this.grok.enqueue(id, job.routeId, userMessage.id);
+        this.wakeWechat();
+      }
       this.sql.exec("UPDATE inbox SET sessionId = ? WHERE id = ?", session.id, id);
       const updatedSession = {
         ...session,
@@ -905,9 +948,23 @@ export class PersonalAccount extends DurableObject<Env> {
   ): Promise<string> {
     try {
       let data: unknown;
-      if (this.plugin(pluginId).pluginId !== `wechatai/${kind}`)
+      if (kind !== "grok" && this.plugin(pluginId).pluginId !== `wechatai/${kind}`)
         throw new AppError("plugin_type", "连接类型不匹配", 403);
-      if (action === "pair") {
+      if (kind === "grok") {
+        this.claw.requireCredential(pluginId, secret);
+        const quota = await this.env.API_LIMIT.limit({ key: `grok:${this.ctx.id}:${pluginId}` });
+        if (!quota.success) throw new AppError("rate_limited", "请求过于频繁，请稍后重试", 429);
+        // Rotation or disable can happen while the quota check is in flight.
+        const plugin = this.claw.authenticate(pluginId, secret);
+        if (plugin.pluginId !== "wechatai/grok")
+          throw new AppError("plugin_type", "连接类型不匹配", 403);
+        // The Grok status shows whether this credential has ever connected.
+        if (!plugin.lastSeen) this.claw.markSeen(pluginId);
+        if (action === "grok.claim") data = this.grok.claim(plugin, payload);
+        else if (action === "grok.finish") data = this.grok.finish(plugin, payload);
+        else if (action === "grok.auth") data = { ok: true };
+        else throw new AppError("not_found", "未知工具", 404);
+      } else if (action === "pair") {
         const input = clawPairExchangeSchema.parse(payload);
         const connectorSecret = deriveOpenClawSecret(this.env, pluginId, secret, input.proof, kind);
         const result = this.claw.pair(pluginId, secret, input, connectorSecret);
@@ -918,13 +975,13 @@ export class PersonalAccount extends DurableObject<Env> {
         };
       } else if (action === "poll") data = await this.claw.poll(pluginId, secret, payload);
       else data = this.claw.handle(pluginId, secret, action, payload);
-      if (action === "event") {
+      if (action === "event" || action === "grok.finish") {
         // Alarms cannot overlap. Release idle receive requests so the active alarm
         // can finish and the persisted reply can be delivered without a 35s wait.
         this.wakeWechat();
         await this.scheduleWechat();
       }
-      if (action === "claim")
+      if (action === "claim" || action === "grok.claim")
         await this.receiver
           .sync()
           .catch(() => console.warn(JSON.stringify({ event: "wechat.typing_sync_retry" })));
@@ -1279,7 +1336,10 @@ export class PersonalAccount extends DurableObject<Env> {
         JSON.stringify(plugin),
       );
       // Every save path must invalidate old work before a quick re-enable.
-      if (!plugin.enabled) this.stopCloudPlugin(plugin.id);
+      if (!plugin.enabled) {
+        this.stopCloudPlugin(plugin.id);
+        if (plugin.pluginId === "wechatai/grok") this.claw.cancelPluginJobs(plugin.id);
+      }
     });
   }
   private async savePlugin(id: string | undefined, raw: unknown) {
@@ -1406,6 +1466,42 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.scheduleWechat();
       return this.publicPlugin(plugin);
     }
+    if ((kind ?? previous?.pluginId) === "wechatai/grok") {
+      const id = previous?.id ?? crypto.randomUUID();
+      const values = raw as Record<string, unknown>;
+      const input = grokInputSchema
+        .safeExtend({ shortcut: editableShortcut })
+        .parse({ ...previous, ...values });
+      const replace = !!(values.webhookKey || values.webhookUrl);
+      const encryptedKey = replace
+        ? await sealGrokWebhook(
+            this.env,
+            this.ctx.id.toString(),
+            values,
+            `${this.ctx.id}:grok:${id}`,
+          )
+        : previous?.encryptedKey;
+      if (!encryptedKey)
+        throw new AppError("grok_webhook_required", "请填写 Routine 的 Webhook URL 和 key");
+      const p: StoredPlugin = {
+        ...input,
+        pluginId: "wechatai/grok",
+        version: "1.0.0",
+        id,
+        createdAt: previous?.createdAt ?? Date.now(),
+        encryptedKey,
+      };
+      this.ctx.storage.transactionSync(() => {
+        this.requirePluginSlot(previous?.id);
+        if (previous && JSON.stringify(this.findPlugin(id)) !== JSON.stringify(previous))
+          throw new AppError("plugin_changed", "配置已更新，请重新打开后再保存", 409);
+        if (!previous || previous.shortcut !== input.shortcut)
+          this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
+        if (previous && replace) this.claw.revoke(id, "preserve");
+        this.persistPlugin(p);
+      });
+      return this.publicPlugin(p);
+    }
     if (
       ["wechatai/openclaw", "wechatai/hermes", "wechatai/muse"].includes(kind ?? previous?.pluginId)
     ) {
@@ -1425,7 +1521,7 @@ export class PersonalAccount extends DurableObject<Env> {
       if (!previous || input.shortcut !== previous.shortcut)
         this.requireUniqueShortcut(input.shortcut, { pluginId: id });
       if (isRemoteAgent(previous) && previous.agentId !== input.agentId)
-        this.claw.clearRoutes(previous.id);
+        this.claw.clearRoutes(previous.id, "discard");
       const p: StoredPlugin = {
         ...input,
         id: id ?? crypto.randomUUID(),
@@ -2837,6 +2933,7 @@ export class PersonalAccount extends DurableObject<Env> {
       this.execution.dirty() ? Date.now() + 1000 : null,
       // Recovery and cancellation continue without an active WeChat connection.
       this.cloudNextAt(),
+      this.grok.nextAt(),
     ].filter((v): v is number => v !== null);
     if (links.length) {
       const activeIds = new Set(links.map((l) => l.id));
@@ -2965,6 +3062,11 @@ export class PersonalAccount extends DurableObject<Env> {
       plan: this.plan(),
       onboardingDismissedAt: this.getSetting("dashboardOnboardingDismissedAt", 0),
       plugins: this.plugins().map((p) => this.publicPlugin(p)),
+      grokBotReady: grokDispatcherReady(this.env, this.ctx.id.toString()),
+      // Existing configurations stay manageable after an account leaves the pilot.
+      grokBotVisible:
+        grokBotEnabled(this.env, this.ctx.id.toString()) ||
+        this.plugins().some((p) => p.pluginId === "wechatai/grok"),
       cloudAgent: this.cloudStatus(),
       planUntil: this.getSetting("planUntil", 0),
       channels: this.channels().map((c) => this.publicChannel(c)),
@@ -3064,13 +3166,11 @@ export class PersonalAccount extends DurableObject<Env> {
         p.maxInputTokens === undefined
       )
         p.maxInputTokens = this.assistant(p.id).maxInputTokens;
-      const remoteAction = /^plugin\.(claw|hermes|muse)(Pair|Token|Revoke|Status)$/.exec(action);
-      const remoteKind: RemoteAgentKind =
-        remoteAction?.[1] === "muse"
-          ? "muse"
-          : remoteAction?.[1] === "hermes"
-            ? "hermes"
-            : "openclaw";
+      const remoteAction = /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status)$/.exec(
+        action,
+      );
+      const remoteKind = remoteAgentKind(`wechatai/${remoteAction?.[1] ?? "openclaw"}`);
+      const queuedReplies = remoteKind === "grok" ? "preserve" : "discard";
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
         throw new AppError("plugin_type", "插件类型不匹配", 403);
       if (action === "snapshot") data = this.snapshot();
@@ -3172,8 +3272,8 @@ export class PersonalAccount extends DurableObject<Env> {
         data = await this.savePlugin(typeof p.id === "string" ? p.id : undefined, p);
       else if (action === "plugin.delete") {
         this.busy();
-        this.plugin(String(p.id));
-        this.claw.revoke(String(p.id));
+        const plugin = this.plugin(String(p.id));
+        this.claw.revoke(plugin.id, plugin.pluginId === "wechatai/grok" ? "preserve" : "discard");
         this.notifications.revoke(String(p.id));
         this.personalRuns.cancelPlugin(String(p.id));
         this.personalRecords.deletePlugin(String(p.id));
@@ -3203,23 +3303,28 @@ export class PersonalAccount extends DurableObject<Env> {
       } else if (
         action === "plugin.clawToken" ||
         action === "plugin.hermesToken" ||
-        action === "plugin.museToken"
+        action === "plugin.museToken" ||
+        action === "plugin.grokToken"
       ) {
         data = {
           token: signOpenClawToken(
             this.env,
-            this.claw.rotate(String(p.id), this.ctx.id.toString()),
+            this.claw.rotate(String(p.id), this.ctx.id.toString(), queuedReplies),
             remoteKind,
           ),
-          endpoint: this.env.APP_URL,
+          endpoint:
+            remoteKind === "grok"
+              ? new URL("/api/grok/mcp", this.env.APP_URL).href
+              : this.env.APP_URL,
         };
       } else if (
         action === "plugin.clawRevoke" ||
         action === "plugin.hermesRevoke" ||
-        action === "plugin.museRevoke"
+        action === "plugin.museRevoke" ||
+        action === "plugin.grokRevoke"
       ) {
         this.plugin(String(p.id));
-        this.claw.revoke(String(p.id));
+        this.claw.revoke(String(p.id), queuedReplies);
         data = { ok: true };
       } else if (
         action === "plugin.clawStatus" ||
@@ -3260,14 +3365,18 @@ export class PersonalAccount extends DurableObject<Env> {
         const plugin = this.plugin(String(p.id), true);
         if (plugin.pluginId === "wechatai/notification")
           throw new AppError("receive_only", "请使用消息提醒配置页中的 HTTP 示例测试推送");
+        if (plugin.pluginId === "wechatai/grok")
+          requireGrokDispatcher(this.env, this.ctx.id.toString());
         if (isRemoteAgent(plugin))
           return JSON.stringify({
             ok: true,
             data: {
               text:
-                this.claw.status(plugin.id).lastSeen > Date.now() - 60000
-                  ? `${remoteAgentName(plugin.pluginId)} 渠道在线，请在微信发送消息测试 Agent。`
-                  : `尚未连接，请在 ${remoteAgentName(plugin.pluginId)} 执行网页生成的连接命令。`,
+                plugin.pluginId === "wechatai/grok"
+                  ? "Webhook 按任务触发，请在微信发送 @快捷名 加文字验证 Grok Bot 收发。"
+                  : this.claw.status(plugin.id).lastSeen > Date.now() - 60000
+                    ? `${remoteAgentName(plugin.pluginId)} 渠道在线，请在微信发送消息测试 Agent。`
+                    : `尚未连接，请在 ${remoteAgentName(plugin.pluginId)} 执行网页生成的连接命令。`,
               cost: 0,
             },
           });
@@ -4831,6 +4940,7 @@ export class PersonalAccount extends DurableObject<Env> {
 
   private stopLinkWork(connectionId: string) {
     this.cloud.stopConnection(connectionId);
+    this.grok.cancelConnection(connectionId);
     this.attachments.clear(connectionId);
     this.sql.exec(
       "UPDATE inbox SET state='done',payload='{}',reply='' WHERE connectionId=? AND state IN ('pending','reply','waiting_context')",
@@ -4960,13 +5070,13 @@ export class PersonalAccount extends DurableObject<Env> {
     const defaultModel = this.defaultChatModel(assistants, connectionId);
     const currentId = this.linkSetting(connectionId, "current", "");
     const currentSession = this.sessions(connectionId).find((s) => s.id === currentId);
-    const currentPlugin = currentSession?.pluginInstanceId
+    let messagePlugin = currentSession?.pluginInstanceId
       ? this.plugins().find((p) => p.id === currentSession.pluginInstanceId)
       : undefined;
     const hostText = platformCommand(
       text,
-      isRemoteAgent(currentPlugin) &&
-        remoteAgentManifest(currentPlugin.pluginId).capabilities.commands === "native",
+      isRemoteAgent(messagePlugin) &&
+        remoteAgentManifest(messagePlugin.pluginId).capabilities.commands === "native",
     );
     const command = (hostText ?? "").trim().split(/\s+/);
     command[0] = command[0].toLowerCase();
@@ -5070,9 +5180,13 @@ export class PersonalAccount extends DurableObject<Env> {
               p.pluginId === "wechatai/image-generation"
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
-                  ? p.pluginId === "wechatai/muse"
-                    ? "之后的文字消息会交给你的 Muse 托管助理。微伴命令使用 /wx 前缀；Muse 原生命令暂不支持。"
-                    : `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
+                  ? p.pluginId === "wechatai/grok"
+                    ? grokDispatcherReady(this.env, this.ctx.id.toString())
+                      ? "之后的文字任务会交给你的 Grok Bot。审批请回到 Grok Bot 完成；微伴命令使用 /wx 前缀。"
+                      : GROK_DISPATCH_UNAVAILABLE
+                    : p.pluginId === "wechatai/muse"
+                      ? "之后的文字消息会交给你的 Muse 托管助理。微伴命令使用 /wx 前缀；Muse 原生命令暂不支持。"
+                      : `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
                   : isCloudAgent(p)
                     ? "之后直接发送文字即可提交云端任务；结果会回复微信，也可在云端任务页查看。/wx stop 请求停止，/wx new 开始新对话。"
                     : p.pluginId === "wechatai/roleplay"
@@ -5291,6 +5405,7 @@ export class PersonalAccount extends DurableObject<Env> {
         return "有多个模型或插件使用了相同别名，请在网页修改为不同别名后再使用 @ 调用。";
       const a = modelMatches[0];
       const plugin = pluginMatches[0];
+      messagePlugin = plugin;
       if (plugin) {
         this.plugin(plugin.id, true, connectionId);
         if (plugin.pluginId === "wechatai/notification")
@@ -5334,10 +5449,13 @@ export class PersonalAccount extends DurableObject<Env> {
           ? `@${handle} 只用于单次调用，请在后面加上问题。\n\n如需默认使用此插件，发送 /use ${plugin.shortcut}；发送 /exit 退出。`
           : `请发送 @${handle} 问题 进行单次对话。切换默认模型请用 /wx models 和 /wx model 编号。`;
     }
+    // Reject new work before even creating a session for a first @mention.
+    if (messagePlugin?.pluginId === "wechatai/grok")
+      requireGrokDispatcher(this.env, this.ctx.id.toString());
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
       this.createSession(defaultModel.id, "", false, connectionId);
     const active = this.linkSetting(connectionId, "current", "");
-    if (!active && once?.pluginId && isRemoteAgent(this.plugin(once.pluginId))) {
+    if (!active && once?.pluginId && isRemoteAgent(messagePlugin)) {
       // First use without any LLM model. Establish an isolated OpenClaw conversation.
       const session = this.activatePlugin(once.pluginId, connectionId);
       this.setLinkSetting(connectionId, "current", "");
@@ -5559,6 +5677,7 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.refreshCloudAccess();
       await this.flushReminderSchedule();
       await this.flushNotificationSchedule();
+      await this.grok.dispatchDue();
       if (this.referralPending()) await this.retryReferral();
       // Recover AGT before idle WeChat long polls can consume this pass's budget.
       await this.cloudRuntime.process(Date.now() + 20_000);
@@ -5758,6 +5877,7 @@ export class PersonalAccount extends DurableObject<Env> {
             payload: string;
             state: string;
             reply: string;
+            sessionId: string | null;
             part: number;
             attempts: number;
             createdAt: number;
@@ -5932,7 +6052,11 @@ export class PersonalAccount extends DurableObject<Env> {
               if (pending.id.startsWith("claw:") && pending.part === 0 && message.remoteReply) {
                 const source = message.remoteReply;
                 const plugin = this.findPlugin(source.pluginId);
-                if (!plugin) {
+                if (
+                  !plugin &&
+                  !source.grokName &&
+                  !this.grok.ownsSettledReply(source.pluginId, pending.id)
+                ) {
                   this.sql.exec(
                     "UPDATE inbox SET state='done', payload='{}', reply='' WHERE id=?",
                     pending.id,
@@ -5941,15 +6065,28 @@ export class PersonalAccount extends DurableObject<Env> {
                 }
                 if (!token) throw new AppError("context_missing", "请先在微信发送一条新消息");
                 const currentId = this.linkSetting(connectionId, "current", "");
-                const currentPluginId = this.sessions(connectionId).find(
-                  (s) => s.id === currentId,
-                )?.pluginInstanceId;
-                if (source.proactive || currentPluginId !== source.pluginId) {
-                  pending.reply = pluginNotificationText(
-                    remoteAgentManifest(plugin.pluginId),
+                const sessions = this.sessions(connectionId);
+                const currentPluginId = sessions.find((s) => s.id === currentId)?.pluginInstanceId;
+                const origin =
+                  currentId && currentId !== pending.sessionId
+                    ? sessions.find((s) => s.id === pending.sessionId)
+                    : undefined;
+                if (origin && (!plugin || plugin.pluginId === "wechatai/grok")) {
+                  pending.reply = grokSessionReplyText(
+                    origin,
                     plugin,
+                    source.grokName,
+                    this.plan() === "plus" ? publicSiteUrl(this.env) : undefined,
                     pending.reply,
                   );
+                } else if (source.proactive || currentPluginId !== source.pluginId) {
+                  pending.reply = plugin
+                    ? pluginNotificationText(
+                        remoteAgentManifest(plugin.pluginId),
+                        plugin,
+                        pending.reply,
+                      )
+                    : `消息来自已删除的 Grok Bot 配置${source.grokName ? `「${source.grokName}」` : ""}。\n\n${pending.reply}`;
                 }
                 // Freeze before network I/O: an ambiguous failure must retry the
                 // same client ID with exactly the same body, even after a switch.

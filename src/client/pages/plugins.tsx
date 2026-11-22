@@ -15,8 +15,10 @@ import { PersonalRecords } from "./personal-records";
 import type { PersonalAssistantPlugin } from "../../shared/personal-assistant";
 import { RoleplayEditor } from "./roleplay-editor";
 import type { RoleplayPlugin } from "../../shared/roleplay";
+import { GrokEditor } from "./grok-editor";
 import { OpenClawEditor } from "./openclaw-editor";
 import {
+  isRemoteAgentId,
   isRemoteAgent,
   type RemoteAgentPlugin,
   remoteAgentKind,
@@ -171,6 +173,7 @@ export function Plugins() {
     setForm(p === "new" ? { ...initial, modelId: textModels[0]?.id ?? "" } : { ...p, apiKey: "" });
   };
   const configure = (kind: PluginKind) => {
+    if (kind === "wechatai/grok" && !data.grokBotReady) return;
     if (
       data.plan === "free" &&
       (kind === "wechatai/cloud-agent" || !canAddPlugin(data.plan, data.plugins?.length ?? 0)) &&
@@ -183,7 +186,7 @@ export function Plugins() {
       setNotificationEditor("new");
       return;
     }
-    if (kind === "wechatai/openclaw" || kind === "wechatai/hermes" || kind === "wechatai/muse") {
+    if (isRemoteAgentId(kind)) {
       setAgentKind(remoteAgentKind(kind));
       setClawEditor("new");
     } else if (kind === "wechatai/personal-assistant") setPersonalEditor("new");
@@ -326,9 +329,8 @@ export function Plugins() {
         )}
       <p className="research-billing">
         消息提醒不扣 credits。其他插件输入与最终回复按 token 计费，生成图片另计 5 credits /
-        张；插件内部调用不重复计收。自备 API 的费用由服务商另行收取；小薇
-        使用你配置的模型，API 费用另付服务商；失败或确认取消不扣
-        credits；请求停止后仍可能完成，费用以最终结果为准。
+        张；插件内部调用不重复计收。自备 API 的费用由服务商另行收取；小薇 使用你配置的模型，API
+        费用另付服务商；失败或确认取消不扣 credits；请求停止后仍可能完成，费用以最终结果为准。
       </p>
       {viewing &&
         returnAction !== "create" &&
@@ -413,7 +415,19 @@ export function Plugins() {
       {personalRecords && (
         <PersonalRecords plugin={personalRecords} onClose={() => setPersonalRecords(null)} />
       )}
-      {activeClawEditor && (
+      {activeClawEditor &&
+        activeAgentKind === "grok" &&
+        (activeClawEditor === "new" || activeClawEditor.pluginId === "wechatai/grok") && (
+          <GrokEditor
+            plugin={activeClawEditor}
+            onClose={closeClawEditor}
+            onSaved={(id) => {
+              setViewedId(id);
+              setViewing("wechatai/grok");
+            }}
+          />
+        )}
+      {activeClawEditor && activeAgentKind !== "grok" && (
         <OpenClawEditor
           key={`${activeAgentKind}:${activeClawEditor === "new" ? "new" : activeClawEditor.id}`}
           kind={activeAgentKind}
@@ -727,7 +741,9 @@ export function Plugins() {
           description={
             deleting.pluginId === "wechatai/personal-assistant"
               ? "将永久删除这份助理的全部笔记、账目和提醒，并取消提醒。已有聊天记录保留。建议先导出需要保留的数据。"
-              : "将删除插件配置，已有会话记录保留，但无法继续调用此插件。"
+              : deleting.pluginId === "wechatai/grok"
+                ? "删除后会撤销 MCP 凭据并关闭未完成的任务。已结算的回复会继续发往原微信，已有聊天记录保留。"
+                : "将删除插件配置，已有会话记录保留，但无法继续调用此插件。"
           }
           onClose={() => {
             if (!busy) setDeleting(null);
