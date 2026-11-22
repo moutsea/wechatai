@@ -29,3 +29,8 @@
 3. 对每对中英文 URL 核对单一自指 canonical、双向 `hreflang`（`en`、`zh-CN`，`x-default` 指向该中文源页），英文 `lang="en"`、`og:locale=en_US` 与页面专属 SEO 标题和摘要。核对英文 JSON-LD 的页面名称、描述、URL 和语言与可见内容对应。比较同一 base SHA 与候选产物的 sitemap URL 集合，新增恰为三条英文路径，删除为空。核对无额外语言前缀产物，选取未登记而中文源存在的页面验证前缀 URL 返回真实 HTTP 404。
 4. 相关回归测试单独存放。运行 `pnpm check`（含 lint、类型、全量测试、构建和产物 SEO 校验），本地以构建后的 Worker 和前端资产完成 HTTP 验收。开工及每次重活前检查 load、`MemAvailable` 和在跑的全量测试或构建。有重活或内存低于 2 GiB 时说明并等待。基线与候选构建串行。PR 附实际命令与结果、base/head SHA、路径及 sitemap 差异、改动文件清单和译文 TODO（如有）。
 5. 本文仅放仓库根 `internal-docs/`。构建后检查公开资产 `dist/client`、Worker 产物 `dist/wechatai` 及文档 bundle 中无本文件或独有标题。用本地生产式预览验证本文直链不可访问，且 `/api/docs` 响应不含本文。
+
+## 首评返工（PR #34 合并后）
+
+- `/en/privacy` 第 2 节的哈希存储声明只指通过邮箱注册的微伴账户密码，不指邮箱服务的密码；中文原文不变。
+- `/en/contact` 的账户或付款支持指引明确说明账户邮箱、订单号可在适用时附上，不要求必填；遮挡截图个人信息的提示保留。

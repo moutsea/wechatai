@@ -102,6 +102,16 @@ describe("English terms, privacy and contact pages", () => {
     );
   });
 
+  it("identifies the hashed password as belonging to a Wechatai account registered by email", () => {
+    const document = parse("/en/privacy");
+    const accountData = [...document.querySelectorAll(".info-document li")].find(
+      (item) => item.querySelector("strong")?.textContent === "Account and sign-in:",
+    );
+    expect(accountData?.textContent).toContain(
+      "Passwords for Wechatai accounts registered with an email address are stored in hashed form.",
+    );
+  });
+
   it("keeps the contact page date-free and preserves #maintainer and the mail subject", () => {
     const document = parse("/en/contact");
     expect(document.querySelector(".info-intro time")).toBeNull();
@@ -113,6 +123,13 @@ describe("English terms, privacy and contact pages", () => {
       "Open the documentation",
     );
     expect(document.querySelector('.contact-privacy a[href="/en/privacy"]')).not.toBeNull();
+  });
+
+  it("makes account email and order number optional when contacting support", () => {
+    const document = parse("/en/contact");
+    expect(document.querySelector(".contact-grid")?.textContent).toContain(
+      "For account or payment issues, you may include your account email and order number if applicable.",
+    );
   });
 
   it("localizes registered targets and leaves unregistered targets on their real paths", () => {

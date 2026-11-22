@@ -183,7 +183,7 @@ const privacySections: readonly InfoSection[] = [
       list(
         [
           strong("Account and sign-in:"),
-          " email address, display name, avatar, verification status, sign-in session, and the identity information returned when you choose Google or GitHub sign-in plus necessary authorization credentials, used for registration, sign-in, account linking and security verification. Email passwords are stored in hashed form.",
+          " email address, display name, avatar, verification status, sign-in session, and the identity information returned when you choose Google or GitHub sign-in plus necessary authorization credentials, used for registration, sign-in, account linking and security verification. Passwords for Wechatai accounts registered with an email address are stored in hashed form.",
         ],
         [
           strong("Connections and configuration:"),
@@ -398,7 +398,7 @@ const contact: ContactCopy = {
       heading: "Make the problem easier to locate",
       blocks: [
         paragraph(
-          "Please explain what happened, the steps you took and the approximate time. For account or payment issues, include the account email and order number; mask personal information in error screenshots first.",
+          "Please explain what happened, the steps you took and the approximate time. For account or payment issues, you may include your account email and order number if applicable. Mask personal information in error screenshots first.",
         ),
       ],
       note: [
