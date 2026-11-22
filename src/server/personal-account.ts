@@ -69,7 +69,13 @@ import {
   type RemoteAgentKind,
 } from "../shared/remote-agent";
 import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
-import { grokInputSchema, GROK_DISPATCH_UNAVAILABLE, type GrokPlugin } from "../shared/grok-bot";
+import {
+  grokInputSchema,
+  GROK_DISPATCH_UNAVAILABLE,
+  GROK_SETUP_INCOMPLETE,
+  GROK_SETUP_MINUTES,
+  type GrokPlugin,
+} from "../shared/grok-bot";
 import { GrokTasks } from "./grok/tasks";
 import { grokSessionReplyText } from "./grok/delivery";
 import {
@@ -303,6 +309,9 @@ type Link = Connection & {
 // Once prepared, the final delivery text replaces this metadata so retries and
 // multipart delivery retain identical content and offsets across restarts.
 type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: string };
+// Expiry of the window in which a freshly generated Grok MCP credential may
+// register its Routine Webhook. Consumed by the first successful registration.
+const grokSetupKey = (pluginId: string) => `grokSetup:${pluginId}`;
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -962,6 +971,8 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!plugin.lastSeen) this.claw.markSeen(pluginId);
         if (action === "grok.claim") data = this.grok.claim(plugin, payload);
         else if (action === "grok.finish") data = this.grok.finish(plugin, payload);
+        else if (action === "grok.register")
+          data = await this.registerGrokWebhook(pluginId, secret, payload);
         else if (action === "grok.auth") data = { ok: true };
         else throw new AppError("not_found", "未知工具", 404);
       } else if (action === "pair") {
@@ -1301,6 +1312,7 @@ export class PersonalAccount extends DurableObject<Env> {
         ...rest,
         ...this.claw.status(p.id),
         access: this.remoteAgentAccess(p),
+        ...(p.pluginId === "wechatai/grok" ? this.grokSetupStatus(p) : {}),
       } as RemoteAgentPlugin;
     return {
       ...rest,
@@ -1311,6 +1323,50 @@ export class PersonalAccount extends DurableObject<Env> {
           ? (this.assistants().find((a) => a.id === p.modelId)?.hasKey ?? false)
           : Boolean(encryptedKey),
     };
+  }
+  private grokSetupStatus(p: StoredPlugin) {
+    return {
+      webhookReady: Boolean(p.encryptedKey),
+      setupPending: this.getSetting(grokSetupKey(p.id), 0) > Date.now(),
+    };
+  }
+  // MCP tool for the configuration prompt: the Bot submits its own Routine Webhook.
+  private async registerGrokWebhook(pluginId: string, secret: string, raw: unknown) {
+    const key = grokSetupKey(pluginId);
+    const until = this.getSetting(key, 0);
+    const closed = () =>
+      new AppError(
+        "grok_setup_closed",
+        "配置指令已过期或已使用。请让用户在微伴网页的 Grok Bot 配置中重新生成配置指令。",
+        409,
+      );
+    if (until <= Date.now()) throw closed();
+    const previous = this.plugin(pluginId);
+    const encryptedKey = await sealGrokWebhook(
+      this.env,
+      this.ctx.id.toString(),
+      raw,
+      `${this.ctx.id}:grok:${pluginId}`,
+    );
+    return this.ctx.storage.transactionSync(() => {
+      // Sealing yields. A rotation, revocation or edit in the meantime wins.
+      this.claw.requireCredential(pluginId, secret);
+      if (this.getSetting(key, 0) !== until || until <= Date.now()) throw closed();
+      const current = this.findPlugin(pluginId);
+      if (!current || JSON.stringify(current) !== JSON.stringify(previous))
+        throw new AppError(
+          "plugin_changed",
+          "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
+          409,
+        );
+      if (current.encryptedKey) this.claw.cancelPluginJobs(pluginId);
+      this.persistPlugin({ ...current, encryptedKey });
+      this.sql.exec("DELETE FROM settings WHERE key=?", key);
+      return {
+        registered: true,
+        next: `配置完成。请用户在微信发送 @${current.shortcut} 加一句任务验证收发。`,
+      };
+    });
   }
   private remoteAgentAccess(p: StoredPlugin): PluginAccessIssue | null {
     if (!this.pluginAvailable(p.id)) return pluginLimitIssue(this.getSetting("planUntil", 0));
@@ -1480,9 +1536,9 @@ export class PersonalAccount extends DurableObject<Env> {
             values,
             `${this.ctx.id}:grok:${id}`,
           )
-        : previous?.encryptedKey;
-      if (!encryptedKey)
-        throw new AppError("grok_webhook_required", "请填写 Routine 的 Webhook URL 和 key");
+        : (previous?.encryptedKey ?? "");
+      // The Bot registers its Webhook through MCP after the configuration exists.
+      if (!previous) requireGrokDispatcher(this.env, this.ctx.id.toString());
       const p: StoredPlugin = {
         ...input,
         pluginId: "wechatai/grok",
@@ -1497,7 +1553,10 @@ export class PersonalAccount extends DurableObject<Env> {
           throw new AppError("plugin_changed", "配置已更新，请重新打开后再保存", 409);
         if (!previous || previous.shortcut !== input.shortcut)
           this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
-        if (previous && replace) this.claw.revoke(id, "preserve");
+        // A different Routine may belong to another Bot, so its old credential
+        // must stop. Adding the first Webhook keeps the connector the Bot added.
+        if (previous?.encryptedKey && replace) this.claw.revoke(id, "preserve");
+        if (replace) this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
         this.persistPlugin(p);
       });
       return this.publicPlugin(p);
@@ -3280,6 +3339,7 @@ export class PersonalAccount extends DurableObject<Env> {
         this.ctx.storage.transactionSync(() => {
           this.stopCloudPlugin(String(p.id));
           this.sql.exec("DELETE FROM plugins WHERE id = ?", String(p.id));
+          this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
         });
         await this.scheduleWechat();
         await this.flushReminderSchedule();
@@ -3306,6 +3366,7 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.museToken" ||
         action === "plugin.grokToken"
       ) {
+        if (remoteKind === "grok") requireGrokDispatcher(this.env, this.ctx.id.toString());
         data = {
           token: signOpenClawToken(
             this.env,
@@ -3317,6 +3378,12 @@ export class PersonalAccount extends DurableObject<Env> {
               ? new URL("/api/grok/mcp", this.env.APP_URL).href
               : this.env.APP_URL,
         };
+        // Only a credential the owner just generated may register a Routine Webhook.
+        if (remoteKind === "grok") {
+          const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
+          this.setSetting(grokSetupKey(String(p.id)), setupUntil);
+          data = { ...(data as object), setupUntil };
+        }
       } else if (
         action === "plugin.clawRevoke" ||
         action === "plugin.hermesRevoke" ||
@@ -3325,16 +3392,19 @@ export class PersonalAccount extends DurableObject<Env> {
       ) {
         this.plugin(String(p.id));
         this.claw.revoke(String(p.id), queuedReplies);
+        this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
         data = { ok: true };
       } else if (
         action === "plugin.clawStatus" ||
         action === "plugin.hermesStatus" ||
-        action === "plugin.museStatus"
+        action === "plugin.museStatus" ||
+        action === "plugin.grokStatus"
       ) {
         const plugin = this.plugin(String(p.id));
         if (!isRemoteAgent(plugin)) throw new AppError("plugin_type", "不是远程 Agent 配置");
         data = {
           ...this.claw.status(plugin.id),
+          ...(plugin.pluginId === "wechatai/grok" ? this.grokSetupStatus(plugin) : {}),
           access: this.remoteAgentAccess(plugin),
           ...(plugin.pluginId === "wechatai/openclaw"
             ? {
@@ -5181,9 +5251,11 @@ export class PersonalAccount extends DurableObject<Env> {
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
                   ? p.pluginId === "wechatai/grok"
-                    ? grokDispatcherReady(this.env, this.ctx.id.toString())
-                      ? "之后的文字任务会交给你的 Grok Bot。审批请回到 Grok Bot 完成；微伴命令使用 /wx 前缀。"
-                      : GROK_DISPATCH_UNAVAILABLE
+                    ? !grokDispatcherReady(this.env, this.ctx.id.toString())
+                      ? GROK_DISPATCH_UNAVAILABLE
+                      : !p.encryptedKey
+                        ? GROK_SETUP_INCOMPLETE
+                        : "之后的文字任务会交给你的 Grok Bot。审批请回到 Grok Bot 完成；微伴命令使用 /wx 前缀。"
                     : p.pluginId === "wechatai/muse"
                       ? "之后的文字消息会交给你的 Muse 托管助理。微伴命令使用 /wx 前缀；Muse 原生命令暂不支持。"
                       : `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
@@ -5450,8 +5522,11 @@ export class PersonalAccount extends DurableObject<Env> {
           : `请发送 @${handle} 问题 进行单次对话。切换默认模型请用 /wx models 和 /wx model 编号。`;
     }
     // Reject new work before even creating a session for a first @mention.
-    if (messagePlugin?.pluginId === "wechatai/grok")
+    if (messagePlugin?.pluginId === "wechatai/grok") {
       requireGrokDispatcher(this.env, this.ctx.id.toString());
+      if (!messagePlugin.encryptedKey)
+        throw new AppError("grok_setup_incomplete", GROK_SETUP_INCOMPLETE, 409);
+    }
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
       this.createSession(defaultModel.id, "", false, connectionId);
     const active = this.linkSetting(connectionId, "current", "");

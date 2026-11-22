@@ -7,6 +7,8 @@ import {
   GROK_DISPATCH_UNAVAILABLE,
   GROK_ID,
   grokInputSchema,
+  grokRoutineInstructions,
+  grokSetupPrompt,
   type GrokPlugin,
 } from "../src/shared/grok-bot";
 import { useApp } from "../src/client/context";
@@ -48,6 +50,7 @@ it("offers the webhook path without a model, and explains both directions of set
   const markup = renderToStaticMarkup(
     <GrokEditor plugin="new" onClose={() => {}} onSaved={() => {}} />,
   );
+  expect(markup).toContain("生成配置指令");
   expect(markup).toContain("Webhook key");
   expect(markup).toContain("wechatai_claim");
   expect(markup).not.toContain("安装命令");
@@ -75,4 +78,17 @@ it("shows an existing Grok configuration how to proceed when dispatch is unavail
   expect(unavailable).toContain("撤销 MCP 凭据");
   data.grokBotReady = true;
   expect(editor()).toContain("验证收发");
+});
+
+it("builds one prompt that lets the Bot connect itself", () => {
+  const prompt = grokSetupPrompt({
+    endpoint: "https://wechatai.app/api/grok/mcp",
+    token: "secret-token",
+    shortcut: "grok",
+  });
+  expect(prompt).toContain("https://wechatai.app/api/grok/mcp");
+  expect(prompt).toContain("Authorization: Bearer secret-token");
+  expect(prompt).toContain(grokRoutineInstructions);
+  expect(prompt).toContain("wechatai_register_webhook");
+  expect(prompt).toContain("@grok");
 });

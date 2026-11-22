@@ -313,7 +313,8 @@ export class GrokTasks {
           else
             this.fail(
               current,
-              error instanceof AppError && error.code === "grok_unavailable"
+              error instanceof AppError &&
+                ["grok_unavailable", "grok_setup_incomplete"].includes(error.code)
                 ? `${error.message}本次任务未发送，未扣平台 credits。`
                 : undefined,
             );

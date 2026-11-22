@@ -820,6 +820,10 @@ app.delete(
   invoke("plugin.grokRevoke", (c) => ({ id: c.req.param("id") })),
 );
 app.get(
+  "/api/plugins/:id/grok/status",
+  invoke("plugin.grokStatus", (c) => ({ id: c.req.param("id") })),
+);
+app.get(
   "/api/plugins/:id/notification",
   invoke("notification.status", (c) => ({ id: c.req.param("id") })),
 );

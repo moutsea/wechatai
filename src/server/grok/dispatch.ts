@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { GROK_DISPATCH_UNAVAILABLE } from "../../shared/grok-bot";
+import { GROK_DISPATCH_UNAVAILABLE, GROK_SETUP_INCOMPLETE } from "../../shared/grok-bot";
 import { backendOrigin, signedRequest } from "../backend-signature";
 import { AppError, secret } from "../config";
 import { encrypt, decrypt } from "../security";
@@ -15,9 +15,15 @@ const credentials = z.object({
   webhookKey: z
     .string()
     .trim()
-    .min(1)
-    .max(2048)
-    .regex(/^[\x21-\x7e]+$/, "请复制 Webhook key，不含 Bearer 前缀"),
+    // A Bot may copy the routine's ready-made header instead of the bare key.
+    .transform((key) => key.replace(/^(authorization:\s*)?bearer\s+/i, ""))
+    .pipe(
+      z
+        .string()
+        .min(1)
+        .max(2048)
+        .regex(/^[\x21-\x7e]+$/, "请复制 Webhook key，不含 Bearer 前缀"),
+    ),
 });
 // Comma-separated PersonalAccount IDs, or "all". Unset keeps Grok Bot hidden.
 export function grokBotEnabled(env: Env, accountId: string) {
@@ -68,6 +74,7 @@ export async function prepareGrokWake(
   taskId: string,
 ) {
   requireGrokDispatcher(env, accountId);
+  if (!sealed) throw new AppError("grok_setup_incomplete", GROK_SETUP_INCOMPLETE, 409);
   const auth = credentials.parse(JSON.parse(await decrypt(env, sealed, binding)));
   const body = JSON.stringify({ ...auth, taskId });
   const target = new URL(
