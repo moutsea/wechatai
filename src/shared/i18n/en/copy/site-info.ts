@@ -183,7 +183,7 @@ const privacySections: readonly InfoSection[] = [
       list(
         [
           strong("Account and sign-in:"),
-          " email address, display name, avatar, verification status, sign-in session, and the identity information returned when you choose Google or GitHub sign-in plus necessary authorization credentials, used for registration, sign-in, account linking and security verification. Email passwords are stored in hashed form.",
+          " email address, display name, avatar, verification status, sign-in session, and the identity information returned when you choose Google or GitHub sign-in plus necessary authorization credentials, used for registration, sign-in, account linking and security verification. Passwords for Wechatai accounts registered with an email address are stored in hashed form.",
         ],
         [
           strong("Connections and configuration:"),

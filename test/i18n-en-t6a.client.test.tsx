@@ -102,6 +102,16 @@ describe("English terms, privacy and contact pages", () => {
     );
   });
 
+  it("identifies the hashed password as belonging to a Wechatai account registered by email", () => {
+    const document = parse("/en/privacy");
+    const accountData = [...document.querySelectorAll(".info-document li")].find(
+      (item) => item.querySelector("strong")?.textContent === "Account and sign-in:",
+    );
+    expect(accountData?.textContent).toContain(
+      "Passwords for Wechatai accounts registered with an email address are stored in hashed form.",
+    );
+  });
+
   it("keeps the contact page date-free and preserves #maintainer and the mail subject", () => {
     const document = parse("/en/contact");
     expect(document.querySelector(".info-intro time")).toBeNull();
