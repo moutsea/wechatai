@@ -1687,7 +1687,8 @@ test("serves the Korean homepage and pricing page without Chinese page copy", as
   expect(await page.locator("body").innerText()).not.toMatch(/\p{Script=Han}/u);
 
   await page.goto(`${origin}/pricing`);
-  await page.getByRole("link", { name: "한국어", exact: true }).click();
+  await page.getByRole("button", { name: "语言：中文", exact: true }).click();
+  await page.getByRole("menuitem", { name: "한국어", exact: true }).click();
   await expect(page).toHaveURL(`${origin}/ko/pricing`);
   await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "ko_KR");
