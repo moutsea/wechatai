@@ -5,6 +5,13 @@ const version: typeof PLUGIN_PROTOCOL_VERSION = protocolExamples.invocation.prot
 const code = (language: string, body: string) => "```" + language + "\n" + body + "\n```";
 const json = (value: unknown) => code("json", JSON.stringify(value, null, 2));
 
+function sourceCodeBlock(id: string, language: string): string {
+  const markdown = protocolSections.find((section) => section.id === id)?.markdown;
+  const block = markdown?.match(new RegExp(`^\`\`\`${language}\\n[\\s\\S]*?^\`\`\`$`, "m"))?.[0];
+  if (!block) throw new Error(`Missing ${language} code block in plugin protocol section ${id}`);
+  return block;
+}
+
 export const agentDevelopmentPromptEn = `First read the Wechatai plugin protocol:
 ${protocolLinks.markdown}
 
@@ -79,30 +86,7 @@ ${json(protocolExamples.result)}
 
 The JavaScript below only demonstrates local conversion; it is not a remote transport protocol. callYourTool and persistence are implemented by your own adapter; the authentication, transport, cancellation and timeout specifications for connecting to the platform are not open yet.
 
-${code(
-  "js",
-  `export async function execute(invocation, callYourTool) {
-  // Validate the input with the Invocation Schema first; this minimal example handles plain text only.
-  const messages = invocation.messages.map((message) => ({
-    role: message.role,
-    content: message.content.map((block) => {
-      if (block.type !== "text") throw new Error("Unsupported input block");
-      return block.text;
-    }).join(""),
-  }));
-  const text = await callYourTool({
-    messages,
-    maxOutputTokens: invocation.limits.outputTokens,
-  });
-  if (typeof text !== "string" || !text.trim()) throw new Error("Empty result");
-  return {
-    protocolVersion: invocation.protocolVersion,
-    runId: invocation.runId,
-    status: "completed",
-    content: [{ type: "text", text }],
-  };
-}`,
-)}
+${sourceCodeBlock("examples", "js")}
 
 The adapter should also enforce input limits before execution and implement timeouts, failures and idempotency; the function above does not include those production requirements. The platform independently enforces the final input/output and fee limits and does not trust metering fields returned by a plugin.
 
@@ -212,12 +196,7 @@ A plugin cannot return writable usage, credits, imageCount or ledger fields; res
 The tokenization rule is fixed at \`cl100k_base@gpt-tokenizer-4.0.0\`; the metering code lives in \`src/server/tokenizer.ts\`.
 The vocabulary is bundled locally with no third-party tokenizer service, and the cross-request text-merge cache is off. Special marker strings are treated as ordinary text and cannot become cheap "special tokens".
 
-${code(
-  "text",
-  `credits = (inputTokens + 8 × outputTokens) / 5000 + 5 × outputImages
-integer billing units = ceil((inputTokens + 8 × outputTokens) × 1000 / 5000)
-                      + outputImages × 5000`,
-)}
+${sourceCodeBlock("metering", "text")}
 
 - Input counts the original boundary snapshot retained by the platform, unaffected by parameters a plugin changes during execution.
 - The final output's text blocks are concatenated in order and tokenized once, so splitting blocks does not change billing.
