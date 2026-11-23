@@ -24,9 +24,9 @@ export const museGuide = `# Muse 接入指南
 
 ## 3. 支持范围
 
-支持文字与微信已经转写的语音，以及明确授权的定时、后台文字通知。模型、工具、长期记忆和模型服务费用由 Muse 自身管理；不会使用微伴选择的普通聊天模型替换 Muse 的模型。
+支持文字与微信已经转写的语音，以及明确授权的定时、后台文字通知。Muse 的任务回复可附带最多 4 张 PNG、JPEG 或 WebP 图片（例如画图结果），微信先收到文字再收到图片，每张另计 5 credits。模型、工具、长期记忆和模型服务费用由 Muse 自身管理；不会使用微伴选择的普通聊天模型替换 Muse 的模型。
 
-第一版不传图片、文件、工具审批和 Muse 原生命令。需要附件时切回普通模型或小薇；需要审批的操作在 Muse 中处理。/wx help、/wx status、/wx new 等微伴命令仍可用，/exit 返回普通模型。/wx new 建立新的返回路由及近期聊天记录；不清除 Muse 自身记忆或取消已经开始的工具操作。
+发给 Muse 的图片和文件、视频、工具审批和 Muse 原生命令暂不支持。需要附件时切回普通模型或小薇；需要审批的操作在 Muse 中处理。/wx help、/wx status、/wx new 等微伴命令仍可用，/exit 返回普通模型。/wx new 建立新的返回路由及近期聊天记录；不清除 Muse 自身记忆或取消已经开始的工具操作。
 
 不同 route 的近期文字记录分别保存，worker 每次收到最近 10 条、每条最多 3000 字符的历史片段；当前要求保留完整文字并受插件输入上限约束。回复在微伴确认接收后才记入历史，使用实际接收的正文，不包含输出上限裁剪掉或被拒收的内容。这不是 Muse 原生会话隔离，同一托管环境仍共享长期记忆、工具及文件，请勿给互不信任的用户共用。
 
@@ -50,7 +50,7 @@ Muse hook 默认每 5 秒触发，使用最多 15 秒长轮询，有消息时立
 
 清空或删除会话、删除全部会话记录时，微伴也会清除对应回执及结果缓存中的正文，保留必要的结算与去重信息；旧事件重试不会恢复正文或再次扣费。此操作不会同步删除 Muse 已有的本地记录、长期记忆或文件。
 
-- 微伴按实际转入的文字和最终返回的文字计 credits：5,000 输入 tokens = 1 credit，输出权重 ×8。
+- 微伴按实际转入的文字和最终返回的文字计 credits：5,000 输入 tokens = 1 credit，输出权重 ×8。回复附带的图片每张 5 credits。
 - Muse 内部历史、系统提示词、工具输入和内部调用不计入微伴 credits。模型服务费用以 Muse 所用服务为准。
 - 失败不收成功账单；主动通知只计算输出。等待提示和平台来源提示不计费。
 - worker 领取时会得到本次回复的 token 上限，取任务受理时和当前配置的较小值；最终回复也最多 30000 字符。请让 Muse 优先给完整摘要，后续追问再分次展开。
@@ -68,7 +68,7 @@ push 命令必须传 --key 单次发送标识（1–200 字符），例如定时
 
 插件清单：GET /api/plugins/muse。本文 Markdown：/developers/muse.md。
 网页登录后 POST /api/plugins/{id}/muse/pair 获取连接指令，GET /api/plugins/{id}/muse/status 查看状态。
-连接器专用传输为 POST /api/muse/{pair|heartbeat|poll|claim|event}，独立 Bearer 凭据，不与 OpenClaw、Hermes 通用。无需用户提供 Muse API Key。
+连接器专用传输为 POST /api/muse/{pair|heartbeat|poll|claim|event}，独立 Bearer 凭据，不与 OpenClaw、Hermes 通用。无需用户提供 Muse API Key。回复图片先逐张 PUT /api/muse/uploads?job={jobId}&runner={runnerId}（同一凭据，仅限本 runner 已领取的任务，每任务最多 8 次），再在 event 的 images 中按发送顺序列出返回的 imageId，最多 4 张。连接器 1.1.0 起支持，旧版只回传文字。
 
 自动测试覆盖微伴权限、任务和计费，以及模拟 hook 环境中的领取、恢复和回传；真实 Muse 版本的 hook 注册与工具执行仍需在用户托管环境联调。本适配器参考 [wechat-ilink-muse-bridge 的 hook 接法](https://github.com/gfydfhcf/wechat-ilink-muse-bridge/tree/main/examples/muse-hook)，未打包其 iLink 客户端。
 

@@ -83,6 +83,6 @@ export function hermesConnectCommand(endpoint: string, code: string) {
 export function museConnectCommand(endpoint: string, code: string) {
   const origin = new URL(endpoint).origin;
   const options = JSON.stringify({ endpoint: origin, code });
-  const script = `import urllib.request; u=${JSON.stringify(origin + "/downloads/wechatai-muse-connect.py")}; h=type("NoRedirect",(urllib.request.HTTPRedirectHandler,),{"redirect_request":lambda *args:None})(); q=urllib.request.Request(u,headers={"User-Agent":"Wechatai-Muse/1.0.0"}); r=urllib.request.build_opener(h).open(q,timeout=30); b=r.read(262145); r.close(); assert len(b)<=262144,"安装脚本过大"; exec(compile(b,u,"exec")); connect(${options})`;
+  const script = `import urllib.request; u=${JSON.stringify(origin + "/downloads/wechatai-muse-connect.py")}; h=type("NoRedirect",(urllib.request.HTTPRedirectHandler,),{"redirect_request":lambda *args:None})(); q=urllib.request.Request(u,headers={"User-Agent":"Wechatai-Muse/1.1.0"}); r=urllib.request.build_opener(h).open(q,timeout=30); b=r.read(262145); r.close(); assert len(b)<=262144,"安装脚本过大"; exec(compile(b,u,"exec")); connect(${options})`;
   return `请帮我把当前 Muse 托管环境连接到微伴。先执行下面的安装命令，再按安装输出的 SETUP.md 注册并启用 Muse hook，读取 WORKER.md 作为 worker 指令。不要另建微信 iLink 连接，不要打印连接凭据。hook 开始轮询后再告知我。\n\npython3 -c '${script.replace(/'/g, `'"'"'`)}'`;
 }

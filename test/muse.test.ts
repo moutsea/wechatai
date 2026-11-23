@@ -8,6 +8,11 @@ import { countTextTokens, limitTextTokens } from "../src/server/tokenizer";
 import { creditUnits } from "../src/server/wallet";
 
 const accounts: DurableObjectStub<PersonalAccount>[] = [];
+// 1x1 PNG with complete pixel data.
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=",
+  "base64",
+);
 const api = async (
   stub: DurableObjectStub<PersonalAccount>,
   action: string,
@@ -439,6 +444,107 @@ describe("Muse hosted hook channel", () => {
         })
       ).status,
     ).toBe(409);
+  });
+
+  it("sends a reply's uploaded images after the text, bills each and drops unlisted uploads", async () => {
+    const ctx = await setup();
+    await send(ctx.stub, "/use muse");
+    const text = "画一位穿 JK 制服的少女";
+    await send(ctx.stub, text);
+    const job = (await ctx.call("poll")).data.jobs[0];
+    const put = (
+      body: BodyInit,
+      query = `job=${job.id}&runner=${ctx.runnerId}`,
+      token = ctx.token,
+    ) =>
+      SELF.fetch(`https://wechatai.app/api/muse/uploads?${query}`, {
+        method: "PUT",
+        headers: { authorization: `Bearer ${token}` },
+        body,
+      });
+    // Uploads need a claimed job of this runner.
+    expect((await put(png)).status).toBe(409);
+    await ctx.call("claim", { id: job.id });
+    expect((await put(png, `job=${job.id}&runner=${crypto.randomUUID()}`)).status).toBe(409);
+    expect((await put(png, undefined, "invalid")).status).toBe(401);
+    expect((await put("not an image")).status).toBe(422);
+    expect((await put(new Uint8Array(8 * 1024 * 1024 + 1))).status).toBe(413);
+    const upload = async () => {
+      const res = await put(png);
+      expect(res.status).toBe(201);
+      return (await res.json<{ imageId: string }>()).imageId;
+    };
+    const uploads: string[] = [];
+    for (let i = 0; i < 8; i++) uploads.push(await upload());
+    expect((await put(png)).status).toBe(409);
+    const [imageId, ...unused] = uploads;
+    const event = {
+      eventId: crypto.randomUUID(),
+      routeId: job.routeId,
+      jobId: job.id,
+      text: "画好了",
+      // An unknown ID is left out instead of failing the finished reply.
+      images: [imageId, imageId, crypto.randomUUID()],
+    };
+    const before = (await ctx.stub.snapshot()).wallet.balance;
+    const first = await ctx.call("event", event);
+    expect(first.data).toMatchObject({ images: 1, acceptedText: "画好了" });
+    expect(first.data.cost).toBe(
+      (creditUnits(countTextTokens(text), countTextTokens(event.text)) + 5000) / 1000,
+    );
+    expect((await ctx.call("event", event)).data).toEqual(first.data);
+    expect((await ctx.stub.snapshot()).wallet.balance).toBeCloseTo(before - first.data.cost, 3);
+    expect((await put(png)).status).toBe(409);
+    const sent = await deliverQueuedReplies(ctx.stub, 2);
+    expect(sent.map((part) => part.imageBytes ?? part.text)).toEqual([event.text, png.length]);
+    await runInDurableObject(ctx.stub, (_, state) => {
+      const committed = (id: string) =>
+        state.storage.sql.exec("SELECT committed FROM output_assets WHERE id=?", id).one()
+          .committed;
+      expect(committed(imageId)).toBe(1);
+      expect(unused.map(committed)).toEqual(unused.map(() => -1));
+      expect(
+        state.storage.sql
+          .exec("SELECT content FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 1")
+          .one().content,
+      ).toBe(`${event.text}\n\n![Muse 图片](/api/assets/${imageId})`);
+    });
+  });
+
+  it("rejects images on proactive notifications and on failed replies", async () => {
+    const ctx = await setup();
+    await send(ctx.stub, "/use muse");
+    await send(ctx.stub, "建立会话");
+    const job = (await ctx.call("poll")).data.jobs[0];
+    await ctx.call("claim", { id: job.id });
+    const res = await SELF.fetch(
+      `https://wechatai.app/api/muse/uploads?job=${job.id}&runner=${ctx.runnerId}`,
+      { method: "PUT", headers: { authorization: `Bearer ${ctx.token}` }, body: png },
+    );
+    const { imageId } = await res.json<{ imageId: string }>();
+    const push = await ctx.call("event", {
+      eventId: crypto.randomUUID(),
+      routeId: job.routeId,
+      text: "通知",
+      images: [imageId],
+    });
+    expect(push).toMatchObject({ ok: false, error: "invalid_event" });
+    const before = (await ctx.stub.snapshot()).wallet.balance;
+    const failed = await ctx.call("event", {
+      eventId: crypto.randomUUID(),
+      routeId: job.routeId,
+      jobId: job.id,
+      status: "failed",
+      images: [imageId],
+    });
+    expect(failed.data).not.toHaveProperty("images");
+    expect((await ctx.stub.snapshot()).wallet.balance).toBe(before);
+    await runInDurableObject(ctx.stub, (_, state) =>
+      expect(
+        state.storage.sql.exec("SELECT committed FROM output_assets WHERE id=?", imageId).one()
+          .committed,
+      ).toBe(-1),
+    );
   });
 
   it("does not pretend Muse supports native commands", async () => {

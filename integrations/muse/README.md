@@ -20,8 +20,11 @@ Installer and connector commands share a lock, so a stale wake cannot claim a ta
 during credential replacement. Explicitly revoking the old connection cancels its
 return routes; that disconnected queue does not block a new pairing.
 
-Only text and WeChat-transcribed voice are transported. Native Muse commands,
-media, remote approvals and cancellation are not implemented. Models, tools,
+Text and WeChat-transcribed voice are transported to Muse. A task reply may attach
+up to 4 PNG, JPEG or WebP images (`reply --image <path>`, 8 MB each, 5 credits each);
+the connector keeps private copies, uploads them before the reply and WeChat receives
+them after the text. Images sent to Muse, files, video, native Muse commands, remote
+approvals and cancellation are not implemented. Models, tools,
 memory and service costs remain with the user's Muse environment. Each route has
 its own recent boundary transcript; the Muse environment's long-term memory and
 tools remain shared. Do not use one environment for mutually untrusted users.

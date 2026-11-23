@@ -106,7 +106,15 @@ import {
 import { compareConnectorVersions, openClawRelease } from "../shared/openclaw-release";
 import type { ConnectorUpdateNotice, ConnectorUpdateReadState } from "../shared/connector-update";
 import { openClawInputSchema, type OpenClawPlugin } from "../shared/openclaw";
-import { OpenClawRelay, clawPairExchangeSchema, type ClawRoute } from "./openclaw-relay";
+import {
+  MUSE_IMAGE_RULES,
+  MUSE_MAX_IMAGES,
+  MUSE_MAX_UPLOADS,
+  OpenClawRelay,
+  clawPairExchangeSchema,
+  museUploadRun,
+  type ClawRoute,
+} from "./openclaw-relay";
 import {
   roleplayInputSchema,
   roleplayManifest,
@@ -202,7 +210,7 @@ import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
 import { pluginNotificationText } from "./plugins/notifications";
 import { assetDownload, missingAsset, validAssetId } from "./asset-download";
-import { MediaStore, MEDIA_TTL_MS } from "./media";
+import { MediaStore, MEDIA_TTL_MS, type OutputAsset } from "./media";
 import {
   imageGenerationInputSchema,
   type ImageGenerationPlugin,
@@ -423,6 +431,17 @@ export class PersonalAccount extends DurableObject<Env> {
         );
       },
       validateRoute: (route) => this.validateClawRoute(route),
+      // The connector cannot ask the worker again, so a missing or expired
+      // image is left out; the receipt reports how many were sent.
+      images: (jobId, ids) =>
+        [...new Set(ids)].filter((imageId) => {
+          const asset = this.media.row(imageId);
+          return (
+            asset?.runId === museUploadRun(jobId) &&
+            asset.committed === 0 &&
+            asset.expiresAt > Date.now()
+          );
+        }),
       balance: () => {
         this.refreshWallet();
         return this.wallet.balance();
@@ -435,6 +454,8 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!failed) this.wallet.charge(id, units, units);
         else recordCallFailure(this.sql, id, new AppError("remote_agent_failed", ""));
         for (const image of images) this.media.commit(image, Date.now() + MEDIA_TTL_MS);
+        // Uploads the reply did not list are never sent.
+        if (event.uploadRun) this.media.discardRun(event.uploadRun);
         this.sql.exec(
           "INSERT INTO runs VALUES (?,?, 'complete',?,?)",
           id,
@@ -982,6 +1003,86 @@ export class PersonalAccount extends DurableObject<Env> {
       return JSON.stringify({ ok: true, data: await this.grok.upload(pluginId, ref, data) });
     } catch (error) {
       // Storage failures stay 5xx so the Bot retries the same file.
+      if (!(error instanceof AppError)) throw error;
+      return JSON.stringify({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        status: error.status,
+      });
+    }
+  }
+  // Image upload from a Muse connector for a job its runner has claimed.
+  async museUpload(
+    pluginId: string,
+    secret: string,
+    jobId: string,
+    runnerId: string,
+    data: Uint8Array,
+  ): Promise<string> {
+    try {
+      if (this.plugin(pluginId).pluginId !== "wechatai/muse")
+        throw new AppError("plugin_type", "连接类型不匹配", 403);
+      this.claw.authenticate(pluginId, secret);
+      const target = this.claw.uploadTarget(pluginId, jobId, runnerId);
+      const { n: uploads } = this.sql
+        .exec<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM output_assets WHERE runId=?",
+          museUploadRun(jobId),
+        )
+        .one();
+      if (uploads >= MUSE_MAX_UPLOADS)
+        throw new AppError(
+          "muse_upload_limit",
+          `每个任务最多上传 ${MUSE_MAX_UPLOADS} 次图片，回复时最多附带 ${MUSE_MAX_IMAGES} 张。`,
+          409,
+        );
+      let asset: OutputAsset;
+      try {
+        asset = await this.media.save(
+          museUploadRun(jobId),
+          target.sessionId,
+          data,
+          target.expiresAt,
+        );
+      } catch (error) {
+        if (error instanceof AppError && ["image_size", "image_invalid"].includes(error.code))
+          throw new AppError(error.code, MUSE_IMAGE_RULES, 422);
+        throw error;
+      }
+      // The R2 write yields. The reply, a cancellation or parallel uploads may have won.
+      try {
+        this.claw.uploadTarget(pluginId, jobId, runnerId);
+        const extra = this.sql
+          .exec<{ id: string }>(
+            "SELECT id FROM output_assets WHERE runId=? ORDER BY rowid LIMIT -1 OFFSET ?",
+            museUploadRun(jobId),
+            MUSE_MAX_UPLOADS,
+          )
+          .toArray()
+          .some((a) => a.id === asset.id);
+        if (extra)
+          throw new AppError(
+            "muse_upload_limit",
+            `每个任务最多上传 ${MUSE_MAX_UPLOADS} 次图片。`,
+            409,
+          );
+      } catch (error) {
+        this.media.discard(asset.id);
+        throw error;
+      }
+      return JSON.stringify({
+        ok: true,
+        data: {
+          imageId: asset.id,
+          mime: asset.mime,
+          width: asset.width,
+          height: asset.height,
+          bytes: asset.bytes,
+        },
+      });
+    } catch (error) {
+      // Storage failures stay 5xx so the connector can retry the same file.
       if (!(error instanceof AppError)) throw error;
       return JSON.stringify({
         ok: false,

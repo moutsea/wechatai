@@ -14,8 +14,10 @@ import urllib.parse
 import urllib.request
 import uuid
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 LEASE_SECONDS = 600
+MAX_IMAGES = 4
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
 AGENTS = [{"id": "main", "name": "Muse 托管助理", "isDefault": True}]
 
 
@@ -65,11 +67,52 @@ def request(account, action, body):
         raise RelayError(error.code, code) from None
 
 
+def upload(account, job_id, runner_id, data):
+    query = urllib.parse.urlencode({"job": job_id, "runner": runner_id})
+    req = urllib.request.Request(
+        origin(account["endpoint"]) + "/api/muse/uploads?" + query, data=data, method="PUT",
+        headers={"Authorization": "Bearer " + account["token"], "Content-Type": "application/octet-stream", "User-Agent": "Wechatai-Muse/" + VERSION},
+    )
+    try:
+        with urllib.request.build_opener(NoRedirect).open(req, timeout=60) as response:
+            result = json.loads(response.read(65536))
+    except urllib.error.HTTPError as error:
+        code = None
+        try:
+            body = json.loads(error.read(8192))
+            if isinstance(body, dict) and isinstance(body.get("error"), str):
+                code = body["error"]
+        except (OSError, ValueError):
+            pass
+        finally:
+            error.close()
+        raise RelayError(error.code, code) from None
+    if not isinstance(result, dict) or not isinstance(result.get("imageId"), str):
+        raise ValueError("微伴上传回执无效")
+    return result["imageId"]
+
+
+def image_path(path):
+    # Muse image tools may report sandbox://workspace/x for the file /workspace/x.
+    return Path("/" + path[len("sandbox://"):] if path.startswith("sandbox://") else path).expanduser()
+
+
+def image_kind(data):
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
 class Connector:
-    def __init__(self, home, relay=request):
+    def __init__(self, home, relay=request, uploader=upload):
         self.home = Path(home).resolve()
         self.account = json.loads((self.home / "account.json").read_text())
         self.relay = lambda action, body: relay(self.account, action, body)
+        self.upload = lambda job_id, data: uploader(self.account, job_id, self.runner, data)
         fingerprint = hashlib.sha256((self.account["endpoint"] + "\0" + self.account["token"]).encode()).hexdigest()
         journal = self.home / ("journal-" + fingerprint + ".sqlite")
         self.db = sqlite3.connect(journal, isolation_level=None, timeout=10)
@@ -100,11 +143,27 @@ class Connector:
     def close(self):
         self.db.close()
 
-    def queue(self, route_id, text, job_id=None, failed=False, expired_only=False, push_key=None):
+    def read_images(self, paths):
+        if len(paths) > MAX_IMAGES:
+            raise ValueError(f"一条回复最多附带 {MAX_IMAGES} 张图片")
+        images = []
+        for path in paths:
+            file = image_path(path)
+            if not file.is_file() or file.stat().st_size > MAX_IMAGE_BYTES:
+                raise ValueError("图片不存在或超过 8 MB：" + str(path))
+            data = file.read_bytes()
+            if not data or len(data) > MAX_IMAGE_BYTES or not image_kind(data):
+                raise ValueError("只支持完整的 PNG、JPEG 或 WebP 图片：" + str(path))
+            images.append(data)
+        return images
+
+    def queue(self, route_id, text, job_id=None, failed=False, expired_only=False, push_key=None, images=()):
         if not self.db.execute("SELECT 1 FROM routes WHERE id=?", (route_id,)).fetchone():
             raise ValueError("未知返回路由，请先从微信发起对话")
         if not failed and (not text.strip() or len(text) > 30000):
             raise ValueError("最终回复需为 1–30000 字符，请先精简后再提交")
+        if images and not job_id:
+            raise ValueError("主动通知不能附带图片")
         if not job_id:
             if not isinstance(push_key, str) or not 1 <= len(push_key.strip()) <= 200:
                 raise ValueError("主动通知需要 1–200 字符的单次发送标识 --key；同一次发送重试须沿用原标识")
@@ -131,6 +190,17 @@ class Connector:
             event = {"eventId": event_id, "routeId": route_id, "status": "failed" if failed else "completed", "text": "" if failed else text.strip()}
             if job_id:
                 event.update(jobId=job_id, runnerId=self.runner)
+            if images and not failed:
+                # Private copies survive the worker's temporary files until delivery.
+                media = self.home / "outbox-media"
+                media.mkdir(mode=0o700, exist_ok=True)
+                event["imageFiles"] = []
+                for index, data in enumerate(images):
+                    file = media / f"{event_id}-{index}"
+                    file.write_bytes(data)
+                    os.chmod(file, 0o600)
+                    event["imageFiles"].append(file.name)
+                event["images"] = []
             self.db.execute("INSERT INTO outbox VALUES (?,?,?,'pending')", (event["eventId"], job_id, json.dumps(event)))
             if job_id:
                 # Tools are done, but the job and its input remain until relay acknowledgement.
@@ -143,6 +213,24 @@ class Connector:
             event = json.loads(row["data"])
             receipt = None
             try:
+                files = event.pop("imageFiles", [])
+                for name in files[len(event.get("images", [])):]:
+                    try:
+                        image_id = self.upload(row["jobId"], (self.home / "outbox-media" / name).read_bytes())
+                    except RelayError as error:
+                        # Pauses, rate limits and server errors retry later. Otherwise the
+                        # file is dropped and the event itself decides the outcome.
+                        if error.status in (402, 403, 429) or error.status >= 500:
+                            raise
+                        image_id = None
+                    except FileNotFoundError:
+                        image_id = None
+                    event.setdefault("images", []).append(image_id)
+                    # Record each upload so a retry does not upload it again.
+                    self.db.execute("UPDATE outbox SET data=? WHERE id=? AND state='pending'", (json.dumps({**event, "imageFiles": files}), row["id"]))
+                event["images"] = [image for image in event.get("images", []) if image]
+                if not event["images"]:
+                    event.pop("images", None)
                 receipt = self.relay("event", event)
                 if not isinstance(receipt, dict) or not isinstance(receipt.get("acceptedText"), str):
                     raise ValueError("微伴回执缺少实际接收的正文")
@@ -169,6 +257,9 @@ class Connector:
                 if row["jobId"]:
                     self.db.execute("UPDATE jobs SET state='finished',text='' WHERE id=?", (row["jobId"],))
                 self.db.execute("UPDATE outbox SET state=?,data='{}' WHERE id=?", (state, row["id"]))
+            for name in files:
+                with contextlib.suppress(FileNotFoundError):
+                    (self.home / "outbox-media" / name).unlink()
 
     def watch(self):
         self.flush()
@@ -245,11 +336,14 @@ def main():
     parser.add_argument("--job")
     parser.add_argument("--route")
     parser.add_argument("--key", help="主动通知的单次发送标识；同一次发送重试沿用，不同次发送使用不同标识")
+    parser.add_argument("--image", action="append", default=[], help="随 reply 回传的本机图片路径（PNG/JPEG/WebP，可重复，最多 4 张）")
     args = parser.parse_args()
     if args.action == "push" and (not args.route or not args.key or not 1 <= len(args.key.strip()) <= 200):
         parser.error("push 需要 --route 和 1–200 字符的 --key；同一次发送重试须沿用原标识")
     if args.action in ("take", "touch") and not args.job:
         parser.error("需要 --job")
+    if args.image and args.action != "reply":
+        parser.error("只有 reply 可以附带 --image")
     os.umask(0o077)
     # Pairing holds this lock exclusively; open account.json only after acquiring it.
     with open(Path(args.home) / "watch.lock", "a") as lock:
@@ -278,9 +372,15 @@ def run(args):
             job = connector.db.execute("SELECT routeId FROM jobs WHERE id=?", (args.job,)).fetchone()
             if not job:
                 raise ValueError("未知任务")
-            result = connector.queue(job["routeId"], "" if args.action == "fail" else sys.stdin.read(30001), args.job, args.action == "fail")
+            failed = args.action == "fail"
+            images = [] if failed else connector.read_images(args.image)
+            result = connector.queue(job["routeId"], "" if failed else sys.stdin.read(30001), args.job, failed, images=images)
         print(json.dumps(result, ensure_ascii=False))
-    except (OSError, ValueError, sqlite3.Error, RelayError):
+    except ValueError as error:
+        # Input errors are the worker's to fix; they never contain credentials.
+        print("Muse 连接器未完成操作：" + str(error), file=sys.stderr)
+        return 1
+    except (OSError, sqlite3.Error, RelayError):
         print("Muse 连接器未完成操作，请检查连接、配对有效期和任务状态。", file=sys.stderr)
         return 1
     finally:
