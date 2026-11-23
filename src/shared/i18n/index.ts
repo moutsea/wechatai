@@ -1,15 +1,15 @@
 /**
- * Locale definitions and the public translation registry.
+ * Locale definitions and the page translation registry.
  *
- * Only pages listed here may be served under a language prefix. The registry is
- * intentionally empty in T1: adding a locale directory is not enough to publish
- * a URL, a module must explicitly register every translated path.
+ * Modules explicitly register every path that may be served under a language
+ * prefix. The SEO layer uses its public path list to decide what to index.
  */
 import type { SeoPage } from "../seo-pages";
 
 export const AVAILABLE_LOCALES = ["zh-CN", "en", "ja", "ko", "es", "pt"] as const;
 export type Locale = (typeof AVAILABLE_LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "zh-CN";
+export const DASHBOARD_PATH = "/app";
 
 export interface LocaleDefinition {
   /** URL prefix without slashes. The default locale is unprefixed. */

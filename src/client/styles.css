@@ -694,7 +694,7 @@ code {
   font-size: var(--text-sm);
   line-height: 1.6;
   letter-spacing: 0.03em;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .banner-chat-question {
   justify-self: end;

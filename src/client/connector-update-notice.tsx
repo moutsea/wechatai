@@ -2,6 +2,9 @@ import { ArrowUpRight, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 import { connectorUpgradePath, type ConnectorUpdateNotice } from "../shared/connector-update";
 
+import { useLocale } from "./locale";
+import { dashboardCopy, formatCopy } from "../shared/i18n/dashboard";
+
 export function ConnectorUpdateCard({
   notice,
   base,
@@ -15,16 +18,18 @@ export function ConnectorUpdateCard({
   onNavigate?: () => void;
   busy?: boolean;
 }) {
+  const { locale } = useLocale();
+  const copy = dashboardCopy[locale].notices;
   return (
     <article className={`connector-update-notice ${notice.isRead ? "" : "unread"}`}>
       <div className="connector-update-heading">
         <span className="notice-item-icon important">
           <Download size={17} />
         </span>
-        <strong>OpenClaw 连接器 v{notice.version} 可升级</strong>
-        {!notice.isRead && <span className="notice-unread-dot" aria-label="未读" />}
+        <strong>{formatCopy(copy.connectorVersionAvailable, { version: notice.version })}</strong>
+        {!notice.isRead && <span className="notice-unread-dot" aria-label={copy.unread} />}
       </div>
-      <p>更新连接器，获得最新修复。保留现有绑定和会话，无需重新配对。</p>
+      <p>{copy.updateHelp}</p>
       <div className="connector-update-links">
         {notice.connections.map((connection) => (
           <Link
@@ -34,7 +39,10 @@ export function ConnectorUpdateCard({
               onRead();
               onNavigate?.();
             }}
-            aria-label={`升级 ${connection.name}（@${connection.shortcut}）`}
+            aria-label={formatCopy(copy.upgradeConnection, {
+              name: connection.name,
+              shortcut: connection.shortcut,
+            })}
           >
             <span>
               <strong>
@@ -42,19 +50,19 @@ export function ConnectorUpdateCard({
               </strong>
               <small>
                 {connection.currentVersion
-                  ? `当前 v${connection.currentVersion}`
-                  : "尚未上报版本，可检查并升级"}
+                  ? formatCopy(copy.currentVersion, { version: connection.currentVersion })
+                  : copy.versionUnknown}
               </small>
             </span>
             <span className="text-link">
-              去升级 <ArrowUpRight size={15} />
+              {copy.upgrade} <ArrowUpRight size={15} />
             </span>
           </Link>
         ))}
       </div>
       {!notice.isRead && (
         <button className="text-link connector-update-dismiss" disabled={busy} onClick={onRead}>
-          不再提醒此版本
+          {copy.dismissVersion}
         </button>
       )}
     </article>

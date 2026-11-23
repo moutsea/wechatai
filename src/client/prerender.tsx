@@ -2,7 +2,8 @@ import { OpenClawGuide } from "./pages/openclaw-guide";
 import { renderToString } from "react-dom/server";
 import { StaticRouter } from "react-router-dom";
 import "../shared/i18n/load";
-import { DEFAULT_LOCALE, normalizePath, resolveLocalizedPath } from "../shared/i18n";
+import { DEFAULT_LOCALE, normalizePath, resolveLocalizedPath, splitLocalePath } from "../shared/i18n";
+import { dashboardCopy } from "../shared/i18n/dashboard";
 import { LocaleProvider } from "./locale";
 import { AnonymousAuthProvider } from "./auth";
 import { Landing } from "./public-pages";
@@ -21,9 +22,15 @@ export {
   LEGACY_PATHS,
   PUBLIC_PATHS,
   publishedLocalizedPaths,
+  localizedDashboardPaths,
   replaceSeoHead,
   renderSitemap,
 } from "../shared/seo";
+
+export function renderPrivateShell(path: string) {
+  const locale = splitLocalePath(path)?.locale ?? DEFAULT_LOCALE;
+  return renderToString(<main aria-busy="true">{dashboardCopy[locale].shell.staticLoading}</main>);
+}
 
 export function renderPublicPage(path: string) {
   const localized = resolveLocalizedPath(path);

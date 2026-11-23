@@ -15,15 +15,29 @@ import {
   Crown,
 } from "lucide-react";
 import { useApp } from "../context";
-import { Empty, relativeTime, SectionTitle } from "../ui";
+import { Empty, relativeTime, renderCommandCopy, SectionTitle } from "../ui";
 import { ChannelIcon } from "../channel-icon";
 import { membershipExpiry } from "../membership";
 import { formatCredits, type ChatSession } from "../../shared/types";
 import { DashboardOnboarding } from "./dashboard-onboarding";
 import { dashboardSetupProgress } from "../../shared/onboarding";
 import { trackFunnel } from "../analytics-client";
+import { useLocale } from "../locale";
+import { dashboardCopy, formatCopy } from "../../shared/i18n/dashboard";
 export function Dashboard() {
   const { data, user, base, request } = useApp();
+  const { locale } = useLocale();
+  const copy = dashboardCopy[locale].dashboard;
+  const source = dashboardCopy["zh-CN"].dashboard;
+  const credits = (amount: number) => formatCredits(amount, locale);
+  const count = (amount: number) => amount.toLocaleString(locale);
+  const models = (amount: number) =>
+    formatCopy(amount === 1 ? copy.modelsOne : copy.models, { count: count(amount) });
+  const shortDate = new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    month: "numeric",
+    day: "numeric",
+  });
   // null = 还没拿到列表。不能拿空数组当初始值，否则「加载中」会被画成「一条都没有」。
   const [sessions, setSessions] = useState<ChatSession[] | null>(null);
   const [sessionsError, setSessionsError] = useState(false);
@@ -53,6 +67,22 @@ export function Dashboard() {
   if (!data) return null;
   const selectedLink = data.connections.find((l) => l.id === data.selectedConnectionId);
   const connected = data.connection.status === "connected" && !selectedLink?.paused;
+  const { currentSession } = data;
+  // The snapshot returns these built-in labels as display strings, including on older accounts.
+  const entryName =
+    currentSession?.channelName === source.executionModelUnavailable
+      ? copy.executionModelUnavailable
+      : currentSession?.channelName === source.remoteAgent
+        ? copy.remoteAgent
+        : currentSession?.channelName || copy.notSet;
+  const assistantName =
+    currentSession?.assistantName === source.deletedPlugin
+      ? copy.deletedPlugin
+      : currentSession?.assistantName === source.model
+        ? copy.model
+        : currentSession?.assistantName === source.cloudName
+          ? copy.cloudName
+          : currentSession?.assistantName || copy.notSet;
   const setup = dashboardSetupProgress(data);
   const maximum = Math.max(...data.activity.map((a) => a.credits), 1);
   const activity = Array.from({ length: 7 }, (_, i) => {
@@ -64,18 +94,18 @@ export function Dashboard() {
     <div className="dashboard page-enter">
       <div className="dashboard-greeting">
         <div>
-          <div className="eyebrow">A LITTLE CLOSER, EVERY DAY</div>
+          <div className="eyebrow">{copy.eyebrow}</div>
           <h1>
-            你好，{user.name || "朋友"}
+            {formatCopy(copy.greeting, { name: user.name || copy.friend })}
             <span className="greeting-dot">.</span>
           </h1>
-          <p>让喜欢的 AI，陪你聊聊日常里的大小事。</p>
+          <p>{copy.tagline}</p>
         </div>
         <div className="dashboard-actions">
           <DashboardOnboarding data={data} />
           <Link className="button secondary" to={`${base}/channels?new=1`}>
             <Plus size={16} />
-            添加渠道
+            {copy.addChannel}
           </Link>
         </div>
       </div>
@@ -83,114 +113,107 @@ export function Dashboard() {
         <div>
           <div className="banner-kicker">
             <span className="tiny-dot" />
-            你的 AI，离你更近一点
+            {copy.bannerKicker}
           </div>
-          <h2>
-            灵感和答案，
-            <br className="mobile-break" />
-            都在熟悉的聊天框里。
-          </h2>
-          <p>
-            {connected
-              ? "微信已连接。选择模型、接入已有 Agent，或配置服务通知。"
-              : "扫码连接微信，再按需配置模型、Agent 或服务通知。"}
-          </p>
+          <h2>{copy.bannerTitle}</h2>
+          <p>{connected ? copy.bannerConnected : copy.bannerWaiting}</p>
           <Link to={`${base}/wechat`}>
-            {connected ? "查看我的微信连接" : "连接我的微信"}
+            {connected ? copy.viewMyConnection : copy.connectMyWechat}
             <ArrowRight size={17} />
           </Link>
         </div>
         <div className="banner-art" aria-hidden="true">
-          <div className="banner-chat-message banner-chat-question">帮我理理思路</div>
+          <div className="banner-chat-message banner-chat-question">{copy.bannerQuestion}</div>
           <div className="banner-chat-answer">
             <span className="banner-chat-avatar">
               <MessageCircle size={17} strokeWidth={1.7} />
             </span>
-            <div className="banner-chat-message banner-chat-response">好呀，我们一起想。</div>
+            <div className="banner-chat-message banner-chat-response">{copy.bannerAnswer}</div>
           </div>
         </div>
       </section>
       <div className="stats-grid dashboard-stats">
         <article className={`stat-card membership-stat ${data.plan === "plus" ? "is-plus" : ""}`}>
           <div>
-            <span>我的会员</span>
+            <span>{copy.membership}</span>
             <Crown size={18} aria-hidden="true" />
           </div>
           <strong>
             {data.plan === "plus" ? "Plus" : "Free"}
-            <small>{data.plan === "plus" ? "会员" : "免费账户"}</small>
+            <small>{data.plan === "plus" ? copy.plusAccount : copy.freeAccount}</small>
           </strong>
           <p>
             <span>
               {data.plan === "plus" ? (
-                <>
-                  <time
-                    dateTime={new Date(data.planUntil).toISOString()}
-                    title={`${membershipExpiry(data.planUntil, true)} 到期（北京时间）`}
-                  >
-                    {membershipExpiry(data.planUntil)}
-                  </time>{" "}
-                  到期
-                </>
+                <time
+                  dateTime={new Date(data.planUntil).toISOString()}
+                  title={formatCopy(copy.expiresBeijing, {
+                    date: membershipExpiry(data.planUntil, true, locale),
+                  })}
+                >
+                  {formatCopy(copy.expires, {
+                    date: membershipExpiry(data.planUntil, false, locale),
+                  })}
+                </time>
               ) : data.planUntil > 0 ? (
-                "Plus 会员已到期"
+                copy.expired
               ) : (
-                `每日赠送 ${formatCredits(data.wallet.dailyGrant)} credits`
+                formatCopy(copy.dailyGrant, { credits: credits(data.wallet.dailyGrant) })
               )}
             </span>
             <Link to={`${base}/billing`}>
-              {data.plan === "plus" ? "续费会员" : "升级会员"}
+              {data.plan === "plus" ? copy.renew : copy.upgrade}
               <ArrowUpRight size={12} aria-hidden="true" />
             </Link>
           </p>
         </article>
         <article className="stat-card">
           <div>
-            <span>可用 Credits</span>
+            <span>{copy.availableCredits}</span>
             <Coins size={17} />
           </div>
           <strong>
-            {formatCredits(data.wallet.balance)}
-            <small>credits</small>
+            {credits(data.wallet.balance)}
+            <small>{copy.creditUnit}</small>
           </strong>
           <p>
-            今日已使用 <b>{formatCredits(data.wallet.spentToday)}</b>
+            {formatCopy(copy.spentToday, { credits: credits(data.wallet.spentToday) })}
             <Link to={`${base}/credits`}>
-              查看明细
+              {copy.creditDetails}
               <ArrowUpRight size={12} />
             </Link>
           </p>
         </article>
         <article className="stat-card">
           <div>
-            <span>我的渠道</span>
+            <span>{copy.channels}</span>
             <Cpu size={18} />
           </div>
           <strong>
             {String(data.channels.length).padStart(2, "0")}
-            <small>/ {data.limits.channels} 个</small>
+            <small>{formatCopy(copy.channelLimit, { count: count(data.limits.channels) })}</small>
           </strong>
           <p>
-            已配置 {data.assistants.length} 个模型
+            {formatCopy(copy.configuredModels, { models: models(data.assistants.length) })}
             <Link to={`${base}/channels`}>
-              管理渠道
+              {copy.manageChannels}
               <ArrowUpRight size={12} />
             </Link>
           </p>
         </article>
         <article className="stat-card">
           <div>
-            <span>累积会话</span>
+            <span>{copy.totalSessions}</span>
             <MessagesSquare size={17} />
           </div>
           <strong>
             {String(data.stats.sessions).padStart(2, "0")}
-            <small>段对话</small>
+            <small>{data.stats.sessions === 1 ? copy.sessionUnitOne : copy.sessionUnit}</small>
           </strong>
           <p>
-            每个话题，都有独立的空间
+            {copy.sessionTagline}
             <Link to={`${base}/sessions`}>
-              会话记录
+              {copy.sessionHistory}
               <ArrowUpRight size={12} />
             </Link>
           </p>
@@ -201,17 +224,17 @@ export function Dashboard() {
           {[
             [
               setup.service,
-              "配置模型或插件",
+              copy.setupService,
               data.plugins?.length
                 ? "/plugins"
                 : data.channels.length
                   ? "/channels"
                   : "/channels?new=1",
             ],
-            [setup.wechat, "扫码连接微信", "/wechat"],
-            [setup.message, "在微信发送消息", "/wechat"],
+            [setup.wechat, copy.setupWechat, "/wechat"],
+            [setup.message, copy.setupMessage, "/wechat"],
           ].map(([done, label, path], i) => (
-            <Link key={String(label)} to={base + path}>
+            <Link key={i} to={base + path}>
               <span className={done ? "step-done" : ""}>
                 {done ? <Check size={14} /> : `0${i + 1}`}
               </span>
@@ -223,7 +246,7 @@ export function Dashboard() {
       )}
       <div className="dashboard-columns">
         <div>
-          <SectionTitle title="我的渠道" link="管理渠道" to={`${base}/channels`} />
+          <SectionTitle title={copy.channels} link={copy.manageChannels} to={`${base}/channels`} />
           <div className="compact-assistant-grid">
             {data.channels.slice(0, 3).map((a) => (
               <Link
@@ -233,10 +256,15 @@ export function Dashboard() {
               >
                 <ChannelIcon channel={a} />
                 <h3>{a.name}</h3>
-                <p>{a.description || a.baseUrl}</p>
+                <p>
+                  {a.integration === "kimiseek" &&
+                  a.description === source.kimiseekChannelDescription
+                    ? copy.kimiseekChannelDescription
+                    : a.description || a.baseUrl}
+                </p>
                 <div>
                   <span className="model-dot" />
-                  {data.assistants.filter((m) => m.channelId === a.id).length} 个模型
+                  {models(data.assistants.filter((m) => m.channelId === a.id).length)}
                   <ArrowUpRight size={14} />
                 </div>
               </Link>
@@ -246,23 +274,23 @@ export function Dashboard() {
                 <span>
                   <Plus size={22} />
                 </span>
-                <strong>添加渠道</strong>
-                <p>填写服务地址与 API Key</p>
+                <strong>{copy.addChannel}</strong>
+                <p>{copy.addChannelHelp}</p>
               </Link>
             )}
           </div>
           <div className="recent-section">
-            <SectionTitle title="最近的对话" link="查看全部" to={`${base}/sessions`} />
+            <SectionTitle title={copy.recent} link={copy.viewAll} to={`${base}/sessions`} />
             <div className="panel recent-panel">
               {!data.stats.sessions ? (
                 // 一次对话都没有的人，先看到「下一步做什么」，而不是升级广告。
                 <Empty
                   icon={<MessagesSquare />}
-                  title="第一段对话，从微信开始"
-                  description="连接微信后发送消息，历史记录会出现在这里。"
+                  title={copy.firstSessionTitle}
+                  description={copy.firstSessionDescription}
                   action={
                     <Link className="text-link" to={`${base}/wechat`}>
-                      连接微信
+                      {copy.connectWechat}
                       <ArrowRight size={15} />
                     </Link>
                   }
@@ -273,37 +301,37 @@ export function Dashboard() {
                     <LockKeyhole size={23} />
                   </span>
                   <div>
-                    <h3>让聊过的灵感，有处可寻。</h3>
-                    <p>升级 Plus，在网页回看和整理微信里的对话。</p>
+                    <h3>{copy.lockedTitle}</h3>
+                    <p>{copy.lockedDescription}</p>
                   </div>
                   <Link
                     className="button secondary small"
                     to={`${base}/billing`}
                     onClick={() => trackFunnel("paywall_click", { surface: "dashboard_recent" })}
                   >
-                    了解 Plus
+                    {copy.learnPlus}
                     <ArrowUpRight size={14} />
                   </Link>
                 </div>
               ) : sessionsError ? (
                 <div className="recent-error" role="alert">
-                  <p>暂时读不到对话记录，请重试。</p>
+                  <p>{copy.sessionsError}</p>
                   <button className="text-link" onClick={() => setSessionsRetry((n) => n + 1)}>
-                    重新加载对话
+                    {copy.reloadSessions}
                   </button>
                 </div>
               ) : sessions === null ? (
                 <p className="recent-error" role="status">
-                  正在加载对话记录…
+                  {copy.loadingSessions}
                 </p>
               ) : !sessions.length ? (
                 <Empty
                   icon={<MessagesSquare />}
-                  title="还没有可回看的对话"
-                  description="在微信里发一条消息，这里就会出现记录。"
+                  title={copy.emptySessions}
+                  description={copy.emptySessionsDescription}
                   action={
                     <Link className="text-link" to={`${base}/wechat`}>
-                      查看微信连接
+                      {copy.viewConnection}
                       <ArrowRight size={15} />
                     </Link>
                   }
@@ -317,15 +345,20 @@ export function Dashboard() {
                         <MessageCircle size={18} aria-hidden="true" />
                       </span>
                       <span>
-                        <strong>{s.title}</strong>
+                        <strong>
+                          {s.title === source.newConversation ? copy.newConversation : s.title}
+                        </strong>
                         <small>
-                          {a?.name} · {s.messageCount} 条消息
+                          {a && `${a.name} · `}
+                          {formatCopy(s.messageCount === 1 ? copy.messagesOne : copy.messages, {
+                            count: count(s.messageCount),
+                          })}
                         </small>
                       </span>
                       {data.currentSession?.id === s.id && (
-                        <span className="tag green">当前会话</span>
+                        <span className="tag green">{copy.currentSession}</span>
                       )}
-                      <time>{relativeTime(s.updatedAt)}</time>
+                      <time>{relativeTime(s.updatedAt, locale)}</time>
                       <ArrowUpRight size={15} />
                     </Link>
                   );
@@ -336,7 +369,10 @@ export function Dashboard() {
         </div>
         <aside className="dashboard-right">
           <SectionTitle
-            title={`微信链接 · ${data.connections.length} / ${data.limits.connections}`}
+            title={formatCopy(copy.connections, {
+              count: count(data.connections.length),
+              limit: count(data.limits.connections),
+            })}
           />
           <div className="panel connection-summary">
             <div className="connection-summary-top">
@@ -345,53 +381,66 @@ export function Dashboard() {
               </span>
               <span className={`tag ${connected ? "green" : ""}`}>
                 <span className="tiny-dot" />
-                {selectedLink?.paused ? "会员到期，已暂停" : connected ? "运行正常" : "等待连接"}
+                {selectedLink?.paused ? copy.paused : connected ? copy.operational : copy.waiting}
               </span>
             </div>
-            <h3>{selectedLink?.name ?? "给 AI 一个熟悉的入口"}</h3>
-            <p>
-              {connected ? "个人专属连接，只回应你的消息。" : "扫一扫，在微信里开启第一段对话。"}
-            </p>
+            <h3>
+              {selectedLink?.name === source.myWechat
+                ? copy.myWechat
+                : (selectedLink?.name ?? copy.connectionTitle)}
+            </h3>
+            <p>{connected ? copy.connectionDescription : copy.connectionPrompt}</p>
             <div className="connection-detail">
               <span>
-                {data.currentSession && !data.currentSession.assistantId ? "当前入口" : "当前渠道"}
+                {data.currentSession && !data.currentSession.assistantId
+                  ? copy.currentEntry
+                  : copy.currentChannel}
               </span>
-              <strong>{data.currentSession?.channelName || "尚未设置"}</strong>
+              <strong>{entryName}</strong>
             </div>
             <div className="connection-detail">
               <span>
                 {data.currentSession && !data.currentSession.assistantId
-                  ? "当前 Agent"
-                  : "当前模型"}
+                  ? copy.currentAgent
+                  : copy.currentModel}
               </span>
-              <strong>{data.currentSession?.assistantName || "尚未设置"}</strong>
+              <strong>{assistantName}</strong>
             </div>
             <div className="connection-detail">
-              <span>最近消息</span>
+              <span>{copy.lastMessage}</span>
               <strong>
                 {data.connection.lastSeen
-                  ? relativeTime(data.connection.lastSeen)
-                  : "等待第一条消息"}
+                  ? relativeTime(data.connection.lastSeen, locale)
+                  : copy.waitingForMessage}
               </strong>
             </div>
             <Link to={`${base}/wechat`}>
-              管理连接
+              {copy.manageConnections}
               <ArrowUpRight size={14} />
             </Link>
           </div>
           <div className="panel usage-panel">
             <div>
-              <h3>这周的好奇心</h3>
-              <span>Credits</span>
+              <h3>{copy.weeklyUsage}</h3>
+              <span>{copy.creditLabel}</span>
             </div>
-            <div className="mini-chart" aria-label="最近七天 Credits 使用量">
+            <div className="mini-chart" aria-label={copy.chartLabel}>
               {activity.map((a, i) => (
-                <div key={a.day} title={`${a.day}：${formatCredits(a.credits)} credits`}>
+                <div
+                  key={a.day}
+                  title={formatCopy(copy.chartPoint, { date: a.day, credits: credits(a.credits) })}
+                >
                   <span
                     style={{ height: `${Math.max(5, (a.credits / maximum) * 74)}px` }}
                     className={i === 6 ? "today" : ""}
                   />
-                  <small>{i === 6 ? "今天" : a.day.slice(5).replace("-", "/")}</small>
+                  <small>
+                    {i === 6
+                      ? copy.today
+                      : locale === "zh-CN"
+                        ? a.day.slice(5).replace("-", "/")
+                        : shortDate.format(new Date(a.day))}
+                  </small>
                 </div>
               ))}
             </div>
@@ -399,10 +448,8 @@ export function Dashboard() {
           <div className="gentle-tip">
             <Sparkles size={18} />
             <div>
-              <h3>聊新话题，轻装上阵。</h3>
-              <p>
-                发送 <code>/new</code> 开始新会话。保留旧灵感，也让上下文更轻一点。
-              </p>
+              <h3>{copy.tipTitle}</h3>
+              <p>{renderCommandCopy(copy.tip, { command: "/new" })}</p>
             </div>
           </div>
         </aside>

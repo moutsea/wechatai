@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { reloadPage } from "./load-error-boundary";
 import { useLocale } from "./locale";
-import { localizedPath } from "../shared/i18n";
+import { DASHBOARD_PATH, LOCALE_DEFINITIONS, localizedPath, registeredTranslation } from "../shared/i18n";
 
-function showPendingMetadata() {
+function showPendingMetadata(pendingTitle = "页面信息暂不可用") {
   document.head.querySelectorAll("[data-seo]").forEach((node) => node.remove());
   const title = document.createElement("title");
   title.setAttribute("data-seo", "");
-  title.textContent = "页面信息暂不可用";
+  title.textContent = pendingTitle;
   const robots = document.createElement("meta");
   robots.setAttribute("data-seo", "");
   robots.name = "robots";
@@ -27,7 +27,12 @@ export function PageMetadata() {
     if (canonical && new URL(canonical.href).pathname === localizedPath(locale, path)) return;
     let active = true;
     // Until the current route's metadata is available, never retain another page's canonical.
-    showPendingMetadata();
+    if (path === DASHBOARD_PATH) document.documentElement.lang = LOCALE_DEFINITIONS[locale].htmlLang;
+    showPendingMetadata(
+      path === DASHBOARD_PATH
+        ? registeredTranslation(locale, path)?.title ?? "工作台 | 微伴 Wechatai"
+        : undefined,
+    );
     void import("../shared/seo")
       .then(({ getPageSeo, renderSeoHead }) => {
         if (!active) return;

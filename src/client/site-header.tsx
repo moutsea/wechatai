@@ -178,7 +178,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           <span className="visually-hidden" role="alert">
             {copy.menuFailed}
           </span>
-          <a href="/app">{copy.workspaceFallback}</a>
+          <a href={localeHref("/app")}>{copy.workspaceFallback}</a>
           <button
             type="button"
             className="icon-button"
@@ -193,7 +193,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     >
       <Suspense
         fallback={
-          <Link className="button small" to="/app">
+          <Link className="button small" to={localeHref("/app")}>
             {copy.workspace}
           </Link>
         }
