@@ -1,6 +1,26 @@
 import { expect, it } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
 
+it("documents Free plugin access, including generation, image reads and assistant writes", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/plugins"),
+    "text/html",
+  );
+  const article = document.querySelector("main article")?.textContent;
+  expect(document.getElementById("identity")?.textContent).toMatch(
+    /plugin configuration limit is 1 on Free and unlimited on Plus/i,
+  );
+  expect(article).toMatch(/oldest configurations within the Free quota can still run/i);
+  expect(article).toMatch(/signed-in owner, including on Free/i);
+  expect(article).toMatch(
+    /editing records requires an enabled assistant within the current plugin quota/i,
+  );
+  expect(article).toMatch(
+    /reminders pause when the assistant is disabled, its configuration is outside the current plugin quota/i,
+  );
+  expect(article).not.toMatch(/Plus-only|by Plus only|with Plus permission|require active Plus/i);
+});
+
 it("renders the complete Wechatai command, including its placeholder", () => {
   const document = new DOMParser().parseFromString(
     renderPublicPage("/en/developers/plugins"),
