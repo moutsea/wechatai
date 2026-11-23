@@ -148,6 +148,8 @@ it("asks before a new credential replaces the connector the Bot uses", async () 
       /重新连接|确认重新生成/.test(b.textContent ?? ""),
     )!;
   expect(button().textContent).toBe("重新连接");
+  // Rebuilding only the Routine needs no new credential.
+  expect(container.textContent).toContain("重新开放登记");
   await act(async () => button().click());
   expect(button().textContent).toBe("确认重新生成，现有连接器会失效");
   expect(paths.some((path) => path.includes("/grok/token"))).toBe(false);

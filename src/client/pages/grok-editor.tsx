@@ -380,6 +380,17 @@ export function GrokEditor({
                     ? "重新连接"
                     : "生成配置指令"}
           </button>
+          {done && (
+            // Lets the Bot register a rebuilt Routine with the connector it has.
+            <button
+              type="button"
+              className="button secondary small"
+              disabled={busy || !ready}
+              onClick={reopen}
+            >
+              重新开放登记
+            </button>
+          )}
         </div>
         {saved?.hasKey && (
           <p className="claw-install-note">

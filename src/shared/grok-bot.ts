@@ -22,8 +22,9 @@ export type GrokPlugin = Omit<OpenClawPlugin, "pluginId"> & {
 export const GROK_SETUP_MINUTES = 30;
 export const GROK_SETUP_INCOMPLETE =
   "Grok Bot 还没完成配置。请在微伴网页的 Grok Bot 配置中复制配置指令，发给你的 Grok Bot。";
-export const GROK_RECONNECTING =
-  "Grok Bot 正在重新连接，这条消息没有发给 Grok Bot。请让 Grok Bot 按新的配置指令连上微伴，或在微伴网页的 Grok Bot 配置中重新开放登记，完成后再发送。";
+/** For WeChat messages while the Bot has never used the current credential. */
+export const GROK_AWAITING_BOT =
+  "Grok Bot 还没用当前的连接凭据连上微伴，这条消息没有发给它。请让 Grok Bot 按配置指令连上「微伴」，例如让它调用一次「微伴」的工具，完成后再发送。";
 /** Sent to WeChat for open tasks when the owner issues a new connection credential. */
 export const GROK_RECONNECT_PENDING =
   "Grok Bot 正在重新连接，这条任务没有交给 Grok Bot，未扣平台 credits。重新连接完成后请重新发送。";

@@ -11,7 +11,7 @@ import {
   GROK_DISPATCH_UNAVAILABLE,
   GROK_RECONNECT_CLAIMED,
   GROK_RECONNECT_PENDING,
-  GROK_RECONNECTING,
+  GROK_AWAITING_BOT,
   GROK_REVOKED_CLAIMED,
   GROK_REVOKED_PENDING,
   GROK_ROUTINE_CHANGED,
@@ -474,7 +474,7 @@ it("tells WeChat about open tasks when the owner reconnects, and holds new messa
     arguments: { taskId: first, receipt: claim.receipt, status: "completed", text: "晚到" },
   });
   expect(late.status).toBe(401);
-  await expect(c.send("第三条")).rejects.toThrow(GROK_RECONNECTING);
+  await expect(c.send("第三条")).rejects.toThrow(GROK_AWAITING_BOT);
   // The Bot re-registers the same Routine with the new credential.
   expect(
     await c.tool("wechatai_register_webhook", { webhookUrl, webhookKey }, data.token),
@@ -494,7 +494,7 @@ it("keeps holding new messages after the window expires until the Bot uses the n
   await runInDurableObject(c.stub, (_, s) =>
     s.storage.sql.exec("UPDATE settings SET value='1' WHERE key=?", `grokSetup:${c.id}`),
   );
-  await expect(c.send("过期后")).rejects.toThrow(GROK_RECONNECTING);
+  await expect(c.send("过期后")).rejects.toThrow(GROK_AWAITING_BOT);
   expect((await c.api("plugin.grokStatus", { id: c.id })).data).toMatchObject({
     hasKey: true,
     lastSeen: 0,
@@ -508,7 +508,20 @@ it("keeps holding new messages after the window expires until the Bot uses the n
   });
 });
 
-it("does not hold a first manual setup before its Bot has connected", async () => {
+it("holds new messages after a revoke and a new prompt until the Bot connects", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  expect((await c.api("plugin.grokRevoke", { id: c.id })).ok).toBe(true);
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  await expect(c.send("撤销后重新生成")).rejects.toThrow(GROK_AWAITING_BOT);
+  expect((await c.rpc("ping", {}, data.token)).status).toBe(200);
+  await c.send("Bot 连上之后");
+  expect(await c.tool("wechatai_claim", { taskId: await c.wake() }, data.token)).toMatchObject({
+    text: "Bot 连上之后",
+  });
+});
+
+it("holds a first manual setup until its Bot connects with the credential", async () => {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(stub.id);
   await runInDurableObject(stub, (_, s) => useManualAlarms(s));
@@ -529,19 +542,28 @@ it("does not hold a first manual setup before its Bot has connected", async () =
     webhookKey,
   });
   // The owner saved the Routine first and copies only the header to the Bot.
-  expect((await api("plugin.grokToken", { id: plugin.id })).ok).toBe(true);
-  const reply = await runInDurableObject(stub, (instance) =>
-    (
-      instance as unknown as {
-        processWechat(id: string, m: WxMessage, link: string): Promise<string>;
-      }
-    ).processWechat(
-      crypto.randomUUID(),
-      { item_list: [{ type: 1, text_item: { text: "@grok 首次手动配置" } }] },
-      "default",
-    ),
-  );
-  expect(reply).toBe(GROK_WAITING_MESSAGE);
+  const { data } = await api("plugin.grokToken", { id: plugin.id });
+  const send = (text: string) =>
+    runInDurableObject(stub, (instance) =>
+      (
+        instance as unknown as {
+          processWechat(id: string, m: WxMessage, link: string): Promise<string>;
+        }
+      ).processWechat(
+        crypto.randomUUID(),
+        { item_list: [{ type: 1, text_item: { text } }] },
+        "default",
+      ),
+    );
+  // A wake now would reach a Routine whose connector has no usable credential.
+  await expect(send("@grok 连接器还没加")).rejects.toThrow(GROK_AWAITING_BOT);
+  const ping = await SELF.fetch(endpoint, {
+    method: "POST",
+    headers: { authorization: "Bearer " + data.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+  });
+  expect(ping.status).toBe(200);
+  expect(await send("@grok 连接器加好了")).toBe(GROK_WAITING_MESSAGE);
 });
 
 it.each([
@@ -563,7 +585,12 @@ it.each([
     await c.tool("wechatai_claim", { taskId: first, claimId: crypto.randomUUID() });
     await c.send("排队的任务");
     const before = (await c.stub.snapshot()).wallet.balance;
+    const alarms = () =>
+      runInDurableObject(c.stub, (_, s) => vi.mocked(s.storage.setAlarm).mock.calls.length);
+    const scheduled = await alarms();
     expect((await c.api(action, { id: c.id, webhookUrl, ...changes })).ok).toBe(true);
+    // The notices go out with the next alarm, not whenever the account wakes next.
+    expect(await alarms()).toBeGreaterThan(scheduled);
     expect((await deliverQueuedReplies(c.stub, 2)).map((x) => x.text)).toEqual(
       expect.arrayContaining([pending, claimed]),
     );
@@ -582,7 +609,11 @@ it("closes woken tasks the old Routine never claimed when the Bot registers anot
   expect(data.setupUntil).toBeGreaterThan(Date.now());
   const routine = { webhookUrl: `${webhookUrl}-2`, webhookKey: "second-routine-key" };
   const before = (await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt;
+  const alarms = () =>
+    runInDurableObject(c.stub, (_, s) => vi.mocked(s.storage.setAlarm).mock.calls.length);
+  const scheduled = await alarms();
   expect(await c.tool("wechatai_register_webhook", routine)).toMatchObject({ registered: true });
+  expect(await alarms()).toBeGreaterThan(scheduled);
   expect((await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt).toBeGreaterThan(
     before,
   );
