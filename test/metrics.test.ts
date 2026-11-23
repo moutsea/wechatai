@@ -1,5 +1,14 @@
 import { env, createExecutionContext } from "cloudflare:test";
-import { beforeAll, beforeEach, afterEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import {
+  beforeAll,
+  beforeEach,
+  afterEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
@@ -76,12 +85,7 @@ function bindings(overrides: Record<string, unknown> = {}): Env {
   } as unknown as Env;
 }
 
-function call(
-  bindings: Env,
-  path = "/api/metrics/health",
-  init: RequestInit = {},
-  clientIp = ip,
-) {
+function call(bindings: Env, path = "/api/metrics/health", init: RequestInit = {}, clientIp = ip) {
   const headers = new Headers(init.headers);
   if (!headers.has("cf-connecting-ip")) headers.set("cf-connecting-ip", clientIp);
   return worker.fetch(
@@ -184,11 +188,9 @@ describe("metrics credentials", () => {
 
   it("fails closed when the credential is missing, short or mismatched", async () => {
     for (const configured of [undefined, "", "   ", "short", "x".repeat(31)]) {
-      const response = await call(
-        bindings({ METRICS_API_TOKEN: configured }),
-        undefined,
-        { headers: bearer() },
-      );
+      const response = await call(bindings({ METRICS_API_TOKEN: configured }), undefined, {
+        headers: bearer(),
+      });
       expect(response.status).toBe(401);
       expect(await response.json()).toEqual({ error: "unauthorized" });
     }
@@ -210,11 +212,9 @@ describe("metrics credentials", () => {
 
   it("does not let an invalid credential consume the shared token quota", async () => {
     const limiter = fakeLimiter();
-    const response = await call(
-      bindings({ API_LIMIT: limiter.binding }),
-      undefined,
-      { headers: bearer(otherToken) },
-    );
+    const response = await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
+      headers: bearer(otherToken),
+    });
     expect(response.status).toBe(401);
     expect(limiter.calls).toEqual([`metrics:ip:${ip}`]);
   });
@@ -419,9 +419,13 @@ describe("metrics rate limits and audit", () => {
     });
     await request(`/api/metrics/${sentinels.path}`, { headers: bearer() });
     await request("/api/metrics/health", { method: "OPTIONS", headers: bearer() });
-    await request("/api/metrics/health", { headers: bearer() }, {
-      API_LIMIT: fakeLimiter(() => "limited").binding,
-    });
+    await request(
+      "/api/metrics/health",
+      { headers: bearer() },
+      {
+        API_LIMIT: fakeLimiter(() => "limited").binding,
+      },
+    );
 
     const exploding = bindings();
     Object.defineProperty(exploding, "METRICS_API_TOKEN", {

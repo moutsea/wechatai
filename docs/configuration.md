@@ -13,7 +13,7 @@
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | 可选 Google OAuth                                   |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | 可选 GitHub OAuth                                   |
 | `STRIPE_*`                                  | 可选会员和 credits 支付，详见[支付文档](billing.md) |
-| `TURNSTILE_SECRET_KEY`                       | 邮件注册、重发与密码找回的人机验证密钥               |
+| `TURNSTILE_SECRET_KEY`                      | 邮件注册、重发与密码找回的人机验证密钥              |
 | `KIMISEEK_CONNECT_SECRET`                   | 可选 KimiSeek 关联，须与对端共享配置一致            |
 | `BILLING_NOTIFY_TOKEN`                      | 可选管理员付款通知；来自消息提醒插件                |
 | `BILLING_NOTIFY_SCOPE`                      | `all`（默认）或 `first_payment`                     |

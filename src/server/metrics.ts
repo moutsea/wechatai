@@ -39,7 +39,10 @@ function billingMode(env: Env): BillingMode {
   return { available: false, reason: "billing_mode_unknown" };
 }
 
-function tokenAuthorized(env: Env, authorization: string): "ok" | "not_configured" | "unauthorized" {
+function tokenAuthorized(
+  env: Env,
+  authorization: string,
+): "ok" | "not_configured" | "unauthorized" {
   const expected = secret(env, TOKEN_NAME, false);
   if (expected.length < TOKEN_MIN_LENGTH) return "not_configured";
   if (!authorization.startsWith("Bearer ")) return "unauthorized";
@@ -124,8 +127,7 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
       return respond(c, 429, { error: "rate_limited" }, "token_rate_limited", true);
     }
 
-    if (c.req.path !== HEALTH_PATH)
-      return respond(c, 404, { error: "not_found" }, "not_found");
+    if (c.req.path !== HEALTH_PATH) return respond(c, 404, { error: "not_found" }, "not_found");
     if (c.req.method !== "GET") {
       c.header("Allow", "GET");
       return respond(c, 405, { error: "method_not_allowed" }, "method_not_allowed");
