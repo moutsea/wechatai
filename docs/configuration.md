@@ -17,8 +17,33 @@
 | `KIMISEEK_CONNECT_SECRET`                   | 可选 KimiSeek 关联，须与对端共享配置一致            |
 | `BILLING_NOTIFY_TOKEN`                      | 可选管理员付款通知；来自消息提醒插件                |
 | `BILLING_NOTIFY_SCOPE`                      | `all`（默认）或 `first_payment`                     |
+| `METRICS_API_TOKEN`                         | 可选只读运营元数据；独立随机值，至少 32 字符        |
 
 不要直接更换已有生产环境的加密密钥，否则旧凭据可能无法解密。迁移时同时保留数据库、文件和对应密钥备份。
+
+### 只读运营 API（元数据）
+
+`METRICS_API_TOKEN` 是可选的独立 Workers Secret。启用时使用单独生成的随机值（至少 32 字符），不得复用 `SERVER_MONITOR_SECRET`、`EXECUTOR_SECRET`、`WECHAT_RECEIVER_SECRET`、`BILLING_NOTIFY_TOKEN`、`BETTER_AUTH_SECRET` 或 `ENCRYPTION_KEY`；未配置、空白或过短时入口关闭。只接受 `Authorization: Bearer <METRICS_API_TOKEN>`，Cookie、登录 Session 和查询参数都不能代替它。
+
+`GET /api/metrics/health` 成功返回固定元数据：
+
+```json
+{
+  "service": "wechatai",
+  "documentationVersion": "1",
+  "timezone": "Asia/Shanghai",
+  "authenticated": true,
+  "billingMode": { "available": true, "mode": "test" }
+}
+```
+
+- 本接口只证明元数据鉴权，不包含 traffic、overview、revenue、activation、retention 等业务指标，也不证明支付可用。
+- `billingMode` 仅在支付密钥可可靠识别时返回 `available: true` 与 `mode: test|live`；未配置返回 `billing_not_configured`，无法识别返回 `billing_mode_unknown`。不会调用 Stripe，也不返回密钥或账号信息。
+- 认证失败返回 401；已知路径的非 GET 方法返回 405（`Allow: GET`）；未知路径返回 404；限流返回 429（`Retry-After: 60`）；限流绑定不可用返回 503。所有响应带 `Cache-Control: no-store` 与 `X-Robots-Tag: noindex, nofollow`。
+- 限流复用 `API_LIMIT`，在每个 Cloudflare 节点内分别按 IP 和有效凭据计 120 次/60 秒；这不是全球严格配额。无效凭据不消耗有效凭据额度。
+- 审计日志只记录时间、固定路由模板、方法、状态、是否限流和固定原因；不记录原始 URL、query、IP、Authorization、Cookie、请求/响应正文或用户标识。
+- 轮换时直接替换 Secret：旧值立即失效，新值生效，不提供双 token 过渡。
+- 生产写入使用现有私有流程，例如 `pnpm cf:production secret put METRICS_API_TOKEN`，属于需单独授权的生产变更。未获部署授权并完成对应版本验证前，不得声称该接口已上线或 token 已能读取运营数。
 
 ## 公共运行参数
 
