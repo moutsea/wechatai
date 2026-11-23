@@ -1520,6 +1520,9 @@ it.each([3100, 31000])(
     expect(await c.tool("wechatai_finish", finish)).toEqual(settled);
     expect((await c.stub.snapshot()).wallet.balance).toBeCloseTo(before - settled.cost, 3);
   },
+  // Like the test below, a 31,000-character turn takes about 1 s locally and
+  // several times that on CI runners.
+  30_000,
 );
 
 it("keeps newer successful turns before spending the remaining history budget on a failed request", async () => {
