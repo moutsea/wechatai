@@ -9,6 +9,8 @@ export interface DeveloperFaqItem {
   answer: string;
 }
 
+const nativeCommandTransport = `The request shapes below also work for plain text without native-command support. For native commands, send \`nativeCommands: true\` in \`heartbeat\`, \`poll\` and \`claim\`. Poll separately with \`lane: "control"\` for \`/stop\` with no arguments so it can run while a normal task is active; use \`lane: "message"\` (the default) for other jobs. See [Command routing](/developers/plugins#commands).`;
+
 export const openClawGuideEn = `# OpenClaw connection guide
 
 Wechatai connects as a native OpenClaw Channel. OpenClaw connects out to Wechatai, so you do not need to expose a local port and you never hand the OpenClaw Gateway management token to Wechatai.
@@ -110,8 +112,10 @@ The install script is viewable at /downloads/wechatai-connect.mjs. The complete 
 
 This is the dedicated transport for the built-in OpenClaw adapter, not a public invocation entry for arbitrary third-party plugins. A single returned text is at most 30,000 characters; an over-long Agent reply includes a truncation notice. All requests are \`POST /api/openclaw/{action}\` with \`Authorization: Bearer <connection credential>\` and \`Content-Type: application/json\`. The server isolates accounts, configurations and sessions by credential and does not accept self-reported token usage.
 
-- \`poll\`: \`{ runnerId, waitMs?: 15000 }\` returns \`jobs\` and \`retryAfterMs\`. \`waitMs\` is 0–15000 milliseconds; when omitted the call returns immediately. New connection packages use long polling and wake immediately when a job exists instead of waiting for a fixed interval. \`runnerId\` is a UUID persisted on the local machine. A job contains \`id\`, \`routeId\`, \`agentId\`, \`text\` and \`state\`.
-- \`claim\`: \`{ id, runnerId }\` claims a job atomically once; do not execute when \`claimed\` is false.
+${nativeCommandTransport}
+
+- \`poll\`: \`{ runnerId, waitMs?: 15000, nativeCommands?: boolean, lane?: "message" | "control" }\` returns \`jobs\` and \`retryAfterMs\`. \`waitMs\` is 0–15000 milliseconds; when omitted the call returns immediately. New connection packages use long polling and wake immediately when a job exists instead of waiting for a fixed interval. \`runnerId\` is a UUID persisted on the local machine. A job contains \`id\`, \`routeId\`, \`agentId\`, \`text\` and \`state\`.
+- \`claim\`: \`{ id, runnerId, nativeCommands?: boolean }\` claims a job atomically once; do not execute when \`claimed\` is false.
 - \`heartbeat\`: \`{ agents?: [{ id, name, isDefault }], nativeCommands?: boolean, connectorVersion?: string }\` updates connection status, selectable assistants, native-command support and the connector version actually running; never uploads assistant model configuration or secrets.
 - \`event\`: \`{ eventId, routeId, jobId?, runnerId?, status, text }\`. \`eventId\` is a stable UUID that network retries must reuse. Task results must include \`jobId\` and the claiming \`runnerId\`; proactive notifications omit \`jobId\`.
 - An \`event\` response with status \`queued\` only means the platform received it. The "delivered" state in the platform UI is what confirms the WeChat API accepted the send.
@@ -185,10 +189,12 @@ After signing in on the web page, \`POST /api/plugins/{id}/hermes/pair\` returns
 
 The Hermes connection package uses the dedicated Channel Transport v1: \`POST /api/hermes/{action}\` with \`Authorization: Bearer <connection credential>\` and \`Content-Type: application/json\`. HTTPS is required (except loopback HTTP on the local machine), and redirects are rejected.
 
+${nativeCommandTransport}
+
 - \`pair\`: one-time credential pairing, \`{ proof, agents: [{ id: "main", name: "Hermes 当前配置", isDefault: true }] }\`, returns \`{ accountId, agentId, token }\`. \`proof\` is a base64url string of 32 random bytes persisted locally; the same credential allows retries only with the same \`proof\`.
-- \`heartbeat\`: \`{ agents }\`, reports status every 20 seconds with assistant names and IDs only.
-- \`poll\`: \`{ runnerId, waitMs: 15000 }\`, long-polls and returns \`{ jobs, retryAfterMs }\`, waking immediately when a job exists.
-- \`claim\`: \`{ id, runnerId }\`; execute only when \`claimed\` is true. \`runnerId\` is a UUID persisted locally.
+- \`heartbeat\`: \`{ agents, nativeCommands?: boolean }\`, reports status and native-command support every 20 seconds; the agent list contains only assistant names, IDs and the default marker.
+- \`poll\`: \`{ runnerId, waitMs: 15000, nativeCommands?: boolean, lane?: "message" | "control" }\`, long-polls and returns \`{ jobs, retryAfterMs }\`, waking immediately when a job exists.
+- \`claim\`: \`{ id, runnerId, nativeCommands?: boolean }\`; execute only when \`claimed\` is true. \`runnerId\` is a UUID persisted locally.
 - \`event\`: \`{ eventId, routeId, jobId?, runnerId?, status, text }\`. \`status\` is \`completed\` or \`failed\`; task results carry \`jobId\` and \`runnerId\`, while proactive notifications omit them. A stable \`eventId\` deduplicates retries; text is at most 30,000 characters, and self-reported token usage is not accepted.
 - 401 credential invalid; 403 permission or membership invalid; 409 route or task invalid; 402 insufficient balance for proactive pushes; 429 retry less frequently.
 

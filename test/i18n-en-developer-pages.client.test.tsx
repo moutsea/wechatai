@@ -1,6 +1,23 @@
 import { expect, it } from "vitest";
 import { renderPublicPage } from "../src/client/prerender";
 
+it.each(["openclaw", "hermes"])("documents native-command relay requests for %s", (agent) => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage(`/en/developers/${agent}`),
+    "text/html",
+  );
+  const requests = Array.from(document.querySelectorAll("main li"));
+  for (const action of ["heartbeat", "poll", "claim"]) {
+    const request = requests.find((item) => item.firstElementChild?.textContent === action);
+    expect(request?.textContent, action).toContain("nativeCommands?: boolean");
+  }
+  const commandRouting = document.querySelector('main a[href="/en/developers/plugins#commands"]');
+  const guidance = commandRouting?.parentElement?.textContent;
+  expect(guidance).toContain("nativeCommands: true in heartbeat, poll and claim");
+  expect(guidance).toContain('lane: "control" for /stop with no arguments');
+  expect(guidance).toContain('lane: "message"');
+});
+
 it("documents Free plugin access, including generation, image reads and assistant writes", () => {
   const document = new DOMParser().parseFromString(
     renderPublicPage("/en/developers/plugins"),
