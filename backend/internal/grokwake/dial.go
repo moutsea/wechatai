@@ -74,7 +74,9 @@ func staggeredDial(dial dialFunc, attempts int, stagger time.Duration) dialFunc 
 
 func wakeTransport() http.RoundTripper {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	dialer := &net.Dialer{KeepAlive: 30 * time.Second}
+	// The transport may keep dialing after the request gives up and pool the
+	// connection for the next wake, so each attempt needs its own bound.
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	// Measured from the VPS with 25 interleaved fresh requests each: a plain
 	// dial failed 12 within the 8 s timeout, 3 attempts 1.5 s apart failed 3,
 	// and 5 attempts 700 ms apart failed 2.
