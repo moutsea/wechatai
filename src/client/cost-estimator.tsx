@@ -18,7 +18,8 @@ const estimateInputIds = [
 const estimatorCopyZh = {
   eyebrow: "自备 API 的两笔费用",
   title: "先估算自己的文字用量",
-  intro: "只在浏览器内计算，无需登录。服务商单价用于估算模型 API 费用；小薇 同样使用自备模型，可能多次调用模型，实际 API 费用以服务商账单为准。云端仍需 Plus 且服务已开放，执行次数另有限制。",
+  intro:
+    "只在浏览器内计算，无需登录。服务商单价用于估算模型 API 费用；小薇 同样使用自备模型，可能多次调用模型，实际 API 费用以服务商账单为准。云端仍需 Plus 且服务已开放，执行次数另有限制。",
   fields: [
     "每轮输入 tokens（含历史上下文）",
     "每轮输出 tokens",
@@ -40,21 +41,42 @@ const estimatorCopyZh = {
   noteLink: "查看完整计费规则",
 };
 
+function parseProviderPrice(value: string): number {
+  if (value === "") return 0;
+  if (!/^(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:e[+-]?\d+)?$/i.test(value)) return NaN;
+  return Number(value.replace(",", "."));
+}
+
 export function CostEstimator() {
   const inputs = useDocumentInputs();
   const { locale } = useLocale();
   const copy = pricingCopyFor(locale)?.estimator ?? estimatorCopyZh;
   const numberLocale =
-    locale === "pt" ? "pt-BR" : locale === "en" ? "en-US" : locale === "ja" ? "ja-JP" : locale === "ko" ? "ko-KR" : "zh-CN";
+    locale === "pt" ? "pt-BR"
+    : locale === "es" ? "es-ES"
+    : locale === "en" ? "en-US"
+    : locale === "ja" ? "ja-JP"
+    : locale === "ko" ? "ko-KR"
+    : "zh-CN";
   const [values, setValues] = useState(() =>
     ["1000", "1000", "10", "", ""].map(
       (value, index) => inputs?.get(estimateInputIds[index]) ?? value,
     ),
   );
-  const estimate = values.slice(0, 3).every((v) => v !== "")
-    ? estimateTextCost(...(values.map(Number) as [number, number, number, number, number]))
-    : null;
-  const priced = values[3] !== "" && values[4] !== "";
+  const spanishPrices = locale === "es";
+  const parsePrice = spanishPrices ? parseProviderPrice : Number;
+  const [input, output, rounds, inputPrice, outputPrice] = values;
+  const estimate =
+    input !== "" && output !== "" && rounds !== ""
+      ? estimateTextCost(
+          Number(input),
+          Number(output),
+          Number(rounds),
+          parsePrice(inputPrice),
+          parsePrice(outputPrice),
+        )
+      : null;
+  const priced = inputPrice !== "" && outputPrice !== "";
   return (
     <section className="cost-estimator" id="estimate" aria-labelledby="cost-estimator-title">
       <header>
@@ -63,22 +85,26 @@ export function CostEstimator() {
         <p>{copy.intro}</p>
       </header>
       <div className="cost-fields">
-        {copy.fields.map((label, index) => (
-          <label key={label}>
-            {label}
-            <input
-              id={estimateInputIds[index]}
-              type="number"
-              min="0"
-              step={index < 3 ? "1" : "any"}
-              value={values[index]}
-              placeholder={index > 2 ? copy.placeholder : undefined}
-              onChange={(e) =>
-                setValues((old) => old.map((v, i) => (i === index ? e.target.value : v)))
-              }
-            />
-          </label>
-        ))}
+        {copy.fields.map((label, index) => {
+          const decimalText = spanishPrices && index >= 3;
+          return (
+            <label key={label}>
+              {label}
+              <input
+                id={estimateInputIds[index]}
+                type={decimalText ? "text" : "number"}
+                min={decimalText ? undefined : 0}
+                step={decimalText ? undefined : index < 3 ? 1 : "any"}
+                inputMode={decimalText ? "decimal" : undefined}
+                value={values[index]}
+                placeholder={index > 2 ? copy.placeholder : undefined}
+                onChange={(e) =>
+                  setValues((old) => old.map((v, i) => (i === index ? e.target.value : v)))
+                }
+              />
+            </label>
+          );
+        })}
       </div>
       <div className="cost-results" aria-live="polite">
         {estimate ? (

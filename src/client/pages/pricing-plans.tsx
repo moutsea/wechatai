@@ -230,9 +230,7 @@ export function PricingPlans() {
                 </p>
                 <p className="plan-price">
                   <strong>{yuan(offer.amount)}</strong>
-                  <span className="plan-price-unit">
-                    {annual ? copy.unitYear : copy.unitMonth}
-                  </span>
+                  <span className="plan-price-unit">{annual ? copy.unitYear : copy.unitMonth}</span>
                 </p>
                 <p className="plan-note">
                   {annual
@@ -289,7 +287,9 @@ export function PricingPlans() {
           <thead>
             <tr>
               {copy.comparisonHeaders.map((label) => (
-                <th key={label} scope="col">{label}</th>
+                <th key={label} scope="col">
+                  {label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -317,8 +317,7 @@ export function PricingPlans() {
       <p className="plans-common">{copy.common}</p>
       <p className="plans-fineprint">{copy.fineprint}</p>
       <p className="plans-checked">
-        {copy.checked}{" "}
-        <time dateTime={BILLING_PRICE_CHECKED_AT}>{BILLING_PRICE_CHECKED_AT}</time>
+        {copy.checked} <time dateTime={BILLING_PRICE_CHECKED_AT}>{BILLING_PRICE_CHECKED_AT}</time>
       </p>
     </section>
   );

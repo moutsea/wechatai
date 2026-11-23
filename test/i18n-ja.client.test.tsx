@@ -82,6 +82,7 @@ describe("published Japanese pages", () => {
       ["en", `${SITE_URL}/en`],
       ["ja-JP", `${SITE_URL}/ja`],
       ["ko-KR", `${SITE_URL}/ko`],
+      ["es", `${SITE_URL}/es`],
       ["pt-BR", `${SITE_URL}/pt`],
       ["x-default", `${SITE_URL}/`],
     ]);
@@ -298,6 +299,7 @@ describe("published Japanese pages", () => {
       "English",
       "日本語",
       "한국어",
+      "Español",
       "Português",
     ]);
     expect(home.host.querySelector('a[href="/en"]')?.textContent).toBe("English");
@@ -309,7 +311,7 @@ describe("published Japanese pages", () => {
 
     const ai = await mountSwitcher("/ja/wechat-ai");
     await ai.open();
-    expect(ai.host.querySelectorAll('[role="menuitem"]')).toHaveLength(5);
+    expect(ai.host.querySelectorAll('[role="menuitem"]')).toHaveLength(6);
     expect(ai.host.querySelector('a[hreflang="en"]')?.textContent).toBe("English");
     expect(ai.host.querySelector('a[hreflang="en"]')?.getAttribute("href")).toBe("/en/wechat-ai");
     expect(ai.host.querySelector('a[hreflang="zh-CN"]')?.getAttribute("href")).toBe("/wechat-ai");
@@ -324,6 +326,7 @@ describe("published Japanese pages", () => {
     const bot = await mountSwitcher("/ja/wechat-bot");
     await bot.open();
     expect(bot.host.querySelector('a[hreflang="en"]')?.getAttribute("href")).toBe("/en/wechat-bot");
+    expect(bot.host.querySelector('a[hreflang="es"]')?.getAttribute("href")).toBe("/es/wechat-bot");
     expect(bot.host.querySelector('a[hreflang="zh-CN"]')?.getAttribute("href")).toBe("/wechat-bot");
     await bot.close();
   });
@@ -367,14 +370,14 @@ describe("published Japanese pages", () => {
     expect(document.body.textContent).not.toContain("自建アプリ");
   });
 
-  it("keeps the Chinese page group unchanged and adds only the registered Japanese URLs", () => {
+  it("keeps the Chinese content and publishes only the registered Japanese URLs", () => {
     const chineseHome = parse("/");
     expect(chineseHome.querySelector("h1")?.textContent).toContain("把你的 AI");
     expect(chineseHome.querySelector('a[href="/pricing"]')?.textContent).toBe("价格");
     const chineseAlternates = [...chineseHome.querySelectorAll('link[rel="alternate"][hreflang]')].map(
       (link) => link.getAttribute("hreflang"),
     );
-    expect(chineseAlternates).toEqual(["zh-CN", "en", "ja-JP", "ko-KR", "pt-BR", "x-default"]);
+    expect(chineseAlternates).toEqual(["zh-CN", "en", "ja-JP", "ko-KR", "es", "pt-BR", "x-default"]);
 
     const pricing = parse("/pricing");
     expect(pricing.querySelector("h1")?.textContent).toBe("免费开始，按需升级 Plus");

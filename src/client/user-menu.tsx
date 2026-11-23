@@ -46,6 +46,30 @@ const userMenuCopyEn = {
   signOutFailed: "Could not log out. Please try again.",
 } as const;
 
+const userMenuCopyEs = {
+  avatarFallback: "?",
+  userMenu: "Menú de usuario",
+  accountMenu: "Menú de la cuenta",
+  account: "Mi cuenta",
+  workspace: "Abrir el espacio de trabajo",
+  loading: "Cargando membresía y créditos…",
+  loadFailed: "No se pudieron cargar los datos de la cuenta",
+  reload: "Recargar",
+  balance: "Saldo de créditos",
+  plus: "Membresía Plus",
+  free: "Cuenta gratuita",
+  expiresOn: "Vence el",
+  timeZone: " (hora de Pekín)",
+  expired: "Tu membresía ha caducado. Actualiza para recuperar los beneficios Plus.",
+  upgradeBenefits: "Actualiza para usar todos los plugins y más conexiones de WeChat.",
+  renew: "Renovar membresía",
+  upgrade: "Mejorar membresía",
+  admin: "Consola de administración",
+  signingOut: "Cerrando sesión…",
+  signOut: "Cerrar sesión",
+  signOutFailed: "No se pudo cerrar sesión. Inténtalo de nuevo.",
+} as const;
+
 const userMenuCopyZh = {
   avatarFallback: "你",
   userMenu: "用户菜单",
@@ -78,8 +102,9 @@ export function UserMenu({ user }: { user: MenuUser }) {
     : locale === "ja" ? userMenuCopyJa
     : locale === "ko" ? userMenuCopyKo
     : locale === "pt" ? userMenuCopyPt
+    : locale === "es" ? userMenuCopyEs
     : userMenuCopyZh;
-  const formatLocale = locale === "pt" ? "pt-BR" : undefined;
+  const formatLocale = locale === "pt" ? "pt-BR" : locale === "es" ? "es-ES" : undefined;
   const { loadFailed } = copy;
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);

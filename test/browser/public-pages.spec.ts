@@ -79,7 +79,7 @@ function languageTriggerName(htmlLang: string, label: string) {
   if (htmlLang === "ko-KR") return `언어：${label}`;
   if (htmlLang === "ja-JP") return `言語：${label}`;
   if (htmlLang === "en") return `Language: ${label}`;
-  if (htmlLang === "pt-BR") return `Idioma：${label}`;
+  if (htmlLang === "pt-BR" || htmlLang === "es") return `Idioma：${label}`;
   return `语言：${label}`;
 }
 const portugueseTrigger = languageTriggerName("pt-BR", "Português");
@@ -179,6 +179,28 @@ for (const group of localePageGroups) {
       }
     });
   }
+}
+
+for (const [suffix, selector, attribute, value] of [
+  ["?interval=year#plan-year", "#plan-year", "aria-current", "true"],
+  ["#estimate", ".pricing-estimate", "open", ""],
+]) {
+  test(`preserves pricing state when switching to Spanish from /pricing${suffix}`, async ({
+    page,
+  }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/pricing${suffix}`);
+    await mounted;
+
+    const switcher = page.locator(".site-language");
+    // 语言切换器是下拉菜单：先展开，再点菜单项。
+    await switcher
+      .getByRole("button", { name: languageTriggerName("zh-CN", "中文"), exact: true })
+      .click();
+    await switcher.getByRole("menuitem", { name: "Español", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/es/pricing${suffix}`);
+    await expect(page.locator(selector)).toHaveAttribute(attribute, value);
+  });
 }
 
 for (const { path } of localePageGroups.flat()) {
@@ -822,6 +844,76 @@ test("preserves cleared and zero estimate fields instead of substituting default
   await expect(page.locator(".cost-results strong")).toHaveText(["0 credits", "约 ¥0"]);
 });
 
+test("explains why the Spanish estimate rounds up to 1,801 credits", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/es/pricing#estimate`);
+  await mounted;
+
+  const estimate = page.locator("#estimate");
+  await estimate.getByLabel("Tokens de entrada por turno (incluido el historial)").fill("1001");
+  await estimate.getByLabel("Tokens de salida por turno").fill("1000");
+  await estimate.getByLabel("Solicitudes al día").fill("1");
+  await expect(estimate.getByText("1,801 créditos", { exact: true })).toBeVisible();
+  await expect(estimate.locator(".cost-estimator-note")).toContainText(
+    "redondeado hacia arriba al siguiente múltiplo de 0,001 crédito por turno",
+  );
+});
+
+test("accepts typed decimal commas and points in both Spanish provider prices", async ({ page }) => {
+  const mounted = page.waitForRequest("**/api/auth/get-session");
+  await page.goto(`${origin}/es/pricing#estimate`);
+  await mounted;
+
+  const estimate = page.locator("#estimate");
+  await estimate.getByLabel("Tokens de entrada por turno (incluido el historial)").fill("1000000");
+  await estimate.getByLabel("Tokens de salida por turno").fill("1000000");
+  await estimate.getByLabel("Solicitudes al día").fill("1");
+  const inputPrice = estimate.getByLabel("Precio de entrada del proveedor", { exact: false });
+  const outputPrice = estimate.getByLabel("Precio de salida del proveedor", { exact: false });
+
+  await outputPrice.pressSequentially("0");
+  await inputPrice.pressSequentially("1,5");
+  await expect(estimate.getByText("Unos ¥1,5", { exact: true })).toBeVisible();
+  await expect(inputPrice).toHaveValue("1,5");
+
+  await outputPrice.clear();
+  await outputPrice.pressSequentially("2.25");
+  await expect(outputPrice).toHaveValue("2.25");
+  await expect(estimate.getByText("Unos ¥3,75", { exact: true })).toBeVisible();
+
+  await inputPrice.clear();
+  await inputPrice.pressSequentially("1.5");
+  await outputPrice.clear();
+  await outputPrice.pressSequentially("2,25");
+  await expect(inputPrice).toHaveValue("1.5");
+  await expect(outputPrice).toHaveValue("2,25");
+  await expect(estimate.getByText("Unos ¥3,75", { exact: true })).toBeVisible();
+
+  await outputPrice.pressSequentially(".4");
+  await expect(outputPrice).toHaveValue("2,25.4");
+  await expect(estimate.getByText(/Introduce números válidos no negativos/)).toBeVisible();
+});
+
+test.describe("English provider prices in Chromium en-US", () => {
+  test.use({ locale: "en-US" });
+
+  test("retains native grouping when typing a provider price of 1,000", async ({ page }) => {
+    const mounted = page.waitForRequest("**/api/auth/get-session");
+    await page.goto(`${origin}/en/pricing#estimate`);
+    await mounted;
+
+    const estimate = page.locator("#estimate");
+    await estimate.getByLabel("Input tokens per turn (including history)").fill("1000000");
+    await estimate.getByLabel("Output tokens per turn").fill("0");
+    await estimate.getByLabel("Requests per day").fill("1");
+    await estimate.getByLabel("Provider output price (CNY / million tokens)").fill("0");
+    await estimate
+      .getByLabel("Provider input price (CNY / million tokens)")
+      .pressSequentially("1,000");
+    await expect(estimate.locator(".cost-results strong").last()).toHaveText("About ¥1,000");
+  });
+});
+
 for (const width of [390, 1280]) {
   for (const { scenario, query, path, fallback } of [
     {
@@ -1253,7 +1345,9 @@ test("English docs keep navigation, search, table of contents and pagination in 
   await expect(next).toHaveAttribute("href", "/en/docs/channels-models");
   await expect(next).toContainText("Next");
   await page.locator(".site-language").getByRole("button", { name: "Language: English", exact: true }).click();
-  await expect(page.locator(".site-language a", { hasText: "中文" })).toHaveAttribute(
+  // 文档页只有 zh/en 两个语种组，切换器不做 query/fragment 保留（与 main 一致）；
+  // es/pt 组内的 hash 保留由 “preserves pricing state when switching to Spanish” 覆盖。
+  await expect(page.locator('.site-language [role="menuitem"]', { hasText: "中文" })).toHaveAttribute(
     "href",
     "/docs/getting-started",
   );
@@ -1541,6 +1635,8 @@ for (const [path, interval] of [
   ["/ja/pricing", "year"],
   ["/ko/pricing", "month"],
   ["/ko/pricing", "year"],
+  ["/es/pricing", "month"],
+  ["/es/pricing", "year"],
   ["/pt/pricing", "month"],
   ["/pt/pricing", "year"],
 ]) {
@@ -1588,6 +1684,7 @@ for (const [path, interval] of [
     await page.locator('input[type="password"]').fill("test-password");
     await submit.click();
     await expect(page).toHaveURL(`${origin}${destination}`);
+    await expect(card).toHaveAttribute("aria-current", "true");
     await expect(card.locator("h3")).toBeInViewport();
     await expect(card.locator("button.plan-cta")).toBeInViewport();
     await expect(card.locator("button.plan-cta")).toBeEnabled();
@@ -1958,6 +2055,28 @@ test("opens a Japanese account menu for signed-in pricing visitors", async ({ pa
   await expect(menu.getByRole("button", { name: "ログアウト" })).toBeVisible();
 });
 
+test("formats the Spanish account balance with the page language and existing precision", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: englishBuyer }));
+  let balance = 12.345;
+  await page.route("**/api/dashboard", (route) =>
+    route.fulfill({ json: { plan: "free", planUntil: 0, wallet: { balance } } }),
+  );
+  await page.goto(`${origin}/es/pricing#estimate`);
+  const trigger = page.getByRole("button", { name: "Menú de usuario", exact: true });
+  await trigger.click();
+  const balanceLink = page
+    .getByRole("dialog", { name: "Menú de la cuenta", exact: true })
+    .getByRole("link", { name: /Saldo de créditos/ });
+  await expect(balanceLink.getByText("12,345", { exact: true })).toBeVisible();
+
+  await trigger.press("Escape");
+  balance = 12345.678;
+  await trigger.click();
+  await expect(balanceLink.getByText("12.346", { exact: true })).toBeVisible();
+});
+
 test("serves the Japanese landing pages with localized chrome and Chinese guide links", async ({
   page,
 }) => {
@@ -1991,6 +2110,10 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
   await expect(switcher.getByRole("menuitem", { name: "English", exact: true })).toHaveAttribute(
     "href",
     "/en/wechat-bot",
+  );
+  await expect(switcher.getByRole("menuitem", { name: "Español", exact: true })).toHaveAttribute(
+    "href",
+    "/es/wechat-bot",
   );
   await expect(switcher.getByRole("menuitem", { name: "中文", exact: true })).toHaveAttribute(
     "href",
