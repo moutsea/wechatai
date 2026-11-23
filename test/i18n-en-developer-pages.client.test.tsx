@@ -91,6 +91,19 @@ it.each(["quickstart", "examples", "validation", "metering"])(
   },
 );
 
+it("distinguishes built-in image delivery from third-party delivery in the Block row", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/plugins"),
+    "text/html",
+  );
+  const row = Array.from(document.querySelectorAll("#validation tbody tr")).find(
+    (row) => row.firstElementChild?.textContent === "Block",
+  );
+  const state = row?.lastElementChild?.textContent;
+  expect(state).toMatch(/built-in image generation delivers platform-verified images/i);
+  expect(state).toMatch(/third-party media delivery is not open/i);
+});
+
 it("shows alias-only plugin switching and how to find aliases in both instructions", () => {
   const document = new DOMParser().parseFromString(
     renderPublicPage("/en/developers/plugins"),

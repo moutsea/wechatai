@@ -108,7 +108,7 @@ The downloaded JSON Schema is a collection of definitions. Choose the definition
 | Manifest | #/$defs/Manifest | Used by the built-in manifest |
 | Invocation | #/$defs/Invocation | Used by built-in synchronous calls |
 | Result | #/$defs/Result | Used by built-in final results |
-| Block | #/$defs/Block | Text and attachment-reference structure; result attachment delivery is not open |
+| Block | #/$defs/Block | Text and attachment-reference structure. Built-in image generation delivers platform-verified images; third-party media delivery is not open. |
 | Event | #/$defs/Event | Envelope reserved only; event-specific payload structures and transport are not open |
 
 For example, in a JSON Schema validator that supports Draft 2020-12, register the downloaded schema (including its $id), then validate an Invocation with this $ref:
