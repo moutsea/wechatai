@@ -31,7 +31,7 @@ AGT 回调先由 Worker 验证路由令牌并限制请求体，再由 Go 使用�
 
 Grok Bot 使用个人微信账户原有的任务队列、计量和回复投递。VPS 上的 Go 服务按任务 ID 向 Routine 派发 Webhook，Grok 通过 Worker 的 `/api/grok/mcp` 领取任务并回传文字。空闲时没有连接器轮询。Go 将派发回执写入账户目录上一级的 `grok-wakes.sqlite`，仅记录任务 ID、状态和时间。同一任务的所有派发请求须使用同一份持久化回执库，升级或重启 VPS 时保留该文件。后续派发会清理超过 24 小时的回执。推送到 `main` 后，CI 会等同一提交的 Go 发布和健康检查成功，再发布 Worker。被更新提交取代的 Go 发布会跳过对应的 Worker 发布。手动单独发布时也应遵循这个顺序。
 
-Worker 联系不上 VPS、未收到明确回执，或收到可重试的派发失败时，使用同一任务 ID 向 VPS 最多请求三次，重试间隔依次为 1 分钟和 2 分钟。Go 在请求 Routine 前持久化回执。Routine 明确返回 408、429 或 5xx 时，Go 释放本次回执，允许 Worker 重试。如果 POST 发出后没有收到 HTTP 响应，后续对同一 ID 的派发直接返回已有回执。Go 确认受理或 Grok 已领取后，Worker 等待原任务直至 45 分钟期限。反向代理应透传 `X-Wechatai-Grok-Wake` 和 `X-Wechatai-Grok-Receipt`。仅当回执能确认该任务从未被受理时，Worker 才会在先前派发结果未知的情况下提前关闭领取。账户已冻结或已迁至 Go 时，Grok MCP 请求会被拒绝。
+Worker 联系不上 VPS、未收到明确回执，或收到可重试的派发失败时，使用同一任务 ID 向 VPS 最多请求三次，重试间隔依次为 1 分钟和 2 分钟。Go 确认首次请求未发出时，第二次改在 5 秒后。VPS 到 Routine 所在主机的跨境 TCP 握手经常丢包，Go 建连未完成时每隔 700 毫秒另起一次，最多 5 次，先连上的一次发送请求。Go 在请求 Routine 前持久化回执。Routine 明确返回 408、429 或 5xx 时，Go 释放本次回执，允许 Worker 重试。如果 POST 发出后没有收到 HTTP 响应，后续对同一 ID 的派发直接返回已有回执。Go 确认受理或 Grok 已领取后，Worker 等待原任务直至 45 分钟期限。反向代理应透传 `X-Wechatai-Grok-Wake` 和 `X-Wechatai-Grok-Receipt`。仅当回执能确认该任务从未被受理时，Worker 才会在先前派发结果未知的情况下提前关闭领取。账户已冻结或已迁至 Go 时，Grok MCP 请求会被拒绝。
 
 1. 在 Go 服务环境配置独立的 `GROK_DISPATCH_SECRET` 或 `GROK_DISPATCH_SECRET_FILE`（至少 32 字节的随机密钥），发布 Go 程序并重启。待命模式也能独立提供这个签名校验接口。
 2. 在既有 TLS 反向代理上将 `POST /internal/v1/grok/wake` 转给 Go 监听地址。在 `edge-production` 的私有 `WRANGLER_CONFIG` 中将 `env.production.vars.GROK_DISPATCH_ORIGIN` 设为该 HTTPS 源，并配置同值的 Worker Secret `GROK_DISPATCH_SECRET`。再用 Worker Secret `GROK_BOT_ACCOUNTS` 列出可见的 PersonalAccount ID（逗号分隔），填 `all` 对所有账户开放。未设置时 Grok Bot 对所有账户隐藏。三项齐备后，列出的账户才能在插件页配置。
