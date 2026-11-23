@@ -46,6 +46,23 @@ it("renders the complete Wechatai command, including its placeholder", () => {
   expect(document.querySelector("#commands li code")?.textContent).toBe("/wx <command>");
 });
 
+it("directs readers and the AI instruction to current English protocol behavior", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/plugins"),
+    "text/html",
+  );
+  const quickstart = document.getElementById("quickstart");
+  const englishLink = quickstart?.querySelector('a[href="/en/developers/plugins"]');
+  expect(englishLink?.closest("tr")?.textContent).toContain("Current platform behavior");
+  expect(quickstart?.textContent).not.toContain("the Markdown use the same content");
+  const prompt = quickstart?.querySelector("pre > code.language-text")?.textContent;
+  expect(prompt).toMatch(
+    /English HTML for current platform behavior.*\nhttps:\/\/wechatai\.app\/en\/developers\/plugins\n/,
+  );
+  expect(prompt).toContain("https://wechatai.app/developers/plugins.md");
+  expect(prompt).toContain("https://wechatai.app/api/plugins/protocol/1.0/schema.json");
+});
+
 it("documents independent reminder records and how to cancel them", () => {
   const document = new DOMParser().parseFromString(
     renderPublicPage("/en/developers/plugins"),

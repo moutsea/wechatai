@@ -1,8 +1,15 @@
+import { localizedPath } from "../..";
 import { PLUGIN_LIMITS } from "../../../plugin-access";
-import { protocolExamples, protocolLinks, protocolSections } from "../../../plugin-docs";
+import {
+  PLUGIN_DOCS_PATH,
+  protocolExamples,
+  protocolLinks,
+  protocolSections,
+} from "../../../plugin-docs";
 import type { PLUGIN_PROTOCOL_VERSION } from "../../../plugins";
 
 const version: typeof PLUGIN_PROTOCOL_VERSION = protocolExamples.invocation.protocolVersion;
+const englishProtocolPath = localizedPath("en", PLUGIN_DOCS_PATH);
 const code = (language: string, body: string) => "```" + language + "\n" + body + "\n```";
 const json = (value: unknown) => code("json", JSON.stringify(value, null, 2));
 
@@ -13,10 +20,11 @@ function sourceCodeBlock(id: string, language: string): string {
   return block;
 }
 
-export const agentDevelopmentPromptEn = `First read the Wechatai plugin protocol:
-${protocolLinks.markdown}
+export const agentDevelopmentPromptEn = `Read the English HTML for current platform behavior, including WeChat commands:
+${new URL(englishProtocolPath, protocolLinks.documentation)}
 
-Then read the protocol index, examples and JSON Schema:
+For the protocol contract and examples, use the Chinese Markdown reference, JSON index and JSON Schema:
+${protocolLinks.markdown}
 ${protocolLinks.api}
 ${protocolLinks.schema}
 
@@ -34,12 +42,12 @@ export interface PluginProtocolSection {
 const quickstart = `
 ## Start here for AI agents
 
-The addresses below need no sign-in or API key; a direct GET is enough. Reading the docs is free, does not trigger a model call and consumes no credits. The HTML page and the Markdown use the same content; the JSON Schema is generated from the platform's actual validation rules.
+The addresses below need no sign-in or API key; a direct GET is enough. Reading the docs is free, does not trigger a model call and consumes no credits. Use the English HTML for current platform behavior, including WeChat commands. The raw Markdown remains the Chinese protocol reference; the JSON Schema is generated from the platform's actual validation rules.
 
 | Format | Address | Purpose |
 | --- | --- | --- |
-| Web page | [Plugin protocol](/developers/plugins) | Read the protocol and examples |
-| Markdown | [Complete protocol source](${protocolLinks.markdown}) | Preferred entry for an AI agent |
+| Web page | [English plugin protocol](${englishProtocolPath}) | Current platform behavior and examples |
+| Markdown | [Chinese protocol reference](${protocolLinks.markdown}) | Raw Markdown for protocol definitions and examples |
 | JSON API | [Protocol index](${protocolLinks.api}) | Version, availability, billing policy, examples and schema links |
 | Fixed version | [Protocol ${version}](${protocolLinks.versionedApi}) | Read a specific version without automatically moving to the next |
 | JSON Schema | [Validation rules](${protocolLinks.schema}) | Draft 2020-12, with definitions for the five protocol objects |
