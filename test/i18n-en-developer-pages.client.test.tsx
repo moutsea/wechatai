@@ -29,6 +29,18 @@ it("renders the complete Wechatai command, including its placeholder", () => {
   expect(document.querySelector("#commands li code")?.textContent).toBe("/wx <command>");
 });
 
+it("documents independent reminder records and how to cancel them", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/plugins"),
+    "text/html",
+  );
+  const assistant = document.getElementById("个人助理插件 1.0")?.textContent;
+  expect(assistant).toMatch(/record types are note, entry, task and reminder/i);
+  expect(assistant).toMatch(/use a reminder record to schedule a reminder/i);
+  expect(assistant).toMatch(/completing or deleting a task does not cancel reminders/i);
+  expect(assistant).toMatch(/set reminderEnabled to false .*or delete the reminder record/i);
+});
+
 it.each(["quickstart", "examples", "validation", "metering"])(
   "preserves every shared fenced block in #%s, including whitespace and comments",
   (section) => {
