@@ -112,4 +112,16 @@
 
 - 任务级依赖：无。无 `blocked_by`，可与无关卡并行。
 - 复用依赖：`API_LIMIT` 绑定、`secret()` 读取、`billingMode()` 语义、现有 Workers Logs 与测试 fixture 机制；不改它们的行为。
-- PR 负责人：进入「开发中」后由 Coder 指定的本卡实现者，负责按本文件实现、提交、跑检查并开唯一 draft PR；本卡不合并、不部署。
+- PR 负责人：本卡实现者负责按本文件实现、提交与跑检查；draft PR 由「评审通过」步骤的唯一 PR agent 创建；本卡不合并、不部署。
+
+## 实施与复核现状（2026-11-23，需求评审复核）
+
+> 本节由后续会话追加。前面「结论与原子性」中的基线 `b36ca2c` 是评估时快照，已被下面的实施基线取代。
+
+- 分支：`feature/wechatai-api-token-3kh`，实施基线 `origin/main` `708e3e1`；复核基线为代码 HEAD `c14d9268cbe213bd8be60c32d98904c0cc1243df`（本节状态记录提交在其后，只改本文件），工作树干净，与 origin 同名分支同步。本轮未 fetch，`origin/main` 缓存仍为 `708e3e1`，不称其为远端最新。
+- 提交（均含 `affc0518`）：`c355f06` 需求文档；`15235e7` 专用 Bearer、前缀/方法边界、元数据白名单与隔离测试；`26d1ebf` 限流、脱敏审计与对应测试；`d21bd07` 配置/部署文档与空占位；`3de5eb7` 公共 `/api/health` 回归；`f90a8c1` 仓库格式化；`bc8044a` 区分 Secret 写入与部署的文档措辞；`c14d926` 真实 Session 与写路由隔离测试。
+- 实现：`src/server/metrics.ts`（只读入口；独立 `METRICS_API_TOKEN`；SHA-256 摘要恒定时间比较；IP 先限流、有效凭据后限流；503 fail-closed；字段白名单审计）；`src/server/index.ts` 仅在通用 bodyLimit 与 Session 中间件之前挂载 `/api/metrics` 与 `/api/metrics/*`；文档与 `.dev.vars.example` 空占位。
+- 本轮在 HEAD `c14d926` 复核（load 3.38，MemAvailable 约 20 GiB）：`pnpm exec vitest run test/metrics.test.ts` 15/15 通过；`pnpm lint` exit 0；`pnpm typecheck` exit 0；`pnpm check:public` 通过（1062 个文件，未打印密钥）。`git diff origin/main...HEAD` 为 7 个文件、+810/−1；扫描未发现真实凭据。
+- 未在本轮执行：全量 Workers/客户端测试与 `pnpm build`。实现会话已在 `f90a8c1` 记录其通过；其后提交仅文档与测试。CI 与生产结果未知。
+- 状态：实现与验收矩阵已由 `test/metrics.test.ts` 覆盖，剩余为独立评审、适用 CI 与 PR。未合并、未部署、未写生产 Secret、未验证生产可读性；即使健康路由 200 也只证明元数据鉴权。
+- 流转：本卡此前被移回「需求评审」；因实现已完成，本轮不重复实现，直接移交「待评审」。
