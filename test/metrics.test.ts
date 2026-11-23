@@ -253,6 +253,14 @@ describe("metrics routing boundary", () => {
     }
   });
 
+  it("keeps the public health probe independent of metrics auth and limits", async () => {
+    const limiter = fakeLimiter();
+    const response = await call(bindings({ API_LIMIT: limiter.binding }), "/api/health");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, service: "wechatai" });
+    expect(limiter.calls).toEqual([]);
+  });
+
   it("handles the prefix before the general API body limit", async () => {
     const response = await call(bindings(), undefined, {
       method: "POST",
