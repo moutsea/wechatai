@@ -205,7 +205,7 @@ export const MUSE_FAQ_EN: readonly DeveloperFaqItem[] = [
   {
     question: "Why does the plugins page never show “Muse connected”?",
     answer:
-      "Wechatai shows online only after the hook actually polls successfully; a successful install or dry run does not mean connected. First have Muse check that this configuration's hook is enabled and inspect its logs, confirming it was registered and enabled per SETUP.md. The hook fires every 5 seconds with long polling of up to 15 seconds; when it is online normally you do not need to refresh the page. If Muse just finished installing, also wait for the first successful poll after it enabled the hook.",
+      "A successful heartbeat can make Wechatai show Muse online before the first poll. Pairing, a successful install or a dry run alone does not verify that the hook is running. If Muse stays offline, check that this configuration's hook was registered and enabled per SETUP.md and look for heartbeat errors in its logs. If Muse is online but no task arrives, check the hook logs for poll and claim errors after sending a test task from WeChat.",
   },
   {
     question: "Why is no reply arriving in WeChat?",
@@ -220,7 +220,7 @@ export const MUSE_FAQ_EN: readonly DeveloperFaqItem[] = [
   {
     question: "What if the hook is not registered or not enabled?",
     answer:
-      "The installer only saves pairing and the script for this configuration; it does not call Muse's hook management tool automatically. Muse must read the generated SETUP.md, register and enable the hook in your hosted environment, and submit the final reply to Wechatai per the installation package's WORKER.md. Until that is done, Wechatai does not show online and WeChat tasks are not claimed; a dry run of the installer in a terminal is not a substitute for registering and enabling the hook.",
+      "The installer only saves pairing and the script for this configuration; it does not call Muse's hook management tool automatically. Muse must read the generated SETUP.md, register and enable the hook in your hosted environment, and submit the final reply to Wechatai per the installation package's WORKER.md. Neither an online badge nor a dry run is a substitute for enabling the hook and verifying that it can receive and claim a real task.",
   },
   {
     question: "Will tasks be lost while the quota is paused?",
@@ -256,7 +256,7 @@ Connect an existing hosted Muse assistant to Wechatai, send text tasks from WeCh
 3. Muse runs the installer, then reads the generated SETUP.md, registers and enables the hook.
 4. Wait for Wechatai to show "Muse connected" ("Muse 已连接"), send /use muse in the bound WeChat conversation, then send a text task. You can also use @muse for a single call; the actual shortcut follows your configuration.
 
-The connection command is valid for ten minutes; generate a new one after it expires. The same command can be retried in the original environment. The installer only saves pairing and this configuration's script; it does not call Muse's hook management tool automatically, and Muse completes that step per SETUP.md. Online status appears only after an actual successful poll; a successful install or dry run does not mean connected.
+The connection command is valid for ten minutes; generate a new one after it expires. The same command can be retried in the original environment. The installer only saves pairing and this configuration's script; it does not call Muse's hook management tool automatically, and Muse completes that step per SETUP.md. A successful heartbeat can show Muse as online before the first poll. Send a test task from WeChat to confirm that the hook picks it up and returns a reply.
 
 This setup reuses the existing Wechatai WeChat connection; do not have Muse run another iLink bot connection for the same WeChat bot. Re-pairing replaces the old credential and old return route, so wait for the current task to finish and return its result first. The installer prevents replacing a valid connection that still has processing tasks or pending results; when the network, permission or quota is paused, restore the original hook to finish returning results first. If you already disconnected the old connection from the web page, the old queue no longer returns results and you can pair again.
 
@@ -273,7 +273,7 @@ Recent text records for different routes are stored separately; the worker recei
 Check the return channel, the hook and the task itself in this order:
 
 1. No reply in WeChat: first send a message in the original WeChat conversation to confirm the return channel. Resetting, archiving or deleting a session, disconnecting the plugin or rebinding WeChat closes the old return route but cannot automatically stop operations already running in Muse.
-2. Wechatai does not show online: a successful install and a dry run do not mean connected; online appears only after the hook actually polls successfully. While offline, have Muse check the enabled state and logs of this configuration's hook and confirm it was registered and enabled per SETUP.md.
+2. Wechatai does not show online: check that this configuration's hook is registered and enabled per SETUP.md, then look for heartbeat errors in its logs. If Muse is online but no task arrives, check the hook logs for poll and claim errors; the online badge does not confirm that a task was retrieved.
 3. The connection command expired: it is valid for ten minutes; generate a new one on the plugins page after it expires.
 4. Insufficient balance: Wechatai rejects new tasks and pauses proactive notifications, while accepted tasks can still return results and are settled normally on success. During a network failure, disabled plugin or paused membership permission, pending results stay in the local send queue and retry with the same event ID after recovery, without rerunning tools or charging again.
 5. Several people share one environment: different routes only store their own recent text records, while the same hosted environment still shares long-term memory, tools and files.

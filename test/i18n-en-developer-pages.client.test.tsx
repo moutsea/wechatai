@@ -106,3 +106,24 @@ it("shows alias-only plugin switching and how to find aliases in both instructio
     expect(codes, id).not.toContain("/use plugin-name/shortcut/number");
   }
 });
+
+it("distinguishes Muse online status from retrieving a task in the guide and FAQ", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/muse"),
+    "text/html",
+  );
+  const main = document.querySelector("main");
+  const faq = Array.from(main?.querySelectorAll("h3") ?? []).find((heading) =>
+    heading.textContent?.startsWith("Why does the plugins page never show"),
+  );
+  expect(faq?.nextElementSibling?.textContent).toMatch(/heartbeat.*before the first poll/i);
+  const setup = Array.from(main?.querySelectorAll("p") ?? []).find((paragraph) =>
+    paragraph.textContent?.startsWith("The connection command is valid"),
+  );
+  expect(setup?.textContent).toMatch(/heartbeat.*before the first poll/i);
+  expect(setup?.textContent).toMatch(/send a test task.*confirm/i);
+  expect(main?.textContent).toMatch(/if Muse is online but no task arrives, check.*poll and claim/i);
+  expect(main?.textContent).not.toMatch(
+    /online (?:only after|appears only after)|does not show online and WeChat tasks/i,
+  );
+});
