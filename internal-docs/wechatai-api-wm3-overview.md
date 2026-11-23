@@ -115,13 +115,13 @@ window, coverage, summary, daily, plugins
 }
 ```
 
-- `available=true`：当前全部账户都有结构完整的快照，`value` 是完整的快照范围合计；`observed` 与 `value` 相同（保留字段形状，便于消费方统一处理）。
+- `available=true`：当前全部账户都有结构完整的快照；`value` 是这些快照的合计，`observed` 与 `value` 相同（保留字段形状，便于消费方统一处理）。对 `summary` 这只表示账户集合与字段完整，不表示同一时刻或实时；对 `daily` 还要求该日已被所有快照覆盖。
 - `available=false`：`value=null`，`observed` 为当前已同步快照上的观测值；若连一个快照都没有，`observed=null`。`reason` 取以下枚举之一：
   - `not_synced`：部分账户没有快照；
   - `legacy_snapshot`：存在旧结构快照，缺失字段不能推成 0（此时 `observed=null`，避免假零）；
   - `day_incomplete`：今天尚未结束；
   - `not_covered`：至少一个快照采样早于该日结束，未覆盖完整日。
-- `available` 只声明「账户集合与字段完整」，不声明实时。快照累计值的时点由 `coverage.oldestSyncedAt/newestSyncedAt` 表达；文档必须写明「累计用量/存量是快照时点合计，不是实时累计」。
+- `available` 不声明实时。`summary` 的时点由 `coverage.oldestSyncedAt/newestSyncedAt` 表达；不同账户的快照时刻可能不同，合计不是同一时刻的实时值。文档必须写明「累计用量/存量是快照时点合计，不是实时累计」。
 
 ### summary
 
