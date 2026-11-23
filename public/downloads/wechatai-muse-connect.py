@@ -18,7 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ARCHIVE_SHA256 = "a8901628a22bb573210e9548068c202f6f09a0d9490308e7e26fa4ee0a709350"
+ARCHIVE_SHA256 = "944b92828ee8f3c015585e94d23558e1d0b70319cd9764fd6e091e80229f7d60"
 FILES = {"connector.py", "WORKER.md", "README.md", "LICENSE"}
 
 
