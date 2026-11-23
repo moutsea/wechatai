@@ -72,6 +72,12 @@ import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
 import {
   grokInputSchema,
   GROK_DISPATCH_UNAVAILABLE,
+  GROK_RECONNECT_CLAIMED,
+  GROK_RECONNECT_PENDING,
+  GROK_AWAITING_BOT,
+  GROK_REVOKED_CLAIMED,
+  GROK_REVOKED_PENDING,
+  GROK_ROUTINE_CHANGED,
   GROK_SETUP_INCOMPLETE,
   GROK_SETUP_MINUTES,
   type GrokPlugin,
@@ -83,6 +89,7 @@ import {
   prepareGrokWake,
   grokBotEnabled,
   grokDispatcherReady,
+  isStoredGrokWebhook,
   requireGrokDispatcher,
   sealGrokWebhook,
 } from "./grok/dispatch";
@@ -313,6 +320,7 @@ type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: stri
 // Expiry of the window in which a freshly generated Grok MCP credential may
 // register its Routine Webhook. Consumed by the first successful registration.
 const grokSetupKey = (pluginId: string) => `grokSetup:${pluginId}`;
+const grokRegisteredKey = (pluginId: string) => `grokRegistered:${pluginId}`;
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -1021,7 +1029,8 @@ export class PersonalAccount extends DurableObject<Env> {
         };
       } else if (action === "poll") data = await this.claw.poll(pluginId, secret, payload);
       else data = this.claw.handle(pluginId, secret, action, payload);
-      if (action === "event" || action === "grok.finish") {
+      // A registration may also have queued notices for tasks it closed.
+      if (action === "event" || action === "grok.finish" || action === "grok.register") {
         // Alarms cannot overlap. Release idle receive requests so the active alarm
         // can finish and the persisted reply can be delivered without a 35s wait.
         this.wakeWechat();
@@ -1359,10 +1368,17 @@ export class PersonalAccount extends DurableObject<Env> {
           : Boolean(encryptedKey),
     };
   }
+  private grokSetupUntil(pluginId: string) {
+    const until = this.getSetting(grokSetupKey(pluginId), 0);
+    return until > Date.now() ? until : 0;
+  }
   private grokSetupStatus(p: StoredPlugin) {
+    const setupUntil = this.grokSetupUntil(p.id);
     return {
       webhookReady: Boolean(p.encryptedKey),
-      setupPending: this.getSetting(grokSetupKey(p.id), 0) > Date.now(),
+      setupPending: setupUntil > 0,
+      setupUntil,
+      registeredAt: this.getSetting(grokRegisteredKey(p.id), 0),
     };
   }
   // MCP tool for the configuration prompt: the Bot submits its own Routine Webhook.
@@ -1372,17 +1388,32 @@ export class PersonalAccount extends DurableObject<Env> {
     const closed = () =>
       new AppError(
         "grok_setup_closed",
-        "配置指令已过期或已使用。请让用户在微伴网页的 Grok Bot 配置中重新生成配置指令。",
+        "配置指令已过期或已使用。请让用户在微伴网页的 Grok Bot 配置中点「重新开放登记」，再用同一个「微伴」连接器提交，不用重新生成指令。",
         409,
       );
-    if (until <= Date.now()) throw closed();
     const previous = this.plugin(pluginId);
-    const encryptedKey = await sealGrokWebhook(
-      this.env,
-      this.ctx.id.toString(),
-      raw,
-      `${this.ctx.id}:grok:${pluginId}`,
-    );
+    const binding = `${this.ctx.id}:grok:${pluginId}`;
+    const done = {
+      registered: true,
+      next: `配置完成。请用户在微信发送 @${previous.shortcut} 加一句任务验证收发。`,
+    };
+    // A repeated call with the saved Routine succeeds, even after the window
+    // closed, so the Bot never tells the user to regenerate a working setup.
+    if (await isStoredGrokWebhook(this.env, previous.encryptedKey, raw, binding))
+      return this.ctx.storage.transactionSync(() => {
+        this.claw.requireCredential(pluginId, secret);
+        if (JSON.stringify(this.findPlugin(pluginId)) !== JSON.stringify(previous))
+          throw new AppError(
+            "plugin_changed",
+            "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
+            409,
+          );
+        this.sql.exec("DELETE FROM settings WHERE key=?", key);
+        this.setSetting(grokRegisteredKey(pluginId), Date.now());
+        return done;
+      });
+    if (until <= Date.now()) throw closed();
+    const encryptedKey = await sealGrokWebhook(this.env, this.ctx.id.toString(), raw, binding);
     return this.ctx.storage.transactionSync(() => {
       // Sealing yields. A rotation, revocation or edit in the meantime wins.
       this.claw.requireCredential(pluginId, secret);
@@ -1394,13 +1425,14 @@ export class PersonalAccount extends DurableObject<Env> {
           "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
           409,
         );
-      if (current.encryptedKey) this.claw.cancelPluginJobs(pluginId);
+      // The caller holds the current credential, so claimed runs can still
+      // finish and later wakes use the new Routine. Woken tasks the old Routine
+      // never claimed would otherwise hold their conversation until expiry.
+      if (current.encryptedKey) this.grok.failUnclaimedWakes(pluginId, GROK_ROUTINE_CHANGED);
       this.persistPlugin({ ...current, encryptedKey });
       this.sql.exec("DELETE FROM settings WHERE key=?", key);
-      return {
-        registered: true,
-        next: `配置完成。请用户在微信发送 @${current.shortcut} 加一句任务验证收发。`,
-      };
+      this.setSetting(grokRegisteredKey(pluginId), Date.now());
+      return done;
     });
   }
   private remoteAgentAccess(p: StoredPlugin): PluginAccessIssue | null {
@@ -1564,6 +1596,7 @@ export class PersonalAccount extends DurableObject<Env> {
         .safeExtend({ shortcut: editableShortcut })
         .parse({ ...previous, ...values });
       const replace = !!(values.webhookKey || values.webhookUrl);
+      let notified = 0;
       const encryptedKey = replace
         ? await sealGrokWebhook(
             this.env,
@@ -1572,6 +1605,15 @@ export class PersonalAccount extends DurableObject<Env> {
             `${this.ctx.id}:grok:${id}`,
           )
         : (previous?.encryptedKey ?? "");
+      const sameRoutine =
+        replace &&
+        !!previous?.encryptedKey &&
+        (await isStoredGrokWebhook(
+          this.env,
+          previous.encryptedKey,
+          values,
+          `${this.ctx.id}:grok:${id}`,
+        ));
       // The Bot registers its Webhook through MCP after the configuration exists.
       if (!previous) requireGrokDispatcher(this.env, this.ctx.id.toString());
       const p: StoredPlugin = {
@@ -1589,11 +1631,24 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!previous || previous.shortcut !== input.shortcut)
           this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
         // A different Routine may belong to another Bot, so its old credential
-        // must stop. Adding the first Webhook keeps the connector the Bot added.
-        if (previous?.encryptedKey && replace) this.claw.revoke(id, "preserve");
-        if (replace) this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
+        // must stop. Adding the first Webhook keeps the connector the Bot added,
+        // and so does a replacement while the owner's setup window is open. Then,
+        // as when the Bot registers it, only unclaimed wakes of the old Routine close.
+        if (previous?.encryptedKey && replace && !this.grokSetupUntil(id)) {
+          notified = this.grok.failForReconnect(id, GROK_RECONNECT_PENDING, GROK_RECONNECT_CLAIMED);
+          this.claw.revoke(id, "preserve");
+        } else if (previous?.encryptedKey && replace && !sameRoutine)
+          notified = this.grok.failUnclaimedWakes(id, GROK_ROUTINE_CHANGED);
+        if (replace) {
+          this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
+          this.setSetting(grokRegisteredKey(id), Date.now());
+        }
         this.persistPlugin(p);
       });
+      if (notified) {
+        this.wakeWechat();
+        await this.scheduleWechat();
+      }
       return this.publicPlugin(p);
     }
     if (
@@ -3260,9 +3315,8 @@ export class PersonalAccount extends DurableObject<Env> {
         p.maxInputTokens === undefined
       )
         p.maxInputTokens = this.assistant(p.id).maxInputTokens;
-      const remoteAction = /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status)$/.exec(
-        action,
-      );
+      const remoteAction =
+        /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status|Reopen)$/.exec(action);
       const remoteKind = remoteAgentKind(`wechatai/${remoteAction?.[1] ?? "openclaw"}`);
       const queuedReplies = remoteKind === "grok" ? "preserve" : "discard";
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
@@ -3374,7 +3428,11 @@ export class PersonalAccount extends DurableObject<Env> {
         this.ctx.storage.transactionSync(() => {
           this.stopCloudPlugin(String(p.id));
           this.sql.exec("DELETE FROM plugins WHERE id = ?", String(p.id));
-          this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
+          this.sql.exec(
+            "DELETE FROM settings WHERE key IN (?,?)",
+            grokSetupKey(String(p.id)),
+            grokRegisteredKey(String(p.id)),
+          );
         });
         await this.scheduleWechat();
         await this.flushReminderSchedule();
@@ -3401,7 +3459,15 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.museToken" ||
         action === "plugin.grokToken"
       ) {
-        if (remoteKind === "grok") requireGrokDispatcher(this.env, this.ctx.id.toString());
+        let notified = 0;
+        if (remoteKind === "grok") {
+          requireGrokDispatcher(this.env, this.ctx.id.toString());
+          notified = this.grok.failForReconnect(
+            String(p.id),
+            GROK_RECONNECT_PENDING,
+            GROK_RECONNECT_CLAIMED,
+          );
+        }
         data = {
           token: signOpenClawToken(
             this.env,
@@ -3418,7 +3484,18 @@ export class PersonalAccount extends DurableObject<Env> {
           const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
           this.setSetting(grokSetupKey(String(p.id)), setupUntil);
           data = { ...(data as object), setupUntil };
+          // Release an idle receive request so the notices go out now.
+          if (notified) this.wakeWechat();
+          await this.scheduleWechat();
         }
+      } else if (action === "plugin.grokReopen") {
+        // Reopen registration for the credential the Bot already holds.
+        requireGrokDispatcher(this.env, this.ctx.id.toString());
+        if (!this.claw.status(String(p.id)).hasKey)
+          throw new AppError("grok_no_credential", "请先生成配置指令。", 409);
+        const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
+        this.setSetting(grokSetupKey(String(p.id)), setupUntil);
+        data = { setupUntil };
       } else if (
         action === "plugin.clawRevoke" ||
         action === "plugin.hermesRevoke" ||
@@ -3426,9 +3503,15 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.grokRevoke"
       ) {
         this.plugin(String(p.id));
+        const notified =
+          remoteKind === "grok"
+            ? this.grok.failForReconnect(String(p.id), GROK_REVOKED_PENDING, GROK_REVOKED_CLAIMED)
+            : 0;
         this.claw.revoke(String(p.id), queuedReplies);
         this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
         data = { ok: true };
+        if (notified) this.wakeWechat();
+        if (remoteKind === "grok") await this.scheduleWechat();
       } else if (
         action === "plugin.clawStatus" ||
         action === "plugin.hermesStatus" ||
@@ -5561,6 +5644,12 @@ export class PersonalAccount extends DurableObject<Env> {
       requireGrokDispatcher(this.env, this.ctx.id.toString());
       if (!messagePlugin.encryptedKey)
         throw new AppError("grok_setup_incomplete", GROK_SETUP_INCOMPLETE, 409);
+      // Until the Bot makes its first MCP call with the current credential, a
+      // wake reaches a Routine that cannot claim, so hold new work. Any call,
+      // including adding the connector, releases it.
+      const connector = this.claw.status(messagePlugin.id);
+      if (connector.hasKey && !connector.lastSeen)
+        throw new AppError("grok_awaiting_bot", GROK_AWAITING_BOT, 409);
     }
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
       this.createSession(defaultModel.id, "", false, connectionId);
