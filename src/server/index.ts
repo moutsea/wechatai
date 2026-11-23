@@ -63,6 +63,7 @@ import { connectorPoll } from "./connector-poll";
 import { executionCompletionSchema } from "../shared/executor-protocol";
 import { executionAuthorized, EXECUTION_MAX_BYTES } from "./execution-store";
 import { serverMonitorAuthorized, saveServerStatus, adminServerStatus } from "./server-status";
+import { metricsRequest } from "./metrics";
 import {
   isAdmin,
   adminAccessUntil,
@@ -177,6 +178,11 @@ app.put(`${GROK_UPLOAD_PATH}/:token`, async (c) => {
         result.status as ContentfulStatusCode,
       );
 });
+// Read-only operator metadata uses its own bearer credential. Terminate it
+// before the general API body limit and browser session middleware so every
+// result is audited and no request reaches a session, D1 row or account object.
+app.all("/api/metrics", metricsRequest);
+app.all("/api/metrics/*", metricsRequest);
 app.use("/api/*", async (c, next) =>
   c.req.path.startsWith("/api/internal/executor/")
     ? next()
