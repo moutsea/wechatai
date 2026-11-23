@@ -119,6 +119,17 @@ it("shows the platform model-switch command in the English Manifest", () => {
   expect(commands).not.toContain("/model number");
 });
 
+it("documents Anthropic tool results in the next user message", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/plugins"),
+    "text/html",
+  );
+  const section = document.getElementById("DS Chat 插件 1.3 调用语义");
+  expect(section?.textContent).toMatch(
+    /assistant message.*tool_use.*immediately followed by a user message containing.*tool_result/,
+  );
+});
+
 it("distinguishes Muse online status from retrieving a task in the guide and FAQ", () => {
   const document = new DOMParser().parseFromString(
     renderPublicPage("/en/developers/muse"),
