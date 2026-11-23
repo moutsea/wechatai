@@ -846,6 +846,10 @@ app.delete(
   "/api/plugins/:id/grok/token",
   invoke("plugin.grokRevoke", (c) => ({ id: c.req.param("id") })),
 );
+app.post(
+  "/api/plugins/:id/grok/reopen",
+  invoke("plugin.grokReopen", (c) => ({ id: c.req.param("id") })),
+);
 app.get(
   "/api/plugins/:id/grok/status",
   invoke("plugin.grokStatus", (c) => ({ id: c.req.param("id") })),

@@ -72,6 +72,9 @@ import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
 import {
   grokInputSchema,
   GROK_DISPATCH_UNAVAILABLE,
+  GROK_RECONNECT_CLAIMED,
+  GROK_RECONNECT_PENDING,
+  GROK_RECONNECTING,
   GROK_SETUP_INCOMPLETE,
   GROK_SETUP_MINUTES,
   type GrokPlugin,
@@ -83,6 +86,7 @@ import {
   prepareGrokWake,
   grokBotEnabled,
   grokDispatcherReady,
+  isStoredGrokWebhook,
   requireGrokDispatcher,
   sealGrokWebhook,
 } from "./grok/dispatch";
@@ -1359,11 +1363,13 @@ export class PersonalAccount extends DurableObject<Env> {
           : Boolean(encryptedKey),
     };
   }
+  private grokSetupUntil(pluginId: string) {
+    const until = this.getSetting(grokSetupKey(pluginId), 0);
+    return until > Date.now() ? until : 0;
+  }
   private grokSetupStatus(p: StoredPlugin) {
-    return {
-      webhookReady: Boolean(p.encryptedKey),
-      setupPending: this.getSetting(grokSetupKey(p.id), 0) > Date.now(),
-    };
+    const setupUntil = this.grokSetupUntil(p.id);
+    return { webhookReady: Boolean(p.encryptedKey), setupPending: setupUntil > 0, setupUntil };
   }
   // MCP tool for the configuration prompt: the Bot submits its own Routine Webhook.
   private async registerGrokWebhook(pluginId: string, secret: string, raw: unknown) {
@@ -1375,14 +1381,28 @@ export class PersonalAccount extends DurableObject<Env> {
         "配置指令已过期或已使用。请让用户在微伴网页的 Grok Bot 配置中重新生成配置指令。",
         409,
       );
-    if (until <= Date.now()) throw closed();
     const previous = this.plugin(pluginId);
-    const encryptedKey = await sealGrokWebhook(
-      this.env,
-      this.ctx.id.toString(),
-      raw,
-      `${this.ctx.id}:grok:${pluginId}`,
-    );
+    const binding = `${this.ctx.id}:grok:${pluginId}`;
+    const done = {
+      registered: true,
+      next: `配置完成。请用户在微信发送 @${previous.shortcut} 加一句任务验证收发。`,
+    };
+    // A repeated call with the saved Routine succeeds, even after the window
+    // closed, so the Bot never tells the user to regenerate a working setup.
+    if (await isStoredGrokWebhook(this.env, previous.encryptedKey, raw, binding))
+      return this.ctx.storage.transactionSync(() => {
+        this.claw.requireCredential(pluginId, secret);
+        if (JSON.stringify(this.findPlugin(pluginId)) !== JSON.stringify(previous))
+          throw new AppError(
+            "plugin_changed",
+            "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
+            409,
+          );
+        this.sql.exec("DELETE FROM settings WHERE key=?", key);
+        return done;
+      });
+    if (until <= Date.now()) throw closed();
+    const encryptedKey = await sealGrokWebhook(this.env, this.ctx.id.toString(), raw, binding);
     return this.ctx.storage.transactionSync(() => {
       // Sealing yields. A rotation, revocation or edit in the meantime wins.
       this.claw.requireCredential(pluginId, secret);
@@ -1394,13 +1414,11 @@ export class PersonalAccount extends DurableObject<Env> {
           "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
           409,
         );
-      if (current.encryptedKey) this.claw.cancelPluginJobs(pluginId);
+      // The caller holds the current credential, so open tasks stay with it:
+      // later wakes use the new Routine and claimed runs can still finish.
       this.persistPlugin({ ...current, encryptedKey });
       this.sql.exec("DELETE FROM settings WHERE key=?", key);
-      return {
-        registered: true,
-        next: `配置完成。请用户在微信发送 @${current.shortcut} 加一句任务验证收发。`,
-      };
+      return done;
     });
   }
   private remoteAgentAccess(p: StoredPlugin): PluginAccessIssue | null {
@@ -1589,8 +1607,10 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!previous || previous.shortcut !== input.shortcut)
           this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
         // A different Routine may belong to another Bot, so its old credential
-        // must stop. Adding the first Webhook keeps the connector the Bot added.
-        if (previous?.encryptedKey && replace) this.claw.revoke(id, "preserve");
+        // must stop. Adding the first Webhook keeps the connector the Bot added,
+        // and so does a replacement while the owner's setup window is open.
+        if (previous?.encryptedKey && replace && !this.grokSetupUntil(id))
+          this.claw.revoke(id, "preserve");
         if (replace) this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
         this.persistPlugin(p);
       });
@@ -3260,9 +3280,8 @@ export class PersonalAccount extends DurableObject<Env> {
         p.maxInputTokens === undefined
       )
         p.maxInputTokens = this.assistant(p.id).maxInputTokens;
-      const remoteAction = /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status)$/.exec(
-        action,
-      );
+      const remoteAction =
+        /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status|Reopen)$/.exec(action);
       const remoteKind = remoteAgentKind(`wechatai/${remoteAction?.[1] ?? "openclaw"}`);
       const queuedReplies = remoteKind === "grok" ? "preserve" : "discard";
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
@@ -3401,7 +3420,10 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.museToken" ||
         action === "plugin.grokToken"
       ) {
-        if (remoteKind === "grok") requireGrokDispatcher(this.env, this.ctx.id.toString());
+        if (remoteKind === "grok") {
+          requireGrokDispatcher(this.env, this.ctx.id.toString());
+          this.grok.failForReconnect(String(p.id), GROK_RECONNECT_PENDING, GROK_RECONNECT_CLAIMED);
+        }
         data = {
           token: signOpenClawToken(
             this.env,
@@ -3418,7 +3440,16 @@ export class PersonalAccount extends DurableObject<Env> {
           const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
           this.setSetting(grokSetupKey(String(p.id)), setupUntil);
           data = { ...(data as object), setupUntil };
+          await this.scheduleWechat();
         }
+      } else if (action === "plugin.grokReopen") {
+        // Reopen registration for the credential the Bot already holds.
+        requireGrokDispatcher(this.env, this.ctx.id.toString());
+        if (!this.claw.status(String(p.id)).hasKey)
+          throw new AppError("grok_no_credential", "请先生成配置指令。", 409);
+        const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
+        this.setSetting(grokSetupKey(String(p.id)), setupUntil);
+        data = { setupUntil };
       } else if (
         action === "plugin.clawRevoke" ||
         action === "plugin.hermesRevoke" ||
@@ -5561,6 +5592,11 @@ export class PersonalAccount extends DurableObject<Env> {
       requireGrokDispatcher(this.env, this.ctx.id.toString());
       if (!messagePlugin.encryptedKey)
         throw new AppError("grok_setup_incomplete", GROK_SETUP_INCOMPLETE, 409);
+      // A new credential is waiting for the Bot. Until the Bot uses it, a wake
+      // would reach a Routine that can no longer claim, so hold new work. The
+      // window bounds this in case the Bot only connects when it is woken.
+      if (this.grokSetupUntil(messagePlugin.id) && !this.claw.status(messagePlugin.id).lastSeen)
+        throw new AppError("grok_reconnecting", GROK_RECONNECTING, 409);
     }
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
       this.createSession(defaultModel.id, "", false, connectionId);

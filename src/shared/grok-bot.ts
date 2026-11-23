@@ -13,11 +13,20 @@ export type GrokPlugin = Omit<OpenClawPlugin, "pluginId"> & {
   webhookReady?: boolean;
   /** A configuration prompt may still register a Routine Webhook. */
   setupPending?: boolean;
+  /** When the registration window closes; 0 when none is open. */
+  setupUntil?: number;
 };
 /** How long a configuration prompt may register a Routine Webhook after it is generated. */
 export const GROK_SETUP_MINUTES = 30;
 export const GROK_SETUP_INCOMPLETE =
   "Grok Bot 还没完成配置。请在微伴网页的 Grok Bot 配置中复制配置指令，发给你的 Grok Bot。";
+export const GROK_RECONNECTING =
+  "Grok Bot 正在重新连接，这条消息没有发给 Grok Bot。请在微伴网页完成 Grok Bot 配置后再发送。";
+/** Sent to WeChat for open tasks when the owner issues a new connection credential. */
+export const GROK_RECONNECT_PENDING =
+  "Grok Bot 正在重新连接，这条任务没有交给 Grok Bot，未扣平台 credits。重新连接完成后请重新发送。";
+export const GROK_RECONNECT_CLAIMED =
+  "Grok Bot 正在重新连接，这条任务已关闭，未扣平台 credits。Grok Bot 可能仍在处理，结果不会再发回这里，请到 Grok Bot 查看运行记录。";
 export const grokInputSchema = openClawInputSchema.safeExtend({
   agentId: z.literal("main").default("main"),
   ...waitingMessageFields(GROK_WAITING_MESSAGE),
@@ -52,12 +61,24 @@ export function grokSetupPrompt(input: { endpoint: string; token: string; shortc
   return [
     "请帮我把你接入微伴（wechatai.app），让我能在微信里把文字任务交给你，你回复的文字和图片会发回微信。按顺序完成以下步骤：",
     "",
-    `1. 添加一个远程 MCP 服务器（Remote HTTPS），名称「微伴」，地址 ${input.endpoint}，请求头 Authorization: Bearer ${input.token}`,
-    "2. 新建一个名为「微伴微信任务」的 Routine，只用 Webhook 触发，不加定时或其他触发。Routine 指令如下：",
+    `1. 配置名为「微伴」的远程 MCP 服务器（Remote HTTPS），地址 ${input.endpoint}，请求头 Authorization: Bearer ${input.token}。如果已经有名为「微伴」的连接器，只更新它的地址和请求头，不要再添加一个。`,
+    "2. 配置名为「微伴微信任务」的 Routine，只用 Webhook 触发，不加定时或其他触发。已有同名 Routine 时更新它的指令并沿用它，不要新建。Routine 指令如下：",
     grokRoutineInstructions,
-    `3. 读取这个 Routine 的 Webhook POST 地址和 key，调用「微伴」的 wechatai_register_webhook 工具提交。key 不含 Bearer 前缀。请在 ${GROK_SETUP_MINUTES} 分钟内完成这一步。`,
+    `3. 读取这个 Routine 的 Webhook POST 地址和 key，调用「微伴」的 wechatai_register_webhook 工具提交。key 不含 Bearer 前缀。请在 ${GROK_SETUP_MINUTES} 分钟内完成这一步。工具返回成功后不必再次调用。`,
     `4. 工具返回成功后告诉我「配置完成」，我会在微信发 @${input.shortcut} 加一句任务来测试。如果读取不到 Webhook 地址或 key，请告诉我在桌面端哪里复制，我会手动填到微伴。`,
     "",
     "这段指令含有微伴的连接凭据，只用于这次配置，不要发给别人，也不要保存到公开位置。",
+  ].join("\n");
+}
+
+// For an expired registration window. The Bot keeps the connector it already
+// added, so this message carries no credential.
+export function grokReopenPrompt(input: { shortcut: string }) {
+  return [
+    `微伴的 Webhook 登记已重新开放，${GROK_SETUP_MINUTES} 分钟内有效。请继续完成接入：`,
+    "",
+    "1. 确认已有名为「微伴」的 MCP 连接器，并且「微伴微信任务」Routine 已建好。缺哪一项，就按之前那段配置指令补上，不要重复添加。",
+    "2. 读取「微伴微信任务」的 Webhook POST 地址和 key，调用「微伴」的 wechatai_register_webhook 工具提交。key 不含 Bearer 前缀。",
+    `3. 工具返回成功后告诉我「配置完成」，我会在微信发 @${input.shortcut} 加一句任务来测试。`,
   ].join("\n");
 }

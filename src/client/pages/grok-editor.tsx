@@ -8,6 +8,7 @@ import {
   GROK_DISPATCH_UNAVAILABLE,
   GROK_SETUP_MINUTES,
   GROK_WAITING_MESSAGE,
+  grokReopenPrompt,
   grokRoutineInstructions,
   grokSetupPrompt,
   type GrokPlugin,
@@ -23,8 +24,16 @@ type GrokStatus = {
   lastSeen: number;
   webhookReady: boolean;
   setupPending: boolean;
+  setupUntil: number;
 };
-type Setup = { prompt: string; token: string; until: number };
+// "resume" watches a window opened earlier, e.g. before the editor was reopened;
+// "reopen" extends it for the connector the Bot already has (no credential).
+type Setup = {
+  kind: "prompt" | "reopen" | "resume";
+  prompt: string;
+  token?: string;
+  until: number;
+};
 
 export function GrokEditor({
   plugin,
@@ -45,7 +54,12 @@ export function GrokEditor({
       ? { waitingMessageEnabled: saved.waitingMessageEnabled, waitingMessage: saved.waitingMessage }
       : waitingMessageDefaults(GROK_WAITING_MESSAGE),
   );
-  const [setup, setSetup] = useState<Setup | null>(null);
+  const [setup, setSetup] = useState<Setup | null>(() =>
+    saved?.hasKey && saved.setupPending && saved.setupUntil
+      ? { kind: "resume", prompt: "", until: saved.setupUntil }
+      : null,
+  );
+  const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [copied, setCopied] = useState("");
   const [url, setUrl] = useState("");
   const [key, setKey] = useState("");
@@ -134,7 +148,13 @@ export function GrokEditor({
     });
   }
   function generate() {
+    // A new credential stops the connector the Bot already uses.
+    if (saved?.hasKey && !confirmGenerate) {
+      setConfirmGenerate(true);
+      return;
+    }
     void run(async () => {
+      setConfirmGenerate(false);
       setEnabled(true);
       const p = await persist({ enabled: true });
       const value = await request<{ token: string; endpoint: string; setupUntil: number }>(
@@ -143,6 +163,7 @@ export function GrokEditor({
       );
       setEndpoint(value.endpoint);
       setSetup({
+        kind: "prompt",
         token: value.token,
         until: value.setupUntil,
         prompt: grokSetupPrompt({
@@ -151,11 +172,29 @@ export function GrokEditor({
           shortcut: p.shortcut,
         }),
       });
-      setSaved({ ...p, hasKey: true, setupPending: true });
+      setSaved({ ...p, hasKey: true, setupPending: true, setupUntil: value.setupUntil });
       setCopied("");
       setConfirmRevoke(false);
       setNow(Date.now());
       await refresh();
+    });
+  }
+  function reopen() {
+    if (!saved) return;
+    void run(async () => {
+      const { setupUntil } = await request<{ setupUntil: number }>(
+        `/plugins/${saved.id}/grok/reopen`,
+        json({}),
+      );
+      setSetup({
+        kind: "reopen",
+        prompt: grokReopenPrompt({ shortcut: saved.shortcut }),
+        until: setupUntil,
+      });
+      setSaved({ ...saved, setupPending: true, setupUntil });
+      setCopied("");
+      setConfirmGenerate(false);
+      setNow(Date.now());
     });
   }
   function copy(text: string, label: string) {
@@ -170,7 +209,8 @@ export function GrokEditor({
       await request(`/plugins/${saved.id}/grok/token`, { method: "DELETE" });
       setSetup(null);
       setConfirmRevoke(false);
-      setSaved({ ...saved, hasKey: false, setupPending: false });
+      setConfirmGenerate(false);
+      setSaved({ ...saved, hasKey: false, setupPending: false, setupUntil: 0 });
       await refresh();
     });
   }
@@ -245,30 +285,58 @@ export function GrokEditor({
         {setup && (
           <div className="claw-command-panel">
             <div className="claw-command-heading">
-              <strong>复制后发给你的 Grok Bot</strong>
+              <strong>
+                {setup.kind === "resume" ? "等待 Grok Bot 完成登记" : "复制后发给你的 Grok Bot"}
+              </strong>
               <small>
                 {secondsLeft
-                  ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} 后过期`
-                  : "指令已过期"}
+                  ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} 后${setup.kind === "prompt" ? "过期" : "关闭登记"}`
+                  : setup.kind === "prompt"
+                    ? "指令已过期"
+                    : "登记已关闭"}
               </small>
             </div>
-            <pre aria-label="Grok Bot 配置指令">{setup.prompt}</pre>
-            <button
-              type="button"
-              className="button small"
-              disabled={!secondsLeft || busy}
-              onClick={() => copy(setup.prompt, "prompt")}
-            >
-              {copied === "prompt" ? <Check size={15} /> : <Copy size={15} />}
-              {copied === "prompt" ? "已复制" : "复制配置指令"}
-            </button>
-            <p>指令含连接凭据，只发给自己的 Grok Bot，不要公开分享。</p>
+            {setup.prompt ? (
+              <>
+                <pre aria-label="Grok Bot 配置指令">{setup.prompt}</pre>
+                <button
+                  type="button"
+                  className="button small"
+                  disabled={!secondsLeft || busy}
+                  onClick={() => copy(setup.prompt, "prompt")}
+                >
+                  {copied === "prompt" ? <Check size={15} /> : <Copy size={15} />}
+                  {copied === "prompt"
+                    ? "已复制"
+                    : setup.kind === "reopen"
+                      ? "复制提醒"
+                      : "复制配置指令"}
+                </button>
+                <p>
+                  {setup.kind === "reopen"
+                    ? "这段提醒不含凭据，Bot 会沿用已添加的「微伴」连接器。"
+                    : "指令含连接凭据，只发给自己的 Grok Bot，不要公开分享。"}
+                </p>
+              </>
+            ) : (
+              <p>配置指令已经发出。Grok Bot 登记 Webhook 后，这里会自动更新。</p>
+            )}
             <div className="claw-waiting">
               <LoaderCircle size={14} className={secondsLeft ? "claw-spin" : ""} />
               {secondsLeft
                 ? "等待 Grok Bot 登记 Webhook，完成后此处会自动更新"
-                : "未在有效期内完成，请重新生成指令"}
+                : "未在有效期内完成。Bot 已添加「微伴」连接器时，重新开放登记即可，不用换凭据。"}
             </div>
+            {!secondsLeft && saved?.hasKey && (
+              <button
+                type="button"
+                className="button small"
+                disabled={busy || !ready}
+                onClick={reopen}
+              >
+                重新开放登记
+              </button>
+            )}
           </div>
         )}
         <div className="claw-connect-actions">
@@ -278,12 +346,21 @@ export function GrokEditor({
             disabled={busy || !ready}
             onClick={generate}
           >
-            {busy ? "处理中…" : setup ? "重新生成指令" : done ? "重新连接" : "生成配置指令"}
+            {busy
+              ? "处理中…"
+              : confirmGenerate
+                ? "确认重新生成，现有连接器会失效"
+                : setup
+                  ? "重新生成指令"
+                  : done
+                    ? "重新连接"
+                    : "生成配置指令"}
           </button>
         </div>
         {saved?.hasKey && (
           <p className="claw-install-note">
-            重新生成会替换旧的 MCP 凭据。Bot 中原来的「微伴」连接器随即失效，未完成的任务会关闭。
+            重新生成会替换旧的 MCP 凭据，Bot
+            中原来的「微伴」连接器随即失效。未完成的任务会关闭，并在微信里提示重新发送。
           </p>
         )}
       </div>
@@ -355,7 +432,7 @@ export function GrokEditor({
             MCP 服务地址
             <input readOnly value={endpoint} />
           </label>
-          {setup ? (
+          {setup?.token ? (
             <button
               type="button"
               className="button secondary small"

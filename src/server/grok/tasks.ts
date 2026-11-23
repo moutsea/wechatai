@@ -343,6 +343,22 @@ export class GrokTasks {
       .toArray();
     await Promise.all(rows.map((row) => this.wake(row)));
   }
+  // A new credential stops the Routine from claiming or finishing open tasks.
+  // Settle each with a WeChat message instead of letting rotation drop it.
+  failForReconnect(pluginId: string, pending: string, claimed: string) {
+    const rows = this.db
+      .exec<Task>(`SELECT ${fields} ${joined} WHERE ${active} AND j.pluginId=?`, pluginId)
+      .toArray();
+    for (const row of rows) {
+      try {
+        this.fail(row, row.state === "claimed" ? claimed : pending);
+      } catch (error) {
+        // A route that is already gone is cleared by the rotation itself.
+        if (!(error instanceof AppError)) throw error;
+      }
+    }
+    return rows.length;
+  }
   cancelConnection(connectionId: string) {
     this.db.exec(
       `UPDATE claw_jobs SET state='cancelled',text=''

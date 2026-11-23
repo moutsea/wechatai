@@ -66,6 +66,21 @@ export async function sealGrokWebhook(
     );
   return encrypt(env, JSON.stringify(parsed.data), binding);
 }
+// A Bot may repeat a registration whose response it lost or wants to confirm.
+export async function isStoredGrokWebhook(
+  env: Env,
+  sealed: string,
+  input: unknown,
+  binding: string,
+) {
+  const submitted = credentials.safeParse(input);
+  if (!sealed || !submitted.success) return false;
+  const stored = credentials.parse(JSON.parse(await decrypt(env, sealed, binding)));
+  return (
+    stored.webhookUrl === submitted.data.webhookUrl &&
+    stored.webhookKey === submitted.data.webhookKey
+  );
+}
 export async function prepareGrokWake(
   env: Env,
   accountId: string,
