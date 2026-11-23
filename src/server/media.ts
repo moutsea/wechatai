@@ -122,10 +122,14 @@ export class MediaStore {
   row(id: string) {
     return this.sql.exec<OutputAsset>("SELECT * FROM output_assets WHERE id = ?", id).toArray()[0];
   }
-  async save(runId: string, sessionId: string | null, data: Uint8Array) {
+  async save(
+    runId: string,
+    sessionId: string | null,
+    data: Uint8Array,
+    expiresAt = Date.now() + MEDIA_TTL_MS,
+  ) {
     const info = verifyGeneratedImage(data);
     const id = crypto.randomUUID();
-    const expiresAt = Date.now() + MEDIA_TTL_MS;
     await this.bucket.put(this.key(id), data, {
       httpMetadata: { contentType: info.mime },
       customMetadata: { runId, expiresAt: String(expiresAt) },
@@ -196,8 +200,16 @@ export class MediaStore {
     );
     return this.row(id)!;
   }
-  commit(id: string) {
-    this.sql.exec("UPDATE output_assets SET committed = 1 WHERE id = ?", id);
+  /** Pass expiresAt to keep an asset that was saved with a short pre-commit lifetime. */
+  commit(id: string, expiresAt?: number) {
+    if (expiresAt === undefined)
+      this.sql.exec("UPDATE output_assets SET committed = 1 WHERE id = ?", id);
+    else
+      this.sql.exec(
+        "UPDATE output_assets SET committed = 1, expiresAt = ? WHERE id = ?",
+        expiresAt,
+        id,
+      );
   }
   discard(id: string) {
     this.sql.exec("UPDATE output_assets SET committed=-1,expiresAt=0,wechat='' WHERE id=?", id);

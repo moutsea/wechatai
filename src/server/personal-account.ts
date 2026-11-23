@@ -78,6 +78,7 @@ import {
 } from "../shared/grok-bot";
 import { GrokTasks } from "./grok/tasks";
 import { grokSessionReplyText } from "./grok/delivery";
+import { GROK_UPLOAD_PATH, signGrokUploadToken } from "./grok/upload";
 import {
   prepareGrokWake,
   grokBotEnabled,
@@ -194,7 +195,7 @@ import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
 import { pluginNotificationText } from "./plugins/notifications";
 import { assetDownload, missingAsset, validAssetId } from "./asset-download";
-import { MediaStore } from "./media";
+import { MediaStore, MEDIA_TTL_MS } from "./media";
 import {
   imageGenerationInputSchema,
   type ImageGenerationPlugin,
@@ -421,14 +422,22 @@ export class PersonalAccount extends DurableObject<Env> {
       deliver: (event) => {
         const { id, plugin, route, text, units, inputTokens, outputTokens, failed, proactive } =
           event;
+        const images = failed ? [] : event.images;
         this.refreshWallet();
         if (!failed) this.wallet.charge(id, units, units);
         else recordCallFailure(this.sql, id, new AppError("remote_agent_failed", ""));
+        for (const image of images) this.media.commit(image, Date.now() + MEDIA_TTL_MS);
         this.sql.exec(
           "INSERT INTO runs VALUES (?,?, 'complete',?,?)",
           id,
           failed || proactive ? null : route.sessionId,
-          JSON.stringify({ text, cost: units / 1000 }),
+          // Delivery sends `images` instead of text, so remote agent images are
+          // stored as attachments that follow the text parts.
+          JSON.stringify({
+            text,
+            cost: units / 1000,
+            ...(images.length ? { attachments: images } : {}),
+          }),
           Date.now(),
         );
         if (!failed) {
@@ -443,7 +452,12 @@ export class PersonalAccount extends DurableObject<Env> {
             this.sql.exec(
               "INSERT INTO messages (sessionId,role,content,createdAt,inputTokens,outputTokens,cost,model) VALUES (?, 'assistant', ?,?,?,?,?,?)",
               route.sessionId,
-              text,
+              [
+                text,
+                ...images.map(
+                  (image) => `![${remoteAgentName(plugin.pluginId)} 图片](/api/assets/${image})`,
+                ),
+              ].join("\n\n"),
               Date.now(),
               inputTokens,
               outputTokens,
@@ -501,6 +515,12 @@ export class PersonalAccount extends DurableObject<Env> {
           `${ctx.id}:grok:${id}`,
           ref,
         ),
+      this.media,
+      (id, ref, expires) =>
+        new URL(
+          `${GROK_UPLOAD_PATH}/${signGrokUploadToken(env, ctx.id.toString(), id, ref, expires)}`,
+          env.APP_URL,
+        ).href,
     );
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.transactionSync(() => this.personalRecords.init());
@@ -947,6 +967,21 @@ export class PersonalAccount extends DurableObject<Env> {
       this.saveSession(updatedSession);
       return reply;
     });
+  }
+  // The signed upload URL authorizes this call; the task must still be claimed.
+  async grokUpload(pluginId: string, ref: string, data: Uint8Array): Promise<string> {
+    try {
+      return JSON.stringify({ ok: true, data: await this.grok.upload(pluginId, ref, data) });
+    } catch (error) {
+      // Storage failures stay 5xx so the Bot retries the same file.
+      if (!(error instanceof AppError)) throw error;
+      return JSON.stringify({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        status: error.status,
+      });
+    }
   }
   async openClawRequest(
     pluginId: string,
@@ -6104,9 +6139,16 @@ export class PersonalAccount extends DurableObject<Env> {
                 pending.id,
               )
               .toArray()[0];
-            const images = completedRun
-              ? ((JSON.parse(completedRun.response) as { images?: string[] }).images ?? [])
-              : [];
+            const response = completedRun
+              ? (JSON.parse(completedRun.response) as { images?: string[]; attachments?: string[] })
+              : {};
+            const images = response.images ?? [];
+            // Cloud files and remote agent images are sent after every text part.
+            const attachments = cloudTaskId
+              ? cloudFiles.map((file) => file.id)
+              : pending.id.startsWith("claw:")
+                ? (response.attachments ?? [])
+                : [];
             let parts: string[] = [];
             let textReceipt: WechatTextReceipt | undefined;
             const token = this.connection(connectionId).contextToken || message.context_token;
@@ -6178,9 +6220,9 @@ export class PersonalAccount extends DurableObject<Env> {
                 p[i] = (p[i] ?? "") + ch;
                 return p;
               }, []);
-              if (cloudFiles.length && pending.part >= parts.length)
+              if (attachments.length && pending.part >= parts.length)
                 await this.deliverAsset(
-                  cloudFiles[pending.part - parts.length].id,
+                  attachments[pending.part - parts.length],
                   credentials,
                   token,
                   `${pending.id}:${pending.part}`,
@@ -6275,7 +6317,7 @@ export class PersonalAccount extends DurableObject<Env> {
                 throw new AppError("cloud_reply_waiting", CLOUD_REPLY_WAITING_MESSAGE, 503);
               throw error;
             }
-            if (pending.part + 1 >= (images.length || parts.length + cloudFiles.length)) {
+            if (pending.part + 1 >= (images.length || parts.length + attachments.length)) {
               if (pending.id.startsWith("claw:"))
                 console.info(
                   JSON.stringify({

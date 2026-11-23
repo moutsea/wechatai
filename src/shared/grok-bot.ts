@@ -43,14 +43,14 @@ export const grokManifest = pluginManifestSchema.parse({
 
 export const grokRoutineInstructions =
   "收到微伴 Webhook 后，为本次 Routine 运行生成一个新的随机 UUID 作为 claimId，连同 Webhook 的 taskId 调用 wechatai_claim。若未收到领取响应，用原 claimId 重试。claimed 为 false 时停止；为 true 时只执行一次。" +
-  "根据 text 和本次 history 处理请求。重试依赖已截断的要求时先请用户确认，保留 Grok 自身的审批。完成后用领取到的 receipt 和同一 taskId 调用 wechatai_finish，" +
-  "成功时提交 completed，最终文字尽量控制在 maxOutputTokens 内。无法完成时提交 failed 并将 text 留空。网络中断只重试同一份回传。工具提示已超时或已结算时停止回传，不重新执行原任务。";
+  "根据 text 和本次 history 处理请求。重试依赖已截断的要求时先请用户确认，保留 Grok 自身的审批。需要回复图片时，按领取结果中 imageUpload 的说明用 curl 逐张上传，记下返回的 imageId。" +
+  "完成后用领取到的 receipt 和同一 taskId 调用 wechatai_finish，成功时提交 completed，有图片时一并提交 images，最终文字尽量控制在 maxOutputTokens 内。无法完成时提交 failed 并将 text 留空。网络中断只重试同一份回传。工具提示已超时或已结算时停止回传，不重新执行原任务。";
 
 // One message for the user's own Grok Bot chat. The Bot adds the MCP connector,
 // creates the Webhook Routine and returns its URL and key through the connector.
 export function grokSetupPrompt(input: { endpoint: string; token: string; shortcut: string }) {
   return [
-    "请帮我把你接入微伴（wechatai.app），让我能在微信里把文字任务交给你。按顺序完成以下步骤：",
+    "请帮我把你接入微伴（wechatai.app），让我能在微信里把文字任务交给你，你回复的文字和图片会发回微信。按顺序完成以下步骤：",
     "",
     `1. 添加一个远程 MCP 服务器（Remote HTTPS），名称「微伴」，地址 ${input.endpoint}，请求头 Authorization: Bearer ${input.token}`,
     "2. 新建一个名为「微伴微信任务」的 Routine，只用 Webhook 触发，不加定时或其他触发。Routine 指令如下：",
