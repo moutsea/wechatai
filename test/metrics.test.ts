@@ -19,8 +19,10 @@ import pageViewsMigration from "../migrations/0014_page_views.sql?raw";
 import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
 import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
 import adminExpiryMigration from "../migrations/0017_admin_expiry.sql?raw";
+import accountRoutesMigration from "../migrations/0019_account_backend_routes.sql?raw";
 import budgetMigration from "../migrations/0020_analytics_budget.sql?raw";
 import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
+import * as auth from "../src/server/auth";
 import worker from "../src/server/index";
 
 const token = "test-only-metrics-token-0123456789abcdef";
@@ -45,6 +47,7 @@ beforeAll(async () => {
     signupMigration,
     funnelMigration,
     budgetMigration,
+    accountRoutesMigration,
     adminExpiryMigration,
   ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
@@ -141,7 +144,13 @@ async function signUp() {
 
 describe("metrics credentials", () => {
   it("accepts only the dedicated bearer credential", async () => {
+    const createAuth = vi.spyOn(auth, "createAuth");
+    const outbound = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Unexpected fetch"));
     const b = bindings({
+      STRIPE_SECRET_KEY: "sk_test_metrics_fixture",
+      STRIPE_WEBHOOK_SECRET: "whsec_test_only",
+      STRIPE_PORTAL_CONFIG_ID: "bpc_test",
+      STRIPE_PLUS_MONTHLY_PRICE_ID: "price_metrics_fixture",
       DB: new Proxy(
         {},
         {
@@ -168,8 +177,10 @@ describe("metrics credentials", () => {
       documentationVersion: "1",
       timezone: "Asia/Shanghai",
       authenticated: true,
-      billingMode: { available: false, reason: "billing_not_configured" },
+      billingMode: { available: true, mode: "test" },
     });
+    expect(createAuth).not.toHaveBeenCalled();
+    expect(outbound).not.toHaveBeenCalled();
     expect(auditRecords()).toEqual([
       {
         event: "metrics.request",
@@ -298,12 +309,14 @@ describe("metrics routing boundary", () => {
       ["/api/admin/users", "GET"],
       ["/api/admin/sync", "POST"],
       ["/api/admin/users/fixture/gift-plus", "POST"],
+      ["/api/models/fixture", "PATCH"],
+      ["/api/wechat/links", "POST"],
       ["/api/internal/server-status", "POST"],
     ] as const) {
       const response = await call(b, path, {
         method,
         headers: { ...bearer(), origin: env.APP_URL, "content-type": "application/json" },
-        ...(method === "POST" ? { body: "{}" } : {}),
+        ...(method !== "GET" ? { body: "{}" } : {}),
       });
       expect(response.status, `${method} ${path}`).toBe(401);
     }
@@ -311,15 +324,28 @@ describe("metrics routing boundary", () => {
 });
 
 describe("metrics browser session isolation", () => {
-  it("rejects admin and ordinary cookies without a bearer", async () => {
+  it("rejects ordinary, admin and Plus cookies without a bearer", async () => {
     const ordinary = await signUp();
     const admin = await signUp();
+    const plus = await signUp();
     await env.DB.prepare("INSERT INTO admin_user(user_id,created_at) VALUES (?,?)")
       .bind(admin.id, Date.now())
       .run();
+    await env.ACCOUNTS.getByName(plus.id).applyPayment({
+      id: "test-only-metrics-membership",
+      kind: "membership",
+      months: 1,
+    });
+    const dashboard = await worker.fetch(
+      new Request(`${env.APP_URL}/api/dashboard`, { headers: { cookie: plus.cookie } }),
+      env,
+      createExecutionContext(),
+    );
+    expect(dashboard.status).toBe(200);
+    expect(await dashboard.json()).toMatchObject({ plan: "plus" });
 
     const limiter = fakeLimiter();
-    for (const cookie of [ordinary.cookie, admin.cookie]) {
+    for (const cookie of [ordinary.cookie, admin.cookie, plus.cookie]) {
       expect(
         (
           await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
