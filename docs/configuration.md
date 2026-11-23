@@ -42,8 +42,9 @@
 - 认证失败返回 401；已知路径的非 GET 方法返回 405（`Allow: GET`）；未知路径返回 404；限流返回 429（`Retry-After: 60`）；限流绑定不可用返回 503。所有响应带 `Cache-Control: no-store` 与 `X-Robots-Tag: noindex, nofollow`。
 - 限流复用 `API_LIMIT`，在每个 Cloudflare 节点内分别按 IP 和有效凭据计 120 次/60 秒；这不是全球严格配额。无效凭据不消耗有效凭据额度。
 - 审计日志只记录时间、固定路由模板、方法、状态、是否限流和固定原因；不记录原始 URL、query、IP、Authorization、Cookie、请求/响应正文或用户标识。
-- 轮换时直接替换 Secret：旧值立即失效，新值生效，不提供双 token 过渡。
-- 生产写入使用现有私有流程，例如 `pnpm cf:production secret put METRICS_API_TOKEN`，属于需单独授权的生产变更。未获部署授权并完成对应版本验证前，不得声称该接口已上线或 token 已能读取运营数。
+- 轮换时直接替换 Secret；新版本接管全部流量后，旧值失效、新值生效，不提供双 token 过渡。
+- `pnpm cf:production secret put METRICS_API_TOKEN` 在当前线上版本为最新版本时会创建并立即部署新版本，须同时取得写入生产 Secret 和部署的授权。
+- 仅获写入授权时，使用 `pnpm cf:production versions secret put METRICS_API_TOKEN` 创建新版本但不部署；新值只在该版本经单独授权部署并开始接收流量后生效。未获部署授权并完成对应版本验证前，不得声称该接口已上线或 token 已能读取运营数。
 
 ## 公共运行参数
 
