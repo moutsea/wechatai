@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
@@ -19,6 +19,9 @@ export function LanguageSwitcher() {
   const { search, hash } = useLocation();
   const suffix = alternates.includes("pt") ? search + hash : "";
   const [open, setOpen] = useState(false);
+  // The menu hangs from the trigger's right edge unless that would cross the
+  // viewport's left edge, e.g. when a wrapped header puts the trigger on the left.
+  const [alignStart, setAlignStart] = useState(false);
   const menuId = useId();
   const rootRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -35,6 +38,12 @@ export function LanguageSwitcher() {
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !menuRef.current || !triggerRef.current) return;
+    // Measure from the trigger so the result does not depend on the last alignment.
+    setAlignStart(triggerRef.current.getBoundingClientRect().right < menuRef.current.offsetWidth);
   }, [open]);
 
   // Opening with a direction key moves focus into the menu after it renders.
@@ -135,6 +144,7 @@ export function LanguageSwitcher() {
           id={menuId}
           ref={menuRef}
           className="site-language-menu"
+          data-align={alignStart ? "start" : undefined}
           role="menu"
           aria-label={navigation}
           onKeyDown={handleMenuKeyDown}

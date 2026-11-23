@@ -1,4 +1,4 @@
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,6 +63,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+/** Resolves once the app has mounted on `url`, which then asks for the session. */
+const appMounted = (page: Page, url: string) =>
+  page.waitForRequest(
+    (request) =>
+      new URL(request.url()).pathname === "/api/auth/get-session" && request.frame().url() === url,
+  );
+
 /** Switcher endonyms (中文, 日本語) are page chrome, not page copy. */
 function withoutSwitcherLabels(text: string) {
   return text.replaceAll("中文", "").replaceAll("日本語", "");
@@ -72,8 +79,10 @@ function languageTriggerName(htmlLang: string, label: string) {
   if (htmlLang === "ko-KR") return `언어：${label}`;
   if (htmlLang === "ja-JP") return `言語：${label}`;
   if (htmlLang === "en") return `Language: ${label}`;
+  if (htmlLang === "pt-BR") return `Idioma：${label}`;
   return `语言：${label}`;
 }
+const portugueseTrigger = languageTriggerName("pt-BR", "Português");
 
 /** Chinese source strings that must never reach a Japanese page. */
 const CHINESE_RESIDUE =
@@ -153,12 +162,14 @@ for (const group of localePageGroups) {
         await expect(mobile).not.toContainText(/\p{Script=Han}/u);
       }
       if (expected.htmlLang === "pt-BR") {
+        await page.keyboard.press("Escape");
         await page.setViewportSize({ width: 390, height: 844 });
         await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
         const mobile = page.locator(".site-mobile-menu");
-        await expect(mobile.locator("a[hreflang]")).toHaveCount(targets.length);
+        await mobile.getByRole("button", { name: portugueseTrigger, exact: true }).click();
+        await expect(mobile.locator('[role="menuitem"][hreflang]')).toHaveCount(group.length);
         for (const { htmlLang, path } of targets) {
-          const link = mobile.getByRole("link", {
+          const link = mobile.getByRole("menuitem", {
             name: portugueseLanguageNames[htmlLang],
             exact: true,
           });
@@ -223,13 +234,23 @@ for (const [path, heading] of Object.entries(portuguesePages)) {
     for (const [name, href] of [
       ["Entrar", "/login"],
       ["Comece grátis", "/register"],
-      ["Inglês", path.replace("/pt", "/en")],
     ]) {
       const link = header.getByRole("link", { name, exact: true });
       await expect(link).toBeInViewport({ ratio: 1 });
       await expect(link).toHaveAttribute("href", href);
       await link.click({ trial: true });
     }
+    const language = header.getByRole("button", { name: portugueseTrigger, exact: true });
+    await expect(language).toBeInViewport({ ratio: 1 });
+    await language.click();
+    // The wrapped header puts the trigger at the left; the menu must not cross that edge.
+    await expect(header.getByRole("menu")).toBeInViewport({ ratio: 1 });
+    const english = header.getByRole("menuitem", { name: "Inglês", exact: true });
+    await expect(english).toBeInViewport({ ratio: 1 });
+    await expect(english).toHaveAttribute("href", path.replace("/pt", "/en"));
+    await english.click({ trial: true });
+    await page.keyboard.press("Escape");
+    await expect(english).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(834);
     await header.getByRole("link", { name: "Comece grátis" }).click();
     await expect(page).toHaveURL(`${origin}/register`);
@@ -256,7 +277,7 @@ for (const [path, heading] of Object.entries(portuguesePages)) {
       navigation.getByRole("link", { name: "Documentação", exact: true }),
     ).toHaveAttribute("href", "/docs");
     await expect(
-      page.locator(".landing-footer").getByRole("link", { name: "Página inicial do Wechatai" }),
+      page.locator(".landing-footer").getByRole("link", { name: /Wechatai AI IN WECHAT Início/ }),
     ).toHaveAttribute("href", "/pt");
     await expect(page.getByRole("navigation", { name: "Idioma" })).toHaveCount(1);
 
@@ -303,6 +324,25 @@ test.describe("short touch viewport", () => {
       await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
       await touch.detach();
 
+      // When the drawer content fits, the swipe scrolls the page behind it instead.
+      // Either can keep coasting, and Chrome treats a tap during a fling as "stop
+      // scrolling" rather than a click. Tap once neither has moved for 10 frames.
+      await page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            const drawer = document.querySelector(".site-mobile-menu")!;
+            let last = "";
+            let still = 0;
+            const check = () => {
+              const position = `${window.scrollY}:${drawer.scrollTop}`;
+              still = position === last ? still + 1 : 0;
+              last = position;
+              if (still >= 10) resolve();
+              else requestAnimationFrame(check);
+            };
+            requestAnimationFrame(check);
+          }),
+      );
       await expect(register).toBeInViewport({ ratio: 1 });
       // Tap at its current location; locator.tap() could scroll it into view itself.
       const box = (await register.boundingBox())!;
@@ -325,7 +365,8 @@ for (const [path, fragment] of [
     await page.goto(`${origin}/pt${path}#${fragment}`);
     await mounted;
     const switcher = page.getByRole("navigation", { name: "Idioma" });
-    await switcher.getByRole("link", { name: "Inglês", exact: true }).click();
+    await switcher.getByRole("button", { name: portugueseTrigger, exact: true }).click();
+    await switcher.getByRole("menuitem", { name: "Inglês", exact: true }).click();
     await expect(page).toHaveURL(`${origin}/en${path}#${fragment}`);
     await expect(page.locator(`#${fragment}`)).toBeInViewport();
   });
@@ -341,7 +382,8 @@ test("keeps the selected annual plan when switching Portuguese pricing to Englis
   await expect(page.locator("#plan-year")).toHaveAttribute("aria-current", "true");
 
   const switcher = page.getByRole("navigation", { name: "Idioma" });
-  await switcher.getByRole("link", { name: "Inglês", exact: true }).click();
+  await switcher.getByRole("button", { name: portugueseTrigger, exact: true }).click();
+  await switcher.getByRole("menuitem", { name: "Inglês", exact: true }).click();
   await expect(page).toHaveURL(`${origin}/en/pricing${suffix}`);
   await expect(page.locator("#plan-year")).toHaveAttribute("aria-current", "true");
   await expect(page.locator("#plan-year h3")).toBeInViewport();
@@ -351,11 +393,15 @@ test("keeps the pricing estimator open when switching Portuguese to English on m
   page,
 }) => {
   await page.setViewportSize({ width: 360, height: 844 });
+  const mounted = page.waitForRequest("**/api/auth/get-session");
   await page.goto(`${origin}/pt/pricing#estimate`);
+  await mounted;
   await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
 
   await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
-  await page.locator(".site-mobile-menu").getByRole("link", { name: "Inglês" }).click();
+  const mobile = page.locator(".site-mobile-menu");
+  await mobile.getByRole("button", { name: portugueseTrigger, exact: true }).click();
+  await mobile.getByRole("menuitem", { name: "Inglês", exact: true }).click();
   await expect(page).toHaveURL(`${origin}/en/pricing#estimate`);
   await expect(page.locator("#pricing-estimate")).toHaveAttribute("open", "");
   await expect(page.locator("#estimate h2")).toBeInViewport();
@@ -1934,7 +1980,11 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
   await expect(page).toHaveURL(`${origin}/docs/deepseek-in-wechat`);
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
 
+  // The prerendered trigger does nothing until the app mounts; wait for that
+  // before opening the menu, here and after the full reload to English.
+  const japaneseMounted = appMounted(page, `${origin}/ja/wechat-bot`);
   await page.goto(`${origin}/ja/wechat-bot`);
+  await japaneseMounted;
   await expect(page.locator("h1")).toHaveText("WeChat ボットの作り方：まず経路を選ぶ");
   const switcher = page.locator(".site-language");
   await switcher.getByRole("button", { name: "言語：日本語", exact: true }).click();
@@ -1948,8 +1998,10 @@ test("serves the Japanese landing pages with localized chrome and Chinese guide 
   );
   const englishPath = "/en/wechat-bot";
   const destination = page.waitForResponse(`${origin}${englishPath}`);
+  const englishMounted = appMounted(page, `${origin}${englishPath}`);
   await switcher.getByRole("menuitem", { name: "English", exact: true }).click();
   expect((await destination).status()).toBe(200);
+  await englishMounted;
   await expect(page).toHaveURL(`${origin}${englishPath}`);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await switcher.getByRole("button", { name: "Language: English", exact: true }).click();
