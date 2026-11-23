@@ -1931,7 +1931,7 @@ test("serves the English homepage and pricing page without Chinese page copy", a
 });
 
 for (const [path, card, note, register] of [
-  ["/ja", ".landing-plan-free", ".landing-plan-note", "/register?returnTo=%2Fapp"],
+  ["/ja", ".landing-plan-free", ".landing-plan-note", "/register?returnTo=%2Fja%2Fapp"],
   ["/ja/pricing", ".plan-free", ".plan-note", "/register"],
 ]) {
   test(`describes the free plan without promising no registration on ${path}`, async ({ page }) => {
