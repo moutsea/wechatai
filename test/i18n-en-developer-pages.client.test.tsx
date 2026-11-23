@@ -107,6 +107,18 @@ it("shows alias-only plugin switching and how to find aliases in both instructio
   }
 });
 
+it("shows the platform model-switch command in the English Manifest", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/plugins"),
+    "text/html",
+  );
+  const commands = Array.from(document.querySelectorAll("#manifest p code"), (code) =>
+    code.textContent,
+  );
+  expect(commands).toContain("/wx model <number>");
+  expect(commands).not.toContain("/model number");
+});
+
 it("distinguishes Muse online status from retrieving a task in the guide and FAQ", () => {
   const document = new DOMParser().parseFromString(
     renderPublicPage("/en/developers/muse"),
