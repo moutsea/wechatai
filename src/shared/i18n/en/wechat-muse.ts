@@ -23,7 +23,7 @@ const content: SeoPage = {
   highlights: [
     "Reuses the existing WeChat connection; no extra model",
     "The connection command is valid for 10 minutes",
-    "Only text and already-transcribed voice are sent",
+    "Text both ways; replies can carry images",
   ],
   ctaHref: "/app/wechat",
   ctaLabel: "Scan to bind WeChat",
@@ -89,7 +89,7 @@ Repairing the pairing replaces the old credentials and return route. Wait for cu
 - \`/wx help\`, \`/wx status\`, and \`/wx new\` are always handled by Wechatai; \`/wx status\` confirms whether the conversation uses the Muse plugin.
 - \`/wx new\` creates a new return route and recent chat history, but **does not clear Muse's own memory** and cannot cancel a tool operation it has already started.
 
-The first version **sends only text** and voice already transcribed by WeChat. Images, files, tool approvals, and native Muse commands are not forwarded: switch back to the ordinary model or Xiaowei when you need an attachment, and approve operations in Muse.
+Muse receives **text** and voice already transcribed by WeChat. Its replies can also carry up to 4 images, such as generated pictures; WeChat receives the text first, then the images. Images and files sent to Muse, video, tool approvals, and native Muse commands are not forwarded: switch back to the ordinary model or Xiaowei when you need an attachment, and approve operations in Muse.
 
 Muse receives the latest 10 messages, up to 3,000 characters each, as a recent excerpt stored per return route; long-term memory, tools, and files in the same hosted environment remain shared, so do not let mutually untrusted people use the same Muse environment.`,
     },
@@ -116,7 +116,7 @@ Muse's hook triggers every 5 seconds by default and long-polls for up to 15 seco
       title: "Billing and fee boundaries",
       body: `Wechatai charges credits only for **text actually sent in** and **text finally returned**:
 
-- 5,000 input tokens = 1 credit, with output weighted ×8.
+- 5,000 input tokens = 1 credit, with output weighted ×8; each image attached to a reply costs 5 credits.
 - Muse's internal history, system prompts, tool input, and internal calls are not counted in Wechatai credits; failures are not charged as successful bills; waiting notices and platform source notices are not charged.
 - When a reply exceeds the output limit, only the text actually received is billed; the truncation notice does not consume credits, and the cut-off part is not sent later.
 - Model service fees follow the party Muse uses; Wechatai does not handle them and does not promise an amount.
@@ -153,9 +153,9 @@ Credentials and the send queue live under \`~/hooks/state/wechatai-muse/<config 
         "Check WeChat is bound, the hook is enabled, and actual polling succeeds: send /wx help in that WeChat conversation to confirm the reply channel, have Muse confirm the hook is registered and enabled per SETUP.md and check the logs, then use /wx status to confirm the conversation has switched to Muse.",
     },
     {
-      question: "Can Muse receive images or files, or approve tool operations in WeChat?",
+      question: "Can Muse send or receive images or files, or approve tool operations in WeChat?",
       answer:
-        "No. The first version forwards only text and voice already transcribed by WeChat; images, files, tool approvals, and native Muse commands do not pass through Wechatai. Switch back to the ordinary model or Xiaowei for attachments, and approve operations in Muse.",
+        "Muse replies can carry up to 4 PNG, JPEG, or WebP images after you run the connection command in Muse once more to install connector 1.1.0. Images and files sent to Muse, video, tool approvals, and native Muse commands do not pass through Wechatai: switch back to the ordinary model or Xiaowei for attachments, and approve operations in Muse.",
     },
     {
       question: "How does Wechatai bill for Muse?",

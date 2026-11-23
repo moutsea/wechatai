@@ -60,6 +60,7 @@ import {
   readGrokUpload,
 } from "./grok/upload";
 import { connectorPoll } from "./connector-poll";
+import { MUSE_IMAGE_RULES } from "./openclaw-relay";
 import { executionCompletionSchema } from "../shared/executor-protocol";
 import { executionAuthorized, EXECUTION_MAX_BYTES } from "./execution-store";
 import { serverMonitorAuthorized, saveServerStatus, adminServerStatus } from "./server-status";
@@ -170,6 +171,36 @@ app.put(`${GROK_UPLOAD_PATH}/:token`, async (c) => {
   if (!data.length) return c.json({ error: "empty_upload", message: "请上传图片文件" }, 400);
   const account = await accountForGrok(c.env, match.accountId);
   const result = JSON.parse(await account.grokUpload(match.pluginId, match.ref, data));
+  return result.ok
+    ? c.json(result.data, 201)
+    : c.json(
+        { error: result.error, message: result.message },
+        result.status as ContentfulStatusCode,
+      );
+});
+// Muse connectors upload a finished job's images with their channel token, one
+// file per request, before the reply that lists them. Registered before the
+// general API body limit, like Grok uploads.
+app.put("/api/muse/uploads", async (c) => {
+  c.header("Cache-Control", "no-store");
+  const match = parseOpenClawToken(c.env, c.req.header("authorization") || "", "muse");
+  if (!match) return c.json({ error: "unauthorized", message: "连接凭证无效" }, 401);
+  const job = c.req.query("job") ?? "";
+  const runner = c.req.query("runner") ?? "";
+  if (!job || job.length > 300 || !/^[0-9a-f-]{36}$/i.test(runner))
+    return c.json({ error: "invalid_request", message: "缺少任务或 runner 标识" }, 400);
+  if (
+    !(await c.env.API_LIMIT.limit({ key: `muse:upload:${match.accountId}:${match.pluginId}` }))
+      .success
+  )
+    return c.json({ error: "rate_limited", message: "上传过于频繁，请稍后重试" }, 429);
+  const data = await readGrokUpload(c.req.raw);
+  if (!data) return c.json({ error: "image_size", message: MUSE_IMAGE_RULES }, 413);
+  if (!data.length) return c.json({ error: "empty_upload", message: "请上传图片文件" }, 400);
+  const account = c.env.ACCOUNTS.get(c.env.ACCOUNTS.idFromString(match.accountId));
+  const result = JSON.parse(
+    await account.museUpload(match.pluginId, match.secret, job, runner, data),
+  );
   return result.ok
     ? c.json(result.data, 201)
     : c.json(

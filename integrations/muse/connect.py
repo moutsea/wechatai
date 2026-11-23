@@ -34,7 +34,7 @@ class RequestError(RuntimeError):
 
 
 def fetch(url, body=None, token=None):
-    headers = {"Content-Type": "application/json", "User-Agent": "Wechatai-Muse/1.0.0"}
+    headers = {"Content-Type": "application/json", "User-Agent": "Wechatai-Muse/1.1.0"}
     if token:
         headers["Authorization"] = "Bearer " + token
     req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None, headers=headers)
@@ -79,7 +79,7 @@ def check_reconnect(home):
     if not busy and not pending:
         return
     try:
-        fetch(account["endpoint"] + "/api/muse/heartbeat", {"nativeCommands": False, "connectorVersion": "1.0.0"}, account["token"])
+        fetch(account["endpoint"] + "/api/muse/heartbeat", {"nativeCommands": False, "connectorVersion": "1.1.0"}, account["token"])
     except RequestError as error:
         if error.status == 401:
             # An explicitly revoked credential can no longer deliver the old queue.
@@ -119,7 +119,7 @@ def install(home, endpoint, code, plugin_id):
         atomic_write(proof_file, json.dumps({"proof": proof}).encode())
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", proof):
         raise RuntimeError("本地配对证明无效，请重新生成指令")
-    archive = fetch(endpoint + "/downloads/wechatai-muse-1.0.0.tgz")
+    archive = fetch(endpoint + "/downloads/wechatai-muse-1.1.0.tgz")
     if hashlib.sha256(archive).hexdigest() != ARCHIVE_SHA256:
         raise RuntimeError("Muse 连接包校验失败，请刷新页面后重试")
     contents = {}
