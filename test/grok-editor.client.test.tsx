@@ -184,3 +184,51 @@ it("offers to reopen registration when an earlier setup never finished", async (
   expect(markup).not.toContain("验证收发");
   expect(remoteAgentConnection(plugin).label).toBe("待 Bot 连接");
 });
+
+it("finishes a setup only after the Bot has used its credential", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const data = await setup();
+  data.grokBotReady = true;
+  const api = createFakeApi();
+  // The owner saved the Routine by hand inside the window; the Bot has not called yet.
+  const status = {
+    hasKey: true,
+    lastSeen: 0,
+    webhookReady: true,
+    setupPending: false,
+    setupUntil: 0,
+    registeredAt: Date.now(),
+  };
+  const request = ((path: string, options?: RequestInit) =>
+    path.endsWith("/grok/status")
+      ? Promise.resolve({ ...status })
+      : api(path, options)) as typeof api;
+  const notify = vi.fn();
+  vi.mocked(useApp).mockReturnValue({ ...vi.mocked(useApp)(), data, request, notify });
+  vi.useFakeTimers();
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  try {
+    const plugin = configured({
+      lastSeen: 0,
+      setupPending: true,
+      setupUntil: Date.now() + 10 * 60_000,
+    });
+    await act(async () =>
+      root.render(<GrokEditor plugin={plugin} onClose={() => {}} onSaved={() => {}} />),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(notify).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Webhook 已保存");
+    status.lastSeen = Date.now();
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(notify).toHaveBeenCalledWith("Grok Bot 已完成配置，可以去微信测试了");
+    expect(container.textContent).toContain("验证收发");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});

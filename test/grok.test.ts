@@ -134,6 +134,12 @@ async function setup({ viaPrompt = false } = {}) {
       }
       return taskId;
     });
+  // Bumped whenever idle WeChat receive requests are released early.
+  const wakeVersion = () =>
+    runInDurableObject(
+      stub,
+      (instance) => (instance as unknown as { wechatWakeVersion: number }).wechatWakeVersion,
+    );
   const restart = async () => {
     await abortAllDurableObjects();
     stub = env.ACCOUNTS.get(stub.id);
@@ -151,6 +157,7 @@ async function setup({ viaPrompt = false } = {}) {
     wake,
     token,
     restart,
+    wakeVersion,
   };
 }
 it("runs a text round trip, reuses only the route history, and settles one result once", async () => {
@@ -464,7 +471,9 @@ it("tells WeChat about open tasks when the owner reconnects, and holds new messa
   const claim = await c.tool("wechatai_claim", { taskId: first, claimId: crypto.randomUUID() });
   await c.send("第二条");
   const before = (await c.stub.snapshot()).wallet.balance;
+  const woke = await c.wakeVersion();
   const { data } = await c.api("plugin.grokToken", { id: c.id });
+  expect(await c.wakeVersion()).toBeGreaterThan(woke);
   const notices = (await deliverQueuedReplies(c.stub, 2)).map((x) => x.text);
   expect(notices).toEqual(expect.arrayContaining([GROK_RECONNECT_CLAIMED, GROK_RECONNECT_PENDING]));
   expect((await c.stub.snapshot()).wallet.balance).toBe(before);
@@ -588,9 +597,12 @@ it.each([
     const alarms = () =>
       runInDurableObject(c.stub, (_, s) => vi.mocked(s.storage.setAlarm).mock.calls.length);
     const scheduled = await alarms();
+    const woke = await c.wakeVersion();
     expect((await c.api(action, { id: c.id, webhookUrl, ...changes })).ok).toBe(true);
-    // The notices go out with the next alarm, not whenever the account wakes next.
+    // The notices go out with the next alarm, not whenever the account wakes next,
+    // and an idle receive request yields instead of holding that alarm for 35s.
     expect(await alarms()).toBeGreaterThan(scheduled);
+    expect(await c.wakeVersion()).toBeGreaterThan(woke);
     expect((await deliverQueuedReplies(c.stub, 2)).map((x) => x.text)).toEqual(
       expect.arrayContaining([pending, claimed]),
     );
@@ -598,41 +610,61 @@ it.each([
   },
 );
 
-it("closes woken tasks the old Routine never claimed when the Bot registers another Routine", async () => {
+it.each(["the Bot registers another Routine", "the owner saves another Routine by hand"] as const)(
+  "closes woken tasks the old Routine never claimed when %s",
+  async (how) => {
+    const c = await setup();
+    await c.send("/use grok");
+    await c.send("旧 Routine 没领取");
+    const stuck = await c.wake();
+    expect(stuck).toBeTruthy();
+    await c.send("下一条");
+    const { data } = await c.api("plugin.grokReopen", { id: c.id });
+    expect(data.setupUntil).toBeGreaterThan(Date.now());
+    const routine = { webhookUrl: `${webhookUrl}-2`, webhookKey: "second-routine-key" };
+    const before = (await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt;
+    const alarms = () =>
+      runInDurableObject(c.stub, (_, s) => vi.mocked(s.storage.setAlarm).mock.calls.length);
+    const scheduled = await alarms();
+    if (how === "the Bot registers another Routine")
+      expect(await c.tool("wechatai_register_webhook", routine)).toMatchObject({
+        registered: true,
+      });
+    else expect((await c.api("plugin.save", { id: c.id, ...routine })).ok).toBe(true);
+    expect(await alarms()).toBeGreaterThan(scheduled);
+    expect((await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt).toBeGreaterThan(
+      before,
+    );
+    expect((await deliverQueuedReplies(c.stub)).map((x) => x.text)).toEqual([GROK_ROUTINE_CHANGED]);
+    expect(await c.tool("wechatai_claim", { taskId: stuck })).toEqual({ claimed: false });
+    // The conversation is free again; the next task wakes the new Routine.
+    await runInDurableObject(c.stub, async (instance) => {
+      let posted = "";
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        posted = JSON.parse(await new Request(input).text()).webhookUrl;
+        return new Response(null, { status: 204 });
+      });
+      try {
+        await (instance as unknown as { grok: GrokTasks }).grok.dispatchDue();
+      } finally {
+        fetch.mockRestore();
+      }
+      expect(posted).toBe(routine.webhookUrl);
+    });
+  },
+);
+
+it("keeps woken tasks when the owner saves the same Routine again in an open window", async () => {
   const c = await setup();
   await c.send("/use grok");
-  await c.send("旧 Routine 没领取");
-  const stuck = await c.wake();
-  expect(stuck).toBeTruthy();
-  await c.send("下一条");
-  const { data } = await c.api("plugin.grokReopen", { id: c.id });
-  expect(data.setupUntil).toBeGreaterThan(Date.now());
-  const routine = { webhookUrl: `${webhookUrl}-2`, webhookKey: "second-routine-key" };
-  const before = (await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt;
-  const alarms = () =>
-    runInDurableObject(c.stub, (_, s) => vi.mocked(s.storage.setAlarm).mock.calls.length);
-  const scheduled = await alarms();
-  expect(await c.tool("wechatai_register_webhook", routine)).toMatchObject({ registered: true });
-  expect(await alarms()).toBeGreaterThan(scheduled);
-  expect((await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt).toBeGreaterThan(
-    before,
-  );
-  expect((await deliverQueuedReplies(c.stub)).map((x) => x.text)).toEqual([GROK_ROUTINE_CHANGED]);
-  expect(await c.tool("wechatai_claim", { taskId: stuck })).toEqual({ claimed: false });
-  // The conversation is free again; the next task wakes the new Routine.
-  await runInDurableObject(c.stub, async (instance) => {
-    let posted = "";
-    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      posted = JSON.parse(await new Request(input).text()).webhookUrl;
-      return new Response(null, { status: 204 });
-    });
-    try {
-      await (instance as unknown as { grok: GrokTasks }).grok.dispatchDue();
-    } finally {
-      fetch.mockRestore();
-    }
-    expect(posted).toBe(routine.webhookUrl);
-  });
+  await c.send("已唤醒");
+  const woken = await c.wake();
+  expect((await c.api("plugin.grokReopen", { id: c.id })).ok).toBe(true);
+  expect((await c.api("plugin.save", { id: c.id, webhookUrl, webhookKey })).ok).toBe(true);
+  expect(await deliverQueuedReplies(c.stub)).toEqual([]);
+  expect(
+    await c.tool("wechatai_claim", { taskId: woken, claimId: crypto.randomUUID() }),
+  ).toMatchObject({ claimed: true });
 });
 
 it("accepts a repeated registration of the saved Routine after the window closes", async () => {

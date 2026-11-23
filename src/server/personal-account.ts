@@ -1605,6 +1605,15 @@ export class PersonalAccount extends DurableObject<Env> {
             `${this.ctx.id}:grok:${id}`,
           )
         : (previous?.encryptedKey ?? "");
+      const sameRoutine =
+        replace &&
+        !!previous?.encryptedKey &&
+        (await isStoredGrokWebhook(
+          this.env,
+          previous.encryptedKey,
+          values,
+          `${this.ctx.id}:grok:${id}`,
+        ));
       // The Bot registers its Webhook through MCP after the configuration exists.
       if (!previous) requireGrokDispatcher(this.env, this.ctx.id.toString());
       const p: StoredPlugin = {
@@ -1623,18 +1632,23 @@ export class PersonalAccount extends DurableObject<Env> {
           this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
         // A different Routine may belong to another Bot, so its old credential
         // must stop. Adding the first Webhook keeps the connector the Bot added,
-        // and so does a replacement while the owner's setup window is open.
+        // and so does a replacement while the owner's setup window is open. Then,
+        // as when the Bot registers it, only unclaimed wakes of the old Routine close.
         if (previous?.encryptedKey && replace && !this.grokSetupUntil(id)) {
           notified = this.grok.failForReconnect(id, GROK_RECONNECT_PENDING, GROK_RECONNECT_CLAIMED);
           this.claw.revoke(id, "preserve");
-        }
+        } else if (previous?.encryptedKey && replace && !sameRoutine)
+          notified = this.grok.failUnclaimedWakes(id, GROK_ROUTINE_CHANGED);
         if (replace) {
           this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
           this.setSetting(grokRegisteredKey(id), Date.now());
         }
         this.persistPlugin(p);
       });
-      if (notified) await this.scheduleWechat();
+      if (notified) {
+        this.wakeWechat();
+        await this.scheduleWechat();
+      }
       return this.publicPlugin(p);
     }
     if (
@@ -3445,9 +3459,14 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.museToken" ||
         action === "plugin.grokToken"
       ) {
+        let notified = 0;
         if (remoteKind === "grok") {
           requireGrokDispatcher(this.env, this.ctx.id.toString());
-          this.grok.failForReconnect(String(p.id), GROK_RECONNECT_PENDING, GROK_RECONNECT_CLAIMED);
+          notified = this.grok.failForReconnect(
+            String(p.id),
+            GROK_RECONNECT_PENDING,
+            GROK_RECONNECT_CLAIMED,
+          );
         }
         data = {
           token: signOpenClawToken(
@@ -3465,6 +3484,8 @@ export class PersonalAccount extends DurableObject<Env> {
           const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
           this.setSetting(grokSetupKey(String(p.id)), setupUntil);
           data = { ...(data as object), setupUntil };
+          // Release an idle receive request so the notices go out now.
+          if (notified) this.wakeWechat();
           await this.scheduleWechat();
         }
       } else if (action === "plugin.grokReopen") {
@@ -3482,11 +3503,14 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.grokRevoke"
       ) {
         this.plugin(String(p.id));
-        if (remoteKind === "grok")
-          this.grok.failForReconnect(String(p.id), GROK_REVOKED_PENDING, GROK_REVOKED_CLAIMED);
+        const notified =
+          remoteKind === "grok"
+            ? this.grok.failForReconnect(String(p.id), GROK_REVOKED_PENDING, GROK_REVOKED_CLAIMED)
+            : 0;
         this.claw.revoke(String(p.id), queuedReplies);
         this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
         data = { ok: true };
+        if (notified) this.wakeWechat();
         if (remoteKind === "grok") await this.scheduleWechat();
       } else if (
         action === "plugin.clawStatus" ||

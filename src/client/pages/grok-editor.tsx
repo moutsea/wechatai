@@ -88,9 +88,11 @@ export function GrokEditor({
         if (stopped) return;
         setSaved((p) => (p ? { ...p, ...state } : p));
         // Compare server times: a window that merely expired is not a registration.
+        // A Routine saved by hand still waits for the Bot to use its credential.
         const opened = until - GROK_SETUP_MINUTES * 60_000;
         if (
           state.hasKey &&
+          state.lastSeen &&
           state.webhookReady &&
           !state.setupPending &&
           (state.registeredAt ?? 0) >= opened
@@ -348,7 +350,9 @@ export function GrokEditor({
             <div className="claw-waiting">
               <LoaderCircle size={14} className={secondsLeft ? "claw-spin" : ""} />
               {secondsLeft
-                ? "等待 Grok Bot 登记 Webhook，完成后此处会自动更新"
+                ? saved?.webhookReady && !saved.setupPending && !saved.lastSeen
+                  ? "Webhook 已保存。Grok Bot 第一次调用「微伴」连接器后即完成，此处会自动更新"
+                  : "等待 Grok Bot 登记 Webhook，完成后此处会自动更新"
                 : "未在有效期内完成。Bot 已添加「微伴」连接器时，重新开放登记即可，不用换凭据。"}
             </div>
             {!secondsLeft && saved?.hasKey && (

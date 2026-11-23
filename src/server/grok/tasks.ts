@@ -375,6 +375,7 @@ export class GrokTasks {
         if (!(error instanceof AppError)) throw error;
       }
     }
+    return rows.length;
   }
   cancelConnection(connectionId: string) {
     this.db.exec(
