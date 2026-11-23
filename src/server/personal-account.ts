@@ -75,6 +75,9 @@ import {
   GROK_RECONNECT_CLAIMED,
   GROK_RECONNECT_PENDING,
   GROK_RECONNECTING,
+  GROK_REVOKED_CLAIMED,
+  GROK_REVOKED_PENDING,
+  GROK_ROUTINE_CHANGED,
   GROK_SETUP_INCOMPLETE,
   GROK_SETUP_MINUTES,
   type GrokPlugin,
@@ -317,6 +320,9 @@ type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: stri
 // Expiry of the window in which a freshly generated Grok MCP credential may
 // register its Routine Webhook. Consumed by the first successful registration.
 const grokSetupKey = (pluginId: string) => `grokSetup:${pluginId}`;
+// Set when a new credential replaces one a Bot may still be using.
+const grokReconnectKey = (pluginId: string) => `grokReconnect:${pluginId}`;
+const grokRegisteredKey = (pluginId: string) => `grokRegistered:${pluginId}`;
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -1369,7 +1375,12 @@ export class PersonalAccount extends DurableObject<Env> {
   }
   private grokSetupStatus(p: StoredPlugin) {
     const setupUntil = this.grokSetupUntil(p.id);
-    return { webhookReady: Boolean(p.encryptedKey), setupPending: setupUntil > 0, setupUntil };
+    return {
+      webhookReady: Boolean(p.encryptedKey),
+      setupPending: setupUntil > 0,
+      setupUntil,
+      registeredAt: this.getSetting(grokRegisteredKey(p.id), 0),
+    };
   }
   // MCP tool for the configuration prompt: the Bot submits its own Routine Webhook.
   private async registerGrokWebhook(pluginId: string, secret: string, raw: unknown) {
@@ -1378,7 +1389,7 @@ export class PersonalAccount extends DurableObject<Env> {
     const closed = () =>
       new AppError(
         "grok_setup_closed",
-        "配置指令已过期或已使用。请让用户在微伴网页的 Grok Bot 配置中重新生成配置指令。",
+        "配置指令已过期或已使用。请让用户在微伴网页的 Grok Bot 配置中点「重新开放登记」，再用同一个「微伴」连接器提交，不用重新生成指令。",
         409,
       );
     const previous = this.plugin(pluginId);
@@ -1399,6 +1410,7 @@ export class PersonalAccount extends DurableObject<Env> {
             409,
           );
         this.sql.exec("DELETE FROM settings WHERE key=?", key);
+        this.setSetting(grokRegisteredKey(pluginId), Date.now());
         return done;
       });
     if (until <= Date.now()) throw closed();
@@ -1414,10 +1426,13 @@ export class PersonalAccount extends DurableObject<Env> {
           "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
           409,
         );
-      // The caller holds the current credential, so open tasks stay with it:
-      // later wakes use the new Routine and claimed runs can still finish.
+      // The caller holds the current credential, so claimed runs can still
+      // finish and later wakes use the new Routine. Woken tasks the old Routine
+      // never claimed would otherwise hold their conversation until expiry.
+      if (current.encryptedKey) this.grok.failUnclaimedWakes(pluginId, GROK_ROUTINE_CHANGED);
       this.persistPlugin({ ...current, encryptedKey });
       this.sql.exec("DELETE FROM settings WHERE key=?", key);
+      this.setSetting(grokRegisteredKey(pluginId), Date.now());
       return done;
     });
   }
@@ -1609,9 +1624,15 @@ export class PersonalAccount extends DurableObject<Env> {
         // A different Routine may belong to another Bot, so its old credential
         // must stop. Adding the first Webhook keeps the connector the Bot added,
         // and so does a replacement while the owner's setup window is open.
-        if (previous?.encryptedKey && replace && !this.grokSetupUntil(id))
+        if (previous?.encryptedKey && replace && !this.grokSetupUntil(id)) {
+          this.grok.failForReconnect(id, GROK_RECONNECT_PENDING, GROK_RECONNECT_CLAIMED);
           this.claw.revoke(id, "preserve");
-        if (replace) this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
+          this.sql.exec("DELETE FROM settings WHERE key=?", grokReconnectKey(id));
+        }
+        if (replace) {
+          this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
+          this.setSetting(grokRegisteredKey(id), Date.now());
+        }
         this.persistPlugin(p);
       });
       return this.publicPlugin(p);
@@ -3393,7 +3414,12 @@ export class PersonalAccount extends DurableObject<Env> {
         this.ctx.storage.transactionSync(() => {
           this.stopCloudPlugin(String(p.id));
           this.sql.exec("DELETE FROM plugins WHERE id = ?", String(p.id));
-          this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
+          this.sql.exec(
+            "DELETE FROM settings WHERE key IN (?,?,?)",
+            grokSetupKey(String(p.id)),
+            grokReconnectKey(String(p.id)),
+            grokRegisteredKey(String(p.id)),
+          );
         });
         await this.scheduleWechat();
         await this.flushReminderSchedule();
@@ -3420,6 +3446,8 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.museToken" ||
         action === "plugin.grokToken"
       ) {
+        // A Bot may still be using the credential this rotation replaces.
+        const replacing = remoteKind === "grok" && this.claw.status(String(p.id)).hasKey;
         if (remoteKind === "grok") {
           requireGrokDispatcher(this.env, this.ctx.id.toString());
           this.grok.failForReconnect(String(p.id), GROK_RECONNECT_PENDING, GROK_RECONNECT_CLAIMED);
@@ -3439,6 +3467,8 @@ export class PersonalAccount extends DurableObject<Env> {
         if (remoteKind === "grok") {
           const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
           this.setSetting(grokSetupKey(String(p.id)), setupUntil);
+          if (replacing) this.setSetting(grokReconnectKey(String(p.id)), 1);
+          else this.sql.exec("DELETE FROM settings WHERE key=?", grokReconnectKey(String(p.id)));
           data = { ...(data as object), setupUntil };
           await this.scheduleWechat();
         }
@@ -3457,9 +3487,16 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.grokRevoke"
       ) {
         this.plugin(String(p.id));
+        if (remoteKind === "grok")
+          this.grok.failForReconnect(String(p.id), GROK_REVOKED_PENDING, GROK_REVOKED_CLAIMED);
         this.claw.revoke(String(p.id), queuedReplies);
-        this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
+        this.sql.exec(
+          "DELETE FROM settings WHERE key IN (?,?)",
+          grokSetupKey(String(p.id)),
+          grokReconnectKey(String(p.id)),
+        );
         data = { ok: true };
+        if (remoteKind === "grok") await this.scheduleWechat();
       } else if (
         action === "plugin.clawStatus" ||
         action === "plugin.hermesStatus" ||
@@ -5592,10 +5629,14 @@ export class PersonalAccount extends DurableObject<Env> {
       requireGrokDispatcher(this.env, this.ctx.id.toString());
       if (!messagePlugin.encryptedKey)
         throw new AppError("grok_setup_incomplete", GROK_SETUP_INCOMPLETE, 409);
-      // A new credential is waiting for the Bot. Until the Bot uses it, a wake
-      // would reach a Routine that can no longer claim, so hold new work. The
-      // window bounds this in case the Bot only connects when it is woken.
-      if (this.grokSetupUntil(messagePlugin.id) && !this.claw.status(messagePlugin.id).lastSeen)
+      // A reconnection replaced the credential the Bot was using. Until the Bot
+      // uses the new one, a wake reaches a Routine that can no longer claim, so
+      // hold new work. A first setup is not held: its Bot may only connect
+      // once it is woken.
+      if (
+        this.getSetting(grokReconnectKey(messagePlugin.id), 0) &&
+        !this.claw.status(messagePlugin.id).lastSeen
+      )
         throw new AppError("grok_reconnecting", GROK_RECONNECTING, 409);
     }
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)

@@ -25,6 +25,7 @@ type GrokStatus = {
   webhookReady: boolean;
   setupPending: boolean;
   setupUntil: number;
+  registeredAt: number;
 };
 // "resume" watches a window opened earlier, e.g. before the editor was reopened;
 // "reopen" extends it for the connector the Bot already has (no credential).
@@ -86,7 +87,14 @@ export function GrokEditor({
         const state = await helpers.current.request<GrokStatus>(`/plugins/${pluginId}/grok/status`);
         if (stopped) return;
         setSaved((p) => (p ? { ...p, ...state } : p));
-        if (state.hasKey && state.webhookReady && !state.setupPending && Date.now() < until) {
+        // Compare server times: a window that merely expired is not a registration.
+        const opened = until - GROK_SETUP_MINUTES * 60_000;
+        if (
+          state.hasKey &&
+          state.webhookReady &&
+          !state.setupPending &&
+          (state.registeredAt ?? 0) >= opened
+        ) {
           stopped = true;
           setSetup(null);
           helpers.current.notify("Grok Bot 已完成配置，可以去微信测试了");
@@ -96,7 +104,8 @@ export function GrokEditor({
       } catch {
         // The next poll retries; the countdown shows when the prompt expires.
       } finally {
-        if (!stopped && Date.now() < until) timer = setTimeout(() => void poll(), 3000);
+        // A minute of grace covers a client clock behind the server's.
+        if (!stopped && Date.now() < until + 60_000) timer = setTimeout(() => void poll(), 3000);
       }
     }
     void poll();
@@ -112,7 +121,8 @@ export function GrokEditor({
   }, [setup]);
   const secondsLeft = setup ? Math.max(0, Math.ceil((setup.until - now) / 1000)) : 0;
   const connection = remoteAgentConnection({ ...(saved ?? { hasKey: false }), pluginId: GROK_ID });
-  const configured = !!saved?.hasKey && saved.webhookReady !== false;
+  // lastSeen is set by the Bot's first MCP call with the current credential.
+  const configured = !!saved?.hasKey && saved.webhookReady !== false && !!saved.lastSeen;
   async function run(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -254,7 +264,21 @@ export function GrokEditor({
             </p>
           </div>
         </div>
-        {ready && !setup && !done && (
+        {ready && !setup && !done && saved?.hasKey && (
+          <div className="claw-command-panel">
+            <div className="claw-command-heading">
+              <strong>上次的配置还没完成</strong>
+            </div>
+            <p>
+              如果 Grok Bot
+              已经按指令添加了「微伴」连接器，重新开放登记，再把提醒发给它即可，不用换凭据。
+            </p>
+            <button type="button" className="button small" disabled={busy} onClick={reopen}>
+              重新开放登记
+            </button>
+          </div>
+        )}
+        {ready && !setup && !done && !saved?.hasKey && (
           <ol className="claw-steps">
             <li>
               <span>1</span>

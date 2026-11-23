@@ -71,6 +71,7 @@ it("shows an existing Grok configuration how to proceed when dispatch is unavail
     version: "1.0.0",
     createdAt: 1,
     hasKey: true,
+    lastSeen: 1,
   };
   data.plugins = [saved];
   const editor = () =>
@@ -106,6 +107,7 @@ const configured = (extra: Partial<GrokPlugin> = {}): GrokPlugin => ({
   createdAt: 1,
   hasKey: true,
   webhookReady: true,
+  lastSeen: 1,
   ...extra,
 });
 
@@ -165,4 +167,18 @@ it("writes prompts a Bot can safely follow twice", () => {
   const reopen = grokReopenPrompt({ shortcut: "grok" });
   expect(reopen).toContain("wechatai_register_webhook");
   expect(reopen).not.toContain("Authorization");
+});
+
+it("offers to reopen registration when an earlier setup never finished", async () => {
+  const data = await setup();
+  data.grokBotReady = true;
+  // Reconnected, then the window expired before the Bot used the new credential.
+  const plugin = configured({ lastSeen: 0, setupPending: false, setupUntil: 0 });
+  const markup = renderToStaticMarkup(
+    <GrokEditor plugin={plugin} onClose={() => {}} onSaved={() => {}} />,
+  );
+  expect(markup).toContain("上次的配置还没完成");
+  expect(markup).toContain("重新开放登记");
+  expect(markup).not.toContain("验证收发");
+  expect(remoteAgentConnection(plugin).label).toBe("待 Bot 连接");
 });

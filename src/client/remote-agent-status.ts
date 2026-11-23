@@ -33,15 +33,19 @@ export function remoteAgentConnection(connection: Connection, now = Date.now()) 
     // An open window means a new credential or registration is still in
     // progress, even when an earlier Webhook is saved.
     const settingUp = connection.hasKey && !!connection.setupPending;
-    const ready = connection.hasKey && webhook && !settingUp;
+    // The first MCP call with the current credential sets lastSeen.
+    const unused = connection.hasKey && webhook && !connection.lastSeen && !settingUp;
+    const ready = connection.hasKey && webhook && !settingUp && !unused;
     return {
       state: connection.hasKey ? ("waiting" as const) : ("pending" as const),
-      label: ready ? "已配置" : settingUp ? "等待 Bot 完成配置" : "待配置",
+      label: ready ? "已配置" : settingUp ? "等待 Bot 完成配置" : unused ? "待 Bot 连接" : "待配置",
       description: ready
         ? "在微信发送 @快捷名 加文字验证收发；Webhook 按消息触发。"
         : settingUp
           ? "把配置指令发给 Grok Bot，由它添加连接器、创建 Routine 并登记 Webhook。"
-          : "生成配置指令并发给你的 Grok Bot，由它完成连接。",
+          : unused
+            ? "Grok Bot 还没用当前凭据连上微伴。请让它按配置指令完成连接，或在配置中重新开放登记。"
+            : "生成配置指令并发给你的 Grok Bot，由它完成连接。",
       connectedBefore: connection.hasKey && webhook,
     };
   }

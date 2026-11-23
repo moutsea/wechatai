@@ -15,18 +15,27 @@ export type GrokPlugin = Omit<OpenClawPlugin, "pluginId"> & {
   setupPending?: boolean;
   /** When the registration window closes; 0 when none is open. */
   setupUntil?: number;
+  /** When a Routine Webhook was last registered or saved, by the server clock. */
+  registeredAt?: number;
 };
 /** How long a configuration prompt may register a Routine Webhook after it is generated. */
 export const GROK_SETUP_MINUTES = 30;
 export const GROK_SETUP_INCOMPLETE =
   "Grok Bot 还没完成配置。请在微伴网页的 Grok Bot 配置中复制配置指令，发给你的 Grok Bot。";
 export const GROK_RECONNECTING =
-  "Grok Bot 正在重新连接，这条消息没有发给 Grok Bot。请在微伴网页完成 Grok Bot 配置后再发送。";
+  "Grok Bot 正在重新连接，这条消息没有发给 Grok Bot。请让 Grok Bot 按新的配置指令连上微伴，或在微伴网页的 Grok Bot 配置中重新开放登记，完成后再发送。";
 /** Sent to WeChat for open tasks when the owner issues a new connection credential. */
 export const GROK_RECONNECT_PENDING =
   "Grok Bot 正在重新连接，这条任务没有交给 Grok Bot，未扣平台 credits。重新连接完成后请重新发送。";
 export const GROK_RECONNECT_CLAIMED =
   "Grok Bot 正在重新连接，这条任务已关闭，未扣平台 credits。Grok Bot 可能仍在处理，结果不会再发回这里，请到 Grok Bot 查看运行记录。";
+export const GROK_REVOKED_PENDING =
+  "Grok Bot 的连接凭据已撤销，这条任务没有交给 Grok Bot，未扣平台 credits。";
+export const GROK_REVOKED_CLAIMED =
+  "Grok Bot 的连接凭据已撤销，这条任务已关闭，未扣平台 credits。Grok Bot 可能仍在处理，结果不会再发回这里，请到 Grok Bot 查看运行记录。";
+/** For woken tasks the old Routine never claimed when the Bot registers another one. */
+export const GROK_ROUTINE_CHANGED =
+  "Grok Bot 换了接收任务的 Routine，这条任务没有被领取，未扣平台 credits。请重新发送。";
 export const grokInputSchema = openClawInputSchema.safeExtend({
   agentId: z.literal("main").default("main"),
   ...waitingMessageFields(GROK_WAITING_MESSAGE),

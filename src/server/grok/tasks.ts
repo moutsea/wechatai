@@ -359,6 +359,23 @@ export class GrokTasks {
     }
     return rows.length;
   }
+  // The old Routine was woken for these but never claimed them. Without this
+  // they would hold their conversation until they expire.
+  failUnclaimedWakes(pluginId: string, message: string) {
+    const rows = this.db
+      .exec<Task>(
+        `SELECT ${fields} ${joined} WHERE ${active} AND j.pluginId=? AND j.state='pending' AND t.attempts>0`,
+        pluginId,
+      )
+      .toArray();
+    for (const row of rows) {
+      try {
+        this.fail(row, message);
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+      }
+    }
+  }
   cancelConnection(connectionId: string) {
     this.db.exec(
       `UPDATE claw_jobs SET state='cancelled',text=''
