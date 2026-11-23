@@ -43,6 +43,17 @@
 - 限流复用 `API_LIMIT`，在每个 Cloudflare 节点内分别按 IP 和有效凭据计 120 次/60 秒；这不是全球严格配额。无效凭据不消耗有效凭据额度。
 - 审计日志只记录时间、固定路由模板、方法、状态、是否限流和固定原因；不记录原始 URL、query、IP、Authorization、Cookie、请求/响应正文或用户标识。
 - 轮换时直接替换 Secret；新版本接管全部流量后，旧值失效、新值生效，不提供双 token 过渡。
+
+  验证时，在仓库外用权限 `0600` 的本地文件保存请求头（单行 `Authorization: Bearer <对应值>`）。替换下方占位路径，目标仅用本地服务或已获授权的 HTTPS 地址。命令关闭 shell tracing、忽略 curl 默认配置，且只输出 HTTP 状态码：
+
+  ```sh
+  set +x
+  curl -q --silent --output /dev/null --write-out '%{http_code}\n' \
+    --header '@/path/to/metrics-new.headers' 'http://127.0.0.1:5173/api/metrics/health'
+  ```
+
+  轮换生效且未限流时，新值应返回 `200`；换成保存旧值的请求头文件，或省略 `--header` 参数，均应返回 `401`。
+
 - `pnpm cf:production secret put METRICS_API_TOKEN` 在当前线上版本为最新版本时会创建并立即部署新版本，须同时取得写入生产 Secret 和部署的授权。
 - 仅获写入授权时，使用 `pnpm cf:production versions secret put METRICS_API_TOKEN` 创建新版本但不部署；新值只在该版本经单独授权部署并开始接收流量后生效。未获部署授权并完成对应版本验证前，不得声称该接口已上线或 token 已能读取运营数。
 
