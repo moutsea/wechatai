@@ -1,5 +1,5 @@
 import { env, createExecutionContext } from "cloudflare:test";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
@@ -17,6 +17,11 @@ import worker from "../src/server/index";
 const token = "test-only-metrics-token-0123456789abcdef";
 const otherToken = "test-only-other-token-fedcba9876543210";
 const ip = "203.0.113.10";
+
+let consoleLog: MockInstance;
+let consoleInfo: MockInstance;
+let consoleWarn: MockInstance;
+let consoleError: MockInstance;
 
 beforeAll(async () => {
   for (const migration of [
@@ -41,7 +46,12 @@ beforeEach(async () => {
       env.DB.prepare(`DELETE FROM ${table}`),
     ),
   );
+  consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+  consoleInfo = vi.spyOn(console, "info").mockImplementation(() => {});
+  consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 });
+afterEach(() => vi.restoreAllMocks());
 
 type LimitOutcome = "ok" | "limited" | "throw";
 
@@ -83,7 +93,18 @@ function call(
 
 const bearer = (value = token) => ({ authorization: `Bearer ${value}` });
 
+function auditRecords(): Record<string, unknown>[] {
+  return consoleLog.mock.calls
+    .map(([value]) => String(value))
+    .filter((value) => value.includes('"event":"metrics.request"'))
+    .map((value) => JSON.parse(value) as Record<string, unknown>);
+}
 
+function allConsoleText() {
+  return [consoleLog, consoleInfo, consoleWarn, consoleError]
+    .flatMap((spy) => spy.mock.calls.map((args) => args.map(String).join(" ")))
+    .join("\n");
+}
 
 async function signUp() {
   const email = `metrics-${crypto.randomUUID()}@example.test`;
@@ -145,6 +166,20 @@ describe("metrics credentials", () => {
       authenticated: true,
       billingMode: { available: false, reason: "billing_not_configured" },
     });
+    expect(auditRecords()).toEqual([
+      {
+        event: "metrics.request",
+        at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.*Z$/),
+        route: "/api/metrics/health",
+        method: "GET",
+        status: 200,
+        rateLimited: false,
+        reason: "ok",
+      },
+    ]);
+    expect(allConsoleText()).not.toContain("DB_SENTINEL");
+    expect(allConsoleText()).not.toContain("DO_SENTINEL");
+    expect(allConsoleText()).not.toContain(token);
   });
 
   it("fails closed when the credential is missing, short or mismatched", async () => {
@@ -173,6 +208,16 @@ describe("metrics credentials", () => {
     }
   });
 
+  it("does not let an invalid credential consume the shared token quota", async () => {
+    const limiter = fakeLimiter();
+    const response = await call(
+      bindings({ API_LIMIT: limiter.binding }),
+      undefined,
+      { headers: bearer(otherToken) },
+    );
+    expect(response.status).toBe(401);
+    expect(limiter.calls).toEqual([`metrics:ip:${ip}`]);
+  });
 
   it("reports only reliably recognized Stripe modes", async () => {
     const cases = [
@@ -293,3 +338,128 @@ describe("metrics browser session isolation", () => {
   });
 });
 
+describe("metrics rate limits and audit", () => {
+  it("limits by trusted client IP before authenticating", async () => {
+    const limiter = fakeLimiter((key) => (key.startsWith("metrics:ip:") ? "limited" : "ok"));
+    const response = await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
+      headers: bearer(otherToken),
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(await response.json()).toEqual({ error: "rate_limited" });
+    expect(limiter.calls).toEqual([`metrics:ip:${ip}`]);
+  });
+
+  it("limits the shared credential only after a valid bearer", async () => {
+    const limiter = fakeLimiter((key) => (key === "metrics:token:shared" ? "limited" : "ok"));
+    const response = await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
+      headers: bearer(),
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(limiter.calls).toEqual([`metrics:ip:${ip}`, "metrics:token:shared"]);
+    expect(limiter.calls.join(" ")).not.toContain(token);
+  });
+
+  it("fails closed when the limiter binding is missing or throws", async () => {
+    const { API_LIMIT: _missing, ...withoutLimiter } = bindings();
+    for (const b of [
+      withoutLimiter as unknown as Env,
+      bindings({
+        API_LIMIT: { limit: async () => Promise.reject(new Error("LIMITER_SENTINEL")) },
+      }),
+    ]) {
+      const response = await call(b, undefined, { headers: bearer() });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "unavailable" });
+    }
+  });
+
+  it("emits one whitelisted audit record per result without request data", async () => {
+    const sentinels = {
+      auth: "AUTH_SENTINEL",
+      cookie: "COOKIE_SENTINEL",
+      header: "HEADER_SENTINEL",
+      query: "QUERY_SENTINEL",
+      path: "PATH_SENTINEL",
+      email: "EMAIL_SENTINEL@example.test",
+      error: "ERROR_SENTINEL",
+    };
+    const b = bindings();
+    const request = (
+      path: string,
+      init: RequestInit = {},
+      overrides: Record<string, unknown> = {},
+    ) =>
+      call(
+        { ...b, ...overrides } as Env,
+        path,
+        {
+          ...init,
+          headers: {
+            "x-probe": sentinels.header,
+            "x-user-email": sentinels.email,
+            ...(init.headers as Record<string, string>),
+          },
+        },
+        "203.0.113.77",
+      );
+
+    await request(`/api/metrics/health?probe=${sentinels.query}`, { headers: bearer() });
+    await request("/api/metrics/health", {
+      headers: { authorization: `Bearer ${sentinels.auth}`, cookie: sentinels.cookie },
+    });
+    await request(`/api/metrics/${sentinels.path}`, { headers: bearer() });
+    await request("/api/metrics/health", { method: "OPTIONS", headers: bearer() });
+    await request("/api/metrics/health", { headers: bearer() }, {
+      API_LIMIT: fakeLimiter(() => "limited").binding,
+    });
+
+    const exploding = bindings();
+    Object.defineProperty(exploding, "METRICS_API_TOKEN", {
+      get() {
+        throw new Error(sentinels.error);
+      },
+    });
+    await call(exploding, "/api/metrics/health", {
+      headers: { authorization: `Bearer ${token}`, "x-probe": sentinels.header },
+    });
+
+    const records = auditRecords();
+    expect(records.map((record) => record.status)).toEqual([200, 401, 404, 405, 429, 503]);
+    expect(records.map((record) => record.reason)).toEqual([
+      "ok",
+      "unauthorized",
+      "not_found",
+      "method_not_allowed",
+      "ip_rate_limited",
+      "internal_error",
+    ]);
+    const allowed = ["event", "at", "route", "method", "status", "rateLimited", "reason"];
+    for (const record of records) {
+      expect(Object.keys(record).sort()).toEqual([...allowed].sort());
+      expect(record.route).toMatch(/^\/api\/metrics(\/health|\/\*)?$/);
+    }
+    const text = allConsoleText();
+    for (const sentinel of Object.values(sentinels)) expect(text).not.toContain(sentinel);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it("enforces the real API_LIMIT binding for IP and token", async () => {
+    const b = bindings({ API_LIMIT: env.API_LIMIT });
+    const clientIp = "203.0.113.240";
+    for (let i = 0; i < 120; i += 1) {
+      expect(
+        (await call(b, undefined, { headers: bearer() }, clientIp)).status,
+        `request ${i + 1}`,
+      ).toBe(200);
+    }
+    const ipLimited = await call(b, undefined, { headers: bearer() }, clientIp);
+    expect(ipLimited.status).toBe(429);
+    expect(ipLimited.headers.get("retry-after")).toBe("60");
+
+    const tokenLimited = await call(b, undefined, { headers: bearer() }, "203.0.113.241");
+    expect(tokenLimited.status).toBe(429);
+    expect(tokenLimited.headers.get("retry-after")).toBe("60");
+  });
+});
