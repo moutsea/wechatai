@@ -56,3 +56,19 @@ it.each(["quickstart", "examples", "validation", "metering"])(
     expect(blocks("/en/developers/plugins")).toEqual(original);
   },
 );
+
+it("shows alias-only plugin switching and how to find aliases in both instructions", () => {
+  const document = new DOMParser().parseFromString(
+    renderPublicPage("/en/developers/plugins"),
+    "text/html",
+  );
+  for (const id of ["manifest", "DS Chat 插件 1.3 调用语义"]) {
+    const codes = Array.from(document.getElementById(id)!.querySelectorAll("p code"), (code) =>
+      code.textContent,
+    );
+    expect(codes, id).toContain("/use <alias>");
+    expect(codes, id).toContain("/wx plugins");
+    expect(codes, id).not.toContain("/use name-or-number");
+    expect(codes, id).not.toContain("/use plugin-name/shortcut/number");
+  }
+});
