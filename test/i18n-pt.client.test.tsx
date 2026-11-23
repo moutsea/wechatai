@@ -61,6 +61,7 @@ describe("published Brazilian Portuguese pages", () => {
       { path: `/en${suffix}`, lang: "en", ogLocale: "en_US" },
       { path: `/ja${suffix}`, lang: "ja-JP", ogLocale: "ja_JP" },
       { path: `/ko${suffix}`, lang: "ko-KR", ogLocale: "ko_KR" },
+      { path: `/es${suffix}`, lang: "es", ogLocale: "es_ES" },
       { path: `/pt${suffix}`, lang: "pt-BR", ogLocale: "pt_BR" },
     ];
     const expected = [
@@ -132,6 +133,7 @@ describe("published Brazilian Portuguese pages", () => {
       ["Inglês", "/en", "en"],
       ["Japonês", "/ja", "ja-JP"],
       ["Coreano", "/ko", "ko-KR"],
+      ["Espanhol", "/es", "es"],
       ["Português", "/pt", "pt-BR"],
     ]);
     await switcher.close();

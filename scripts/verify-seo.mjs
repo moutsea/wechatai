@@ -697,7 +697,7 @@ for (const group of localePageGroups) {
             ? "言語"
             : htmlLang === "en"
               ? "Language"
-              : htmlLang === "pt-BR"
+              : htmlLang === "pt-BR" || htmlLang === "es"
                 ? "Idioma"
                 : "语言";
       const separator = htmlLang === "en" ? ": " : "：";

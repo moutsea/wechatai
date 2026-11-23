@@ -40,6 +40,7 @@ import {
 // Public search URLs always use the production domain, including local builds.
 export const SITE_URL = "https://wechatai.app";
 export const SITE_NAME = "微伴 Wechatai";
+
 // Update only when the actual homepage content changes, never on every build.
 const HOME_UPDATED_AT = "2026-11-14";
 export const SOCIAL_IMAGE = `${SITE_URL}/og-image.png`;
@@ -151,6 +152,8 @@ function organizationNode(locale: Locale = DEFAULT_LOCALE) {
           ? seoCopyJa.organizationDescription
           : locale === "pt"
             ? seoCopyPt.organizationDescription
+            : locale === "es"
+              ? "Servicio mantenido de forma independiente que conecta modelos de IA y agentes con chats individuales de WeChat ClawBot. No está afiliado oficialmente a Tencent ni a WeChat."
             : locale === "ko"
               ? seoCopyKo.organizationDescription
               : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
@@ -198,7 +201,9 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   const japanese = locale === "ja";
   const korean = locale === "ko";
   const portuguese = locale === "pt";
-  const copy = japanese || korean || portuguese ? pricingCopyFor(locale)?.plans : undefined;
+  const spanish = locale === "es";
+  const copy =
+    japanese || korean || portuguese || spanish ? pricingCopyFor(locale)?.plans : undefined;
   const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus").map((offer) => {
     const price = offer.amount / 100;
     const name = offer.interval === "year" ? "Plus Yearly" : "Plus Monthly";
@@ -206,7 +211,7 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
     return {
       "@type": "Offer",
       name: localizedName,
-      url: `${SITE_URL}${korean || portuguese ? localizedPath(locale, "/pricing") : "/pricing"}`,
+      url: `${SITE_URL}${korean || portuguese || spanish ? localizedPath(locale, "/pricing") : "/pricing"}`,
       price,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
@@ -224,7 +229,7 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
     {
       "@type": "Offer",
       name: english ? "Free" : copy?.free.name ?? "免费版",
-      url: `${SITE_URL}${korean || portuguese ? localizedPath(locale, "/") : "/"}`,
+      url: `${SITE_URL}${korean || portuguese || spanish ? localizedPath(locale, "/") : "/"}`,
       price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
@@ -234,6 +239,8 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
           ? pricingCopyJa.seo.freeOfferDescription
           : portuguese
             ? seoCopyPt.freeOfferDescription(WECHAT_LINK_LIMITS.free, PLUGIN_LIMITS.free)
+            : spanish
+              ? `Incluye créditos diarios, ${WECHAT_LINK_LIMITS.free} conexión de WeChat y ${PLUGIN_LIMITS.free} configuración de plugin.`
             : korean
               ? seoCopyKo.freeOfferDescription(WECHAT_LINK_LIMITS.free, PLUGIN_LIMITS.free)
               : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
@@ -295,6 +302,7 @@ function seoLandingPage(
   const japanese = locale === "ja";
   const korean = locale === "ko";
   const portuguese = locale === "pt";
+  const spanish = locale === "es";
   const isArticle = page.kind === "article";
   const publisher = organizationNode(locale);
   const webPage = isArticle
@@ -347,6 +355,8 @@ function seoLandingPage(
                     ? pricingCopyJa.seo.serviceName
                     : portuguese
                       ? seoCopyPt.serviceName
+                      : spanish
+                        ? "Wechatai Gratis y Plus"
                       : korean
                         ? seoCopyKo.serviceName
                         : `${SITE_NAME} 免费版与 Plus`,
@@ -356,6 +366,8 @@ function seoLandingPage(
                     ? pricingCopyJa.seo.serviceType
                     : portuguese
                       ? seoCopyPt.serviceType
+                      : spanish
+                        ? "Servicio de integración de IA con WeChat"
                       : korean
                         ? seoCopyKo.serviceType
                         : "微信 AI 接入服务",
@@ -662,6 +674,16 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                   ? homeCopyJa.seo.featureList
                   : portuguese
                     ? seoCopyPt.featureList
+                    : locale === "es"
+                      ? [
+                          "Usa tu propia clave de API y endpoint de modelo",
+                          "Cambia de modelo y gestiona conversaciones en WeChat",
+                          "Compatible con OpenAI Chat Completions, Responses y Anthropic Messages",
+                          "Conecta agentes existentes de Muse, Hermes y OpenClaw",
+                          "Configura un modelo de imagen para generar y recibir imágenes con IA en WeChat",
+                          "Personaliza personajes e historias con el plugin de juego de rol",
+                          "El asistente en la nube Plus Xiaowei procesa archivos, crea documentos y ejecuta tareas; requiere un modelo de texto",
+                        ]
                     : [
                         "使用自己的 API Key 与模型服务地址",
                         "在微信中切换大模型并管理聊天会话",
@@ -808,6 +830,8 @@ export function renderSeoHead(seo: PageSeo) {
           ? seoCopyKo.imageAlt
           : imageLang === LOCALE_DEFINITIONS.pt.htmlLang
             ? seoCopyPt.imageAlt
+            : imageLang === LOCALE_DEFINITIONS.es.htmlLang
+              ? "Wechatai: chatea en WeChat con los modelos que elijas."
             : "微伴 Wechatai：在微信里，与自选大模型对话。";
   return [
     `<title data-seo>${escapeHtml(seo.title)}</title>`,

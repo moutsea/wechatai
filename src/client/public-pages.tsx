@@ -104,7 +104,8 @@ const homeCopyZh = {
     title: "免费开始，Plus 解锁更多",
     intro: "日常问答先用免费版。更多额度、多微信连接和小薇 AI，选择 Plus。",
     note: "credits 是微伴的平台用量额度，按使用量扣除。会员单次购买，不自动续费；每日赠额不累积。模型 API 费用另付服务商。",
-    noteSecond: "小薇 AI 使用你配置的模型，执行次数与服务状态以插件页为准。月付与年付享有相同权益。",
+    noteSecond:
+      "小薇 AI 使用你配置的模型，执行次数与服务状态以插件页为准。月付与年付享有相同权益。",
     estimate: "额度怎么用？估算每日用量",
     details: "看完整价格与额度明细",
   },
@@ -307,7 +308,7 @@ export function Landing() {
           <div className="landing-copy">
             <h1>
               {copy.hero.titleLead}
-              {(locale === "en" || locale === "ko" || locale === "pt") && " "}
+              {(locale === "en" || locale === "ko" || locale === "pt" || locale === "es") && " "}
               <span>{copy.hero.titleAccent}</span>
             </h1>
             <p>{copy.hero.body}</p>
@@ -370,11 +371,7 @@ export function Landing() {
               id="mobile-plus"
               className="landing-plan-mobile-plus"
             >
-              <div
-                className="landing-plan-switch"
-                role="group"
-                aria-label={copy.plans.switchLabel}
-              >
+              <div className="landing-plan-switch" role="group" aria-label={copy.plans.switchLabel}>
                 {(["month", "year"] as const).map((interval) => (
                   <button
                     key={interval}

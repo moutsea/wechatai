@@ -17,7 +17,7 @@ import { useLocale } from "./locale";
 export function LanguageSwitcher() {
   const { locale, path, alternates } = useLocale();
   const { search, hash } = useLocation();
-  const suffix = alternates.includes("pt") ? search + hash : "";
+  const suffix = alternates.includes("pt") || alternates.includes("es") ? search + hash : "";
   const [open, setOpen] = useState(false);
   // The menu hangs from the trigger's right edge unless that would cross the
   // viewport's left edge, e.g. when a wrapped header puts the trigger on the left.
@@ -65,6 +65,8 @@ export function LanguageSwitcher() {
           ? headerCopyJa.language
           : locale === "pt"
             ? languageCopyPt.navigation
+            : locale === "es"
+              ? "Idioma"
             : "语言";
   const currentLabel =
     (locale === "ko" ? languageCopyKo.labels[locale] : undefined) ??

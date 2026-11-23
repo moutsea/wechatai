@@ -128,11 +128,7 @@ function AgentsScene() {
             href: "/docs/multiple-openclaw-in-wechat",
           },
         ].map(({ name, logo, href }) => (
-          <Link
-            key={name}
-            to={localizedHref(locale, href)}
-            aria-label={copy.agentGuide(name)}
-          >
+          <Link key={name} to={localizedHref(locale, href)} aria-label={copy.agentGuide(name)}>
             <img src={logo} width={56} height={56} alt="" loading="lazy" />
             {name}
           </Link>

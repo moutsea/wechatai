@@ -319,6 +319,11 @@ describe("Google and GitHub OAuth", () => {
       "/pt/pricing-other",
       "/pt/pricing/../../api/auth/sign-out",
       "//evil.example/pt/pricing",
+      "/es",
+      "/es/pricing-other",
+      "/es/pricing/checkout",
+      "/es/pricing/../../api/auth/sign-out",
+      "//evil.example/es/pricing",
       "/pricing/../../api/auth/sign-out",
     ]) {
       expect(authReturnPath(path)).toBe("/app");

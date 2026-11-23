@@ -245,6 +245,11 @@ describe("published English pages", () => {
       "/ko/wechat-ai",
       "/ko/wechat-bot",
       "/ko/wechat-deepseek",
+      "/es",
+      "/es/pricing",
+      "/es/wechat-ai",
+      "/es/wechat-bot",
+      "/es/wechat-deepseek",
       "/pt",
       "/pt/pricing",
       "/pt/wechat-ai",
@@ -254,7 +259,7 @@ describe("published English pages", () => {
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
     const localized = [
-      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja|ko|pt)[^<]*)<\/loc>/g),
+      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja|ko|es|pt)[^<]*)<\/loc>/g),
     ].map(([, path]) => path);
     expect(localized.sort()).toEqual(expected);
   });

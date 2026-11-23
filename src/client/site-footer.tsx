@@ -36,7 +36,14 @@ const tutorialLabelsEn: Record<string, string> = {
   "hermes-in-wechat": "Use Hermes in WeChat",
 };
 
-type LabelKey = "zh" | "en" | "ja" | "ko" | "pt";
+const tutorialLabelsEs: Record<string, string> = {
+  "wechat-ai-assistant": "Xiaowei: asistente de IA sin despliegue",
+  "deepseek-in-wechat": "Usar DeepSeek en WeChat",
+  "multiple-openclaw-in-wechat": "Conectar varios OpenClaw",
+  "hermes-in-wechat": "Usar Hermes en WeChat",
+};
+
+type LabelKey = "zh" | "en" | "ja" | "ko" | "es" | "pt";
 type FooterLink = { href: string } & Record<LabelKey, string>;
 type FooterGroup = Record<LabelKey, string> & { links: FooterLink[] };
 
@@ -47,9 +54,10 @@ const footerGroups: FooterGroup[] = [
     ja: footerCopyJa.groups.product,
     ko: groupLabelsKo.product,
     pt: groupLabelsPt.product,
+    es: "Producto",
     links: [
-      { href: "/wechat-ai", zh: "微信 AI 助手", en: "WeChat AI assistant", ja: footerCopyJa.links.wechatAi, ko: linkLabelsKo.wechatAi , pt: linkLabelsPt.wechatAi },
-      { href: "/wechat-ai-options", zh: "方案对比", en: "Compare options", ja: footerCopyJa.links.compare, ko: linkLabelsKo.compareOptions , pt: linkLabelsPt.compareOptions },
+      { href: "/wechat-ai", zh: "微信 AI 助手", en: "WeChat AI assistant", ja: footerCopyJa.links.wechatAi, ko: linkLabelsKo.wechatAi, pt: linkLabelsPt.wechatAi, es: "Asistente de IA para WeChat" },
+      { href: "/wechat-ai-options", zh: "方案对比", en: "Compare options", ja: footerCopyJa.links.compare, ko: linkLabelsKo.compareOptions, pt: linkLabelsPt.compareOptions, es: "Comparar opciones" },
       {
         href: "/pricing",
         zh: "价格与免费额度",
@@ -57,8 +65,9 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.pricing,
         ko: linkLabelsKo.freePricing,
       pt: linkLabelsPt.freePricing,
+      es: "Precios y créditos gratis",
       },
-      { href: "/app", zh: "我的工作台", en: "My workspace", ja: footerCopyJa.links.myWorkspace, ko: linkLabelsKo.myWorkspace , pt: linkLabelsPt.myWorkspace },
+      { href: "/app", zh: "我的工作台", en: "My workspace", ja: footerCopyJa.links.myWorkspace, ko: linkLabelsKo.myWorkspace, pt: linkLabelsPt.myWorkspace, es: "Mi espacio de trabajo" },
       {
         href: "/docs/channels-models",
         zh: "渠道与模型",
@@ -66,6 +75,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.providers,
         ko: linkLabelsKo.channels,
       pt: linkLabelsPt.channels,
+      es: "Proveedores y modelos",
       },
       {
         href: "/docs/credits",
@@ -74,6 +84,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.membership,
         ko: linkLabelsKo.credits,
       pt: linkLabelsPt.credits,
+      es: "Membresía y créditos",
       },
     ],
   },
@@ -83,8 +94,9 @@ const footerGroups: FooterGroup[] = [
     ja: footerCopyJa.groups.help,
     ko: groupLabelsKo.help,
     pt: groupLabelsPt.help,
+    es: "Ayuda",
     links: [
-      { href: "/docs", zh: "文档与教程", en: "Docs and tutorials", ja: footerCopyJa.links.docs, ko: linkLabelsKo.docs , pt: linkLabelsPt.docs },
+      { href: "/docs", zh: "文档与教程", en: "Docs and tutorials", ja: footerCopyJa.links.docs, ko: linkLabelsKo.docs, pt: linkLabelsPt.docs, es: "Documentación y tutoriales" },
       {
         href: "/wechat-clawbot",
         zh: "ClawBot 绑定与排查",
@@ -92,6 +104,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.clawbotSetup,
         ko: linkLabelsKo.clawbot,
       pt: linkLabelsPt.clawbot,
+      es: "Configuración y problemas de ClawBot",
       },
       {
         href: "/wechat-clawbot-models",
@@ -100,6 +113,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.clawbotModels,
         ko: linkLabelsKo.clawbotModels,
       pt: linkLabelsPt.clawbotModels,
+      es: "Modelos compatibles con ClawBot",
       },
       {
         href: "/wechat-ai-ban-risk",
@@ -108,6 +122,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.banRisk,
         ko: linkLabelsKo.banRisk,
       pt: linkLabelsPt.banRisk,
+      es: "¿Puede la IA bloquear mi cuenta?",
       },
       {
         href: "/wechat-deepseek",
@@ -116,6 +131,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.deepseek,
         ko: linkLabelsKo.deepSeek,
       pt: linkLabelsPt.deepSeek,
+      es: "Usar DeepSeek en WeChat",
       },
       {
         href: "/wechat-claude",
@@ -124,9 +140,10 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.claude,
         ko: linkLabelsKo.claude,
       pt: linkLabelsPt.claude,
+      es: "Usar Claude en WeChat",
       },
-      { href: "/wechat-gpt", zh: "在微信里用 GPT", en: "Use GPT in WeChat", ja: footerCopyJa.links.gpt, ko: linkLabelsKo.gpt , pt: linkLabelsPt.gpt },
-      { href: "/docs/faq", zh: "常见问题", en: "FAQ", ja: footerCopyJa.links.faq, ko: linkLabelsKo.faq , pt: linkLabelsPt.faq },
+      { href: "/wechat-gpt", zh: "在微信里用 GPT", en: "Use GPT in WeChat", ja: footerCopyJa.links.gpt, ko: linkLabelsKo.gpt, pt: linkLabelsPt.gpt, es: "Usar GPT en WeChat" },
+      { href: "/docs/faq", zh: "常见问题", en: "FAQ", ja: footerCopyJa.links.faq, ko: linkLabelsKo.faq, pt: linkLabelsPt.faq, es: "Preguntas frecuentes" },
     ],
   },
   {
@@ -135,6 +152,7 @@ const footerGroups: FooterGroup[] = [
     ja: footerCopyJa.groups.developers,
     ko: groupLabelsKo.developers,
     pt: groupLabelsPt.developers,
+    es: "Desarrolladores",
     links: [
       {
         href: "/developers/plugins",
@@ -143,10 +161,11 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.plugins,
         ko: linkLabelsKo.plugins,
       pt: linkLabelsPt.plugins,
+      es: "Documentación de desarrollo de plugins",
       },
-      { href: "/developers/openclaw", zh: "OpenClaw 接入", en: "OpenClaw setup", ja: footerCopyJa.links.openclaw, ko: linkLabelsKo.openClaw , pt: linkLabelsPt.openClaw },
-      { href: "/developers/hermes", zh: "Hermes 接入", en: "Hermes setup", ja: footerCopyJa.links.hermes, ko: linkLabelsKo.hermes , pt: linkLabelsPt.hermes },
-      { href: "/developers/muse", zh: "Muse 接入", en: "Muse setup", ja: footerCopyJa.links.muse, ko: linkLabelsKo.muse , pt: linkLabelsPt.muse },
+      { href: "/developers/openclaw", zh: "OpenClaw 接入", en: "OpenClaw setup", ja: footerCopyJa.links.openclaw, ko: linkLabelsKo.openClaw, pt: linkLabelsPt.openClaw, es: "Configuración de OpenClaw" },
+      { href: "/developers/hermes", zh: "Hermes 接入", en: "Hermes setup", ja: footerCopyJa.links.hermes, ko: linkLabelsKo.hermes, pt: linkLabelsPt.hermes, es: "Configuración de Hermes" },
+      { href: "/developers/muse", zh: "Muse 接入", en: "Muse setup", ja: footerCopyJa.links.muse, ko: linkLabelsKo.muse, pt: linkLabelsPt.muse, es: "Configuración de Muse" },
       {
         href: "/wechat-agent",
         zh: "微信接入 Agent",
@@ -154,6 +173,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.agent,
         ko: linkLabelsKo.agent,
       pt: linkLabelsPt.agent,
+      es: "Conectar un agente a WeChat",
       },
       {
         href: "/bring-your-own-api-key",
@@ -162,8 +182,9 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.apiKey,
         ko: linkLabelsKo.ownApiKey,
       pt: linkLabelsPt.ownApiKey,
+      es: "Trae tu propia clave de API",
       },
-      { href: "/developers/plugins.md", zh: "协议 Markdown", en: "Protocol Markdown", ja: footerCopyJa.links.protocol, ko: linkLabelsKo.protocol , pt: linkLabelsPt.protocol },
+      { href: "/developers/plugins.md", zh: "协议 Markdown", en: "Protocol Markdown", ja: footerCopyJa.links.protocol, ko: linkLabelsKo.protocol, pt: linkLabelsPt.protocol, es: "Protocolo en Markdown" },
     ],
   },
   {
@@ -172,6 +193,7 @@ const footerGroups: FooterGroup[] = [
     ja: footerCopyJa.groups.tutorials,
     ko: groupLabelsKo.tutorials,
     pt: groupLabelsPt.tutorials,
+    es: "Tutoriales",
     links: DOC_TUTORIALS.map((article) => ({
       href: docPath(article.slug),
       zh: footerLabel(article),
@@ -179,6 +201,7 @@ const footerGroups: FooterGroup[] = [
       ja: tutorialLabelsJa[article.slug] ?? footerLabel(article),
       ko: tutorialLabelsKo[article.slug] ?? footerLabel(article),
       pt: tutorialLabelsPt[article.slug] ?? footerLabel(article),
+      es: tutorialLabelsEs[article.slug] ?? footerLabel(article),
     })),
   },
   {
@@ -187,10 +210,11 @@ const footerGroups: FooterGroup[] = [
     ja: footerCopyJa.groups.support,
     ko: groupLabelsKo.support,
     pt: groupLabelsPt.support,
+    es: "Soporte y condiciones",
     links: [
-      { href: "/terms", zh: "服务协议", en: "Terms of service", ja: footerCopyJa.links.terms, ko: linkLabelsKo.terms , pt: linkLabelsPt.terms },
-      { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: footerCopyJa.links.privacy, ko: linkLabelsKo.privacy , pt: linkLabelsPt.privacy },
-      { href: "/contact", zh: "联系我们", en: "Contact us", ja: footerCopyJa.links.contact, ko: linkLabelsKo.contact , pt: linkLabelsPt.contact },
+      { href: "/terms", zh: "服务协议", en: "Terms of service", ja: footerCopyJa.links.terms, ko: linkLabelsKo.terms, pt: linkLabelsPt.terms, es: "Términos del servicio" },
+      { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: footerCopyJa.links.privacy, ko: linkLabelsKo.privacy, pt: linkLabelsPt.privacy, es: "Política de privacidad" },
+      { href: "/contact", zh: "联系我们", en: "Contact us", ja: footerCopyJa.links.contact, ko: linkLabelsKo.contact, pt: linkLabelsPt.contact, es: "Contacto" },
       {
         href: "/contact#maintainer",
         zh: "维护者与项目来源",
@@ -198,6 +222,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.maintainer,
         ko: linkLabelsKo.maintainer,
       pt: linkLabelsPt.maintainer,
+      es: "Mantenedor y origen del proyecto",
       },
       {
         href: "https://github.com/moutsea/wechatai",
@@ -206,6 +231,7 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.source,
         ko: linkLabelsKo.source,
       pt: linkLabelsPt.source,
+      es: "Código fuente y mantenedor",
       },
       {
         href: "https://github.com/moutsea/wechatai/commits/main/",
@@ -214,14 +240,15 @@ const footerGroups: FooterGroup[] = [
         ja: footerCopyJa.links.changelog,
         ko: linkLabelsKo.changelog,
       pt: linkLabelsPt.changelog,
+      es: "Registro público de cambios",
       },
     ],
   },
 ];
 
 const quickLinks: FooterLink[] = [
-  { href: "/app", zh: "进入工作台", en: "Open workspace", ja: footerCopyJa.links.workspace, ko: linkLabelsKo.openWorkspace , pt: linkLabelsPt.openWorkspace },
-  { href: "/pricing", zh: "价格与额度", en: "Pricing and credits", ja: footerCopyJa.links.pricingQuick, ko: linkLabelsKo.pricing , pt: linkLabelsPt.pricing },
+  { href: "/app", zh: "进入工作台", en: "Open workspace", ja: footerCopyJa.links.workspace, ko: linkLabelsKo.openWorkspace, pt: linkLabelsPt.openWorkspace, es: "Abrir el espacio de trabajo" },
+  { href: "/pricing", zh: "价格与额度", en: "Pricing and credits", ja: footerCopyJa.links.pricingQuick, ko: linkLabelsKo.pricing, pt: linkLabelsPt.pricing, es: "Precios y créditos" },
   {
     href: "/docs/getting-started",
     zh: "入门教程",
@@ -229,9 +256,10 @@ const quickLinks: FooterLink[] = [
     ja: footerCopyJa.links.gettingStarted,
     ko: linkLabelsKo.gettingStarted,
   pt: linkLabelsPt.gettingStarted,
+  es: "Primeros pasos",
   },
-  { href: "/contact", zh: "联系我们", en: "Contact us", ja: footerCopyJa.links.contact, ko: linkLabelsKo.contact , pt: linkLabelsPt.contact },
-  { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: footerCopyJa.links.privacy, ko: linkLabelsKo.privacy , pt: linkLabelsPt.privacy },
+  { href: "/contact", zh: "联系我们", en: "Contact us", ja: footerCopyJa.links.contact, ko: linkLabelsKo.contact, pt: linkLabelsPt.contact, es: "Contacto" },
+  { href: "/privacy", zh: "隐私政策", en: "Privacy policy", ja: footerCopyJa.links.privacy, ko: linkLabelsKo.privacy, pt: linkLabelsPt.privacy, es: "Política de privacidad" },
   {
     href: "https://github.com/moutsea/wechatai",
     zh: "GitHub 开源",
@@ -239,6 +267,7 @@ const quickLinks: FooterLink[] = [
     ja: footerCopyJa.links.github,
     ko: linkLabelsKo.openSource,
   pt: linkLabelsPt.openSource,
+  es: "Código abierto en GitHub",
   },
 ];
 
@@ -294,17 +323,28 @@ const footerCopyEn = {
   disclaimer: "Independently built; not affiliated with WeChat, Tencent, or model providers.",
 };
 
+const footerCopyEs = {
+  home: "Inicio",
+  intro: "Chatea con los modelos que elijas, directamente en WeChat.",
+  tagline: "Conecta tus modelos y agentes para que las ideas siempre tengan respuesta.",
+  navigation: "Navegación del pie de página",
+  brand: "Wechatai",
+  disclaimer:
+    "Desarrollado de forma independiente; sin afiliación con WeChat, Tencent ni los proveedores de modelos.",
+};
+
 const footerCopies: Partial<Record<Locale, FooterCopy>> = {
   en: footerCopyEn,
   ja: footerCopyJa,
   ko: footerCopyKo,
   pt: footerCopyPt,
+  es: footerCopyEs,
 };
 
 export function SiteFooter() {
   const { locale } = useLocale();
   const label: LabelKey =
-    locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : locale === "pt" ? "pt" : "zh";
+    locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : locale === "pt" ? "pt" : locale === "es" ? "es" : "zh";
   const copy = footerCopies[locale] ?? footerCopyZh;
   return (
     <footer className="landing-footer">
