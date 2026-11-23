@@ -6,6 +6,8 @@ import { initGrokTasks } from "./schema";
 import { readGrokHistory } from "./history";
 import { countTextTokens } from "../tokenizer";
 import { AppError } from "../config";
+import { MAX_GENERATED_BYTES, type MediaStore, type OutputAsset } from "../media";
+import { GROK_IMAGE_RULES, GROK_MAX_IMAGES, GROK_MAX_UPLOADS } from "./upload";
 
 const lifetime = 45 * 60_000;
 const maxWakeAttempts = 3;
@@ -23,8 +25,11 @@ const finishArgs = z
     receipt: id,
     status: z.enum(["completed", "failed"]),
     text: z.string().max(30000),
+    images: z.array(id).max(GROK_MAX_IMAGES).default([]),
   })
   .strict();
+// Uploaded images stay uncommitted under the task until wechatai_finish sends them.
+const uploadRun = (ref: string) => `grok:${ref}`;
 type Task = {
   ref: string;
   jobId: string;
@@ -59,6 +64,8 @@ export class GrokTasks {
     private relay: OpenClawRelay,
     private plugin: (id: string) => GrokPlugin,
     private prepareWake: (pluginId: string, ref: string) => Promise<Request>,
+    private media: MediaStore,
+    private uploadUrl: (pluginId: string, ref: string, expires: number) => string,
   ) {}
   private get db() {
     return this.storage.sql;
@@ -130,6 +137,7 @@ export class GrokTasks {
           text: row.text,
           history,
           maxOutputTokens: row.claimedOutputLimit ?? row.outputLimit,
+          imageUpload: this.imageUpload(row),
         };
       const receipt = crypto.randomUUID();
       const maxOutputTokens = Math.min(plugin.maxOutputTokens, row.outputLimit);
@@ -153,8 +161,95 @@ export class GrokTasks {
         text: row.text,
         history,
         maxOutputTokens,
+        imageUpload: this.imageUpload(row),
       };
     });
+  }
+  private imageUpload(row: Task) {
+    return {
+      url: this.uploadUrl(row.pluginId, row.ref, row.expires),
+      maxImages: GROK_MAX_IMAGES,
+      maxBytes: MAX_GENERATED_BYTES,
+      usage: `需要回复图片时，用 curl -X PUT --upload-file <图片路径> '<url>' 逐张上传，每次返回一个 imageId。在 wechatai_finish 的 images 中按发送顺序提交，最多 ${GROK_MAX_IMAGES} 张，text 仍写一句文字说明。${GROK_IMAGE_RULES}`,
+    };
+  }
+  async upload(pluginId: string, ref: string, data: Uint8Array) {
+    const open = () => {
+      const row = this.row(pluginId, ref);
+      if (row.state !== "claimed" || row.expires <= Date.now())
+        throw new AppError("grok_upload_closed", "任务已结束或超时，上传已关闭。", 409);
+      this.relay.requireRoute(row.routeId);
+      const { uploads } = this.db
+        .exec<{ uploads: number }>(
+          "SELECT COUNT(*) AS uploads FROM output_assets WHERE runId=?",
+          uploadRun(ref),
+        )
+        .one();
+      if (uploads >= GROK_MAX_UPLOADS)
+        throw new AppError(
+          "grok_upload_limit",
+          `每个任务最多上传 ${GROK_MAX_UPLOADS} 次图片，回传时最多附带 ${GROK_MAX_IMAGES} 张。`,
+          409,
+        );
+      return row;
+    };
+    const row = open();
+    const { sessionId } = this.db
+      .exec<{ sessionId: string }>("SELECT sessionId FROM claw_routes WHERE id=?", row.routeId)
+      .one();
+    let asset: OutputAsset;
+    try {
+      // Unsent uploads expire shortly after the task instead of living for 30 days.
+      asset = await this.media.save(uploadRun(ref), sessionId, data, row.expires + 10 * 60_000);
+    } catch (error) {
+      if (error instanceof AppError && ["image_size", "image_invalid"].includes(error.code))
+        throw new AppError(error.code, GROK_IMAGE_RULES, 422);
+      throw error;
+    }
+    // The R2 write yields. Settlement, cancellation or parallel uploads may have won.
+    const extra = this.db
+      .exec<{ id: string }>(
+        "SELECT id FROM output_assets WHERE runId=? ORDER BY rowid LIMIT -1 OFFSET ?",
+        uploadRun(ref),
+        GROK_MAX_UPLOADS,
+      )
+      .toArray()
+      .some((a) => a.id === asset.id);
+    const current = this.row(pluginId, ref);
+    if (extra || current.state !== "claimed" || current.expires <= Date.now()) {
+      this.media.discard(asset.id);
+      throw new AppError(
+        extra ? "grok_upload_limit" : "grok_upload_closed",
+        extra ? `每个任务最多上传 ${GROK_MAX_UPLOADS} 次图片。` : "任务已结束或超时，上传已关闭。",
+        409,
+      );
+    }
+    return {
+      imageId: asset.id,
+      mime: asset.mime,
+      width: asset.width,
+      height: asset.height,
+      bytes: asset.bytes,
+    };
+  }
+  // Only images uploaded for this task and not yet sent can join its result.
+  private finishedImages(row: Task, ids: string[]) {
+    const unique = [...new Set(ids)];
+    for (const imageId of unique) {
+      const asset = this.media.row(imageId);
+      if (
+        !asset ||
+        asset.runId !== uploadRun(row.ref) ||
+        asset.committed !== 0 ||
+        asset.expiresAt <= Date.now()
+      )
+        throw new AppError(
+          "grok_image_missing",
+          "images 中有图片不存在或不属于这条任务，请重新上传后再回传。",
+          409,
+        );
+    }
+    return unique;
   }
   finish(plugin: GrokPlugin, raw: unknown) {
     const input = finishArgs.parse(raw);
@@ -177,7 +272,11 @@ export class GrokTasks {
             : "任务已成功结算，回传已关闭。",
           409,
         );
-      return this.settle(plugin, row, input.receipt, input.status, input.text);
+      const images =
+        input.status === "completed" && row.state === "claimed"
+          ? this.finishedImages(row, input.images)
+          : [];
+      return this.settle(plugin, row, input.receipt, input.status, input.text, undefined, images);
     });
   }
   private settle(
@@ -187,6 +286,7 @@ export class GrokTasks {
     outcome: "completed" | "failed" | "expired",
     text: string,
     dispatchFailure?: string,
+    images: string[] = [],
   ) {
     const status = outcome === "completed" ? "completed" : "failed";
     const failureMessage =
@@ -199,8 +299,10 @@ export class GrokTasks {
       plugin,
       "event",
       { eventId: row.ref, jobId: row.jobId, routeId: row.routeId, runnerId: receipt, status, text },
-      { failureMessage, claimedOutputLimit: row.claimedOutputLimit ?? undefined },
+      { failureMessage, claimedOutputLimit: row.claimedOutputLimit ?? undefined, images },
     );
+    // The reply has committed the images it sends. Close the rest of this task's uploads.
+    this.media.discardRun(uploadRun(row.ref));
     if (row.state === "claimed" || row.state === "pending") {
       this.db.exec(
         `UPDATE grok_tasks SET due=NULL,outcome=?,answerMessage=(SELECT MAX(m.id) FROM messages m

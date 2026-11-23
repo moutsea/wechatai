@@ -32,6 +32,7 @@ import {
 } from "./cloud-agent-callback";
 import { parseNotificationToken, notificationTokenHash } from "./notification-token";
 import {
+  accountForGrok,
   accountForNotification,
   accountForUser,
   type AdminGrant,
@@ -52,6 +53,12 @@ import { senderAccess } from "./wechat-sender";
 import { watchdogHeader, fallbackWatchdogs } from "./receiver-watchdog";
 import { watchdogRoutes } from "./receiver-watchdog-routes";
 import { grokMcp } from "./grok/mcp";
+import {
+  GROK_IMAGE_RULES,
+  GROK_UPLOAD_PATH,
+  parseGrokUploadToken,
+  readGrokUpload,
+} from "./grok/upload";
 import { connectorPoll } from "./connector-poll";
 import { executionCompletionSchema } from "../shared/executor-protocol";
 import { executionAuthorized, EXECUTION_MAX_BYTES } from "./execution-store";
@@ -149,6 +156,26 @@ app.post(`${CLOUD_CALLBACK_PATH}/:token`, async (c) => {
     );
     return c.json({ error: "unavailable" }, 503);
   }
+});
+// Grok Bot image uploads come from curl with a signed task URL, not a browser
+// session, and need a larger cap than the general API body limit.
+app.put(`${GROK_UPLOAD_PATH}/:token`, async (c) => {
+  c.header("Cache-Control", "no-store");
+  const match = parseGrokUploadToken(c.env, c.req.param("token"));
+  if (!match) return c.json({ error: "invalid_token", message: "上传地址无效或已过期" }, 401);
+  if (!(await c.env.API_LIMIT.limit({ key: `grok:upload:${match.ref}` })).success)
+    return c.json({ error: "rate_limited", message: "上传过于频繁，请稍后重试" }, 429);
+  const data = await readGrokUpload(c.req.raw);
+  if (!data) return c.json({ error: "image_size", message: GROK_IMAGE_RULES }, 413);
+  if (!data.length) return c.json({ error: "empty_upload", message: "请上传图片文件" }, 400);
+  const account = await accountForGrok(c.env, match.accountId);
+  const result = JSON.parse(await account.grokUpload(match.pluginId, match.ref, data));
+  return result.ok
+    ? c.json(result.data, 201)
+    : c.json(
+        { error: result.error, message: result.message },
+        result.status as ContentfulStatusCode,
+      );
 });
 app.use("/api/*", async (c, next) =>
   c.req.path.startsWith("/api/internal/executor/")

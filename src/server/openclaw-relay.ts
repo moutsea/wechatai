@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AppError } from "./config";
 import { countTextTokens, limitTextTokens } from "./tokenizer";
 import { creditUnits } from "./wallet";
+import { IMAGE_CREDITS } from "../shared/credits";
 import { openClawAgentsSchema, type OpenClawAgent } from "../shared/openclaw";
 import { connectorVersionPattern } from "../shared/openclaw-release";
 
@@ -41,6 +42,8 @@ type Hooks = {
     id: string;
     route: ClawRoute;
     text: string;
+    /** Uploaded output assets to commit and send after the text. */
+    images: string[];
     inputTokens: number;
     outputTokens: number;
     units: number;
@@ -437,6 +440,7 @@ export class OpenClawRelay {
       failureMessage?: string;
       historyInputTokens?: number;
       claimedOutputLimit?: number;
+      images?: string[];
     } = {},
   ) {
     const pluginId = plugin.id;
@@ -604,13 +608,18 @@ export class OpenClawRelay {
             : text;
       const inputTokens = failed ? 0 : (job?.inputTokens ?? 0);
       const outputTokens = failed ? 0 : countTextTokens(text);
-      const units = job?.lane === "control" ? 0 : creditUnits(inputTokens, outputTokens);
+      const images = failed ? [] : (options.images ?? []);
+      const units =
+        job?.lane === "control"
+          ? 0
+          : creditUnits(inputTokens, outputTokens) + images.length * IMAGE_CREDITS * 1000;
       const id = `claw:${receiptId}`;
       this.hooks.deliver({
         plugin,
         id,
         route,
         text: displayText,
+        images,
         inputTokens,
         outputTokens,
         units,
@@ -629,6 +638,7 @@ export class OpenClawRelay {
         status: "queued",
         cost: units / 1000,
         truncated,
+        ...(images.length ? { images: images.length } : {}),
         // Muse builds its recent transcript from this durable acknowledgement.
         // Keep the accepted text in the receipt so retries cannot change history.
         ...(plugin.pluginId === "wechatai/muse" ? { acceptedText: displayText } : {}),

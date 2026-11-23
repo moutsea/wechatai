@@ -68,7 +68,9 @@ export async function deliverQueuedReplies(
     viaAlarm?: boolean;
   } = {},
 ) {
-  const attempts: { id: string; text: string }[] = [];
+  // Image sends are recorded with the uploaded size and an empty text.
+  const attempts: { id: string; text: string; imageBytes?: number }[] = [];
+  const uploads: number[] = [];
   const mockErrors: unknown[] = [];
   await runInDurableObject(stub, async (instance, state) => {
     await useManualAlarms(state);
@@ -77,12 +79,23 @@ export async function deliverQueuedReplies(
         const request = new Request(url, init);
         if (request.url.endsWith("getupdates"))
           return Response.json({ ret: 0, msgs: options.incoming ?? [] });
+        if (request.url.endsWith("getuploadurl")) {
+          uploads.push((await request.json<{ rawsize: number }>()).rawsize);
+          return Response.json({ upload_param: "upload-param" });
+        }
+        if (new URL(request.url).hostname === "novac2c.cdn.weixin.qq.com")
+          return new Response(null, { headers: { "x-encrypted-param": "download-param" } });
         if (!request.url.endsWith("sendmessage"))
           throw new Error(`Unexpected delivery endpoint: ${new URL(request.url).pathname}`);
         const body = await request.json<{
-          msg: { client_id: string; item_list: { text_item: { text: string } }[] };
+          msg: { client_id: string; item_list: { type: number; text_item?: { text: string } }[] };
         }>();
-        attempts.push({ id: body.msg.client_id, text: body.msg.item_list[0].text_item.text });
+        const [item] = body.msg.item_list;
+        attempts.push(
+          item.type === 2
+            ? { id: body.msg.client_id, text: "", imageBytes: uploads.shift() }
+            : { id: body.msg.client_id, text: item.text_item!.text },
+        );
         await options.beforeSendResult?.(instance);
         return fail ? Response.json({ ret: 1 }, { status: 503 }) : Response.json({ ret: 0 });
       } catch (error) {

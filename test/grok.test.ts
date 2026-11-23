@@ -510,6 +510,87 @@ it("lists only known MCP tools", async () => {
   expect(await res.json()).toMatchObject({ error: { code: -32602 } });
 });
 
+// 1x1 PNG with complete pixel data.
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=",
+  "base64",
+);
+it("sends uploaded images after the text, bills each one and closes uploads at settlement", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  await c.send("画一只猫");
+  const taskId = await c.wake();
+  const claim = await c.tool("wechatai_claim", { taskId, claimId: crypto.randomUUID() });
+  expect(claim.imageUpload).toMatchObject({ maxImages: 4, maxBytes: 8 * 1024 * 1024 });
+  const { url } = claim.imageUpload as { url: string };
+  expect(new URL(url).pathname).toMatch(/^\/api\/grok\/uploads\/gup1\./);
+  const put = (body: BodyInit, target = url) => SELF.fetch(target, { method: "PUT", body });
+  expect((await put(png, url.replace(/\.[^.]+$/, `.${"A".repeat(43)}`))).status).toBe(401);
+  expect((await put("not an image")).status).toBe(422);
+  expect((await put(new Uint8Array(8 * 1024 * 1024 + 1))).status).toBe(413);
+  const upload = async () => {
+    const res = await put(png);
+    expect(res.status).toBe(201);
+    return (await res.json<{ imageId: string }>()).imageId;
+  };
+  const uploads = [];
+  for (let i = 0; i < 8; i++) uploads.push(await upload());
+  const limited = await put(png);
+  expect(limited.status).toBe(409);
+  expect(await limited.text()).toContain("最多上传 8 次");
+  const [imageId, ...unused] = uploads;
+  const finish = { taskId, receipt: claim.receipt, status: "completed", text: "画好了" };
+  await expect(
+    c.tool("wechatai_finish", { ...finish, images: [crypto.randomUUID()] }),
+  ).rejects.toThrow("不属于这条任务");
+  const before = (await c.stub.snapshot()).wallet.balance;
+  const result = await c.tool("wechatai_finish", { ...finish, images: [imageId] });
+  expect(result).toMatchObject({ taskStatus: "completed", images: 1 });
+  expect(result.cost).toBe(
+    (creditUnits(countTextTokens(claim.text), countTextTokens(finish.text)) + 5000) / 1000,
+  );
+  expect((await c.stub.snapshot()).wallet.balance).toBeCloseTo(before - result.cost, 3);
+  expect(await c.tool("wechatai_finish", { ...finish, images: [] })).toEqual(result);
+  expect((await put(png)).status).toBe(409);
+  const sent = await deliverQueuedReplies(c.stub, 2);
+  expect(sent.map((part) => part.imageBytes ?? part.text)).toEqual([finish.text, png.length]);
+  await runInDurableObject(c.stub, (_, s) => {
+    const committed = (id: string) =>
+      s.storage.sql.exec("SELECT committed FROM output_assets WHERE id=?", id).one().committed;
+    expect(committed(imageId)).toBe(1);
+    expect(unused.map(committed)).toEqual(unused.map(() => -1));
+    expect(
+      s.storage.sql
+        .exec("SELECT content FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 1")
+        .one().content,
+    ).toBe(`${finish.text}\n\n![Grok Bot 图片](/api/assets/${imageId})`);
+  });
+});
+it("drops a failed task's uploads and keeps text-only results unchanged", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  await c.send("画一只狗");
+  const taskId = await c.wake();
+  const claim = await c.tool("wechatai_claim", { taskId, claimId: crypto.randomUUID() });
+  const res = await SELF.fetch(claim.imageUpload.url, { method: "PUT", body: png });
+  const { imageId } = await res.json<{ imageId: string }>();
+  const result = await c.tool("wechatai_finish", {
+    taskId,
+    receipt: claim.receipt,
+    status: "failed",
+    text: "",
+    images: [imageId],
+  });
+  expect(result).toMatchObject({ taskStatus: "failed", cost: 0 });
+  expect(result.images).toBeUndefined();
+  expect((await deliverQueuedReplies(c.stub)).map((x) => x.imageBytes)).toEqual([undefined]);
+  await runInDurableObject(c.stub, (_, s) =>
+    expect(
+      s.storage.sql.exec("SELECT committed FROM output_assets WHERE id=?", imageId).one().committed,
+    ).toBe(-1),
+  );
+});
+
 it("shows Grok Bot only to the configured accounts", async () => {
   const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(stub.id);

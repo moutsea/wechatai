@@ -14,6 +14,7 @@ import {
 } from "../../shared/grok-bot";
 import { PLUGIN_SHORTCUT_PATTERN, PLUGIN_SHORTCUT_HINT } from "../../shared/plugin-shortcut";
 import { remoteAgentConnection } from "../remote-agent-status";
+import { IMAGE_CREDITS } from "../../shared/credits";
 import { WaitingMessageField } from "./waiting-message-field";
 import { waitingMessageDefaults, type WaitingMessageSettings } from "../../shared/waiting-message";
 
@@ -177,7 +178,7 @@ export function GrokEditor({
   return (
     <Modal
       title="连接 Grok Bot"
-      description="把微信里的文字任务交给你自己的 Grok Bot，结果回到原微信会话。"
+      description="把微信里的文字任务交给你自己的 Grok Bot，文字和图片结果回到原微信会话。"
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -371,8 +372,8 @@ export function GrokEditor({
           )}
         </details>
         <p>
-          成功回复按本条消息、随任务发送的历史文字和平台保留的最终回复计收平台
-          credits。失败或超时不扣费。
+          成功回复按本条消息、随任务发送的历史文字和平台保留的最终回复计收平台 credits，每张图片另计{" "}
+          {IMAGE_CREDITS} credits。失败或超时不扣费。
         </p>
         <button className="button" disabled={busy}>
           保存配置

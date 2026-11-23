@@ -5,6 +5,7 @@ import { accountForGrok } from "../account-route";
 import { parseOpenClawToken } from "../openclaw-token";
 import { trustedAppOrigins } from "../config";
 import { GROK_SETUP_MINUTES } from "../../shared/grok-bot";
+import { GROK_MAX_IMAGES } from "./upload";
 
 const versions = ["2025-11-25", "2025-06-18", "2025-03-26"];
 const uuid = { type: "string", format: "uuid" };
@@ -12,7 +13,7 @@ const tools = [
   {
     name: "wechatai_claim",
     description:
-      "每次 Routine 运行独立生成随机 UUID 作为 claimId。领取响应丢失时，以同一 taskId 和 claimId 重试。仅在 claimed 为 true 时执行一次。history 中 failed 表示任务失败，expired 表示微伴等待超时，重做前先核对 Grok 运行记录。truncated 为 true 表示内容不完整，重试依赖缺失要求时请先向用户确认。",
+      "每次 Routine 运行独立生成随机 UUID 作为 claimId。领取响应丢失时，以同一 taskId 和 claimId 重试。仅在 claimed 为 true 时执行一次。history 中 failed 表示任务失败，expired 表示微伴等待超时，重做前先核对 Grok 运行记录。truncated 为 true 表示内容不完整，重试依赖缺失要求时请先向用户确认。需要回复图片时按 imageUpload 上传。",
     inputSchema: {
       type: "object",
       properties: { taskId: uuid, claimId: uuid },
@@ -23,7 +24,7 @@ const tools = [
   {
     name: "wechatai_finish",
     description:
-      "向原微信会话提交最终结果。使用同一 taskId、receipt 和结算状态重试。以回执的 taskStatus 为准；已超时或结算冲突时结束本次回传。",
+      "向原微信会话提交最终结果。使用同一 taskId、receipt 和结算状态重试。以回执的 taskStatus 为准；已超时或结算冲突时结束本次回传。附带图片时 text 仍写一句文字说明，微信先收到文字再收到图片。",
     inputSchema: {
       type: "object",
       properties: {
@@ -31,6 +32,13 @@ const tools = [
         receipt: uuid,
         status: { type: "string", enum: ["completed", "failed"] },
         text: { type: "string", maxLength: 30000 },
+        images: {
+          type: "array",
+          description: "按 imageUpload 上传后返回的 imageId，按发送顺序排列。仅 completed 时发送。",
+          items: uuid,
+          maxItems: GROK_MAX_IMAGES,
+          uniqueItems: true,
+        },
       },
       required: ["taskId", "receipt", "status", "text"],
       additionalProperties: false,
