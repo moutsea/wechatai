@@ -11,6 +11,9 @@ import { GROK_IMAGE_RULES, GROK_MAX_IMAGES, GROK_MAX_UPLOADS } from "./upload";
 
 const lifetime = 45 * 60_000;
 const maxWakeAttempts = 3;
+// A first wake that Go confirms it never sent is usually a slow cross-border
+// connect from the VPS. Retry it soon; later retries keep the longer backoff.
+const unsentRetryMs = 5_000;
 const id = z.string().uuid();
 const claimArgs = z
   .object({ taskId: id, claimId: id.optional() })
@@ -373,7 +376,7 @@ export class GrokTasks {
     row: Task,
     attempt: number,
     retryAt: number,
-    { status, receiptDeclined }: GrokWakeResult,
+    { status, receiptDeclined, notSent }: GrokWakeResult,
   ) {
     if (status === "reconcile") return;
     const attempts = status === "rejected" ? maxWakeAttempts : attempt;
@@ -381,6 +384,7 @@ export class GrokTasks {
     const claimable = Number(status === "waiting" || (row.claimable && !receiptDeclined));
     let due = retryAt;
     if (status === "waiting") due = row.expires;
+    else if (notSent && attempt === 1) due = Math.min(row.expires, Date.now() + unsentRetryMs);
     else if (attempts >= maxWakeAttempts) due = claimable ? row.expires : Date.now();
     this.db.exec(
       `UPDATE grok_tasks SET due=?,claimable=?,attempts=? WHERE ref=? AND attempts=?

@@ -93,6 +93,8 @@ export async function prepareGrokWake(
 export type GrokWakeResult = {
   status: "waiting" | "reconcile" | "retry" | "rejected";
   receiptDeclined?: boolean;
+  /** Go confirmed the Routine POST never left the VPS. */
+  notSent?: boolean;
 };
 export async function sendGrokWake(request: Request): Promise<GrokWakeResult> {
   let response: Response;
@@ -104,12 +106,10 @@ export async function sendGrokWake(request: Request): Promise<GrokWakeResult> {
   await response.body?.cancel().catch(() => {});
   if (response.status === 202 || response.status === 204) return { status: "waiting" };
   const receiptDeclined = response.headers.get("X-Wechatai-Grok-Receipt") === "declined";
-  if (
-    response.status === 429 ||
-    (response.status === 502 && receiptDeclined) ||
-    (response.status === 503 && response.headers.get("X-Wechatai-Grok-Wake") === "not-sent")
-  )
-    return { status: "retry", receiptDeclined };
+  const notSent =
+    response.status === 503 && response.headers.get("X-Wechatai-Grok-Wake") === "not-sent";
+  if (response.status === 429 || (response.status === 502 && receiptDeclined) || notSent)
+    return { status: "retry", receiptDeclined, ...(notSent ? { notSent } : {}) };
   if (response.status >= 400 && response.status < 500 && response.status !== 408)
     return { status: "rejected", receiptDeclined };
   return { status: "reconcile" };

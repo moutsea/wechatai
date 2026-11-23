@@ -1462,6 +1462,38 @@ it.each([429, 502])(
   },
 );
 
+it.each([
+  ["a confirmed unsent wake", 503, { "X-Wechatai-Grok-Wake": "not-sent" }, 5_000],
+  ["a provider rate limit", 429, {}, 60_000],
+] as const)("schedules the first retry after %s", async (_, status, headers, delay) => {
+  const c = await setup();
+  await c.send("@grok 跨境连接慢");
+  const task = (ref: string) =>
+    runInDurableObject(c.stub, (_, s) =>
+      s.storage.sql
+        .exec<{ due: number; attempts: number }>(
+          "SELECT due,attempts FROM grok_tasks WHERE ref=?",
+          ref,
+        )
+        .one(),
+    );
+  const before = Date.now();
+  const ref = await c.wake(status, false, headers);
+  const first = await task(ref);
+  expect(first.attempts).toBe(1);
+  expect(first.due).toBeGreaterThanOrEqual(before + delay);
+  expect(first.due).toBeLessThan(Date.now() + delay + 1_000);
+  // Only the first unsent retry is quick, so an outage still spans minutes.
+  await runInDurableObject(c.stub, (_, s) =>
+    s.storage.sql.exec("UPDATE grok_tasks SET due=0 WHERE ref=?", ref),
+  );
+  const retried = Date.now();
+  expect(await c.wake(503, false, { "X-Wechatai-Grok-Wake": "not-sent" })).toBe(ref);
+  const second = await task(ref);
+  expect(second.attempts).toBe(2);
+  expect(second.due).toBeGreaterThanOrEqual(retried + 120_000);
+});
+
 it("releases the route without charging after three confirmed unsent attempts", async () => {
   const c = await setup();
   await c.send("/use grok");

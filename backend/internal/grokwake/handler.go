@@ -46,7 +46,7 @@ func Mount(ctx context.Context, next http.Handler, secret, receiptPath string) (
 		return nil, nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle("POST "+Path, handler(signer, http.DefaultTransport, store))
+	mux.Handle("POST "+Path, handler(signer, wakeTransport(), store))
 	mux.Handle("/", next)
 	return mux, func() { store.db.Close() }, nil
 }
