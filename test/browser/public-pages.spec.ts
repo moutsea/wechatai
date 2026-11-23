@@ -243,6 +243,8 @@ for (const [path, heading] of Object.entries(portuguesePages)) {
     const language = header.getByRole("button", { name: portugueseTrigger, exact: true });
     await expect(language).toBeInViewport({ ratio: 1 });
     await language.click();
+    // The wrapped header puts the trigger at the left; the menu must not cross that edge.
+    await expect(header.getByRole("menu")).toBeInViewport({ ratio: 1 });
     const english = header.getByRole("menuitem", { name: "Inglês", exact: true });
     await expect(english).toBeInViewport({ ratio: 1 });
     await expect(english).toHaveAttribute("href", path.replace("/pt", "/en"));
@@ -322,17 +324,19 @@ test.describe("short touch viewport", () => {
       await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
       await touch.detach();
 
-      // The swipe can leave the drawer coasting, and Chrome treats a tap during a
-      // fling as "stop scrolling" rather than a click. Tap once it has settled.
-      await register.evaluate(
-        (link) =>
+      // When the drawer content fits, the swipe scrolls the page behind it instead.
+      // Either can keep coasting, and Chrome treats a tap during a fling as "stop
+      // scrolling" rather than a click. Tap once neither has moved for 10 frames.
+      await page.evaluate(
+        () =>
           new Promise<void>((resolve) => {
-            let last = Number.NaN;
+            const drawer = document.querySelector(".site-mobile-menu")!;
+            let last = "";
             let still = 0;
             const check = () => {
-              const top = link.getBoundingClientRect().top;
-              still = top === last ? still + 1 : 0;
-              last = top;
+              const position = `${window.scrollY}:${drawer.scrollTop}`;
+              still = position === last ? still + 1 : 0;
+              last = position;
               if (still >= 10) resolve();
               else requestAnimationFrame(check);
             };
