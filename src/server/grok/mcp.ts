@@ -46,7 +46,7 @@ const tools = [
   },
   {
     name: "wechatai_register_webhook",
-    description: `仅在配置时调用：提交本 Bot 中接收微伴任务的 Routine 的 Webhook POST 地址和 key，key 不含 Bearer 前缀。须在微伴网页生成配置指令后 ${GROK_SETUP_MINUTES} 分钟内调用，成功一次后关闭；需要更换时请用户在网页重新生成指令。`,
+    description: `仅在配置时调用：提交本 Bot 中接收微伴任务的 Routine 的 Webhook POST 地址和 key，key 不含 Bearer 前缀。须在微伴网页生成配置指令后 ${GROK_SETUP_MINUTES} 分钟内调用，成功一次后关闭，用同一 Routine 重复提交也会返回成功。登记已关闭时，请用户在微伴网页的 Grok Bot 配置中点「重新开放登记」，不要让用户重新生成指令。`,
     inputSchema: {
       type: "object",
       properties: {

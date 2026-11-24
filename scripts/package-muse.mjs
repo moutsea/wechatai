@@ -18,7 +18,7 @@ const FIXED_MTIME = 1_700_000_000;
 
 const output = resolve("public/downloads");
 await mkdir(output, { recursive: true });
-const archive = resolve(output, "wechatai-muse-1.0.0.tgz");
+const archive = resolve(output, "wechatai-muse-1.1.0.tgz");
 
 const source = resolve("integrations/muse");
 

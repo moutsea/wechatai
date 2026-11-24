@@ -1,0 +1,3 @@
+# The IndexNow test (PR #44) uses the placeholder key 0123456789abcdef repeated twice.
+# CI scans every branch, so this finding on an unmerged branch also blocks main.
+ddf7fe56a9adc9f8ed97147f1151d48babe84694:scripts/indexnow-submit.node-test.mjs:generic-api-key:8
