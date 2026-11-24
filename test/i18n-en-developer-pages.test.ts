@@ -127,6 +127,18 @@ describe("English developer pages", () => {
     }
   });
 
+  it("documents Muse reply images, billing and upload order", () => {
+    expect(museGuideEn).toContain("up to 4 PNG, JPEG or WebP images");
+    expect(museGuideEn).toContain("WeChat receives the text first and then the images");
+    expect(museGuideEn).toContain("Each reply image costs 5 credits");
+    expect(museGuideEn).toContain("Images and files sent to Muse");
+    expect(museGuideEn).not.toContain("does not carry images");
+    expect(museGuideEn).toContain("PUT /api/muse/uploads?job={jobId}&runner={runnerId}");
+    expect(museGuideEn).toContain("8 upload attempts per task");
+    expect(museGuideEn).toContain("event's `images` array in delivery order");
+    expect(museGuideEn).toContain("connector version 1.1.0; older versions return text only");
+  });
+
   it("adds exactly four English URLs to the sitemap", () => {
     const sitemap = renderSitemap();
     const englishUrls = [...sitemap.matchAll(/<loc>(https:\/\/wechatai\.app\/en\/[^<]+)<\/loc>/g)].map(

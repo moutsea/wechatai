@@ -262,9 +262,9 @@ This setup reuses the existing Wechatai WeChat connection; do not have Muse run 
 
 ## 3. Supported scope
 
-Text, voice already transcribed by WeChat, and explicitly authorized scheduled or background text notifications are supported. Muse manages its own models, tools, long-term memory and model service fees; Wechatai does not replace Muse's model with the normal chat model selected in Wechatai.
+Text, voice already transcribed by WeChat, and explicitly authorized scheduled or background text notifications are supported. Task replies can include up to 4 PNG, JPEG or WebP images, such as generated images. WeChat receives the text first and then the images. Each reply image costs 5 credits. Muse manages its own models, tools, long-term memory and model service fees; Wechatai does not replace Muse's model with the normal chat model selected in Wechatai.
 
-The first version does not carry images, files, tool approvals or Muse native commands. Switch to the normal model or Xiaowei when attachments are needed, and approve operations that need approval inside Muse. Wechatai commands such as /wx help, /wx status and /wx new still work, and /exit returns to the normal model. /wx new creates a new return route and recent chat record; it does not clear Muse's own memory or cancel tool operations that already started.
+Images and files sent to Muse, video, tool approvals and Muse native commands are not supported. Switch to the normal model or Xiaowei when incoming attachments are needed, and approve operations that need approval inside Muse. Wechatai commands such as /wx help, /wx status and /wx new still work, and /exit returns to the normal model. /wx new creates a new return route and recent chat record; it does not clear Muse's own memory or cancel tool operations that already started.
 
 Recent text records for different routes are stored separately; the worker receives a history fragment of the latest 10 messages, up to 3,000 characters each, per call, and the current requirement is to keep complete text and respect the plugin input limit. A reply enters history only after Wechatai confirms receipt, using the body actually received and excluding content removed by the output limit or rejected. This is not native Muse session isolation; the same hosted environment still shares long-term memory, tools and files, so do not share it between users who do not trust each other.
 
@@ -288,7 +288,7 @@ The final reply is saved in the local send queue first and then returned to Wech
 
 When you clear or delete a session or delete all session records, Wechatai removes only the reply bodies from the corresponding receipts and the result cache, retaining the metadata needed for settlement and deduplication; retrying an old event does not restore the body or charge again. This operation does not synchronously delete Muse's existing local records, long-term memory or files.
 
-- Wechatai bills credits on the text actually received and the final returned text: 5,000 input tokens = 1 credit, with output weighted ×8.
+- Wechatai bills credits on the text actually received and the final returned text: 5,000 input tokens = 1 credit, with output weighted ×8. Each reply image costs 5 credits.
 - Muse's internal history, system prompt, tool input and internal calls do not consume Wechatai credits. Model service fees follow the service Muse uses.
 - Failures are not billed as successes; proactive notifications bill output only. Waiting notices and platform source notices are free.
 - When the worker claims a task it receives this reply's token limit, the smaller of the task acceptance value and the current configuration; the final reply is also at most 30,000 characters. Have Muse prefer a complete summary first and expand in follow-ups.
@@ -306,7 +306,7 @@ Credentials and queues are stored in the Muse environment at ~/hooks/state/wecha
 
 Plugin manifest: \`GET /api/plugins/muse\`. This article's Markdown: /developers/muse.md.
 After signing in on the web page, \`POST /api/plugins/{id}/muse/pair\` returns the connection command, and \`GET /api/plugins/{id}/muse/status\` shows status.
-The connector's dedicated transport is \`POST /api/muse/{pair|heartbeat|poll|claim|event}\` with an independent Bearer credential, not shared with OpenClaw or Hermes. Users do not provide a Muse API Key.
+The connector's dedicated transport is \`POST /api/muse/{pair|heartbeat|poll|claim|event}\` with an independent Bearer credential, not shared with OpenClaw or Hermes. Users do not provide a Muse API Key. To return images, upload each one with \`PUT /api/muse/uploads?job={jobId}&runner={runnerId}\` using the same credential. Uploads are limited to tasks claimed by that runner and 8 upload attempts per task. Then include the returned \`imageId\` values in the event's \`images\` array in delivery order, up to 4 images. Image replies are supported from connector version 1.1.0; older versions return text only.
 
 Automated tests cover Wechatai permissions, tasks and billing, plus claiming, recovery and result return in a simulated hook environment; hook registration and tool execution with a real Muse version still need integration in the user's hosted environment. This adapter follows the [hook setup in wechat-ilink-muse-bridge](https://github.com/gfydfhcf/wechat-ilink-muse-bridge/tree/main/examples/muse-hook) and does not bundle its iLink client.
 

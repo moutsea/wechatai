@@ -74,6 +74,10 @@ for (const [kind, label] of [["openclaw", "OpenClaw"], ["hermes", "Hermes"], ["m
     await page.goto(`${origin}/en${path}`);
     await mounted;
     await expect(page.getByRole("heading", { name: `${label} connection guide`, level: 1 })).toBeVisible();
+    if (kind === "muse") {
+      await expect(page.getByText(/Task replies can include up to 4 PNG, JPEG or WebP images/)).toBeVisible();
+      await expect(page.getByText(/8 upload attempts per task/)).toBeVisible();
+    }
     await expect(page.getByRole("link", { name: "Markdown version" })).toHaveAttribute("href", `${path}.md`);
     await page.getByRole("button", { name: "Language: English", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "中文", exact: true })).toHaveAttribute("href", path);
