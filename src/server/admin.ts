@@ -1,6 +1,7 @@
 import { accountForAdmin, type AdminGrant } from "./account-route";
 import { AppError } from "./config";
 import { billingMode } from "./billing";
+import { billingRevenueQueries } from "./billing-revenue";
 import { dayWindow } from "./wallet";
 import { adminGiftInputSchema } from "../shared/admin";
 import type {
@@ -120,6 +121,7 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
   const startDay = dayWindow(start).day;
   const endDay = dayWindow(now).day;
   const db = env.DB.withSession("first-primary");
+  const [paymentSummary, paymentDays] = billingRevenueQueries(db, mode, start, now);
   const results = await db.batch<Record<string, string | number | null>>([
     db
       .prepare(`SELECT COUNT(*) users, COUNT(s.user_id) synced, MIN(s.synced_at) oldest, MAX(s.synced_at) newest,
@@ -127,22 +129,13 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
       ${["links", "connected", "channels", "models", "plugins", "sessions", "requests", "failedRequests", "tokens", "credits", "purchasedCredits", "debt"].map((k) => `COALESCE(SUM(${value(k)}),0) ${k}`).join(",")}
       FROM user u LEFT JOIN admin_account_stats s ON s.user_id=u.id`)
       .bind(now),
-    db
-      .prepare(`SELECT COALESCE(SUM(amount),0)/100.0 revenue, COUNT(*) paidOrders, COUNT(DISTINCT user_id) payingUsers,
-      COALESCE(SUM(CASE WHEN kind='plus' THEN amount ELSE 0 END),0)/100.0 membershipRevenue,
-      COALESCE(SUM(CASE WHEN kind='credits' THEN amount ELSE 0 END),0)/100.0 creditsRevenue
-      FROM billing_order WHERE mode=? AND status='paid' AND currency='cny'`)
-      .bind(mode),
+    paymentSummary,
     db.prepare("SELECT COUNT(*) rewardedReferrals FROM referral WHERE status='rewarded'"),
     db
       .prepare(`SELECT strftime('%Y-%m-%d',(${createdMillis})/1000,'unixepoch','+8 hours') day, COUNT(*) newUsers
       FROM user u WHERE (${createdMillis})>=? AND (${createdMillis})<=? GROUP BY day`)
       .bind(start, now),
-    db
-      .prepare(`SELECT strftime('%Y-%m-%d',COALESCE(paid_at,created_at)/1000,'unixepoch','+8 hours') day,
-      SUM(amount)/100.0 revenue, COUNT(*) paidOrders FROM billing_order
-      WHERE mode=? AND status='paid' AND currency='cny' AND COALESCE(paid_at,created_at)>=? AND COALESCE(paid_at,created_at)<=? GROUP BY day`)
-      .bind(mode, start, now),
+    paymentDays,
     db
       .prepare(`SELECT json_extract(d.value,'$.day') day,
       COUNT(DISTINCT CASE WHEN json_extract(d.value,'$.requests')>0 THEN s.user_id END) activeUsers,
