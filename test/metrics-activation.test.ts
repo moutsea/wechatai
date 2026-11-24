@@ -1,5 +1,16 @@
-import { env } from "cloudflare:test";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { env, createExecutionContext } from "cloudflare:test";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
+import worker from "../src/server/index";
+import * as auth from "../src/server/auth";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
@@ -387,5 +398,229 @@ describe("activation range parsing", () => {
       from_ms: 0,
       to_ms: 1,
     });
+  });
+});
+
+const token = "test-only-activation-token-0123456789abcdef";
+const bearer = { authorization: `Bearer ${token}` };
+const queryString = `from_ms=${start}&to_ms=${start + day}`;
+
+function request(
+  init: RequestInit = { headers: bearer },
+  overrides: Record<string, unknown> = {},
+  search = queryString,
+) {
+  return worker.fetch(
+    new Request(`https://wechatai.app/api/metrics/activation?${search}`, init),
+    {
+      ...bindings,
+      METRICS_API_TOKEN: token,
+      API_LIMIT: { limit: async () => ({ success: true }) },
+      ...overrides,
+    } as Env,
+    createExecutionContext(),
+  );
+}
+
+describe("activation HTTP boundary", () => {
+  let consoleSpies: MockInstance[];
+  beforeEach(() => {
+    vi.spyOn(Date, "now").mockReturnValue(observed);
+    consoleSpies = (["log", "info", "warn", "error"] as const).map((method) =>
+      vi.spyOn(console, method).mockImplementation(() => {}),
+    );
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reads aggregate SQL through the worker with a bearer and exposes only the response whitelist", async () => {
+    await account("PRIVATE_USER", start, { firstWechatReplyAt: start });
+    await order("PRIVATE_ORDER", "PRIVATE_USER", start);
+    const createAuth = vi.spyOn(auth, "createAuth");
+    const outbound = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("UNEXPECTED_NETWORK"));
+    const prepare = vi.fn((sql: string) => {
+      expect(sql).toBe(referenceSql);
+      return env.DB.prepare(sql);
+    });
+    const response = await request(
+      { headers: bearer },
+      {
+        DB: { prepare },
+        ACCOUNTS: new Proxy(
+          {},
+          {
+            get() {
+              throw new Error("ACCOUNT_SENTINEL");
+            },
+          },
+        ),
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    const body = await response.json<Record<string, unknown>>();
+    expect(Object.keys(body).sort()).toEqual(
+      [
+        "timezone",
+        "requested_range",
+        "effective_range",
+        "collection_started_at_ms",
+        "collection_start_policy",
+        "observed_until_ms",
+        "window_ms",
+        "mode",
+        "registration_interval",
+        "event_interval",
+        "stages_independent",
+        "paid_accounts_basis",
+        "amount_basis",
+        "refund_adjustment",
+        "available",
+        "reasons",
+        "days",
+      ].sort(),
+    );
+    expect(body.days).toEqual([
+      {
+        signup_day: "2026-11-22",
+        available: true,
+        accounts: 1,
+        model_tested: 0,
+        connected: 0,
+        first_reply_delivered: 1,
+        paid_accounts: 1,
+      },
+    ]);
+    expect(body.observed_until_ms).toBe(observed);
+    expect(JSON.stringify(body)).not.toMatch(
+      /PRIVATE_|example\.test|user_id|order_id|email|retention|last_reply|d7/i,
+    );
+    expect(createAuth).not.toHaveBeenCalled();
+    expect(outbound).not.toHaveBeenCalled();
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(consoleSpies[0]).toHaveBeenCalledOnce();
+    expect(JSON.parse(consoleSpies[0].mock.calls[0][0])).toMatchObject({
+      event: "metrics.request",
+      route: "/api/metrics/activation",
+      status: 200,
+      reason: "ok",
+    });
+  });
+
+  it("authenticates before parsing the range or reading D1", async () => {
+    const prepare = vi.fn(() => {
+      throw new Error("UNEXPECTED_DB");
+    });
+    for (const authorization of ["", "Bearer invalid", "Bearer ", "Bearer short"]) {
+      const response = await request({ headers: { authorization } }, { DB: { prepare } }, "");
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: "unauthorized" });
+    }
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it.each(["HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"])(
+    "rejects %s after authentication",
+    async (method) => {
+      const response = await request({ method, headers: bearer });
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("GET");
+      if (method === "HEAD") expect(await response.text()).toBe("");
+      else expect(await response.json()).toEqual({ error: "method_not_allowed" });
+    },
+  );
+
+  it("reports invalid bounds as 400 and prevents client overrides of the window, cutoff or mode", async () => {
+    const invalid = await request({ headers: bearer }, {}, "from_ms=PRIVATE_QUERY&to_ms=2");
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: "invalid_query" });
+    const response = await request(
+      { headers: bearer },
+      {},
+      `${queryString}&observed_until_ms=0&window_ms=1&mode=live&collection_started_at_ms=0`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      observed_until_ms: observed,
+      window_ms: window,
+      mode: "test",
+      collection_started_at_ms: start,
+    });
+  });
+
+  it("returns unavailable days and outside-collection ranges as explicit 200 results", async () => {
+    await account("incomplete", start, null);
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      available: false,
+      days: [
+        {
+          signup_day: "2026-11-22",
+          available: false,
+          reasons: ["activation_missing"],
+        },
+      ],
+    });
+    const earlier = await request({ headers: bearer }, {}, `from_ms=0&to_ms=${start}`);
+    expect(earlier.status).toBe(200);
+    expect(await earlier.json()).toMatchObject({
+      available: false,
+      reasons: ["before_collection_start"],
+      days: [],
+    });
+  });
+
+  it("uses both inherited quotas and fails closed on limiter or database failure", async () => {
+    for (const limitedKey of ["metrics:ip:unknown", "metrics:token:shared"]) {
+      const response = await request(
+        { headers: bearer },
+        {
+          API_LIMIT: {
+            limit: async ({ key }: { key: string }) => ({ success: key !== limitedKey }),
+          },
+        },
+      );
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("60");
+      expect(await response.json()).toEqual({ error: "rate_limited" });
+    }
+    for (const overrides of [
+      { API_LIMIT: undefined },
+      {
+        API_LIMIT: {
+          limit() {
+            throw new Error("PRIVATE_LIMITER");
+          },
+        },
+      },
+      {
+        DB: {
+          prepare() {
+            throw new Error("PRIVATE_DATABASE");
+          },
+        },
+      },
+    ]) {
+      const response = await request({ headers: bearer }, overrides);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "unavailable" });
+    }
+    const records = consoleSpies[0].mock.calls.map(([message]) => JSON.parse(message));
+    expect(records.map((record) => record.status)).toEqual([429, 429, 503, 503, 503]);
+    for (const record of records) {
+      expect(Object.keys(record).sort()).toEqual(
+        ["event", "at", "route", "method", "status", "rateLimited", "reason"].sort(),
+      );
+      expect(record.route).toBe("/api/metrics/activation");
+    }
+    const logs = consoleSpies
+      .flatMap((logger) => logger.mock.calls)
+      .flat()
+      .join(" ");
+    expect(logs).not.toContain(token);
+    expect(logs).not.toMatch(/PRIVATE_|from_ms|Bearer|cookie/i);
   });
 });

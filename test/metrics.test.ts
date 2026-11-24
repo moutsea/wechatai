@@ -281,12 +281,13 @@ describe("metrics routing boundary", () => {
     expect(response.status).toBe(405);
   });
 
-  it("returns 404 for every path except the exact health route", async () => {
+  it("returns 404 for unregistered metrics paths", async () => {
     for (const path of [
       "/api/metrics",
       "/api/metrics/",
       "/api/metrics/overview",
       "/api/metrics/health/extra",
+      "/api/metrics/activation/extra",
       "/api/metrics/health%2f..%2fadmin",
     ]) {
       const response = await call(bindings(), path, { headers: bearer() });
@@ -346,20 +347,22 @@ describe("metrics browser session isolation", () => {
 
     const limiter = fakeLimiter();
     for (const cookie of [ordinary.cookie, admin.cookie, plus.cookie]) {
-      expect(
-        (
-          await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
-            headers: { cookie },
-          })
-        ).status,
-      ).toBe(401);
-      expect(
-        (
-          await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
-            headers: { cookie, ...bearer(otherToken) },
-          })
-        ).status,
-      ).toBe(401);
+      for (const path of ["/api/metrics/health", "/api/metrics/activation?from_ms=0&to_ms=1"]) {
+        expect(
+          (
+            await call(bindings({ API_LIMIT: limiter.binding }), path, {
+              headers: { cookie },
+            })
+          ).status,
+        ).toBe(401);
+        expect(
+          (
+            await call(bindings({ API_LIMIT: limiter.binding }), path, {
+              headers: { cookie, ...bearer(otherToken) },
+            })
+          ).status,
+        ).toBe(401);
+      }
     }
 
     const access = await worker.fetch(

@@ -2,12 +2,14 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { secret } from "./config";
+import { getActivationMetrics, parseActivationRange } from "./metrics-activation";
 
 const TOKEN_NAME = "METRICS_API_TOKEN";
 const TOKEN_MIN_LENGTH = 32;
 const IP_LIMIT_KEY = "metrics:ip:";
 const TOKEN_LIMIT_KEY = "metrics:token:shared";
 const HEALTH_PATH = "/api/metrics/health";
+const ACTIVATION_PATH = "/api/metrics/activation";
 
 type BillingMode =
   | { available: true; mode: "test" | "live" }
@@ -22,6 +24,7 @@ type AuditReason =
   | "rate_limit_unavailable"
   | "method_not_allowed"
   | "not_found"
+  | "invalid_query"
   | "internal_error";
 
 type LimitResult = "ok" | "limited" | "unavailable";
@@ -67,6 +70,7 @@ async function consumeLimit(env: Env, key: string): Promise<LimitResult> {
 
 function routeTemplate(path: string) {
   if (path === HEALTH_PATH) return HEALTH_PATH;
+  if (path === ACTIVATION_PATH) return ACTIVATION_PATH;
   if (path === "/api/metrics") return "/api/metrics";
   return "/api/metrics/*";
 }
@@ -95,11 +99,12 @@ function respond(
 }
 
 /**
- * Dedicated read-only operator metadata endpoint. It is mounted before the
+ * Dedicated read-only operator endpoints. It is mounted before the
  * general API body limit and browser session middleware, so it never reads a
  * request body, queries a session, or reaches account Durable Objects.
  */
 export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
+  const observedUntil = Date.now();
   c.header("Cache-Control", "no-store");
   c.header("X-Robots-Tag", "noindex, nofollow");
   try {
@@ -127,10 +132,17 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
       return respond(c, 429, { error: "rate_limited" }, "token_rate_limited", true);
     }
 
-    if (c.req.path !== HEALTH_PATH) return respond(c, 404, { error: "not_found" }, "not_found");
+    if (c.req.path !== HEALTH_PATH && c.req.path !== ACTIVATION_PATH)
+      return respond(c, 404, { error: "not_found" }, "not_found");
     if (c.req.method !== "GET") {
       c.header("Allow", "GET");
       return respond(c, 405, { error: "method_not_allowed" }, "method_not_allowed");
+    }
+
+    if (c.req.path === ACTIVATION_PATH) {
+      const range = parseActivationRange(new URL(c.req.url).searchParams);
+      if (!range) return respond(c, 400, { error: "invalid_query" }, "invalid_query");
+      return respond(c, 200, await getActivationMetrics(c.env, range, observedUntil), "ok");
     }
 
     return respond(
