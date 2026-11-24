@@ -1,10 +1,16 @@
 import type { AdminAccountStats, AdminUsage } from "../shared/admin";
 import { dayWindow } from "./wallet";
+import { readAccountRetention } from "./account-retention";
 import { wechatLinkKey, WECHAT_LINK_LIMITS } from "../shared/wechat-links";
 
 // Internal RPC only. Return aggregates, never messages, record titles, API keys or plugin config.
 // Reading statistics must not grant daily credits, schedule alarms, or change chat state.
-export function readAdminAccountStats(sql: SqlStorage, now = Date.now()): AdminAccountStats {
+export function readAdminAccountStats(
+  sql: SqlStorage,
+  now = Date.now(),
+  registeredAt?: number,
+  collectionStart?: number,
+): AdminAccountStats {
   const setting = <T>(key: string, fallback: T): T => {
     const row = sql
       .exec<{ value: string }>("SELECT value FROM settings WHERE key=?", key)
@@ -94,6 +100,9 @@ export function readAdminAccountStats(sql: SqlStorage, now = Date.now()): AdminA
     .toArray();
   return {
     ...totals,
+    ...(registeredAt === undefined
+      ? {}
+      : { retention: readAccountRetention(sql, registeredAt, now, collectionStart) }),
     activation: {
       firstModelTestAt: setting<number | null>("firstModelTestAt", null),
       firstWechatConnectedAt: setting<number | null>("firstWechatConnectedAt", null),

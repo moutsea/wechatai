@@ -1174,8 +1174,8 @@ export class PersonalAccount extends DurableObject<Env> {
     if (!this.getSetting("ownerId", "")) this.setSetting("ownerId", userId);
   }
   // Server binding RPC; deliberately not exposed by the account api(action) dispatcher.
-  adminStats() {
-    return readAdminAccountStats(this.sql);
+  adminStats(registeredAt?: number, collectionStart?: number) {
+    return readAdminAccountStats(this.sql, Date.now(), registeredAt, collectionStart);
   }
   // These RPCs are only available to the server binding, never the user action dispatcher.
   adminMembership() {
