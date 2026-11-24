@@ -115,7 +115,44 @@ const createdMillis =
   "CASE WHEN u.createdAt<100000000000 THEN u.createdAt*1000 ELSE u.createdAt END";
 const value = (field: string) => `json_extract(s.data,'$.${field}')`;
 
-export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOverview> {
+// Inspect existing snapshots in the same batch as their aggregates, so a sync
+// cannot race the completeness check. Missing or invalid old fields stay unknown.
+function snapshotCoverageColumns() {
+  const numeric = (source: string, fields: string[]) =>
+    fields
+      .map(
+        (field) =>
+          `COALESCE(json_type(${source},'$.${field}') IN ('integer','real') AND json_extract(${source},'$.${field}')>=0,0)`,
+      )
+      .join(" AND ");
+  const usage = ["requests", "tokens", "credits"];
+  const rowChecks = [
+    ["daily", [...usage, "failedRequests"]],
+    ["pluginUsage", usage],
+  ] as const;
+  return `,
+    COUNT(CASE WHEN s.user_id IS NOT NULL AND NOT (
+      ${numeric("s.data", ["sampledAt", "planUntil", "links", "connected", "channels", "models", "plugins", "sessions", ...usage, "failedRequests", "purchasedCredits", "debt"])}
+      AND ${value("sampledAt")}=s.synced_at
+      AND ${rowChecks
+        .map(
+          ([field, fields]) => `
+        COALESCE(json_type(s.data,'$.${field}')='array',0)
+        AND NOT EXISTS(SELECT 1 FROM json_each(s.data,'$.${field}') row WHERE
+          row.type!='object' OR NOT (${numeric("row.value", [...fields])})
+          OR COALESCE(json_type(row.value,'$.day')='text',0)=0
+          ${field === "pluginUsage" ? "OR COALESCE(json_type(row.value,'$.pluginId')='text',0)=0" : ""}
+        )`,
+        )
+        .join(" AND ")}
+    ) THEN 1 END) legacySnapshots`;
+}
+
+export async function adminOverview(
+  env: Env,
+  now = Date.now(),
+  options: { snapshotCoverage?: boolean; publicPluginIds?: readonly string[] } = {},
+): Promise<AdminOverview> {
   const mode = billingMode(env);
   const start = dayWindow(now).start - 29 * 86400000;
   const startDay = dayWindow(start).day;
@@ -126,7 +163,7 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
     db
       .prepare(`SELECT COUNT(*) users, COUNT(s.user_id) synced, MIN(s.synced_at) oldest, MAX(s.synced_at) newest,
       COALESCE(SUM(${value("planUntil")}>?),0) plus,
-      ${["links", "connected", "channels", "models", "plugins", "sessions", "requests", "failedRequests", "tokens", "credits", "purchasedCredits", "debt"].map((k) => `COALESCE(SUM(${value(k)}),0) ${k}`).join(",")}
+      ${["links", "connected", "channels", "models", "plugins", "sessions", "requests", "failedRequests", "tokens", "credits", "purchasedCredits", "debt"].map((k) => `COALESCE(SUM(${value(k)}),0) ${k}`).join(",")}${options.snapshotCoverage ? snapshotCoverageColumns() : ""}
       FROM user u LEFT JOIN admin_account_stats s ON s.user_id=u.id`)
       .bind(now),
     paymentSummary,
@@ -150,11 +187,13 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
       SUM(json_extract(p.value,'$.requests')) requests, SUM(json_extract(p.value,'$.tokens')) tokens,
       SUM(json_extract(p.value,'$.credits')) credits
       FROM admin_account_stats s JOIN user u ON u.id=s.user_id, json_each(s.data,'$.pluginUsage') p
-      WHERE json_extract(p.value,'$.day') BETWEEN ? AND ? GROUP BY pluginId ORDER BY requests DESC LIMIT 20`)
-      .bind(startDay, endDay),
+      WHERE json_extract(p.value,'$.day') BETWEEN ? AND ?
+      ${options.publicPluginIds ? `AND json_extract(p.value,'$.pluginId') IN (${options.publicPluginIds.map(() => "?").join(",")})` : ""}
+      GROUP BY pluginId ORDER BY requests DESC, pluginId ASC LIMIT 20`)
+      .bind(startDay, endDay, ...(options.publicPluginIds ?? [])),
   ]);
   const stats = results[0].results[0] as AdminOverview["summary"] & AdminOverview["coverage"];
-  const { synced, oldest, newest, ...summary } = stats;
+  const { synced, oldest, newest, legacySnapshots, ...summary } = stats;
   const days = new Map<string, Partial<AdminDay>>();
   for (const result of results.slice(3, 6))
     for (const row of result.results) {
@@ -179,7 +218,7 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
   return {
     mode,
     generatedAt: now,
-    coverage: { synced, oldest, newest },
+    coverage: { synced, oldest, newest, ...(options.snapshotCoverage ? { legacySnapshots } : {}) },
     summary: {
       ...summary,
       ...results[1].results[0],

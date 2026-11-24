@@ -55,7 +55,12 @@ export type AdminAccountStats = AdminUsage & {
 export type AdminOverview = {
   mode: "test" | "live";
   generatedAt: number;
-  coverage: { synced: number; oldest: number | null; newest: number | null };
+  coverage: {
+    synced: number;
+    oldest: number | null;
+    newest: number | null;
+    legacySnapshots?: number;
+  };
   summary: AdminUsage & {
     failedRequests: number;
     users: number;
