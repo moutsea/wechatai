@@ -184,6 +184,11 @@ ON CONFLICT(user_id) DO UPDATE SET expires_at=excluded.expires_at;
 
 管理后台的「服务器」页需要先应用 `0013_server_status.sql`，再按[服务器状态采集说明](../integrations/server-monitor/README.md)安装独立采集器并配置 `SERVER_MONITOR_SECRET`。采集器每 30 秒推送一次最新快照，不唤醒账户 Durable Objects；无需重启现有消息服务。未配置时显示等待接入，超过 90 秒无上报显示过期状态。
 
+如需向外部运营工具提供只读元数据，使用单独生成的随机 `METRICS_API_TOKEN`（至少 32 字符），不要复用其他密钥，也不要把值写进仓库、PR 或聊天。未配置时 `GET /api/metrics/health` 返回 401。该接口只返回元数据，不包含业务指标。
+
+- `pnpm cf:production secret put METRICS_API_TOKEN` 在当前线上版本为最新版本时会创建并立即部署新版本，须同时取得写入生产 Secret 和部署的授权。
+- 仅获写入授权时，使用 `pnpm cf:production versions secret put METRICS_API_TOKEN` 创建新版本但不部署；新值只在该版本经单独授权部署并开始接收流量后生效。
+
 每次上线后先检查 HTTP 入口是否跳转，并保留路径和查询参数：
 
 ```sh

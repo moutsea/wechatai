@@ -11,6 +11,8 @@ EXECUTOR_SECRET=
 EXECUTOR_ACCOUNTS=
 # Optional aggregate-only server monitoring credential, independent of receiver/executor.
 SERVER_MONITOR_SECRET=
+# Optional read-only operator metadata credential; independent random value of at least 32 characters.
+METRICS_API_TOKEN=
 # Same random secret as KimiSeek WECHATAI_CONNECT_SECRET (at least 32 characters).
 KIMISEEK_CONNECT_SECRET=
 # Optional: each OAuth button is enabled only when both values are configured.
