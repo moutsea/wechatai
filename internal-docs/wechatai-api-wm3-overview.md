@@ -1,9 +1,24 @@
 # wechatai 只读 API：注册、活跃与平台用量聚合（WM3）
 
-卡：`5a170ea1-a18e-4ec9-8d43-0485121d870d`  
-仓库：`moutsea/wechatai`，默认目标分支 `main`  
-评审日期：2026-11-23  
+卡：`5a170ea1-a18e-4ec9-8d43-0485121d870d`
+
+仓库：`moutsea/wechatai`，默认目标分支 `main`
+
+评审日期：2026-11-23
+
 评估基线：工作区 `HEAD = b36ca2cba3e4cfbc04f99fa0e466423bda54e936`；本地缓存 `origin/main = 708e3e1caebe62127b3d418434ef56573c87c5b6`；工作树干净。未联网刷新远端，不能据此声称 `main` 已是最新。
+
+## 2026-11-24 实施契约补充
+
+本节更新开发基线、覆盖检查与评审交付顺序，历史评审证据保留供追溯。
+
+- WM1 正式独立 PASS 对应 `179fc9251bd8f50030bb8e29f361cba3c5c8e396`，PR #48 合并为 `f84b9060a79d421c659cb68737a6b551a33c568b`，已 fetch 并确认可达。本卡从该 main 基线开发。
+- 本卡沿用独立分支、一个 draft PR。每笔实现提交先自查并记录，完成后通过 step_complete 交工作流独立评审。原单张在途 PR 建议不再作为开工门槛。同文件重叠写入评审交接。
+- coverage 的旧结构检查补充 `sampledAt` 与 `synced_at` 一致性、数值字段类型、daily/pluginUsage 的数组及行字段完整性。部分同步与旧结构同时存在时 reason 为 not_synced，observed/items 为 null。
+- daily 还检查快照自身保留窗口的起点，取最晚采样账户的 30 日窗口起点。采样晚于 generatedAt 时按 not_covered 处理日桶和插件排名。
+- plugins 使用已有 `adminPluginNames` 的公开 ID 名单，在 Top 20 排序前过滤。快照早于今天或晚于 generatedAt 时 reason 为 not_covered，其余包含今日的观测排名为 day_incomplete。
+- window 增加 endInclusive、activeUsers、credits、source 元数据，明确包含查询上界、按用户日去重、结算 units/1000 的退款前消耗及快照来源。
+- 本轮仅使用明确 test-only 本地配置进行验证。公开接口文档为 docs/metrics-overview.md，内部评审文件留在 internal-docs。
 
 ## 结论与原子性
 
