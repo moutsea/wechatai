@@ -21,7 +21,7 @@
 
 不要直接更换已有生产环境的加密密钥，否则旧凭据可能无法解密。迁移时同时保留数据库、文件和对应密钥备份。
 
-### 只读运营 API（元数据）
+### 只读运营 API
 
 `METRICS_API_TOKEN` 是可选的独立 Workers Secret。启用时使用单独生成的随机值（至少 32 字符），不得复用 `SERVER_MONITOR_SECRET`、`EXECUTOR_SECRET`、`WECHAT_RECEIVER_SECRET`、`BILLING_NOTIFY_TOKEN`、`BETTER_AUTH_SECRET` 或 `ENCRYPTION_KEY`；未配置、空白或过短时入口关闭。只接受 `Authorization: Bearer <METRICS_API_TOKEN>`，Cookie、登录 Session 和查询参数都不能代替它。
 
@@ -56,6 +56,8 @@
 
 - `pnpm cf:production secret put METRICS_API_TOKEN` 在当前线上版本为最新版本时会创建并立即部署新版本，须同时取得写入生产 Secret 和部署的授权。
 - 仅获写入授权时，使用 `pnpm cf:production versions secret put METRICS_API_TOKEN` 创建新版本但不部署；新值只在该版本经单独授权部署并开始接收流量后生效。未获部署授权并完成对应版本验证前，不得声称该接口已上线或 token 已能读取运营数。
+
+`GET /api/metrics/activation` 返回按上海注册日分组的激活队列，使用固定 7 天窗口，并显式报告快照或观察窗不完整的日桶。请求参数与口径见[激活队列接口](metrics-activation.md)。
 
 ## 公共运行参数
 
