@@ -539,28 +539,38 @@ export class PersonalRecordsStore {
     this.sql.exec("DELETE FROM personal_records WHERE pluginId=?", pluginId);
     this.sql.exec("DELETE FROM personal_record_state WHERE pluginId=?", pluginId);
   }
-  /** Earliest delivery this link must still receive after `after`, if any. */
-  nextDelivery(connectionId: string, generation: string, after: number) {
+  /** Earliest delivery from these plugins this link must still receive after `after`, if any. */
+  nextDelivery(connectionId: string, generation: string, after: number, pluginIds: string[]) {
+    if (!pluginIds.length) return null;
     return this.sql
       .exec<{ due: number | null }>(
-        "SELECT MIN(dueAt) due FROM personal_reminders WHERE connectionId=? AND generation=? AND state IN ('scheduled','retry','waiting_context') AND dueAt>?",
+        "SELECT MIN(dueAt) due FROM personal_reminders WHERE connectionId=? AND generation=? AND state IN ('scheduled','retry','waiting_context') AND dueAt>? AND pluginId IN (SELECT value FROM json_each(?))",
         connectionId,
         generation,
         after,
+        JSON.stringify(pluginIds),
       )
       .one().due;
   }
-  /** A new message from the user reopens WeChat's reply window; retry held reminders now. */
-  wakeWaiting(connectionId: string) {
+  /**
+   * A new message from the user reopens WeChat's reply window. Retry up to
+   * `limit` held reminders from these plugins now, oldest first.
+   */
+  wakeWaiting(connectionId: string, pluginIds: string[], limit: number) {
+    if (limit <= 0 || !pluginIds.length) return 0;
+    const now = Date.now();
     const woken = this.sql
       .exec(
-        "UPDATE personal_reminders SET retryAt=? WHERE connectionId=? AND state='waiting_context' AND retryAt>? RETURNING id",
-        Date.now(),
+        "UPDATE personal_reminders SET retryAt=? WHERE id IN (SELECT id FROM personal_reminders WHERE connectionId=? AND state='waiting_context' AND retryAt>? AND pluginId IN (SELECT value FROM json_each(?)) ORDER BY dueAt LIMIT ?) RETURNING id",
+        now,
         connectionId,
-        Date.now(),
+        now,
+        JSON.stringify(pluginIds),
+        limit,
       )
       .toArray().length;
     if (woken) this.changedSchedule();
+    return woken;
   }
   nextReminder() {
     return this.sql

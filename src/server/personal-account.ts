@@ -322,7 +322,10 @@ type Link = Connection & {
   blockedContextId?: string;
   lastPoll?: number;
   pollBaseUrl?: string;
-  /** WeChat refused a reminder or notification push. Cleared by the user's next message. */
+  /**
+   * WeChat refused a reminder or notification push. Cleared by the user's next
+   * message or by a later push WeChat accepts.
+   */
   pushBlockedAt?: number;
   /** The reply-window reminder for the window opened by the message at `for`. */
   windowNudge?: { for: number; retryAt: number; sent?: boolean };
@@ -348,8 +351,11 @@ function windowNudgeText(need: { nextReminderAt: number | null; notifications: b
       : ""
   }`;
 }
-// A refused push is retried slowly; the user's next message retries it at once.
+// A refused push is retried slowly; the user's next message retries a few at once.
 const PUSH_REFUSED_RETRY_MS = 30 * 60_000;
+// WeChat reportedly accepts about ten pushes per user message. Release only a
+// few held pushes per message so the reply to that message still gets through.
+const HELD_PUSH_WAKE_LIMIT = 3;
 const PUSH_REFUSED_MESSAGE =
   "微信暂不允许推送，通常是因为接收微信超过 24 小时没有发消息。在微信发送 /wx help 后会继续投递（不消耗 credits）。";
 const CLOUD_REPLY_WAITING_MESSAGE =
@@ -909,9 +915,15 @@ export class PersonalAccount extends DurableObject<Env> {
       }
       if (received) {
         this.membershipReminders.wake();
-        // The user's message reopened WeChat's reply window; send held pushes now.
-        this.personalRecords.wakeWaiting(connectionId);
-        this.notifications.wake(connectionId);
+        // The user's message reopened WeChat's reply window. Send a few held
+        // pushes now; the rest keep their slow retry.
+        const live = this.livePushPlugins(connectionId);
+        const woken = this.personalRecords.wakeWaiting(
+          connectionId,
+          live.reminders,
+          HELD_PUSH_WAKE_LIMIT,
+        );
+        this.notifications.wake(connectionId, live.notifications, HELD_PUSH_WAKE_LIMIT - woken);
       }
       // A fallback poll or a lost acknowledgement may race this batch. Merge
       // messages, but never overwrite a cursor advanced by another receiver.
@@ -2893,19 +2905,43 @@ export class PersonalAccount extends DurableObject<Env> {
     if (link.generation !== generation || link.pushBlockedAt) return;
     this.setLinkSetting(connectionId, "connection", { ...link, pushBlockedAt: Date.now() });
   }
+  // WeChat accepted a push again. A refusal recorded after this send started
+  // may be newer evidence, so only an older one is cleared.
+  private markPushDelivered(connectionId: string, generation: string, startedAt: number) {
+    const link = this.connection(connectionId);
+    if (link.generation !== generation || !link.pushBlockedAt || link.pushBlockedAt > startedAt)
+      return;
+    this.setLinkSetting(connectionId, "connection", { ...link, pushBlockedAt: undefined });
+  }
+  // Plugins whose scheduled pushes to this link would be sent, matching the
+  // plugin checks made at delivery time.
+  private livePushPlugins(connectionId: string) {
+    const live = { reminders: [] as string[], notifications: [] as string[] };
+    for (const p of this.plugins()) {
+      if (!p.enabled || !this.pluginAvailable(p.id)) continue;
+      if (p.pluginId === "wechatai/personal-assistant") live.reminders.push(p.id);
+      else if (
+        p.pluginId === "wechatai/notification" &&
+        p.connectionId === connectionId &&
+        this.notifications.hasToken(p.id)
+      )
+        live.notifications.push(p.id);
+    }
+    return live;
+  }
   // Scheduled pushes that need WeChat's reply window to outlast the current one.
   private pushWindowNeed(connectionId: string, link: Link) {
     if (link.status !== "connected" || !link.contextToken || link.lastSeen === undefined)
       return null;
     const until = link.lastSeen + WECHAT_REPLY_WINDOW_MS;
-    const nextReminderAt = this.personalRecords.nextDelivery(connectionId, link.generation, until);
-    const notifications = this.plugins().some(
-      (p) =>
-        p.pluginId === "wechatai/notification" &&
-        p.enabled &&
-        p.connectionId === connectionId &&
-        this.notifications.hasToken(p.id),
+    const live = this.livePushPlugins(connectionId);
+    const nextReminderAt = this.personalRecords.nextDelivery(
+      connectionId,
+      link.generation,
+      until,
+      live.reminders,
     );
+    const notifications = live.notifications.length > 0;
     return nextReminderAt !== null || notifications
       ? { until, nextReminderAt, notifications }
       : null;
@@ -2946,6 +2982,7 @@ export class PersonalAccount extends DurableObject<Env> {
           !current.contextToken
         )
           continue;
+        const startedAt = Date.now();
         await sendText(
           credentials,
           current.contextToken,
@@ -2959,6 +2996,7 @@ export class PersonalAccount extends DurableObject<Env> {
             ...latest,
             windowNudge: { ...lease, sent: true },
           });
+        this.markPushDelivered(id, link.generation, startedAt);
         console.info(JSON.stringify({ event: "wechat.window_nudge_sent" }));
       } catch (error) {
         if (isWechatPushRefusal(error)) this.markPushBlocked(id, link.generation);
@@ -3021,8 +3059,10 @@ export class PersonalAccount extends DurableObject<Env> {
         )
           continue;
         const text = `消息来自 ${latest.name.replace(/\s+/g, " ")}（消息提醒插件）。\n\n──────────\n\n${job.title ? `${job.title}\n\n` : ""}${job.text}`;
+        const startedAt = Date.now();
         await sendText(credentials, target.contextToken!, `notify:${job.id}`, text, 5000);
         this.notifications.finish(job.id, "sent");
+        this.markPushDelivered(job.connectionId, job.generation, startedAt);
       } catch (error) {
         // Retried sends reuse client_id. Never log the token, message or recipient.
         if (isWechatPushRefusal(error)) {
@@ -3232,6 +3272,7 @@ export class PersonalAccount extends DurableObject<Env> {
         }
         const text = pluginNotificationText(personalAssistantManifest, latest.plugin, reminderText);
         attempts = this.personalRecords.startAttempt(reminder);
+        const startedAt = Date.now();
         await sendText(
           credentials,
           latest.link.contextToken!,
@@ -3240,6 +3281,7 @@ export class PersonalAccount extends DurableObject<Env> {
           5000,
         );
         this.personalRecords.finish(reminder);
+        this.markPushDelivered(reminder.connectionId, reminder.generation, startedAt);
         console.info(
           JSON.stringify({
             event: "personal.reminder_delivered",

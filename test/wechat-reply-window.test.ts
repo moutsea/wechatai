@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { WxMessage } from "../src/server/wechat";
 import { WECHAT_REPLY_WINDOW_MS, WECHAT_WINDOW_NUDGE_MS } from "../src/shared/wechat-readiness";
 import {
+  api,
   connect,
   deliver,
   due,
@@ -28,23 +29,64 @@ function wechat(reply: () => Response = () => Response.json({ ret: 0 })) {
   });
   return sent;
 }
-async function withReminder(lastSeenAgo: number, remindIn = 2 * 86400000) {
-  const { stub, model } = await setup("chat-completions", false);
+async function remind(stub: Account, pluginId: string, at: number, title = "交房租") {
+  const saved = await save(stub, pluginId, {
+    kind: "reminder",
+    title,
+    date: new Date(at + 8 * hour).toISOString().slice(0, 10),
+    remindAt: new Date(at).toISOString(),
+  });
+  expect(saved.ok).toBe(true);
+}
+async function withReminder(lastSeenAgo: number, remindIn = 2 * 86400000, plus = false) {
+  const { stub, model } = await setup("chat-completions", plus);
   await connect(stub, { lastSeen: Date.now() - lastSeenAgo });
   const plugin = await savePlugin(stub, model.id, { reminderConnectionId: "default" });
   const at = Date.now() + remindIn;
-  expect(
-    (
-      await save(stub, plugin.id, {
-        kind: "reminder",
-        title: "交房租",
-        date: new Date(at + 8 * hour).toISOString().slice(0, 10),
-        remindAt: new Date(at).toISOString(),
-      })
-    ).ok,
-  ).toBe(true);
-  return { stub, plugin, at };
+  await remind(stub, plugin.id, at);
+  return { stub, plugin, model, at };
 }
+async function notifier(stub: Account) {
+  const saved = await api(stub, "plugin.save", {
+    pluginId: "wechatai/notification",
+    name: "告警",
+    connectionId: "default",
+  });
+  expect(saved.ok).toBe(true);
+  const token = String((await api(stub, "notification.token", { id: saved.data.id })).data.token);
+  return {
+    id: saved.data.id as string,
+    send: async (text: string) =>
+      expect(
+        JSON.parse(
+          await stub.notificationRequest(
+            saved.data.id,
+            token.split(".")[3],
+            "send",
+            { text },
+            crypto.randomUUID(),
+          ),
+        ).ok,
+      ).toBe(true),
+  };
+}
+const downgrade = (stub: Account) =>
+  runInDurableObject(stub, (_, state) => {
+    state.storage.sql.exec(
+      "UPDATE settings SET value=? WHERE key='planUntil'",
+      JSON.stringify(Date.now() - 1000),
+    );
+  });
+const held = (stub: Account) =>
+  runInDurableObject(stub, (_, state) => ({
+    reminders: state.storage.sql
+      .exec("SELECT 1 FROM personal_reminders WHERE state='waiting_context' AND retryAt>?", Date.now())
+      .toArray().length,
+    notifications: state.storage.sql
+      .exec("SELECT 1 FROM notification_jobs WHERE state='pending' AND nextAt>?", Date.now())
+      .toArray().length,
+  }));
+let messageId = 1;
 const nudge = (stub: Account) =>
   runInDurableObject(stub, (instance) =>
     (instance as unknown as { deliverWindowNudges(): Promise<void> }).deliverWindowNudges(),
@@ -53,7 +95,7 @@ const nudge = (stub: Account) =>
 const userWrites = (stub: Account) =>
   runInDurableObject(stub, (instance) => {
     const message: WxMessage = {
-      message_id: Date.now(),
+      message_id: messageId++,
       message_type: 1,
       from_user_id: "owner",
       context_token: "fresh-context",
@@ -141,5 +183,89 @@ describe("WeChat reply window", () => {
     expect((await stub.snapshot()).connection.pushWindow?.blockedAt).toBeGreaterThan(0);
     await nudge(stub);
     expect(sent).toHaveLength(1);
+  });
+
+  it("ignores pushes a disabled or over-plan plugin would not send", async () => {
+    const sent = wechat();
+    const ago = WECHAT_WINDOW_NUDGE_MS + 10 * 60_000;
+    const disabled = await withReminder(ago);
+    const off = await api(disabled.stub, "plugin.save", { ...disabled.plugin, enabled: false });
+    expect(off.ok).toBe(true);
+    // On the free plan only the first plugin runs; the assistant and notifier are held.
+    const { stub, model } = await setup("chat-completions", true);
+    await connect(stub, { lastSeen: Date.now() - ago });
+    await savePlugin(stub, model.id, { name: "第一个", shortcut: "a1" });
+    const assistant = await savePlugin(stub, model.id, {
+      reminderConnectionId: "default",
+      name: "第二个",
+      shortcut: "b2",
+    });
+    await remind(stub, assistant.id, Date.now() + 2 * 86400000);
+    await notifier(stub);
+    expect((await stub.snapshot()).connection.pushWindow).toBeDefined();
+    await downgrade(stub);
+    for (const account of [disabled.stub, stub]) {
+      expect((await account.snapshot()).connection.pushWindow).toBeUndefined();
+      await nudge(account);
+    }
+    expect(sent).toEqual([]);
+  });
+
+  it("clears a refusal once WeChat accepts a later push, so the window reminder still goes out", async () => {
+    let refuse = true;
+    const sent = wechat(() => Response.json(refuse ? { ret: -2 } : { ret: 0 }));
+    const lastSeen = Date.now() - 2 * hour;
+    const { stub, plugin } = await withReminder(Date.now() - lastSeen);
+    await remind(stub, plugin.id, Date.now() + 60_000, "喝水");
+    const t0 = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(t0 + 2 * 60_000);
+    await deliver(stub);
+    const blockedAt = (await stub.snapshot()).connection.pushWindow?.blockedAt as number;
+    expect(blockedAt).toBeGreaterThan(0);
+    // A send that started before the refusal proves nothing about it.
+    await runInDurableObject(stub, (instance) =>
+      (
+        instance as unknown as { markPushDelivered(id: string, g: string, at: number): void }
+      ).markPushDelivered("default", "g1", blockedAt - 1),
+    );
+    expect((await stub.snapshot()).connection.pushWindow?.blockedAt).toBe(blockedAt);
+    refuse = false;
+    clock.mockReturnValue(t0 + 33 * 60_000);
+    await deliver(stub);
+    expect(sent).toHaveLength(2);
+    expect((await stub.snapshot()).connection.pushWindow?.blockedAt).toBeUndefined();
+    // The two-day reminder still needs the next window.
+    clock.mockReturnValue(lastSeen + WECHAT_WINDOW_NUDGE_MS + 10 * 60_000);
+    await nudge(stub);
+    expect(sent).toHaveLength(3);
+    expect(sent[2].clientId).toMatch(/^window:/);
+  });
+
+  it("sends only a few held pushes per user message, reminders first", async () => {
+    let refuse = true;
+    const sent = wechat(() => Response.json(refuse ? { ret: -2 } : { ret: 0 }));
+    const { stub, plugin } = await withReminder(30 * hour, 2 * 86400000, true);
+    for (const title of ["倒垃圾", "浇花", "取快递"])
+      await remind(stub, plugin.id, Date.now() + 2 * 86400000, title);
+    await due(stub);
+    await deliver(stub);
+    const alerts = await notifier(stub);
+    for (let i = 0; i < 3; i++) await alerts.send(`告警 ${i}`);
+    await stub.dispatchNotifications();
+    expect(sent).toHaveLength(7);
+    expect(await held(stub)).toEqual({ reminders: 4, notifications: 3 });
+    refuse = false;
+    const kinds = async () => {
+      const start = sent.length;
+      await userWrites(stub);
+      await deliver(stub);
+      await stub.dispatchNotifications();
+      return sent.slice(start).map((m) => m.clientId.split(":")[0]);
+    };
+    // The rest keep their slow retry, leaving WeChat's per-message quota for the reply.
+    expect(await kinds()).toEqual(["personal", "personal", "personal"]);
+    expect(await held(stub)).toEqual({ reminders: 1, notifications: 3 });
+    expect(await kinds()).toEqual(["personal", "notify", "notify"]);
+    expect(await held(stub)).toEqual({ reminders: 0, notifications: 1 });
   });
 });

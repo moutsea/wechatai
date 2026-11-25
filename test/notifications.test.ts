@@ -609,6 +609,16 @@ describe("receive-only notification plugin", () => {
     await stub.dispatchNotifications();
     expect((await status(stub, plugin.id)).deliveries[0].state).toBe("sent");
   });
+  it("clears the refusal once WeChat accepts a later notification", async () => {
+    const { stub, token } = await setup();
+    await send(token, { text: "first" });
+    vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ ret: -2 }));
+    await stub.dispatchNotifications();
+    expect((await stub.snapshot()).connection.pushWindow?.blockedAt).toBeGreaterThan(0);
+    await send(token, { text: "second" });
+    await stub.dispatchNotifications();
+    expect((await stub.snapshot()).connection.pushWindow?.blockedAt).toBeUndefined();
+  });
   it("does not resurrect cancelled messages from a delivery batch after token revocation", async () => {
     const { stub, plugin, token } = await setup();
     await send(token, { text: "first" });
