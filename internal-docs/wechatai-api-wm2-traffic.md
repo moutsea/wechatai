@@ -103,7 +103,7 @@ WM4 卡为 `d34f762e-c7f2-4a3a-a558-8f13540220a8`，内部需求文件为 `inter
   "asOf": "2026-11-25T09:00:00.000Z",
   "window": { "from": "2026-11-25", "to": "2026-11-25", "days": 1, "includesToday": true },
   "dataSource": "first_party_site_analytics",
-  "coverage": { "complete": false, "reason": "coverage_unknown", "basis": null },
+  "coverage": { "complete": false, "reason": "coverage_unknown", "basis": null, "checkedDay": "2026-11-25" },
   "semantics": {
     "observed": "stored_records_only",
     "visitorDays": "sum_of_daily_deduplicated_visitors",
@@ -125,8 +125,8 @@ WM4 卡为 `d34f762e-c7f2-4a3a-a558-8f13540220a8`，内部需求文件为 `inter
       "topPages": [{ "label": "/pricing", "labelRedacted": false, "pv": 2, "visitorDays": 1 }],
       "sources": [{ "source": "", "label": "（直接访问）", "sourceRedacted": false, "pv": 2, "visitorDays": 1 }],
       "sourceDepth": [{ "source": "", "label": "（直接访问）", "sourceRedacted": false, "pv": 2, "sessions": 1, "pagesPerSession": 2 }],
-      "countries": [{ "label": "CN", "pv": 2, "visitorDays": 1 }],
-      "devices": [{ "label": "desktop", "pv": 2, "visitorDays": 1 }]
+      "countries": [{ "label": "CN", "labelRedacted": false, "pv": 2, "visitorDays": 1 }],
+      "devices": [{ "label": "desktop", "labelRedacted": false, "pv": 2, "visitorDays": 1 }]
     }
   },
   "conversions": {
@@ -226,3 +226,18 @@ WM3–WM6 如另有在途改动命中上述文件，接入前核对其实际提�
 本轮交付为需求文档与任务计划更新。Worker/Vitest、类型检查、lint 和构建的功能验收尚待开发执行。线上状态沿用依赖卡记录的证据边界，本轮没有生产请求或真实凭据验证。
 
 续办已将复核基线从 `2fec26ec9a004530022454381b9ebedf81b7b36e` 更新到 `76590750244d7f5b289f7fb1ad17c45f13ea4a0d`，检查了新增 retention 分发、日期校验及覆盖来源。两者之间的 analytics 聚合、schema 与预算实现无变化。WM2 日期校验仍复用管理员的默认 7 和允许 `07` 的语义，retention 的默认 30 及更严格字符串校验保留在其自身路由。
+
+
+## 2026-11-25 开发记录
+
+开发基线为 `76590750244d7f5b289f7fb1ad17c45f13ea4a0d`。已核对 WM1 计划中的正式独立 PASS（覆盖 `179fc9251bd8f50030bb8e29f361cba3c5c8e396`），并验证 WM1 合并提交为基线祖先。当前分支通过 `e6c387562f431ec49918d870784dcab0b6aa6a9b` 同步该 main，保留需求文档提交。
+
+第一实现提交 `cd8fd92` 抽取管理员与外部接口共用的 days 校验、预算配置解析，以及 raw 来源映射选项。原查询与默认管理员投影保留。逐提交复核了默认调用行为、错误码、边界和预算解析，56 项 analytics 测试、类型检查和 lint 通过。
+
+报表使用 `metrics.ts` 已有鉴权、限流、方法边界和审计，只新增 traffic 分发及固定路由模板。逐块读取和显式投影位于 `metrics-traffic.ts`。完整路径许可清单采用 126 个实际发布或登录注册路径，测试直接与现有路由注册表比对，Worker 只引入轻量清单。
+
+当前预算触顶原因具体限定为当天许可已预留完，响应提供 `basis=current_day_permits_fully_reserved` 和 `checkedDay`，并在使用文档说明剩余缓存许可与实际丢弃情况仍未知。历史预算行只保留其原始证据范围，缺少历史缺采证据时使用 coverage_unknown。该实现没有可证的 incomplete_window 分支，也没有完整性为 true 的生产分支。
+
+公开使用说明为 `docs/metrics-traffic.md`，仅包含接口契约和合成示例。内部评审文档继续位于根目录 internal-docs。实际功能测试和最终 HEAD 证据以任务计划交接记录为准。
+
+第二实现提交 `b5ed385` 交付 traffic 路由、可用性状态、显式字段投影、路径许可清单和使用说明。逐提交复核了鉴权分发顺序、共享查询调用、独立行计数与隐私边界。7 文件相关 Worker 验证通过 169 项，新增文档响应比对和 SQL 只读断言后，2 文件 WM2 定向验证通过 39 项，类型检查和 lint 通过。相关日志为 `/tmp/wm2-shared-tests.log`、`/tmp/wm2-route-tests.log`、`/tmp/wm2-final-focused.log`。本地采用 Node 22.19.0 和 lockfile 锁定依赖，`.dev.vars` 只使用新建的 test-only 值。全量检查与最终 SHA 记录继续保存在任务计划。
