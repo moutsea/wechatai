@@ -192,7 +192,7 @@ export function PricingPlans() {
             <p className="plan-note">{copy.free.note}</p>
           </header>
           {isPending ? null : session ? (
-            <Link className="button secondary plan-cta" to="/app">
+            <Link className="button secondary plan-cta" to={localizedHref(locale, "/app")}>
               {copy.free.workspace}
               <ArrowRight size={17} aria-hidden="true" />
             </Link>

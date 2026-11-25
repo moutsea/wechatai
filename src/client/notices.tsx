@@ -17,6 +17,8 @@ import { noticeDate, type UserNotice, type UserNotices } from "../shared/site-no
 import { unreadNoticeCount } from "../shared/site-notices";
 import { connectorUpgradePath, type ConnectorUpdateNotice } from "../shared/connector-update";
 import { ConnectorUpdateCard } from "./connector-update-notice";
+import { useLocale } from "./locale";
+import { dashboardCopy, formatCopy } from "../shared/i18n/dashboard";
 import "./notices.css";
 
 type NoticeState = {
@@ -38,6 +40,8 @@ export function useNotices() {
 }
 
 export function NoticeProvider({ children }: { children: ReactNode }) {
+  const { locale } = useLocale();
+  const { notices: copy, shell } = dashboardCopy[locale];
   const { request, notify, user } = useApp();
   const [feed, setFeed] = useState<UserNotices | null>(null);
   const [error, setError] = useState("");
@@ -114,7 +118,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       await refresh();
     } catch (e) {
       if (epoch !== generation.current) return;
-      notify((e as Error).message, true);
+      notify(locale === "zh-CN" ? (e as Error).message : copy.updateFailed, true);
       await refresh();
     } finally {
       if (epoch === generation.current) {
@@ -143,7 +147,7 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       await refresh();
     } catch (e) {
       if (epoch !== generation.current) return;
-      notify((e as Error).message, true);
+      notify(locale === "zh-CN" ? (e as Error).message : copy.updateFailed, true);
       await refresh();
     } finally {
       if (epoch === generation.current) {
@@ -171,7 +175,8 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
       {selected && (
         <Modal
           title={selected.title}
-          description={`${selected.priority === "important" ? "重要通知 · " : ""}${noticeDate(selected.publishedAt ?? selected.createdAt)}`}
+          description={`${selected.priority === "important" ? copy.important + " · " : ""}${noticeDate(selected.publishedAt ?? selected.createdAt, locale)}`}
+          closeLabel={shell.close}
           wide
           onClose={() => setSelected(null)}
         >
@@ -185,11 +190,11 @@ export function NoticeProvider({ children }: { children: ReactNode }) {
                 disabled={busy}
                 onClick={() => void mark(selected, "read")}
               >
-                标为已读
+                {copy.read}
               </button>
             )}
             <button className="button" onClick={() => setSelected(null)}>
-              知道了
+              {copy.dismiss}
             </button>
           </div>
         </Modal>
@@ -207,6 +212,8 @@ export function NoticeItem({
   onOpen: () => void;
   disabled?: boolean;
 }) {
+  const { locale } = useLocale();
+  const copy = dashboardCopy[locale].notices;
   return (
     <button
       className={`notice-item ${notice.isRead ? "" : "unread"}`}
@@ -219,14 +226,14 @@ export function NoticeItem({
       <span className="notice-item-copy">
         <span className="notice-item-title">
           {notice.title}
-          {!notice.isRead && <span className="notice-unread-dot" aria-label="未读" />}
+          {!notice.isRead && <span className="notice-unread-dot" aria-label={copy.unread} />}
         </span>
         <span className="notice-item-preview">
           {notice.content.replace(/[#*`>[\]]/g, "").slice(0, 110)}
         </span>
         <span className="notice-item-date">
-          {noticeDate(notice.publishedAt ?? notice.createdAt)}
-          {notice.priority === "important" && " · 重要通知"}
+          {noticeDate(notice.publishedAt ?? notice.createdAt, locale)}
+          {notice.priority === "important" && ` · ${copy.important}`}
         </span>
       </span>
       <ChevronRight size={16} className="notice-chevron" />
@@ -235,6 +242,8 @@ export function NoticeItem({
 }
 
 export function NoticeBell() {
+  const { locale } = useLocale();
+  const { notices: copy, shell } = dashboardCopy[locale];
   const { feed, error, busy, refresh, open, readAll, readConnectorUpdate } = useNotices();
   const { base } = useApp();
   const [expanded, setExpanded] = useState(false);
@@ -266,7 +275,7 @@ export function NoticeBell() {
       <button
         ref={button}
         className="icon-button notice-bell-button"
-        aria-label={`通知${unread ? `，${unread} 条未读` : ""}`}
+        aria-label={unread ? formatCopy(copy.unreadCount, { count: unread }) : shell.notices}
         aria-expanded={expanded}
         aria-controls="notice-popover"
         onClick={() => {
@@ -278,9 +287,9 @@ export function NoticeBell() {
         {Boolean(unread) && <span className="notice-badge">{unread > 99 ? "99+" : unread}</span>}
       </button>
       {expanded && (
-        <section id="notice-popover" className="notice-popover" aria-label="站内通知">
+        <section id="notice-popover" className="notice-popover" aria-label={copy.siteNotices}>
           <div className="notice-popover-heading">
-            <h2>通知</h2>
+            <h2>{shell.notices}</h2>
             {Boolean(unread) && (
               <button
                 className="text-link"
@@ -288,23 +297,23 @@ export function NoticeBell() {
                 onClick={() => feed && void readAll(feed)}
               >
                 <CheckCheck size={15} />
-                全部已读
+                {copy.readAll}
               </button>
             )}
           </div>
           {error ? (
             <div className="notice-empty" role="alert">
-              <p>{error}</p>
+              <p>{locale === "zh-CN" ? error : copy.loadFailed}</p>
               <button className="text-link" onClick={() => void refresh()}>
-                重新加载
+                {shell.reload}
               </button>
             </div>
           ) : !feed ? (
             <p className="notice-empty" role="status">
-              正在加载通知…
+              {copy.loading}
             </p>
           ) : !feed.items.length && !feed.connectorUpdate ? (
-            <p className="notice-empty">暂时没有新通知</p>
+            <p className="notice-empty">{copy.empty}</p>
           ) : (
             <>
               {feed.connectorUpdate && (
@@ -333,7 +342,7 @@ export function NoticeBell() {
             to={`${base}/notices`}
             onClick={() => setExpanded(false)}
           >
-            查看全部通知 <ChevronRight size={15} />
+            {copy.viewAll} <ChevronRight size={15} />
           </Link>
         </section>
       )}
@@ -342,30 +351,34 @@ export function NoticeBell() {
 }
 
 export function ImportantNotice() {
+  const { locale } = useLocale();
+  const copy = dashboardCopy[locale].notices;
   const { feed, busy, open, markRead, readConnectorUpdate } = useNotices();
   const { base } = useApp();
   const notice = feed?.important;
   const update = feed?.connectorUpdate;
   if (!notice && update && !update.isRead && update.connections.length) {
     return (
-      <aside className="notice-banner" aria-label="连接器升级通知">
+      <aside className="notice-banner" aria-label={copy.upgradeNotice}>
         <Megaphone size={18} />
         <Link
           className="notice-banner-title"
           to={connectorUpgradePath(update.connections[0].id, base)}
           onClick={() => void readConnectorUpdate(update)}
         >
-          <span>连接器更新</span>
+          <span>{copy.connectorUpdate}</span>
           <strong>
-            OpenClaw v{update.version} 可升级
-            {update.connections.length > 1 ? ` · ${update.connections.length} 个连接` : ""}
+            {formatCopy(copy.versionAvailable, { version: update.version })}
+            {update.connections.length > 1
+              ? ` · ${formatCopy(copy.linkCount, { count: update.connections.length })}`
+              : ""}
           </strong>
-          <span>去升级 →</span>
+          <span>{copy.upgrade} →</span>
         </Link>
         <button
           className="icon-button"
           disabled={busy}
-          aria-label="不再提醒此版本"
+          aria-label={copy.dismissVersion}
           onClick={() => void readConnectorUpdate(update)}
         >
           <X size={17} />
@@ -375,17 +388,17 @@ export function ImportantNotice() {
   }
   if (!notice) return null;
   return (
-    <aside className="notice-banner" aria-label="重要通知">
+    <aside className="notice-banner" aria-label={copy.important}>
       <Megaphone size={18} />
       <button className="notice-banner-title" onClick={() => open(notice)}>
-        <span>重要通知</span>
+        <span>{copy.important}</span>
         <strong>{notice.title}</strong>
-        <span>查看详情 →</span>
+        <span>{copy.viewDetails} →</span>
       </button>
       <button
         className="icon-button"
         disabled={busy}
-        aria-label={`关闭并标记已读：${notice.title}`}
+        aria-label={formatCopy(copy.markReadAndClose, { title: notice.title })}
         onClick={() => void markRead(notice)}
       >
         <X size={17} />

@@ -5,6 +5,10 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.modal-head > .site-language {
+  flex-shrink: 0;
+  margin-left: auto;
+}
 .onboarding-content {
   padding: 22px 27px 24px;
 }

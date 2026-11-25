@@ -28,6 +28,7 @@ import {
   DEFAULT_LOCALE,
   hasRegisteredTranslation,
   LOCALE_DEFINITIONS,
+  DASHBOARD_PATH,
   localizedPath,
   normalizePath,
   registeredTranslation,
@@ -78,6 +79,12 @@ export const PRIVATE_PATHS = [
     "/notices",
   ].map((section) => `/app${section}`),
 ];
+
+export function localizedDashboardPaths(): string[] {
+  return registeredTranslationsForPath(DASHBOARD_PATH).map(({ locale }) =>
+    localizedPath(locale, DASHBOARD_PATH),
+  );
+}
 
 const ORGANIZATION_ID = `${SITE_URL}/#organization`;
 const APPLICATION_ID = `${SITE_URL}/#application`;
@@ -791,6 +798,18 @@ function translatedPageSeo(path: string, translation: RegisteredTranslation): Pa
 export function getPageSeo(pathname: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   const normalized = normalizePath(pathname);
   const split = splitLocalePath(normalized);
+  const activeLocale = split?.locale ?? locale;
+  if ((split?.path ?? normalized) === DASHBOARD_PATH && activeLocale !== DEFAULT_LOCALE) {
+    const translation = registeredTranslation(activeLocale, DASHBOARD_PATH);
+    if (!translation) return notFoundPageSeo();
+    const { htmlLang } = LOCALE_DEFINITIONS[activeLocale];
+    return {
+      title: translation.title,
+      description: translation.description,
+      htmlLang,
+      indexable: false,
+    };
+  }
   if (split) {
     const translation = registeredTranslation(split.locale, split.path);
     if (!translation || !publicPathSet.has(split.path)) return notFoundPageSeo();
