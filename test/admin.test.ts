@@ -722,6 +722,30 @@ describe("admin aggregates", () => {
     });
     expect((await adminOverview(env, now)).summary.revenue).toBe(88);
   });
+  it("keeps all-time payments independent of daily bounds and snapshot coverage", async () => {
+    const now = Date.parse("2026-10-10T01:00:00Z");
+    const start = dayWindow(now).start - 29 * 86400000;
+    const id = await user();
+    await order("before-window", id, 101, "test", "paid", "plus", start - 1);
+    await order("at-start", id, 102, "test", "paid", "credits", start);
+    await order("fallback", id, 103, "test", "paid", "credits", now);
+    await env.DB.prepare("UPDATE billing_order SET paid_at=NULL WHERE id='fallback'").run();
+    await order("after-now", id, 104, "test", "paid", "plus", now + 1);
+
+    const result = await adminOverview(env, now);
+    expect(result.coverage).toEqual({ synced: 0, oldest: null, newest: null });
+    expect(result.summary).toMatchObject({
+      revenue: 4.1,
+      paidOrders: 4,
+      payingUsers: 1,
+      membershipRevenue: 2.05,
+      creditsRevenue: 2.05,
+    });
+    expect(result.daily).toHaveLength(30);
+    expect(result.daily[0]).toMatchObject({ revenue: 1.02, paidOrders: 1 });
+    expect(result.daily.at(-1)).toMatchObject({ revenue: 1.03, paidOrders: 1 });
+    expect(result.daily.reduce((count, day) => count + day.paidOrders, 0)).toBe(2);
+  });
   it("does not let a delayed sync overwrite a newer sample, and reports coverage", async () => {
     const id = await user();
     await user();

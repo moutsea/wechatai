@@ -8,11 +8,15 @@
  */
 import type { Locale } from "./index";
 import { homeCopy as homeCopyEn } from "./en/copy/home";
+import { homeCopy as homeCopyEs } from "./es/copy/home";
 import { homeCopy as homeCopyJa } from "./ja/copy/home";
 import { homeCopy as homeCopyKo } from "./ko/copy/home";
+import { homeCopyPt } from "./pt/copy/home";
 import { pricingCopy as pricingCopyEn } from "./en/copy/pricing";
+import { pricingCopy as pricingCopyEs } from "./es/copy/pricing";
 import { pricingCopy as pricingCopyJa } from "./ja/copy/pricing";
 import { pricingCopy as pricingCopyKo } from "./ko/copy/pricing";
+import { pricingCopyPt } from "./pt/copy/pricing";
 
 type Widen<T> = T extends string
   ? string
@@ -35,12 +39,16 @@ const homeCopies: Partial<Record<Locale, HomeCopy>> = {
   en: homeCopyEn,
   ja: homeCopyJa,
   ko: homeCopyKo,
+  es: homeCopyEs,
+  pt: homeCopyPt,
 };
 
 const pricingCopies: Partial<Record<Locale, PricingCopy>> = {
   en: pricingCopyEn,
   ja: pricingCopyJa,
   ko: pricingCopyKo,
+  es: pricingCopyEs,
+  pt: pricingCopyPt,
 };
 
 export function homeCopyFor(locale: Locale): HomeCopy | undefined {

@@ -18,21 +18,30 @@ const server = await createServer({
 try {
   const {
     renderPublicPage,
+    renderPrivateShell,
     getPageSeo,
     replaceSeoHead,
     renderSitemap,
     publishedLocalizedPaths,
+    localizedDashboardPaths,
     PUBLIC_PATHS,
     PRIVATE_PATHS,
     LEGACY_PATHS,
   } = await server.ssrLoadModule("/src/client/prerender.tsx");
   const localizedPaths = publishedLocalizedPaths();
+  const dashboardPaths = localizedDashboardPaths();
   const renderedPublicPaths = [...PUBLIC_PATHS, ...localizedPaths];
-  for (const path of [...renderedPublicPaths, ...LEGACY_PATHS, ...PRIVATE_PATHS, "/404"]) {
+  for (const path of [
+    ...renderedPublicPaths,
+    ...LEGACY_PATHS,
+    ...PRIVATE_PATHS,
+    ...dashboardPaths,
+    "/404",
+  ]) {
     const body =
       renderedPublicPaths.includes(path) || LEGACY_PATHS.includes(path) || path === "/404"
         ? renderPublicPage(path)
-        : '<main aria-busy="true">正在加载微伴工作台…</main>';
+        : renderPrivateShell(path);
     const html = replaceSeoHead(template, getPageSeo(path)).replace(
       '<div id="root"></div>',
       () => `<div id="root">${body}</div>`,
@@ -42,6 +51,11 @@ try {
     await writeFile(target, html);
   }
   await writeFile(resolve(output, "sitemap.xml"), renderSitemap());
+  const headers = await readFile(resolve("public/_headers"), "utf8");
+  await writeFile(
+    resolve(output, "_headers"),
+    `${headers.trimEnd()}\n\n${dashboardPaths.map((path) => `${path}\n  X-Robots-Tag: noindex`).join("\n")}\n`,
+  );
   // Asset HTML normalization defaults to 307. These aliases are permanent;
   // generate exact rules from public routes without redirecting unknown URLs.
   //

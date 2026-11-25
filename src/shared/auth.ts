@@ -1,14 +1,20 @@
+import { DASHBOARD_PATH, splitLocalePath } from "./i18n";
+
 // Preserve workspace and pricing intent without allowing an external post-login redirect.
 export function authReturnPath(value: string | null): string {
   if (!value?.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/app";
   try {
     const url = new URL(value, "https://wechatai.app");
-    return url.pathname === "/app" ||
-      url.pathname.startsWith("/app/") ||
-      url.pathname === "/pricing" ||
-      url.pathname === "/en/pricing" ||
-      url.pathname === "/ja/pricing" ||
-      url.pathname === "/ko/pricing"
+    return url.origin === "https://wechatai.app" &&
+      (url.pathname === DASHBOARD_PATH ||
+        url.pathname.startsWith("/app/") ||
+        splitLocalePath(url.pathname)?.path === DASHBOARD_PATH ||
+        url.pathname === "/pricing" ||
+        url.pathname === "/en/pricing" ||
+        url.pathname === "/ja/pricing" ||
+        url.pathname === "/ko/pricing" ||
+        url.pathname === "/pt/pricing" ||
+        url.pathname === "/es/pricing")
       ? `${url.pathname}${url.search}${url.hash}`
       : "/app";
   } catch {

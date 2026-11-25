@@ -11,11 +11,12 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
-import { useLocale } from "./locale";
+import { localizedHref, useLocale } from "./locale";
 import { membershipExpiry } from "./membership";
 import { formatCredits, type Snapshot } from "../shared/types";
 import { userMenuCopy as userMenuCopyJa } from "../shared/i18n/ja/copy/user-menu";
 import { userMenuCopy as userMenuCopyKo } from "../shared/i18n/ko/copy/user-menu";
+import { userMenuCopy as userMenuCopyPt } from "../shared/i18n/pt/copy/user-menu";
 import "./user-menu.css";
 
 type MenuUser = { id: string; name: string; email: string; image?: string | null };
@@ -43,6 +44,30 @@ const userMenuCopyEn = {
   signingOut: "Logging out…",
   signOut: "Log out",
   signOutFailed: "Could not log out. Please try again.",
+} as const;
+
+const userMenuCopyEs = {
+  avatarFallback: "?",
+  userMenu: "Menú de usuario",
+  accountMenu: "Menú de la cuenta",
+  account: "Mi cuenta",
+  workspace: "Abrir el espacio de trabajo",
+  loading: "Cargando membresía y créditos…",
+  loadFailed: "No se pudieron cargar los datos de la cuenta",
+  reload: "Recargar",
+  balance: "Saldo de créditos",
+  plus: "Membresía Plus",
+  free: "Cuenta gratuita",
+  expiresOn: "Vence el",
+  timeZone: " (hora de Pekín)",
+  expired: "Tu membresía ha caducado. Actualiza para recuperar los beneficios Plus.",
+  upgradeBenefits: "Actualiza para usar todos los plugins y más conexiones de WeChat.",
+  renew: "Renovar membresía",
+  upgrade: "Mejorar membresía",
+  admin: "Consola de administración",
+  signingOut: "Cerrando sesión…",
+  signOut: "Cerrar sesión",
+  signOutFailed: "No se pudo cerrar sesión. Inténtalo de nuevo.",
 } as const;
 
 const userMenuCopyZh = {
@@ -76,7 +101,10 @@ export function UserMenu({ user }: { user: MenuUser }) {
     locale === "en" ? userMenuCopyEn
     : locale === "ja" ? userMenuCopyJa
     : locale === "ko" ? userMenuCopyKo
+    : locale === "pt" ? userMenuCopyPt
+    : locale === "es" ? userMenuCopyEs
     : userMenuCopyZh;
+  const formatLocale = locale === "pt" ? "pt-BR" : locale === "es" ? "es-ES" : undefined;
   const { loadFailed } = copy;
   const [open, setOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -197,7 +225,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           </div>
           <Link
             className="account-menu-item"
-            to="/app"
+            to={localizedHref(locale, "/app")}
             ref={dashboardLink}
             onClick={() => setOpen(false)}
           >
@@ -231,7 +259,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                     {copy.balance}
                   </span>
                   <strong>
-                    {formatCredits(summary.balance)}
+                    {formatCredits(summary.balance, formatLocale)}
                     <ChevronDown size={13} aria-hidden="true" />
                   </strong>
                 </Link>
@@ -248,7 +276,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                       <>
                         {copy.expiresOn}{" "}
                         <time dateTime={new Date(summary.planUntil).toISOString()}>
-                          {membershipExpiry(summary.planUntil, true)}
+                          {membershipExpiry(summary.planUntil, true, formatLocale)}
                         </time>
                         <small>{copy.timeZone}</small>
                       </>

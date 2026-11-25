@@ -7,7 +7,17 @@ import { readGrokHistory } from "../src/server/grok/history";
 import { countTextTokens } from "../src/server/tokenizer";
 import { creditUnits } from "../src/server/wallet";
 import { grokMcp } from "../src/server/grok/mcp";
-import { GROK_DISPATCH_UNAVAILABLE } from "../src/shared/grok-bot";
+import {
+  GROK_DISPATCH_UNAVAILABLE,
+  GROK_RECONNECT_CLAIMED,
+  GROK_RECONNECT_PENDING,
+  GROK_AWAITING_BOT,
+  GROK_REVOKED_CLAIMED,
+  GROK_REVOKED_PENDING,
+  GROK_ROUTINE_CHANGED,
+  GROK_SETUP_INCOMPLETE,
+  GROK_WAITING_MESSAGE,
+} from "../src/shared/grok-bot";
 import type { GrokTasks } from "../src/server/grok/tasks";
 import {
   connectForManualDelivery,
@@ -27,7 +37,8 @@ afterEach(async () => {
     await runInDurableObject(env.ACCOUNTS.get(id), (_, s) => s.storage.deleteAlarm());
   vi.restoreAllMocks();
 });
-async function setup() {
+// viaPrompt saves no Webhook; the Bot registers it through MCP with the setup prompt.
+async function setup({ viaPrompt = false } = {}) {
   let stub = env.ACCOUNTS.getByName(crypto.randomUUID());
   accounts.push(stub.id);
   await runInDurableObject(stub, (_, s) => useManualAlarms(s));
@@ -44,10 +55,9 @@ async function setup() {
     pluginId: "wechatai/grok",
     name: "测试 Bot",
     shortcut: "grok",
-    webhookUrl,
-    webhookKey,
+    ...(viaPrompt ? {} : { webhookUrl, webhookKey }),
   });
-  expect(config).toMatchObject({ ok: true, data: { hasKey: false } });
+  expect(config).toMatchObject({ ok: true, data: { hasKey: false, webhookReady: !viaPrompt } });
   expect(JSON.stringify(config)).not.toContain(webhookKey);
   const id = config.data.id;
   const {
@@ -70,6 +80,17 @@ async function setup() {
     if (reply.result.isError) throw Error(reply.result.content[0].text);
     return JSON.parse(reply.result.content[0].text);
   };
+  // The Bot follows the prompt and registers the Routine the owner saved by hand.
+  // That is its first contact with the credential and closes the setup window.
+  if (!viaPrompt)
+    expect(await tool("wechatai_register_webhook", { webhookUrl, webhookKey })).toMatchObject({
+      registered: true,
+    });
+  if (viaPrompt)
+    // Bots may copy the routine's ready-made header value instead of the bare key.
+    expect(
+      await tool("wechatai_register_webhook", { webhookUrl, webhookKey: `Bearer ${webhookKey}` }),
+    ).toMatchObject({ registered: true });
   const send = (text: string, msg = crypto.randomUUID()) =>
     runInDurableObject(stub, (instance) =>
       (
@@ -113,6 +134,12 @@ async function setup() {
       }
       return taskId;
     });
+  // Bumped whenever idle WeChat receive requests are released early.
+  const wakeVersion = () =>
+    runInDurableObject(
+      stub,
+      (instance) => (instance as unknown as { wechatWakeVersion: number }).wechatWakeVersion,
+    );
   const restart = async () => {
     await abortAllDurableObjects();
     stub = env.ACCOUNTS.get(stub.id);
@@ -130,6 +157,7 @@ async function setup() {
     wake,
     token,
     restart,
+    wakeVersion,
   };
 }
 it("runs a text round trip, reuses only the route history, and settles one result once", async () => {
@@ -313,11 +341,11 @@ it("records just the first authenticated MCP contact for each credential", async
     runInDurableObject(c.stub, (_, s) =>
       s.storage.sql.exec("SELECT seen FROM seen_writes ORDER BY rowid").toArray(),
     );
-  expect((await c.rpc("initialize", { protocolVersion: "2025-06-18" })).status).toBe(200);
+  // setup() already made the first contact with this credential.
+  for (const method of ["initialize", "tools/list", "ping", "ping"])
+    expect((await c.rpc(method, { protocolVersion: "2025-06-18" })).status).toBe(200);
   const first = await writes();
-  expect(first).toEqual([{ seen: expect.any(Number) }]);
-  for (const method of ["tools/list", "ping", "ping"])
-    expect((await c.rpc(method)).status).toBe(200);
+  expect(first).toEqual([]);
   await c.send("@grok 测试连接");
   const taskId = await c.wake();
   const { receipt } = await c.tool("wechatai_claim", { taskId });
@@ -330,7 +358,7 @@ it("records just the first authenticated MCP contact for each credential", async
   expect(await writes()).toEqual(first);
   for (const method of ["tools/list", "ping"])
     expect((await c.rpc(method, {}, token)).status).toBe(200);
-  expect(await writes()).toHaveLength(2);
+  expect(await writes()).toEqual([{ seen: expect.any(Number) }]);
 });
 
 it("shares MCP quota only between authenticated calls and returns HTTP 429 before a claim", async () => {
@@ -338,6 +366,7 @@ it("shares MCP quota only between authenticated calls and returns HTTP 429 befor
   const {
     data: { token: fresh },
   } = await c.api("plugin.grokToken", { id: c.id });
+  expect((await c.rpc("ping", {}, fresh)).status).toBe(200);
   await c.send("@grok 核实配额");
   const taskId = await c.wake();
   const claimArgs = { taskId, claimId: crypto.randomUUID() };
@@ -395,6 +424,449 @@ it("cancels rejected wakes without charging, and rejects untrusted webhook URLs"
   expect(await c.tool("wechatai_claim", { taskId: ref })).toEqual({ claimed: false });
   expect((await c.stub.snapshot()).wallet.balance).toBe(before);
   expect((await deliverQueuedReplies(c.stub)).map((x) => x.text).join("")).toContain("未扣费");
+});
+
+it("lets the Bot register its own Webhook once, within the prompt window", async () => {
+  const c = await setup({ viaPrompt: true });
+  const grok = async () =>
+    (await c.stub.snapshot()).plugins?.find((p: { id: string }) => p.id === c.id) as {
+      hasKey: boolean;
+      webhookReady: boolean;
+      setupPending: boolean;
+    };
+  expect(await grok()).toMatchObject({ hasKey: true, webhookReady: true, setupPending: false });
+  const register = { webhookUrl, webhookKey: "another-key" };
+  await expect(c.tool("wechatai_register_webhook", register)).rejects.toThrow("已过期或已使用");
+  // The registered Routine receives tasks with the normalized key (checked by wake).
+  await c.send("/use grok");
+  await c.send("用一句话问好");
+  const taskId = await c.wake();
+  const claim = await c.tool("wechatai_claim", { taskId });
+  expect(claim).toMatchObject({ claimed: true, text: "用一句话问好" });
+  // An expired prompt cannot replace the Routine either.
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  expect(data.setupUntil).toBeGreaterThan(Date.now());
+  await runInDurableObject(c.stub, (_, s) =>
+    s.storage.sql.exec("UPDATE settings SET value='1' WHERE key=?", `grokSetup:${c.id}`),
+  );
+  await expect(c.tool("wechatai_register_webhook", register, data.token)).rejects.toThrow(
+    "已过期或已使用",
+  );
+  const malformed = { webhookUrl: "https://example.com/hook", webhookKey: "k" };
+  expect((await c.api("plugin.grokToken", { id: c.id })).ok).toBe(true);
+  const { data: fresh } = await c.api("plugin.grokToken", { id: c.id });
+  await expect(c.tool("wechatai_register_webhook", malformed, fresh.token)).rejects.toThrow(
+    "Webhook URL",
+  );
+  expect(await grok()).toMatchObject({ webhookReady: true, setupPending: true });
+  expect((await c.api("plugin.grokRevoke", { id: c.id })).ok).toBe(true);
+  expect(await grok()).toMatchObject({ hasKey: false, setupPending: false });
+});
+
+it("tells WeChat about open tasks when the owner reconnects, and holds new messages until the Bot registers", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  await c.send("第一条");
+  const first = await c.wake();
+  const claim = await c.tool("wechatai_claim", { taskId: first, claimId: crypto.randomUUID() });
+  await c.send("第二条");
+  const before = (await c.stub.snapshot()).wallet.balance;
+  const woke = await c.wakeVersion();
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  expect(await c.wakeVersion()).toBeGreaterThan(woke);
+  const notices = (await deliverQueuedReplies(c.stub, 2)).map((x) => x.text);
+  expect(notices).toEqual(expect.arrayContaining([GROK_RECONNECT_CLAIMED, GROK_RECONNECT_PENDING]));
+  expect((await c.stub.snapshot()).wallet.balance).toBe(before);
+  // The old Routine run can no longer report back with the replaced credential.
+  const late = await c.rpc("tools/call", {
+    name: "wechatai_finish",
+    arguments: { taskId: first, receipt: claim.receipt, status: "completed", text: "晚到" },
+  });
+  expect(late.status).toBe(401);
+  await expect(c.send("第三条")).rejects.toThrow(GROK_AWAITING_BOT);
+  // The Bot re-registers the same Routine with the new credential.
+  expect(
+    await c.tool("wechatai_register_webhook", { webhookUrl, webhookKey }, data.token),
+  ).toMatchObject({ registered: true });
+  await c.send("第四条");
+  const next = await c.wake();
+  expect(await c.tool("wechatai_claim", { taskId: next }, data.token)).toMatchObject({
+    claimed: true,
+    text: "第四条",
+  });
+});
+
+it("keeps holding new messages after the window expires until the Bot uses the new credential", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  await runInDurableObject(c.stub, (_, s) =>
+    s.storage.sql.exec("UPDATE settings SET value='1' WHERE key=?", `grokSetup:${c.id}`),
+  );
+  await expect(c.send("过期后")).rejects.toThrow(GROK_AWAITING_BOT);
+  expect((await c.api("plugin.grokStatus", { id: c.id })).data).toMatchObject({
+    hasKey: true,
+    lastSeen: 0,
+    setupPending: false,
+  });
+  // Any MCP call with the new credential means the Bot can claim again.
+  expect((await c.rpc("tools/list", {}, data.token)).status).toBe(200);
+  await c.send("连上以后");
+  expect(await c.tool("wechatai_claim", { taskId: await c.wake() }, data.token)).toMatchObject({
+    text: "连上以后",
+  });
+});
+
+it("holds new messages after a revoke and a new prompt until the Bot connects", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  expect((await c.api("plugin.grokRevoke", { id: c.id })).ok).toBe(true);
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  await expect(c.send("撤销后重新生成")).rejects.toThrow(GROK_AWAITING_BOT);
+  expect((await c.rpc("ping", {}, data.token)).status).toBe(200);
+  await c.send("Bot 连上之后");
+  expect(await c.tool("wechatai_claim", { taskId: await c.wake() }, data.token)).toMatchObject({
+    text: "Bot 连上之后",
+  });
+});
+
+it("holds a first manual setup until its Bot connects with the credential", async () => {
+  const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
+  accounts.push(stub.id);
+  await runInDurableObject(stub, (_, s) => useManualAlarms(s));
+  const api = async (action: string, input: unknown = {}) =>
+    JSON.parse(await stub.api(action, input));
+  await api("wechat.create", { name: "微信" });
+  await runInDurableObject(stub, (_, state) =>
+    state.storage.sql.exec(
+      "INSERT OR REPLACE INTO settings(key,value) VALUES('connection',?)",
+      JSON.stringify({ status: "connected", generation: "g1", contextToken: "context" }),
+    ),
+  );
+  const { data: plugin } = await api("plugin.save", {
+    pluginId: "wechatai/grok",
+    name: "Bot",
+    shortcut: "grok",
+    webhookUrl,
+    webhookKey,
+  });
+  // The owner saved the Routine first and copies only the header to the Bot.
+  const { data } = await api("plugin.grokToken", { id: plugin.id });
+  const send = (text: string) =>
+    runInDurableObject(stub, (instance) =>
+      (
+        instance as unknown as {
+          processWechat(id: string, m: WxMessage, link: string): Promise<string>;
+        }
+      ).processWechat(
+        crypto.randomUUID(),
+        { item_list: [{ type: 1, text_item: { text } }] },
+        "default",
+      ),
+    );
+  // A wake now would reach a Routine whose connector has no usable credential.
+  await expect(send("@grok 连接器还没加")).rejects.toThrow(GROK_AWAITING_BOT);
+  const ping = await SELF.fetch(endpoint, {
+    method: "POST",
+    headers: { authorization: "Bearer " + data.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+  });
+  expect(ping.status).toBe(200);
+  expect(await send("@grok 连接器加好了")).toBe(GROK_WAITING_MESSAGE);
+});
+
+it.each([
+  [
+    "a manual Routine change",
+    "plugin.save",
+    { webhookKey: "other-routine-key" },
+    GROK_RECONNECT_PENDING,
+    GROK_RECONNECT_CLAIMED,
+  ],
+  ["a revoked credential", "plugin.grokRevoke", {}, GROK_REVOKED_PENDING, GROK_REVOKED_CLAIMED],
+] as const)(
+  "tells WeChat about open tasks after %s",
+  async (_, action, changes, pending, claimed) => {
+    const c = await setup();
+    await c.send("/use grok");
+    await c.send("已领取的任务");
+    const first = await c.wake();
+    await c.tool("wechatai_claim", { taskId: first, claimId: crypto.randomUUID() });
+    await c.send("排队的任务");
+    const before = (await c.stub.snapshot()).wallet.balance;
+    const alarms = () =>
+      runInDurableObject(c.stub, (_, s) => vi.mocked(s.storage.setAlarm).mock.calls.length);
+    const scheduled = await alarms();
+    const woke = await c.wakeVersion();
+    expect((await c.api(action, { id: c.id, webhookUrl, ...changes })).ok).toBe(true);
+    // The notices go out with the next alarm, not whenever the account wakes next,
+    // and an idle receive request yields instead of holding that alarm for 35s.
+    expect(await alarms()).toBeGreaterThan(scheduled);
+    expect(await c.wakeVersion()).toBeGreaterThan(woke);
+    expect((await deliverQueuedReplies(c.stub, 2)).map((x) => x.text)).toEqual(
+      expect.arrayContaining([pending, claimed]),
+    );
+    expect((await c.stub.snapshot()).wallet.balance).toBe(before);
+  },
+);
+
+it.each(["the Bot registers another Routine", "the owner saves another Routine by hand"] as const)(
+  "closes woken tasks the old Routine never claimed when %s",
+  async (how) => {
+    const c = await setup();
+    await c.send("/use grok");
+    await c.send("旧 Routine 没领取");
+    const stuck = await c.wake();
+    expect(stuck).toBeTruthy();
+    await c.send("下一条");
+    const { data } = await c.api("plugin.grokReopen", { id: c.id });
+    expect(data.setupUntil).toBeGreaterThan(Date.now());
+    const routine = { webhookUrl: `${webhookUrl}-2`, webhookKey: "second-routine-key" };
+    const before = (await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt;
+    const alarms = () =>
+      runInDurableObject(c.stub, (_, s) => vi.mocked(s.storage.setAlarm).mock.calls.length);
+    const scheduled = await alarms();
+    if (how === "the Bot registers another Routine")
+      expect(await c.tool("wechatai_register_webhook", routine)).toMatchObject({
+        registered: true,
+      });
+    else expect((await c.api("plugin.save", { id: c.id, ...routine })).ok).toBe(true);
+    expect(await alarms()).toBeGreaterThan(scheduled);
+    expect((await c.api("plugin.grokStatus", { id: c.id })).data.registeredAt).toBeGreaterThan(
+      before,
+    );
+    expect((await deliverQueuedReplies(c.stub)).map((x) => x.text)).toEqual([GROK_ROUTINE_CHANGED]);
+    expect(await c.tool("wechatai_claim", { taskId: stuck })).toEqual({ claimed: false });
+    // The conversation is free again; the next task wakes the new Routine.
+    await runInDurableObject(c.stub, async (instance) => {
+      let posted = "";
+      const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        posted = JSON.parse(await new Request(input).text()).webhookUrl;
+        return new Response(null, { status: 204 });
+      });
+      try {
+        await (instance as unknown as { grok: GrokTasks }).grok.dispatchDue();
+      } finally {
+        fetch.mockRestore();
+      }
+      expect(posted).toBe(routine.webhookUrl);
+    });
+  },
+);
+
+it("keeps woken tasks when the owner saves the same Routine again in an open window", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  await c.send("已唤醒");
+  const woken = await c.wake();
+  expect((await c.api("plugin.grokReopen", { id: c.id })).ok).toBe(true);
+  expect((await c.api("plugin.save", { id: c.id, webhookUrl, webhookKey })).ok).toBe(true);
+  expect(await deliverQueuedReplies(c.stub)).toEqual([]);
+  expect(
+    await c.tool("wechatai_claim", { taskId: woken, claimId: crypto.randomUUID() }),
+  ).toMatchObject({ claimed: true });
+});
+
+it("accepts a repeated registration of the saved Routine after the window closes", async () => {
+  const c = await setup({ viaPrompt: true });
+  // The Bot may retry after a lost response or call again to confirm.
+  expect(
+    await c.tool("wechatai_register_webhook", { webhookUrl, webhookKey: `Bearer ${webhookKey}` }),
+  ).toMatchObject({ registered: true });
+  await expect(
+    c.tool("wechatai_register_webhook", { webhookUrl, webhookKey: "another-key" }),
+  ).rejects.toThrow("已过期或已使用");
+});
+
+it("reopens registration for the credential the Bot already holds", async () => {
+  const c = await setup({ viaPrompt: true });
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  await runInDurableObject(c.stub, (_, s) =>
+    s.storage.sql.exec("UPDATE settings SET value='1' WHERE key=?", `grokSetup:${c.id}`),
+  );
+  const routine = { webhookUrl: `${webhookUrl}-2`, webhookKey: "second-routine-key" };
+  await expect(c.tool("wechatai_register_webhook", routine, data.token)).rejects.toThrow(
+    "已过期或已使用",
+  );
+  const reopened = await c.api("plugin.grokReopen", { id: c.id });
+  expect(reopened.data.setupUntil).toBeGreaterThan(Date.now());
+  expect(await c.tool("wechatai_register_webhook", routine, data.token)).toMatchObject({
+    registered: true,
+  });
+  expect((await c.rpc("tools/list", {}, data.token)).status).toBe(200);
+  expect((await c.api("plugin.grokStatus", { id: c.id })).data).toMatchObject({
+    hasKey: true,
+    webhookReady: true,
+    setupPending: false,
+    setupUntil: 0,
+  });
+  expect((await c.api("plugin.grokRevoke", { id: c.id })).ok).toBe(true);
+  expect(await c.api("plugin.grokReopen", { id: c.id })).toMatchObject({
+    ok: false,
+    error: "grok_no_credential",
+  });
+});
+
+it("keeps a credential issued for an open window when the owner saves a Routine by hand", async () => {
+  const c = await setup();
+  const { data } = await c.api("plugin.grokToken", { id: c.id });
+  expect((await c.api("plugin.save", { id: c.id, webhookUrl, webhookKey: "manual-key" })).ok).toBe(
+    true,
+  );
+  expect((await c.api("plugin.grokStatus", { id: c.id })).data).toMatchObject({
+    hasKey: true,
+    webhookReady: true,
+    setupPending: false,
+  });
+  expect((await c.rpc("tools/list", {}, data.token)).status).toBe(200);
+});
+
+it("asks to finish setup before queueing work, and keeps the Bot's connector on a first manual Webhook", async () => {
+  const stub = env.ACCOUNTS.getByName(crypto.randomUUID());
+  accounts.push(stub.id);
+  await runInDurableObject(stub, (_, s) => useManualAlarms(s));
+  const api = async (action: string, input: unknown = {}) =>
+    JSON.parse(await stub.api(action, input));
+  await api("wechat.create", { name: "微信" });
+  const config = await api("plugin.save", {
+    pluginId: "wechatai/grok",
+    name: "Bot",
+    shortcut: "grok",
+  });
+  const id = config.data.id;
+  const send = (text: string) =>
+    runInDurableObject(stub, (instance) =>
+      (
+        instance as unknown as {
+          processWechat(id: string, m: WxMessage, link: string): Promise<string>;
+        }
+      ).processWechat(
+        crypto.randomUUID(),
+        { item_list: [{ type: 1, text_item: { text } }] },
+        "default",
+      ),
+    );
+  expect(await send("/use grok")).toContain(GROK_SETUP_INCOMPLETE);
+  await expect(send("帮我订会议室")).rejects.toThrow(GROK_SETUP_INCOMPLETE);
+  await expect(send("@grok 帮我订会议室")).rejects.toThrow(GROK_SETUP_INCOMPLETE);
+  expect((await api("plugin.grokToken", { id })).ok).toBe(true);
+  const status = async () => (await api("plugin.grokStatus", { id })).data;
+  expect(await status()).toMatchObject({ hasKey: true, webhookReady: false, setupPending: true });
+  expect((await api("plugin.save", { id, webhookUrl, webhookKey })).ok).toBe(true);
+  expect(await status()).toMatchObject({ hasKey: true, webhookReady: true, setupPending: false });
+  // Replacing an existing Routine may move to another Bot, so the old credential stops.
+  expect((await api("plugin.save", { id, webhookUrl, webhookKey: "rotated" })).ok).toBe(true);
+  expect(await status()).toMatchObject({ hasKey: false, webhookReady: true });
+});
+
+it("sends, customizes or skips the Grok waiting notice as configured", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  expect(await c.send("第一件事")).toBe(GROK_WAITING_MESSAGE);
+  const save = (input: object) => c.api("plugin.save", { id: c.id, ...input });
+  expect((await save({ waitingMessage: "收到，稍等" })).ok).toBe(true);
+  expect(await c.send("第二件事")).toBe("收到，稍等");
+  expect((await save({ waitingMessageEnabled: false })).ok).toBe(true);
+  expect(await c.send("第三件事")).toBe("");
+  // Changing the notice keeps the saved Webhook and the Bot's MCP connector.
+  expect(
+    (await c.stub.snapshot()).plugins?.find((p: { id: string }) => p.id === c.id),
+  ).toMatchObject({ hasKey: true, webhookReady: true, waitingMessageEnabled: false });
+});
+
+it("lists only known MCP tools", async () => {
+  const c = await setup();
+  const listed = await (
+    await c.rpc("tools/list")
+  ).json<{ result: { tools: { name: string }[] } }>();
+  expect(listed.result.tools.map((t) => t.name)).toEqual([
+    "wechatai_claim",
+    "wechatai_finish",
+    "wechatai_register_webhook",
+  ]);
+  const res = await c.rpc("tools/call", { name: "toString", arguments: {} });
+  expect(await res.json()).toMatchObject({ error: { code: -32602 } });
+});
+
+// 1x1 PNG with complete pixel data.
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a1XcAAAAASUVORK5CYII=",
+  "base64",
+);
+it("sends uploaded images after the text, bills each one and closes uploads at settlement", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  await c.send("画一只猫");
+  const taskId = await c.wake();
+  const claim = await c.tool("wechatai_claim", { taskId, claimId: crypto.randomUUID() });
+  expect(claim.imageUpload).toMatchObject({ maxImages: 4, maxBytes: 8 * 1024 * 1024 });
+  const { url } = claim.imageUpload as { url: string };
+  expect(new URL(url).pathname).toMatch(/^\/api\/grok\/uploads\/gup1\./);
+  const put = (body: BodyInit, target = url) => SELF.fetch(target, { method: "PUT", body });
+  expect((await put(png, url.replace(/\.[^.]+$/, `.${"A".repeat(43)}`))).status).toBe(401);
+  expect((await put("not an image")).status).toBe(422);
+  expect((await put(new Uint8Array(8 * 1024 * 1024 + 1))).status).toBe(413);
+  const upload = async () => {
+    const res = await put(png);
+    expect(res.status).toBe(201);
+    return (await res.json<{ imageId: string }>()).imageId;
+  };
+  const uploads = [];
+  for (let i = 0; i < 8; i++) uploads.push(await upload());
+  const limited = await put(png);
+  expect(limited.status).toBe(409);
+  expect(await limited.text()).toContain("最多上传 8 次");
+  const [imageId, ...unused] = uploads;
+  const finish = { taskId, receipt: claim.receipt, status: "completed", text: "画好了" };
+  await expect(
+    c.tool("wechatai_finish", { ...finish, images: [crypto.randomUUID()] }),
+  ).rejects.toThrow("不属于这条任务");
+  const before = (await c.stub.snapshot()).wallet.balance;
+  const result = await c.tool("wechatai_finish", { ...finish, images: [imageId] });
+  expect(result).toMatchObject({ taskStatus: "completed", images: 1 });
+  expect(result.cost).toBe(
+    (creditUnits(countTextTokens(claim.text), countTextTokens(finish.text)) + 5000) / 1000,
+  );
+  expect((await c.stub.snapshot()).wallet.balance).toBeCloseTo(before - result.cost, 3);
+  expect(await c.tool("wechatai_finish", { ...finish, images: [] })).toEqual(result);
+  expect((await put(png)).status).toBe(409);
+  const sent = await deliverQueuedReplies(c.stub, 2);
+  expect(sent.map((part) => part.imageBytes ?? part.text)).toEqual([finish.text, png.length]);
+  await runInDurableObject(c.stub, (_, s) => {
+    const committed = (id: string) =>
+      s.storage.sql.exec("SELECT committed FROM output_assets WHERE id=?", id).one().committed;
+    expect(committed(imageId)).toBe(1);
+    expect(unused.map(committed)).toEqual(unused.map(() => -1));
+    expect(
+      s.storage.sql
+        .exec("SELECT content FROM messages WHERE role='assistant' ORDER BY id DESC LIMIT 1")
+        .one().content,
+    ).toBe(`${finish.text}\n\n![Grok Bot 图片](/api/assets/${imageId})`);
+  });
+});
+it("drops a failed task's uploads and keeps text-only results unchanged", async () => {
+  const c = await setup();
+  await c.send("/use grok");
+  await c.send("画一只狗");
+  const taskId = await c.wake();
+  const claim = await c.tool("wechatai_claim", { taskId, claimId: crypto.randomUUID() });
+  const res = await SELF.fetch(claim.imageUpload.url, { method: "PUT", body: png });
+  const { imageId } = await res.json<{ imageId: string }>();
+  const result = await c.tool("wechatai_finish", {
+    taskId,
+    receipt: claim.receipt,
+    status: "failed",
+    text: "",
+    images: [imageId],
+  });
+  expect(result).toMatchObject({ taskStatus: "failed", cost: 0 });
+  expect(result.images).toBeUndefined();
+  expect((await deliverQueuedReplies(c.stub)).map((x) => x.imageBytes)).toEqual([undefined]);
+  await runInDurableObject(c.stub, (_, s) =>
+    expect(
+      s.storage.sql.exec("SELECT committed FROM output_assets WHERE id=?", imageId).one().committed,
+    ).toBe(-1),
+  );
 });
 
 it("shows Grok Bot only to the configured accounts", async () => {
@@ -600,7 +1072,7 @@ it("revokes the original token and pending work on rebinding and honors an accou
       c.stub,
       (_, s) => s.storage.sql.exec("SELECT state FROM claw_jobs").one().state,
     ),
-  ).toBe("cancelled");
+  ).toBe("failed");
   await env.DB.prepare("INSERT INTO account_backend_routes VALUES (?,?,'frozen',1)")
     .bind(crypto.randomUUID(), c.stub.id.toString())
     .run();
@@ -623,6 +1095,7 @@ it.each(["rotate", "rebind"])(
       data: { token },
     } = await c.api("plugin.grokToken", { id: c.id });
     expect((await c.rpc("ping")).status).toBe(401);
+    expect((await c.rpc("ping", {}, token)).status).toBe(200);
     await c.send("重新开始");
     expect((await c.stub.snapshot()).currentSession?.id).toBe(session);
     expect(await c.tool("wechatai_claim", { taskId: await c.wake() }, token)).toMatchObject({
@@ -1047,6 +1520,9 @@ it.each([3100, 31000])(
     expect(await c.tool("wechatai_finish", finish)).toEqual(settled);
     expect((await c.stub.snapshot()).wallet.balance).toBeCloseTo(before - settled.cost, 3);
   },
+  // Like the test below, a 31,000-character turn takes about 1 s locally and
+  // several times that on CI runners.
+  30_000,
 );
 
 it("keeps newer successful turns before spending the remaining history budget on a failed request", async () => {
@@ -1267,6 +1743,38 @@ it.each([429, 502])(
     });
   },
 );
+
+it.each([
+  ["a confirmed unsent wake", 503, { "X-Wechatai-Grok-Wake": "not-sent" }, 5_000],
+  ["a provider rate limit", 429, {}, 60_000],
+] as const)("schedules the first retry after %s", async (_, status, headers, delay) => {
+  const c = await setup();
+  await c.send("@grok 跨境连接慢");
+  const task = (ref: string) =>
+    runInDurableObject(c.stub, (_, s) =>
+      s.storage.sql
+        .exec<{ due: number; attempts: number }>(
+          "SELECT due,attempts FROM grok_tasks WHERE ref=?",
+          ref,
+        )
+        .one(),
+    );
+  const before = Date.now();
+  const ref = await c.wake(status, false, headers);
+  const first = await task(ref);
+  expect(first.attempts).toBe(1);
+  expect(first.due).toBeGreaterThanOrEqual(before + delay);
+  expect(first.due).toBeLessThan(Date.now() + delay + 1_000);
+  // Only the first unsent retry is quick, so an outage still spans minutes.
+  await runInDurableObject(c.stub, (_, s) =>
+    s.storage.sql.exec("UPDATE grok_tasks SET due=0 WHERE ref=?", ref),
+  );
+  const retried = Date.now();
+  expect(await c.wake(503, false, { "X-Wechatai-Grok-Wake": "not-sent" })).toBe(ref);
+  const second = await task(ref);
+  expect(second.attempts).toBe(2);
+  expect(second.due).toBeGreaterThanOrEqual(retried + 120_000);
+});
 
 it("releases the route without charging after three confirmed unsent attempts", async () => {
   const c = await setup();

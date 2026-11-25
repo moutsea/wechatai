@@ -9,6 +9,7 @@ import { useLocale } from "./locale";
 import { DEFAULT_LOCALE, hasRegisteredTranslation, localizedPath, type Locale } from "../shared/i18n";
 import { headerCopy as headerCopyKo, navLabels as navLabelsKo } from "../shared/i18n/ko/copy/site-header";
 import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
+import { headerCopy as headerCopyPt, navLabels as navLabelsPt } from "../shared/i18n/pt/copy/site-header";
 
 const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: module.UserMenu })));
 
@@ -24,10 +25,10 @@ const UserMenu = lazy(() => import("./user-menu").then((module) => ({ default: m
  *  - 窄屏折叠成抽屉菜单，修复营销站在手机上没有任何导航入口的问题。
  */
 const NAV = [
-  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], match: "/" },
-  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], match: "/pricing" },
-  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], match: "/docs" },
-  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], match: "/#how" },
+  { to: "/", label: "首页", en: "Home", ja: headerCopyJa.nav.home, ko: navLabelsKo["/"], pt: navLabelsPt["/"], match: "/", es: "Inicio" },
+  { to: "/pricing", label: "价格", en: "Pricing", ja: headerCopyJa.nav.pricing, ko: navLabelsKo["/pricing"], pt: navLabelsPt["/pricing"], match: "/pricing", es: "Precios" },
+  { to: "/docs", label: "文档", en: "Docs", ja: headerCopyJa.nav.docs, ko: navLabelsKo["/docs"], pt: navLabelsPt["/docs"], match: "/docs", es: "Documentación" },
+  { to: "/#how", label: "如何使用", en: "How it works", ja: headerCopyJa.nav.how, ko: navLabelsKo["/#how"], pt: navLabelsPt["/#how"], match: "/#how", es: "Cómo funciona" },
 ] as const;
 
 interface HeaderCopy {
@@ -72,10 +73,26 @@ const headerCopyZh = {
   reloadMenu: "重新加载账户菜单",
 } as const;
 
+const headerCopyEs = {
+  home: "Inicio de Wechatai",
+  topNav: "Navegación principal",
+  account: "Cuenta",
+  login: "Iniciar sesión",
+  start: "Empezar",
+  workspace: "Abrir el espacio de trabajo",
+  workspaceFallback: "Espacio de trabajo",
+  openMenu: "Abrir el menú",
+  closeMenu: "Cerrar el menú",
+  menuFailed: "No se pudo cargar el menú de la cuenta",
+  reloadMenu: "Recargar el menú de la cuenta",
+} as const;
+
 const headerCopies: Partial<Record<Locale, HeaderCopy>> = {
   en: headerCopyEn,
   ja: headerCopyJa,
   ko: headerCopyKo,
+  pt: headerCopyPt,
+  es: headerCopyEs,
 };
 
 type SiteHeaderProps = {
@@ -111,7 +128,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
   const { locale, path } = useLocale();
   const copy = headerCopies[locale] ?? headerCopyZh;
   const latin = locale !== DEFAULT_LOCALE;
-  const navLabelKey = locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : "label";
+  const navLabelKey = locale === "en" ? "en" : locale === "ko" ? "ko" : locale === "ja" ? "ja" : locale === "pt" ? "pt" : locale === "es" ? "es" : "label";
   const current = active ?? (path === "/" ? (hash === "#how" ? "/#how" : "/") : undefined);
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -161,7 +178,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
           <span className="visually-hidden" role="alert">
             {copy.menuFailed}
           </span>
-          <a href="/app">{copy.workspaceFallback}</a>
+          <a href={localeHref("/app")}>{copy.workspaceFallback}</a>
           <button
             type="button"
             className="icon-button"
@@ -176,7 +193,7 @@ export function SiteHeader({ active, extra }: SiteHeaderProps) {
     >
       <Suspense
         fallback={
-          <Link className="button small" to="/app">
+          <Link className="button small" to={localeHref("/app")}>
             {copy.workspace}
           </Link>
         }

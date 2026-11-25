@@ -84,6 +84,18 @@ describe("published English pages", () => {
     expect(image?.getAttribute("srcset")).toBe(`${asset}-640.webp 640w, ${asset}.webp 1280w`);
   });
 
+  it("documents how generated image sizes affect metering, retries and old configurations", () => {
+    const text = parse("/en/developers/plugins").querySelector(
+      'section[id="AI 生图插件 1.0"] h2 + p',
+    )?.textContent;
+    expect(text).toMatch(/automatically added size .*not counted toward input tokens/i);
+    expect(text).toMatch(
+      /if the upstream rejects the size, Wechatai does not retry without the parameter/i,
+    );
+    expect(text).toMatch(/fixed size values from older clients are ignored/i);
+    expect(text).toMatch(/fixed sizes are still removed automatically from older configurations/i);
+  });
+
   it("limits the English homepage privacy statement to proactive review", () => {
     const document = parse("/en");
     const statements = [...document.querySelectorAll(".landing-privacy-item p")];
@@ -192,6 +204,19 @@ describe("published English pages", () => {
     expect(homeFaq.mainEntity[0].name).toBe("Do I need my own API key?");
   });
 
+  it("documents that clearing Muse history removes bodies without deleting receipts", () => {
+    const paragraph = [...parse("/en/developers/muse").querySelectorAll("main p")].find((p) =>
+      p.textContent?.includes("delete all session records"),
+    );
+    expect(paragraph?.textContent).toMatch(
+      /(?:reply |response )?bodies from (?:the )?corresponding receipts and (?:the )?result cache/i,
+    );
+    expect(paragraph?.textContent).toMatch(/retain\w* .*settlement and deduplication/i);
+    expect(paragraph?.textContent).toMatch(
+      /does not synchronously delete Muse's existing local records, long-term memory or files/i,
+    );
+  });
+
   it("keeps the existing Chinese pages and publishes only the approved localized URLs", () => {
     const home = parse("/");
     expect(home.querySelector("h1")?.textContent).toContain("把你的 AI");
@@ -212,6 +237,10 @@ describe("published English pages", () => {
       "/en/compare/wechatai-vs-commercial-wechat-ai",
       "/en/compare/wechatai-vs-openclaw",
       "/en/compare/wechatai-vs-wechat-official-ai",
+      "/en/developers/hermes",
+      "/en/developers/muse",
+      "/en/developers/openclaw",
+      "/en/developers/plugins",
       ...englishDocs.map(({ path }) => `/en${path}`),
       "/en/pricing",
       "/en/terms",
@@ -245,11 +274,21 @@ describe("published English pages", () => {
       "/ko/wechat-ai",
       "/ko/wechat-bot",
       "/ko/wechat-deepseek",
+      "/es",
+      "/es/pricing",
+      "/es/wechat-ai",
+      "/es/wechat-bot",
+      "/es/wechat-deepseek",
+      "/pt",
+      "/pt/pricing",
+      "/pt/wechat-ai",
+      "/pt/wechat-bot",
+      "/pt/wechat-deepseek",
     ].sort();
     expect(publishedLocalizedPaths().sort()).toEqual(expected);
     const sitemap = renderSitemap();
     const localized = [
-      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja|ko)[^<]*)<\/loc>/g),
+      ...sitemap.matchAll(/<loc>https:\/\/wechatai\.app(\/(?:en|ja|ko|es|pt)[^<]*)<\/loc>/g),
     ].map(([, path]) => path);
     expect(localized.sort()).toEqual(expected);
   });

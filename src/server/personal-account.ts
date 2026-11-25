@@ -69,13 +69,27 @@ import {
   type RemoteAgentKind,
 } from "../shared/remote-agent";
 import { hermesInputSchema, type HermesPlugin } from "../shared/hermes";
-import { grokInputSchema, GROK_DISPATCH_UNAVAILABLE, type GrokPlugin } from "../shared/grok-bot";
+import {
+  grokInputSchema,
+  GROK_DISPATCH_UNAVAILABLE,
+  GROK_RECONNECT_CLAIMED,
+  GROK_RECONNECT_PENDING,
+  GROK_AWAITING_BOT,
+  GROK_REVOKED_CLAIMED,
+  GROK_REVOKED_PENDING,
+  GROK_ROUTINE_CHANGED,
+  GROK_SETUP_INCOMPLETE,
+  GROK_SETUP_MINUTES,
+  type GrokPlugin,
+} from "../shared/grok-bot";
 import { GrokTasks } from "./grok/tasks";
 import { grokSessionReplyText } from "./grok/delivery";
+import { GROK_UPLOAD_PATH, signGrokUploadToken } from "./grok/upload";
 import {
   prepareGrokWake,
   grokBotEnabled,
   grokDispatcherReady,
+  isStoredGrokWebhook,
   requireGrokDispatcher,
   sealGrokWebhook,
 } from "./grok/dispatch";
@@ -92,7 +106,15 @@ import {
 import { compareConnectorVersions, openClawRelease } from "../shared/openclaw-release";
 import type { ConnectorUpdateNotice, ConnectorUpdateReadState } from "../shared/connector-update";
 import { openClawInputSchema, type OpenClawPlugin } from "../shared/openclaw";
-import { OpenClawRelay, clawPairExchangeSchema, type ClawRoute } from "./openclaw-relay";
+import {
+  MUSE_IMAGE_RULES,
+  MUSE_MAX_IMAGES,
+  MUSE_MAX_UPLOADS,
+  OpenClawRelay,
+  clawPairExchangeSchema,
+  museUploadRun,
+  type ClawRoute,
+} from "./openclaw-relay";
 import {
   roleplayInputSchema,
   roleplayManifest,
@@ -188,7 +210,7 @@ import { invokeWebResearch } from "./plugins/web-research";
 import { invokeImageGeneration } from "./plugins/image-generation";
 import { pluginNotificationText } from "./plugins/notifications";
 import { assetDownload, missingAsset, validAssetId } from "./asset-download";
-import { MediaStore } from "./media";
+import { MediaStore, MEDIA_TTL_MS, type OutputAsset } from "./media";
 import {
   imageGenerationInputSchema,
   type ImageGenerationPlugin,
@@ -303,6 +325,10 @@ type Link = Connection & {
 // Once prepared, the final delivery text replaces this metadata so retries and
 // multipart delivery retain identical content and offsets across restarts.
 type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: string };
+// Expiry of the window in which a freshly generated Grok MCP credential may
+// register its Routine Webhook. Consumed by the first successful registration.
+const grokSetupKey = (pluginId: string) => `grokSetup:${pluginId}`;
+const grokRegisteredKey = (pluginId: string) => `grokRegistered:${pluginId}`;
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -405,6 +431,17 @@ export class PersonalAccount extends DurableObject<Env> {
         );
       },
       validateRoute: (route) => this.validateClawRoute(route),
+      // The connector cannot ask the worker again, so a missing or expired
+      // image is left out; the receipt reports how many were sent.
+      images: (jobId, ids) =>
+        [...new Set(ids)].filter((imageId) => {
+          const asset = this.media.row(imageId);
+          return (
+            asset?.runId === museUploadRun(jobId) &&
+            asset.committed === 0 &&
+            asset.expiresAt > Date.now()
+          );
+        }),
       balance: () => {
         this.refreshWallet();
         return this.wallet.balance();
@@ -412,14 +449,24 @@ export class PersonalAccount extends DurableObject<Env> {
       deliver: (event) => {
         const { id, plugin, route, text, units, inputTokens, outputTokens, failed, proactive } =
           event;
+        const images = failed ? [] : event.images;
         this.refreshWallet();
         if (!failed) this.wallet.charge(id, units, units);
         else recordCallFailure(this.sql, id, new AppError("remote_agent_failed", ""));
+        for (const image of images) this.media.commit(image, Date.now() + MEDIA_TTL_MS);
+        // Uploads the reply did not list are never sent.
+        if (event.uploadRun) this.media.discardRun(event.uploadRun);
         this.sql.exec(
           "INSERT INTO runs VALUES (?,?, 'complete',?,?)",
           id,
           failed || proactive ? null : route.sessionId,
-          JSON.stringify({ text, cost: units / 1000 }),
+          // Delivery sends `images` instead of text, so remote agent images are
+          // stored as attachments that follow the text parts.
+          JSON.stringify({
+            text,
+            cost: units / 1000,
+            ...(images.length ? { attachments: images } : {}),
+          }),
           Date.now(),
         );
         if (!failed) {
@@ -434,7 +481,12 @@ export class PersonalAccount extends DurableObject<Env> {
             this.sql.exec(
               "INSERT INTO messages (sessionId,role,content,createdAt,inputTokens,outputTokens,cost,model) VALUES (?, 'assistant', ?,?,?,?,?,?)",
               route.sessionId,
-              text,
+              [
+                text,
+                ...images.map(
+                  (image) => `![${remoteAgentName(plugin.pluginId)} 图片](/api/assets/${image})`,
+                ),
+              ].join("\n\n"),
               Date.now(),
               inputTokens,
               outputTokens,
@@ -492,6 +544,12 @@ export class PersonalAccount extends DurableObject<Env> {
           `${ctx.id}:grok:${id}`,
           ref,
         ),
+      this.media,
+      (id, ref, expires) =>
+        new URL(
+          `${GROK_UPLOAD_PATH}/${signGrokUploadToken(env, ctx.id.toString(), id, ref, expires)}`,
+          env.APP_URL,
+        ).href,
     );
     ctx.blockConcurrencyWhile(async () => {
       ctx.storage.transactionSync(() => this.personalRecords.init());
@@ -939,6 +997,101 @@ export class PersonalAccount extends DurableObject<Env> {
       return reply;
     });
   }
+  // The signed upload URL authorizes this call; the task must still be claimed.
+  async grokUpload(pluginId: string, ref: string, data: Uint8Array): Promise<string> {
+    try {
+      return JSON.stringify({ ok: true, data: await this.grok.upload(pluginId, ref, data) });
+    } catch (error) {
+      // Storage failures stay 5xx so the Bot retries the same file.
+      if (!(error instanceof AppError)) throw error;
+      return JSON.stringify({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        status: error.status,
+      });
+    }
+  }
+  // Image upload from a Muse connector for a job its runner has claimed.
+  async museUpload(
+    pluginId: string,
+    secret: string,
+    jobId: string,
+    runnerId: string,
+    data: Uint8Array,
+  ): Promise<string> {
+    try {
+      if (this.plugin(pluginId).pluginId !== "wechatai/muse")
+        throw new AppError("plugin_type", "连接类型不匹配", 403);
+      this.claw.authenticate(pluginId, secret);
+      const target = this.claw.uploadTarget(pluginId, jobId, runnerId);
+      const { n: uploads } = this.sql
+        .exec<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM output_assets WHERE runId=?",
+          museUploadRun(jobId),
+        )
+        .one();
+      if (uploads >= MUSE_MAX_UPLOADS)
+        throw new AppError(
+          "muse_upload_limit",
+          `每个任务最多上传 ${MUSE_MAX_UPLOADS} 次图片，回复时最多附带 ${MUSE_MAX_IMAGES} 张。`,
+          409,
+        );
+      let asset: OutputAsset;
+      try {
+        asset = await this.media.save(
+          museUploadRun(jobId),
+          target.sessionId,
+          data,
+          target.expiresAt,
+        );
+      } catch (error) {
+        if (error instanceof AppError && ["image_size", "image_invalid"].includes(error.code))
+          throw new AppError(error.code, MUSE_IMAGE_RULES, 422);
+        throw error;
+      }
+      // The R2 write yields. The reply, a cancellation or parallel uploads may have won.
+      try {
+        this.claw.uploadTarget(pluginId, jobId, runnerId);
+        const extra = this.sql
+          .exec<{ id: string }>(
+            "SELECT id FROM output_assets WHERE runId=? ORDER BY rowid LIMIT -1 OFFSET ?",
+            museUploadRun(jobId),
+            MUSE_MAX_UPLOADS,
+          )
+          .toArray()
+          .some((a) => a.id === asset.id);
+        if (extra)
+          throw new AppError(
+            "muse_upload_limit",
+            `每个任务最多上传 ${MUSE_MAX_UPLOADS} 次图片。`,
+            409,
+          );
+      } catch (error) {
+        this.media.discard(asset.id);
+        throw error;
+      }
+      return JSON.stringify({
+        ok: true,
+        data: {
+          imageId: asset.id,
+          mime: asset.mime,
+          width: asset.width,
+          height: asset.height,
+          bytes: asset.bytes,
+        },
+      });
+    } catch (error) {
+      // Storage failures stay 5xx so the connector can retry the same file.
+      if (!(error instanceof AppError)) throw error;
+      return JSON.stringify({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        status: error.status,
+      });
+    }
+  }
   async openClawRequest(
     pluginId: string,
     secret: string,
@@ -962,6 +1115,8 @@ export class PersonalAccount extends DurableObject<Env> {
         if (!plugin.lastSeen) this.claw.markSeen(pluginId);
         if (action === "grok.claim") data = this.grok.claim(plugin, payload);
         else if (action === "grok.finish") data = this.grok.finish(plugin, payload);
+        else if (action === "grok.register")
+          data = await this.registerGrokWebhook(pluginId, secret, payload);
         else if (action === "grok.auth") data = { ok: true };
         else throw new AppError("not_found", "未知工具", 404);
       } else if (action === "pair") {
@@ -975,7 +1130,8 @@ export class PersonalAccount extends DurableObject<Env> {
         };
       } else if (action === "poll") data = await this.claw.poll(pluginId, secret, payload);
       else data = this.claw.handle(pluginId, secret, action, payload);
-      if (action === "event" || action === "grok.finish") {
+      // A registration may also have queued notices for tasks it closed.
+      if (action === "event" || action === "grok.finish" || action === "grok.register") {
         // Alarms cannot overlap. Release idle receive requests so the active alarm
         // can finish and the persisted reply can be delivered without a 35s wait.
         this.wakeWechat();
@@ -1018,8 +1174,8 @@ export class PersonalAccount extends DurableObject<Env> {
     if (!this.getSetting("ownerId", "")) this.setSetting("ownerId", userId);
   }
   // Server binding RPC; deliberately not exposed by the account api(action) dispatcher.
-  adminStats() {
-    return readAdminAccountStats(this.sql);
+  adminStats(registeredAt?: number, collectionStart?: number) {
+    return readAdminAccountStats(this.sql, Date.now(), registeredAt, collectionStart);
   }
   // These RPCs are only available to the server binding, never the user action dispatcher.
   adminMembership() {
@@ -1301,6 +1457,7 @@ export class PersonalAccount extends DurableObject<Env> {
         ...rest,
         ...this.claw.status(p.id),
         access: this.remoteAgentAccess(p),
+        ...(p.pluginId === "wechatai/grok" ? this.grokSetupStatus(p) : {}),
       } as RemoteAgentPlugin;
     return {
       ...rest,
@@ -1311,6 +1468,73 @@ export class PersonalAccount extends DurableObject<Env> {
           ? (this.assistants().find((a) => a.id === p.modelId)?.hasKey ?? false)
           : Boolean(encryptedKey),
     };
+  }
+  private grokSetupUntil(pluginId: string) {
+    const until = this.getSetting(grokSetupKey(pluginId), 0);
+    return until > Date.now() ? until : 0;
+  }
+  private grokSetupStatus(p: StoredPlugin) {
+    const setupUntil = this.grokSetupUntil(p.id);
+    return {
+      webhookReady: Boolean(p.encryptedKey),
+      setupPending: setupUntil > 0,
+      setupUntil,
+      registeredAt: this.getSetting(grokRegisteredKey(p.id), 0),
+    };
+  }
+  // MCP tool for the configuration prompt: the Bot submits its own Routine Webhook.
+  private async registerGrokWebhook(pluginId: string, secret: string, raw: unknown) {
+    const key = grokSetupKey(pluginId);
+    const until = this.getSetting(key, 0);
+    const closed = () =>
+      new AppError(
+        "grok_setup_closed",
+        "配置指令已过期或已使用。请让用户在微伴网页的 Grok Bot 配置中点「重新开放登记」，再用同一个「微伴」连接器提交，不用重新生成指令。",
+        409,
+      );
+    const previous = this.plugin(pluginId);
+    const binding = `${this.ctx.id}:grok:${pluginId}`;
+    const done = {
+      registered: true,
+      next: `配置完成。请用户在微信发送 @${previous.shortcut} 加一句任务验证收发。`,
+    };
+    // A repeated call with the saved Routine succeeds, even after the window
+    // closed, so the Bot never tells the user to regenerate a working setup.
+    if (await isStoredGrokWebhook(this.env, previous.encryptedKey, raw, binding))
+      return this.ctx.storage.transactionSync(() => {
+        this.claw.requireCredential(pluginId, secret);
+        if (JSON.stringify(this.findPlugin(pluginId)) !== JSON.stringify(previous))
+          throw new AppError(
+            "plugin_changed",
+            "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
+            409,
+          );
+        this.sql.exec("DELETE FROM settings WHERE key=?", key);
+        this.setSetting(grokRegisteredKey(pluginId), Date.now());
+        return done;
+      });
+    if (until <= Date.now()) throw closed();
+    const encryptedKey = await sealGrokWebhook(this.env, this.ctx.id.toString(), raw, binding);
+    return this.ctx.storage.transactionSync(() => {
+      // Sealing yields. A rotation, revocation or edit in the meantime wins.
+      this.claw.requireCredential(pluginId, secret);
+      if (this.getSetting(key, 0) !== until || until <= Date.now()) throw closed();
+      const current = this.findPlugin(pluginId);
+      if (!current || JSON.stringify(current) !== JSON.stringify(previous))
+        throw new AppError(
+          "plugin_changed",
+          "微伴中的配置刚被修改，请让用户在网页重新生成配置指令。",
+          409,
+        );
+      // The caller holds the current credential, so claimed runs can still
+      // finish and later wakes use the new Routine. Woken tasks the old Routine
+      // never claimed would otherwise hold their conversation until expiry.
+      if (current.encryptedKey) this.grok.failUnclaimedWakes(pluginId, GROK_ROUTINE_CHANGED);
+      this.persistPlugin({ ...current, encryptedKey });
+      this.sql.exec("DELETE FROM settings WHERE key=?", key);
+      this.setSetting(grokRegisteredKey(pluginId), Date.now());
+      return done;
+    });
   }
   private remoteAgentAccess(p: StoredPlugin): PluginAccessIssue | null {
     if (!this.pluginAvailable(p.id)) return pluginLimitIssue(this.getSetting("planUntil", 0));
@@ -1473,6 +1697,7 @@ export class PersonalAccount extends DurableObject<Env> {
         .safeExtend({ shortcut: editableShortcut })
         .parse({ ...previous, ...values });
       const replace = !!(values.webhookKey || values.webhookUrl);
+      let notified = 0;
       const encryptedKey = replace
         ? await sealGrokWebhook(
             this.env,
@@ -1480,9 +1705,18 @@ export class PersonalAccount extends DurableObject<Env> {
             values,
             `${this.ctx.id}:grok:${id}`,
           )
-        : previous?.encryptedKey;
-      if (!encryptedKey)
-        throw new AppError("grok_webhook_required", "请填写 Routine 的 Webhook URL 和 key");
+        : (previous?.encryptedKey ?? "");
+      const sameRoutine =
+        replace &&
+        !!previous?.encryptedKey &&
+        (await isStoredGrokWebhook(
+          this.env,
+          previous.encryptedKey,
+          values,
+          `${this.ctx.id}:grok:${id}`,
+        ));
+      // The Bot registers its Webhook through MCP after the configuration exists.
+      if (!previous) requireGrokDispatcher(this.env, this.ctx.id.toString());
       const p: StoredPlugin = {
         ...input,
         pluginId: "wechatai/grok",
@@ -1497,9 +1731,25 @@ export class PersonalAccount extends DurableObject<Env> {
           throw new AppError("plugin_changed", "配置已更新，请重新打开后再保存", 409);
         if (!previous || previous.shortcut !== input.shortcut)
           this.requireUniqueShortcut(input.shortcut, { pluginId: previous?.id });
-        if (previous && replace) this.claw.revoke(id, "preserve");
+        // A different Routine may belong to another Bot, so its old credential
+        // must stop. Adding the first Webhook keeps the connector the Bot added,
+        // and so does a replacement while the owner's setup window is open. Then,
+        // as when the Bot registers it, only unclaimed wakes of the old Routine close.
+        if (previous?.encryptedKey && replace && !this.grokSetupUntil(id)) {
+          notified = this.grok.failForReconnect(id, GROK_RECONNECT_PENDING, GROK_RECONNECT_CLAIMED);
+          this.claw.revoke(id, "preserve");
+        } else if (previous?.encryptedKey && replace && !sameRoutine)
+          notified = this.grok.failUnclaimedWakes(id, GROK_ROUTINE_CHANGED);
+        if (replace) {
+          this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(id));
+          this.setSetting(grokRegisteredKey(id), Date.now());
+        }
         this.persistPlugin(p);
       });
+      if (notified) {
+        this.wakeWechat();
+        await this.scheduleWechat();
+      }
       return this.publicPlugin(p);
     }
     if (
@@ -3166,9 +3416,8 @@ export class PersonalAccount extends DurableObject<Env> {
         p.maxInputTokens === undefined
       )
         p.maxInputTokens = this.assistant(p.id).maxInputTokens;
-      const remoteAction = /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status)$/.exec(
-        action,
-      );
+      const remoteAction =
+        /^plugin\.(claw|hermes|muse|grok)(Pair|Token|Revoke|Status|Reopen)$/.exec(action);
       const remoteKind = remoteAgentKind(`wechatai/${remoteAction?.[1] ?? "openclaw"}`);
       const queuedReplies = remoteKind === "grok" ? "preserve" : "discard";
       if (remoteAction && this.plugin(String(p.id)).pluginId !== `wechatai/${remoteKind}`)
@@ -3280,6 +3529,11 @@ export class PersonalAccount extends DurableObject<Env> {
         this.ctx.storage.transactionSync(() => {
           this.stopCloudPlugin(String(p.id));
           this.sql.exec("DELETE FROM plugins WHERE id = ?", String(p.id));
+          this.sql.exec(
+            "DELETE FROM settings WHERE key IN (?,?)",
+            grokSetupKey(String(p.id)),
+            grokRegisteredKey(String(p.id)),
+          );
         });
         await this.scheduleWechat();
         await this.flushReminderSchedule();
@@ -3306,6 +3560,15 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.museToken" ||
         action === "plugin.grokToken"
       ) {
+        let notified = 0;
+        if (remoteKind === "grok") {
+          requireGrokDispatcher(this.env, this.ctx.id.toString());
+          notified = this.grok.failForReconnect(
+            String(p.id),
+            GROK_RECONNECT_PENDING,
+            GROK_RECONNECT_CLAIMED,
+          );
+        }
         data = {
           token: signOpenClawToken(
             this.env,
@@ -3317,6 +3580,23 @@ export class PersonalAccount extends DurableObject<Env> {
               ? new URL("/api/grok/mcp", this.env.APP_URL).href
               : this.env.APP_URL,
         };
+        // Only a credential the owner just generated may register a Routine Webhook.
+        if (remoteKind === "grok") {
+          const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
+          this.setSetting(grokSetupKey(String(p.id)), setupUntil);
+          data = { ...(data as object), setupUntil };
+          // Release an idle receive request so the notices go out now.
+          if (notified) this.wakeWechat();
+          await this.scheduleWechat();
+        }
+      } else if (action === "plugin.grokReopen") {
+        // Reopen registration for the credential the Bot already holds.
+        requireGrokDispatcher(this.env, this.ctx.id.toString());
+        if (!this.claw.status(String(p.id)).hasKey)
+          throw new AppError("grok_no_credential", "请先生成配置指令。", 409);
+        const setupUntil = Date.now() + GROK_SETUP_MINUTES * 60_000;
+        this.setSetting(grokSetupKey(String(p.id)), setupUntil);
+        data = { setupUntil };
       } else if (
         action === "plugin.clawRevoke" ||
         action === "plugin.hermesRevoke" ||
@@ -3324,17 +3604,26 @@ export class PersonalAccount extends DurableObject<Env> {
         action === "plugin.grokRevoke"
       ) {
         this.plugin(String(p.id));
+        const notified =
+          remoteKind === "grok"
+            ? this.grok.failForReconnect(String(p.id), GROK_REVOKED_PENDING, GROK_REVOKED_CLAIMED)
+            : 0;
         this.claw.revoke(String(p.id), queuedReplies);
+        this.sql.exec("DELETE FROM settings WHERE key=?", grokSetupKey(String(p.id)));
         data = { ok: true };
+        if (notified) this.wakeWechat();
+        if (remoteKind === "grok") await this.scheduleWechat();
       } else if (
         action === "plugin.clawStatus" ||
         action === "plugin.hermesStatus" ||
-        action === "plugin.museStatus"
+        action === "plugin.museStatus" ||
+        action === "plugin.grokStatus"
       ) {
         const plugin = this.plugin(String(p.id));
         if (!isRemoteAgent(plugin)) throw new AppError("plugin_type", "不是远程 Agent 配置");
         data = {
           ...this.claw.status(plugin.id),
+          ...(plugin.pluginId === "wechatai/grok" ? this.grokSetupStatus(plugin) : {}),
           access: this.remoteAgentAccess(plugin),
           ...(plugin.pluginId === "wechatai/openclaw"
             ? {
@@ -5181,9 +5470,11 @@ export class PersonalAccount extends DurableObject<Env> {
                 ? "之后直接发送画面描述即可生成图片，每条描述独立生成 1 张。"
                 : isRemoteAgent(p)
                   ? p.pluginId === "wechatai/grok"
-                    ? grokDispatcherReady(this.env, this.ctx.id.toString())
-                      ? "之后的文字任务会交给你的 Grok Bot。审批请回到 Grok Bot 完成；微伴命令使用 /wx 前缀。"
-                      : GROK_DISPATCH_UNAVAILABLE
+                    ? !grokDispatcherReady(this.env, this.ctx.id.toString())
+                      ? GROK_DISPATCH_UNAVAILABLE
+                      : !p.encryptedKey
+                        ? GROK_SETUP_INCOMPLETE
+                        : "之后的文字任务会交给你的 Grok Bot。审批请回到 Grok Bot 完成；微伴命令使用 /wx 前缀。"
                     : p.pluginId === "wechatai/muse"
                       ? "之后的文字消息会交给你的 Muse 托管助理。微伴命令使用 /wx 前缀；Muse 原生命令暂不支持。"
                       : `之后的消息和 /new、/help 等命令会交给你的 ${remoteAgentName(p.pluginId)} Agent。微伴命令请加 /wx 前缀，例如 /wx status、/wx help。`
@@ -5450,8 +5741,17 @@ export class PersonalAccount extends DurableObject<Env> {
           : `请发送 @${handle} 问题 进行单次对话。切换默认模型请用 /wx models 和 /wx model 编号。`;
     }
     // Reject new work before even creating a session for a first @mention.
-    if (messagePlugin?.pluginId === "wechatai/grok")
+    if (messagePlugin?.pluginId === "wechatai/grok") {
       requireGrokDispatcher(this.env, this.ctx.id.toString());
+      if (!messagePlugin.encryptedKey)
+        throw new AppError("grok_setup_incomplete", GROK_SETUP_INCOMPLETE, 409);
+      // Until the Bot makes its first MCP call with the current credential, a
+      // wake reaches a Routine that cannot claim, so hold new work. Any call,
+      // including adding the connector, releases it.
+      const connector = this.claw.status(messagePlugin.id);
+      if (connector.hasKey && !connector.lastSeen)
+        throw new AppError("grok_awaiting_bot", GROK_AWAITING_BOT, 409);
+    }
     if (!this.linkSetting(connectionId, "current", "") && defaultModel)
       this.createSession(defaultModel.id, "", false, connectionId);
     const active = this.linkSetting(connectionId, "current", "");
@@ -6029,9 +6329,16 @@ export class PersonalAccount extends DurableObject<Env> {
                 pending.id,
               )
               .toArray()[0];
-            const images = completedRun
-              ? ((JSON.parse(completedRun.response) as { images?: string[] }).images ?? [])
-              : [];
+            const response = completedRun
+              ? (JSON.parse(completedRun.response) as { images?: string[]; attachments?: string[] })
+              : {};
+            const images = response.images ?? [];
+            // Cloud files and remote agent images are sent after every text part.
+            const attachments = cloudTaskId
+              ? cloudFiles.map((file) => file.id)
+              : pending.id.startsWith("claw:")
+                ? (response.attachments ?? [])
+                : [];
             let parts: string[] = [];
             let textReceipt: WechatTextReceipt | undefined;
             const token = this.connection(connectionId).contextToken || message.context_token;
@@ -6103,9 +6410,9 @@ export class PersonalAccount extends DurableObject<Env> {
                 p[i] = (p[i] ?? "") + ch;
                 return p;
               }, []);
-              if (cloudFiles.length && pending.part >= parts.length)
+              if (attachments.length && pending.part >= parts.length)
                 await this.deliverAsset(
-                  cloudFiles[pending.part - parts.length].id,
+                  attachments[pending.part - parts.length],
                   credentials,
                   token,
                   `${pending.id}:${pending.part}`,
@@ -6200,7 +6507,7 @@ export class PersonalAccount extends DurableObject<Env> {
                 throw new AppError("cloud_reply_waiting", CLOUD_REPLY_WAITING_MESSAGE, 503);
               throw error;
             }
-            if (pending.part + 1 >= (images.length || parts.length + cloudFiles.length)) {
+            if (pending.part + 1 >= (images.length || parts.length + attachments.length)) {
               if (pending.id.startsWith("claw:"))
                 console.info(
                   JSON.stringify({

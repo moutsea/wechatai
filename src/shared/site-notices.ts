@@ -50,8 +50,8 @@ export type UserNotices = NoticePage & {
 };
 export const unreadNoticeCount = (feed: UserNotices | null) =>
   (feed?.unread ?? 0) + (feed?.connectorUpdate && !feed.connectorUpdate.isRead ? 1 : 0);
-export const noticeDate = (time: number) =>
-  new Intl.DateTimeFormat("zh-CN", {
+export const noticeDate = (time: number, locale = "zh-CN") =>
+  new Intl.DateTimeFormat(locale, {
     timeZone: "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",

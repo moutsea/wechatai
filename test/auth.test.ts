@@ -276,17 +276,23 @@ describe("Google and GitHub OAuth", () => {
     ["/app/billing", 987603],
     ["/pricing?interval=month", 987604],
     ["/pricing?interval=year", 987605],
+    ["/pt/pricing?interval=month#plan-month", 987606],
+    ["/pt/pricing?interval=year#plan-year", 987607],
+    ["/es/app?source=setup#help", 987608],
   ])("returns new and existing OAuth users to %s after authorization", async (path, id) => {
     const returnTo = authReturnPath(path);
+    const callback = path.includes("#") ? new URL(returnTo, env.APP_URL).href : returnTo;
     mockGitHub(`upgrade-${crypto.randomUUID()}@example.test`, id);
     for (let i = 0; i < 2; i++) {
       const response = await finish(
         await begin("github", {
-          callbackURL: returnTo,
-          newUserCallbackURL: returnTo,
+          callbackURL: callback,
+          newUserCallbackURL: callback,
         }),
       );
-      expect(response.headers.get("location")).toBe(path);
+      expect(response.headers.get("location")).toBe(
+        path.includes("#") ? new URL(path, env.APP_URL).href : path,
+      );
       expect(cookieHeader(response)).toContain("session_token=");
     }
   });
@@ -297,6 +303,11 @@ describe("Google and GitHub OAuth", () => {
     expect(authReturnPath("/ko/pricing?interval=year#plan-year")).toBe(
       "/ko/pricing?interval=year#plan-year",
     );
+    for (const locale of ["en", "ja", "ko", "es", "pt"]) {
+      const target = `/${locale}/app?source=setup#help`;
+      expect(authReturnPath(target)).toBe(target);
+      expect(authReturnPath(`/${locale}/app/channels`)).toBe("/app");
+    }
     for (const path of [
       null,
       "https://evil.example",
@@ -310,6 +321,15 @@ describe("Google and GitHub OAuth", () => {
       "/ko/pricing-other",
       "/ko/pricing/other",
       "//evil.example/ko/pricing",
+      "/pt",
+      "/pt/pricing-other",
+      "/pt/pricing/../../api/auth/sign-out",
+      "//evil.example/pt/pricing",
+      "/es",
+      "/es/pricing-other",
+      "/es/pricing/checkout",
+      "/es/pricing/../../api/auth/sign-out",
+      "//evil.example/es/pricing",
       "/pricing/../../api/auth/sign-out",
     ]) {
       expect(authReturnPath(path)).toBe("/app");

@@ -19,14 +19,17 @@ import { seoCopy as seoCopyKo } from "./i18n/ko/copy/seo";
 import { seoCopy as seoCopyJa } from "./i18n/ja/copy/seo";
 import { homeCopy as homeCopyJa } from "./i18n/ja/copy/home";
 import { pricingCopy as pricingCopyJa } from "./i18n/ja/copy/pricing";
+import { seoCopy as seoCopyPt } from "./i18n/pt/copy/seo";
 import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
 import { MUSE_FAQ } from "./muse-faq";
+import { DEVELOPER_PAGES_EN } from "./i18n/en/developer-pages";
 import {
   DEFAULT_LOCALE,
   hasRegisteredTranslation,
   LOCALE_DEFINITIONS,
+  DASHBOARD_PATH,
   localizedPath,
   normalizePath,
   registeredTranslation,
@@ -39,6 +42,7 @@ import {
 // Public search URLs always use the production domain, including local builds.
 export const SITE_URL = "https://wechatai.app";
 export const SITE_NAME = "微伴 Wechatai";
+
 // Update only when the actual homepage content changes, never on every build.
 const HOME_UPDATED_AT = "2026-11-14";
 export const SOCIAL_IMAGE = `${SITE_URL}/og-image.png`;
@@ -76,6 +80,12 @@ export const PRIVATE_PATHS = [
     "/notices",
   ].map((section) => `/app${section}`),
 ];
+
+export function localizedDashboardPaths(): string[] {
+  return registeredTranslationsForPath(DASHBOARD_PATH).map(({ locale }) =>
+    localizedPath(locale, DASHBOARD_PATH),
+  );
+}
 
 const ORGANIZATION_ID = `${SITE_URL}/#organization`;
 const APPLICATION_ID = `${SITE_URL}/#application`;
@@ -148,9 +158,13 @@ function organizationNode(locale: Locale = DEFAULT_LOCALE) {
         ? "An independently maintained service that connects AI models and agents to one-to-one WeChat ClawBot chats. It is not officially affiliated with Tencent or WeChat."
         : locale === "ja"
           ? seoCopyJa.organizationDescription
-          : locale === "ko"
-            ? seoCopyKo.organizationDescription
-            : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
+          : locale === "pt"
+            ? seoCopyPt.organizationDescription
+            : locale === "es"
+              ? "Servicio mantenido de forma independiente que conecta modelos de IA y agentes con chats individuales de WeChat ClawBot. No está afiliado oficialmente a Tencent ni a WeChat."
+            : locale === "ko"
+              ? seoCopyKo.organizationDescription
+              : "独立维护的微信 ClawBot 单聊模型与 Agent 接入服务，与腾讯微信无官方关联。",
     // 站内唯一的方形品牌资源是 favicon.svg（64×64 矢量）；og-image.png 是 1200×630 横幅，不能当 logo。
     logo: {
       "@type": "ImageObject",
@@ -194,7 +208,10 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
   const english = locale === "en";
   const japanese = locale === "ja";
   const korean = locale === "ko";
-  const copy = japanese || korean ? pricingCopyFor(locale)?.plans : undefined;
+  const portuguese = locale === "pt";
+  const spanish = locale === "es";
+  const copy =
+    japanese || korean || portuguese || spanish ? pricingCopyFor(locale)?.plans : undefined;
   const plans = BILLING_OFFERS.filter((offer) => offer.kind === "plus").map((offer) => {
     const price = offer.amount / 100;
     const name = offer.interval === "year" ? "Plus Yearly" : "Plus Monthly";
@@ -202,7 +219,7 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
     return {
       "@type": "Offer",
       name: localizedName,
-      url: `${SITE_URL}${korean ? localizedPath(locale, "/pricing") : "/pricing"}`,
+      url: `${SITE_URL}${korean || portuguese || spanish ? localizedPath(locale, "/pricing") : "/pricing"}`,
       price,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
@@ -220,7 +237,7 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
     {
       "@type": "Offer",
       name: english ? "Free" : copy?.free.name ?? "免费版",
-      url: `${SITE_URL}${korean ? localizedPath(locale, "/") : "/"}`,
+      url: `${SITE_URL}${korean || portuguese || spanish ? localizedPath(locale, "/") : "/"}`,
       price: freePrice,
       priceCurrency: "CNY",
       availability: "https://schema.org/InStock",
@@ -228,9 +245,13 @@ function softwareApplicationOffers(locale: Locale = DEFAULT_LOCALE) {
         ? `Includes daily credits, ${WECHAT_LINK_LIMITS.free} WeChat connection, and ${PLUGIN_LIMITS.free} plugin configuration.`
         : japanese
           ? pricingCopyJa.seo.freeOfferDescription
-          : korean
-            ? seoCopyKo.freeOfferDescription(WECHAT_LINK_LIMITS.free, PLUGIN_LIMITS.free)
-            : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
+          : portuguese
+            ? seoCopyPt.freeOfferDescription(WECHAT_LINK_LIMITS.free, PLUGIN_LIMITS.free)
+            : spanish
+              ? `Incluye créditos diarios, ${WECHAT_LINK_LIMITS.free} conexión de WeChat y ${PLUGIN_LIMITS.free} configuración de plugin.`
+            : korean
+              ? seoCopyKo.freeOfferDescription(WECHAT_LINK_LIMITS.free, PLUGIN_LIMITS.free)
+              : `每天赠送 credits，可绑定 ${WECHAT_LINK_LIMITS.free} 个微信链接和 ${PLUGIN_LIMITS.free} 个插件。`,
       priceSpecification: {
         "@type": "UnitPriceSpecification",
         price: freePrice,
@@ -288,6 +309,8 @@ function seoLandingPage(
   const english = locale === "en";
   const japanese = locale === "ja";
   const korean = locale === "ko";
+  const portuguese = locale === "pt";
+  const spanish = locale === "es";
   const isArticle = page.kind === "article";
   const publisher = organizationNode(locale);
   const webPage = isArticle
@@ -338,16 +361,24 @@ function seoLandingPage(
                   ? "Wechatai Free and Plus"
                   : japanese
                     ? pricingCopyJa.seo.serviceName
-                    : korean
-                      ? seoCopyKo.serviceName
-                      : `${SITE_NAME} 免费版与 Plus`,
+                    : portuguese
+                      ? seoCopyPt.serviceName
+                      : spanish
+                        ? "Wechatai Gratis y Plus"
+                      : korean
+                        ? seoCopyKo.serviceName
+                        : `${SITE_NAME} 免费版与 Plus`,
                 serviceType: english
                   ? "WeChat AI integration service"
                   : japanese
                     ? pricingCopyJa.seo.serviceType
-                    : korean
-                      ? seoCopyKo.serviceType
-                      : "微信 AI 接入服务",
+                    : portuguese
+                      ? seoCopyPt.serviceType
+                      : spanish
+                        ? "Servicio de integración de IA con WeChat"
+                      : korean
+                        ? seoCopyKo.serviceType
+                        : "微信 AI 接入服务",
                 provider: { "@id": ORGANIZATION_ID },
                 offers: softwareApplicationOffers(locale),
               },
@@ -528,11 +559,15 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   }
   const developer = findDeveloperPage(path);
   if (developer) {
-    const isArticle = "article" in developer && developer.article === true;
-    const faq = "faq" in developer ? developer.faq : undefined;
+    const english = locale === "en";
+    const page = english
+      ? DEVELOPER_PAGES_EN[path as keyof typeof DEVELOPER_PAGES_EN]
+      : developer;
+    const isArticle = "article" in page && page.article === true;
+    const faq = "faq" in page ? page.faq : undefined;
     return {
-      title: `${developer.title} | ${SITE_NAME}`,
-      description: developer.description,
+      title: english ? page.title : `${page.title} | ${SITE_NAME}`,
+      description: page.description,
       indexable: true,
       canonical,
       ogType: isArticle ? "article" : "website",
@@ -545,35 +580,35 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                 "@id": `${canonical}#article`,
                 url: canonical,
                 mainEntityOfPage: canonical,
-                headline: developer.name,
-                description: developer.description,
+                headline: page.name,
+                description: page.description,
                 inLanguage: htmlLang,
                 image: SOCIAL_IMAGE,
-                dateModified: developer.updatedAt,
+                dateModified: page.updatedAt,
                 author: {
                   "@id": ORGANIZATION_ID,
                   "@type": "Organization",
                   name: SITE_NAME,
                   url: `${SITE_URL}/`,
                 },
-                publisher: organizationNode(),
+                publisher: organizationNode(locale),
               }
             : {
                 "@type": "WebPage",
                 "@id": `${canonical}#webpage`,
                 url: canonical,
-                name: developer.name,
-                description: developer.description,
+                name: page.name,
+                description: page.description,
                 inLanguage: htmlLang,
-                dateModified: developer.updatedAt,
+                dateModified: page.updatedAt,
                 about: softwareApplicationRef(),
-                publisher: organizationNode(),
+                publisher: organizationNode(locale),
               },
           // 站内没有 /developers 索引页（只有子路由），中间层给 item 会指向 404，
           // 因此与 landing 页一样用两级：首页 → 当前页。
           breadcrumbList([
-            { name: "首页", item: `${SITE_URL}/` },
-            { name: developer.name, item: canonical },
+            { name: english ? "Home" : "首页", item: `${SITE_URL}/` },
+            { name: page.name, item: canonical },
           ]),
           ...(faq?.length
             ? [
@@ -594,6 +629,7 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   }
   if (path === "/") {
     const english = locale === "en";
+    const portuguese = locale === "pt";
     const copy = homeCopyFor(locale);
     const title =
       copy?.seo.title ?? `微信 AI 接入：DeepSeek、Claude、GPT 与 Agent | ${SITE_NAME}`;
@@ -648,15 +684,27 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                   ]
                 : locale === "ja"
                   ? homeCopyJa.seo.featureList
-                  : [
-                    "使用自己的 API Key 与模型服务地址",
-                    "在微信中切换大模型并管理聊天会话",
-                    "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
-                    "连接已有 Muse、Hermes 和 OpenClaw Agent",
-                    "配置图片模型，在微信生成并接收 AI 图片",
-                    "通过角色扮演插件自定义人设与剧情",
-                    "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
-                  ],
+                  : portuguese
+                    ? seoCopyPt.featureList
+                    : locale === "es"
+                      ? [
+                          "Usa tu propia clave de API y endpoint de modelo",
+                          "Cambia de modelo y gestiona conversaciones en WeChat",
+                          "Compatible con OpenAI Chat Completions, Responses y Anthropic Messages",
+                          "Conecta agentes existentes de Muse, Hermes y OpenClaw",
+                          "Configura un modelo de imagen para generar y recibir imágenes con IA en WeChat",
+                          "Personaliza personajes e historias con el plugin de juego de rol",
+                          "El asistente en la nube Plus Xiaowei procesa archivos, crea documentos y ejecuta tareas; requiere un modelo de texto",
+                        ]
+                    : [
+                        "使用自己的 API Key 与模型服务地址",
+                        "在微信中切换大模型并管理聊天会话",
+                        "支持 OpenAI Chat Completions、Responses 与 Anthropic Messages",
+                        "连接已有 Muse、Hermes 和 OpenClaw Agent",
+                        "配置图片模型，在微信生成并接收 AI 图片",
+                        "通过角色扮演插件自定义人设与剧情",
+                        "Plus 云端助手小薇处理文件、生成文档与执行任务，需配置文本模型",
+                      ],
             offers: softwareApplicationOffers(locale),
           },
           // 首页折叠问答的 FAQPage 节点，条目与页面上渲染的问答同源。
@@ -755,6 +803,18 @@ function translatedPageSeo(path: string, translation: RegisteredTranslation): Pa
 export function getPageSeo(pathname: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   const normalized = normalizePath(pathname);
   const split = splitLocalePath(normalized);
+  const activeLocale = split?.locale ?? locale;
+  if ((split?.path ?? normalized) === DASHBOARD_PATH && activeLocale !== DEFAULT_LOCALE) {
+    const translation = registeredTranslation(activeLocale, DASHBOARD_PATH);
+    if (!translation) return notFoundPageSeo();
+    const { htmlLang } = LOCALE_DEFINITIONS[activeLocale];
+    return {
+      title: translation.title,
+      description: translation.description,
+      htmlLang,
+      indexable: false,
+    };
+  }
   if (split) {
     const translation = registeredTranslation(split.locale, split.path);
     if (!translation || !publicPathSet.has(split.path)) return notFoundPageSeo();
@@ -784,14 +844,19 @@ export function renderSeoHead(seo: PageSeo) {
   const meta = (name: string, content: string, property = false) =>
     `<meta ${property ? "property" : "name"}="${name}" content="${escapeHtml(content)}" data-seo />`;
   const defaultLocale = LOCALE_DEFINITIONS[DEFAULT_LOCALE];
+  const imageLang = seo.htmlLang ?? defaultLocale.htmlLang;
   const imageAlt =
-    seo.htmlLang === LOCALE_DEFINITIONS.en.htmlLang
+    imageLang === "en"
       ? "Wechatai: chat with the models you choose in WeChat."
-      : seo.htmlLang === LOCALE_DEFINITIONS.ja.htmlLang
+      : imageLang === LOCALE_DEFINITIONS.ja.htmlLang
         ? seoCopyJa.imageAlt
-        : seo.htmlLang === LOCALE_DEFINITIONS.ko.htmlLang
+        : imageLang === LOCALE_DEFINITIONS.ko.htmlLang
           ? seoCopyKo.imageAlt
-          : "微伴 Wechatai：在微信里，与自选大模型对话。";
+          : imageLang === LOCALE_DEFINITIONS.pt.htmlLang
+            ? seoCopyPt.imageAlt
+            : imageLang === LOCALE_DEFINITIONS.es.htmlLang
+              ? "Wechatai: chatea en WeChat con los modelos que elijas."
+            : "微伴 Wechatai：在微信里，与自选大模型对话。";
   return [
     `<title data-seo>${escapeHtml(seo.title)}</title>`,
     meta("description", seo.description),

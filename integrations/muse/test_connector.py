@@ -15,7 +15,9 @@ from unittest.mock import patch
 import uuid
 
 import connect
-from connector import Connector, RelayError, request
+from connector import Connector, RelayError, image_path, request, upload
+
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c020000000b4944415478da63fcff1f0003030200ef9ad5770000000049454e44ae426082")
 
 
 class Relay:
@@ -56,7 +58,16 @@ class ConnectorTests(unittest.TestCase):
         self.home = Path(self.temp.name)
         (self.home / "account.json").write_text(json.dumps({"endpoint": "https://wechatai.example", "token": "private-fixture-token"}))
         self.relay = Relay()
-        self.c = Connector(self.home, self.relay)
+        self.uploads = []
+        self.upload_error = None
+        self.c = Connector(self.home, self.relay, self.fake_upload)
+
+    def fake_upload(self, account, job_id, runner_id, data):
+        if self.upload_error:
+            error, self.upload_error = self.upload_error, None
+            raise error
+        self.uploads.append((job_id, runner_id, data))
+        return f"00000000-0000-4000-8000-{len(self.uploads):012d}"
 
     def tearDown(self):
         self.c.close()
@@ -399,6 +410,86 @@ class ConnectorTests(unittest.TestCase):
         self.assertEqual(len(self.relay.events), 1)
         self.assertEqual(self.c.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 1)
 
+    def image(self, name="cat.png", data=PNG):
+        path = self.home.parent / (self.home.name + "-" + name)
+        path.write_bytes(data)
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        return path
+
+    def test_reply_images_upload_once_before_the_event_and_survive_a_lost_receipt(self):
+        job = self.take()
+        first, second = self.image("a.png"), self.image("b.png")
+        images = self.c.read_images([str(first), str(second)])
+        # The worker's temporary files may vanish before the hook delivers.
+        first.unlink()
+        receipt = self.c.queue(job["routeId"], "画好了", job["jobId"], images=images)
+        self.assertEqual(self.uploads, [])
+        original = self.c.relay
+        sent = []
+
+        def lose_first_event(action, body):
+            result = original(action, body)
+            if action == "event":
+                sent.append(json.loads(json.dumps(body)))
+                if len(sent) == 1:
+                    raise TimeoutError()
+            return result
+
+        self.c.relay = lose_first_event
+        with self.assertRaises(TimeoutError):
+            self.c.flush()
+        self.c.close()
+        self.c = Connector(self.home, self.relay, self.fake_upload)
+        self.c.relay = lose_first_event
+        self.c.flush()
+        self.assertEqual([(j, d) for j, _, d in self.uploads], [(job["jobId"], PNG), (job["jobId"], PNG)])
+        self.assertEqual({r for _, r, _ in self.uploads}, {self.c.runner})
+        ids = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"]
+        # The retry is the identical event, so the server settles it once.
+        self.assertEqual(sent[0], sent[1])
+        self.assertEqual(sent[0]["images"], ids)
+        self.assertEqual(sent[0]["eventId"], receipt["eventId"])
+        self.assertNotIn("imageFiles", sent[0])
+        self.assertEqual(list((self.home / "outbox-media").iterdir()), [])
+        self.assertEqual(dict(self.c.db.execute("SELECT state,data FROM outbox").fetchone()), {"state": "sent", "data": "{}"})
+
+    def test_a_paused_upload_retries_later_and_a_rejected_one_is_left_out(self):
+        job = self.take()
+        images = self.c.read_images([str(self.image("a.png")), str(self.image("b.png"))])
+        self.c.queue(job["routeId"], "两张图", job["jobId"], images=images)
+        self.upload_error = RelayError(503)
+        with self.assertRaises(RelayError):
+            self.c.flush()
+        self.assertEqual(self.relay.events, [])
+        self.upload_error = RelayError(422, "image_invalid")
+        self.c.flush()
+        self.assertEqual(len(self.uploads), 1)
+        self.assertEqual(self.relay.events[0]["images"], ["00000000-0000-4000-8000-000000000001"])
+
+    def test_reply_images_are_checked_before_enqueue(self):
+        job = self.take()
+        for paths in ([str(self.image("x.txt", b"not an image"))], [str(self.home / "missing.png")], [str(self.image())] * 5):
+            with self.subTest(paths=paths), self.assertRaises(ValueError):
+                self.c.read_images(paths)
+        with self.assertRaises(ValueError):
+            self.c.queue(job["routeId"], "推送", push_key="k", images=[PNG])
+        self.assertEqual(self.c.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 0)
+        command = [sys.executable, str(Path(__file__).parent / "connector.py"), "--home", str(self.home)]
+        bad = subprocess.run(command + ["reply", "--job", job["jobId"], "--image", str(self.home / "missing.png")], input="画好了", capture_output=True, text=True)
+        self.assertNotEqual(bad.returncode, 0)
+        self.assertIn("missing.png", bad.stderr)
+        self.assertNotIn("Traceback", bad.stderr)
+        pushed = subprocess.run(command + ["push", "--route", job["routeId"], "--key", "k", "--image", str(self.image())], input="提醒", capture_output=True, text=True)
+        self.assertIn("只有 reply", pushed.stderr)
+        self.assertEqual(self.c.db.execute("SELECT count(*) FROM outbox").fetchone()[0], 0)
+        good = subprocess.run(command + ["reply", "--job", job["jobId"], "--image", str(self.image())], input="画好了", capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(good.stdout)["state"], "pending")
+        self.assertEqual(len(list((self.home / "outbox-media").iterdir())), 1)
+
+    def test_sandbox_image_paths_resolve_to_the_workspace(self):
+        self.assertEqual(image_path("sandbox://workspace/imagine_media/cat.webp"), Path("/workspace/imagine_media/cat.webp"))
+        self.assertEqual(image_path("/tmp/cat.png"), Path("/tmp/cat.png"))
+
     def test_take_returns_the_current_server_output_limit(self):
         self.c.watch()
         self.relay.max_output_tokens = 256
@@ -621,7 +712,42 @@ class InstallTests(unittest.TestCase):
                 request(account, "claim", {})
             self.assertEqual((temporary.exception.status, temporary.exception.code), (403, None))
             self.assertEqual([r[0] for r in requests], ["/api/muse/poll", "/api/muse/heartbeat", "/api/muse/event", "/api/muse/claim"])
-            self.assertTrue(all(r[1] == "Bearer fixture" and r[2] == "Wechatai-Muse/1.0.0" for r in requests))
+            self.assertTrue(all(r[1] == "Bearer fixture" and r[2] == "Wechatai-Muse/1.1.0" for r in requests))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_upload_puts_the_image_with_the_channel_token_and_job_scope(self):
+        requests = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_PUT(self):
+                body = self.rfile.read(int(self.headers["Content-Length"]))
+                requests.append((self.path, self.headers.get("Authorization"), body))
+                if body == PNG:
+                    self.send_response(201)
+                    self.end_headers()
+                    self.wfile.write(b'{"imageId":"00000000-0000-4000-8000-000000000001"}')
+                else:
+                    self.send_response(422)
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"image_invalid","message":"fixture"}')
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            account = {"endpoint": f"http://127.0.0.1:{server.server_port}", "token": "fixture"}
+            runner = str(uuid.uuid4())
+            self.assertEqual(upload(account, "message 1", runner, PNG), "00000000-0000-4000-8000-000000000001")
+            with self.assertRaises(RelayError) as rejected:
+                upload(account, "message 1", runner, b"broken")
+            self.assertEqual((rejected.exception.status, rejected.exception.code), (422, "image_invalid"))
+            self.assertEqual(requests[0], (f"/api/muse/uploads?job=message+1&runner={runner}", "Bearer fixture", PNG))
         finally:
             server.shutdown()
             server.server_close()

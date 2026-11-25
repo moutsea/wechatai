@@ -1,15 +1,15 @@
 /**
- * Locale definitions and the public translation registry.
+ * Locale definitions and the page translation registry.
  *
- * Only pages listed here may be served under a language prefix. The registry is
- * intentionally empty in T1: adding a locale directory is not enough to publish
- * a URL, a module must explicitly register every translated path.
+ * Modules explicitly register every path that may be served under a language
+ * prefix. The SEO layer uses its public path list to decide what to index.
  */
 import type { SeoPage } from "../seo-pages";
 
 export const AVAILABLE_LOCALES = ["zh-CN", "en", "ja", "ko", "es", "pt"] as const;
 export type Locale = (typeof AVAILABLE_LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = "zh-CN";
+export const DASHBOARD_PATH = "/app";
 
 export interface LocaleDefinition {
   /** URL prefix without slashes. The default locale is unprefixed. */
@@ -28,7 +28,7 @@ export const LOCALE_DEFINITIONS: Readonly<Record<Locale, LocaleDefinition>> = {
   ja: { prefix: "ja", htmlLang: "ja-JP", ogLocale: "ja_JP", label: "日本語" },
   ko: { prefix: "ko", htmlLang: "ko-KR", ogLocale: "ko_KR", label: "한국어" },
   es: { prefix: "es", htmlLang: "es", ogLocale: "es_ES", label: "Español" },
-  pt: { prefix: "pt", htmlLang: "pt", ogLocale: "pt_BR", label: "Português" },
+  pt: { prefix: "pt", htmlLang: "pt-BR", ogLocale: "pt_BR", label: "Português" },
 };
 
 export interface TranslationPage {

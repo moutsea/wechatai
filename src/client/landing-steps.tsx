@@ -91,7 +91,8 @@ const stepsCopyZh = {
   },
   previous: "上一步",
   next: "下一步",
-  status: (index: number, total: number, title: string) => `第 ${index} 步，共 ${total} 步：${title}`,
+  status: (index: number, total: number, title: string) =>
+    `第 ${index} 步，共 ${total} 步：${title}`,
   alternativesPrefix: "配置模型、连接微信、开始聊天。也可以",
   alternativesAgent: "连接已有 Agent",
   alternativesMiddle: "或",
@@ -103,7 +104,11 @@ function StepPreview({ step }: { step: number }) {
   const { locale } = useLocale();
   const copy = homeCopyFor(locale)?.steps.preview ?? stepsCopyZh.preview;
   const labels =
-    locale === "ko" ? providerLabelsKo : locale === "en" || locale === "ja" ? providerLabelsEn : providerLabels;
+    locale === "ko"
+      ? providerLabelsKo
+      : locale === "en" || locale === "ja" || locale === "pt" || locale === "es"
+        ? providerLabelsEn
+        : providerLabels;
   if (step === 0)
     return (
       <div className="steps-preview">
@@ -148,8 +153,8 @@ function StepPreview({ step }: { step: number }) {
     <div className="steps-preview" aria-hidden="true">
       <div className="steps-chat">
         <div className="steps-chat-heading">
-          <img src="/favicon.svg" width={22} height={22} alt="" />{" "}
-          {copy.chatBrand} <span>DeepSeek</span>
+          <img src="/favicon.svg" width={22} height={22} alt="" /> {copy.chatBrand}{" "}
+          <span>DeepSeek</span>
         </div>
         <div className="steps-chat-body">
           <div className="steps-chat-sent">{copy.chatSent}</div>
@@ -271,18 +276,10 @@ export function LandingSteps({ startAction }: { startAction: ReactNode }) {
           </span>
         </span>
         <div>
-          <button
-            type="button"
-            aria-label={copy.previous}
-            onClick={() => move(-1)}
-          >
+          <button type="button" aria-label={copy.previous} onClick={() => move(-1)}>
             <ArrowLeft size={19} aria-hidden="true" />
           </button>
-          <button
-            type="button"
-            aria-label={copy.next}
-            onClick={() => move(1)}
-          >
+          <button type="button" aria-label={copy.next} onClick={() => move(1)}>
             <ArrowRight size={19} aria-hidden="true" />
           </button>
         </div>

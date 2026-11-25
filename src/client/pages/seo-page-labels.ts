@@ -1,6 +1,8 @@
 import { DEFAULT_LOCALE, type Locale } from "../../shared/i18n";
 import { seoPageLabels as ko } from "../../shared/i18n/ko/copy/seo-page";
 import { seoPageLabels as ja } from "../../shared/i18n/ja/copy/seo-page-labels";
+import { seoPageLabelsEs } from "../../shared/i18n/es/copy/labels";
+import { seoPageLabels as pt } from "../../shared/i18n/pt/copy/seo-page";
 
 /** Chrome shared by every landing page rendered through `SeoPageView`. */
 export interface SeoPageLabels {
@@ -58,7 +60,8 @@ const en: SeoPageLabels = {
   home: "Home",
   breadcrumb: "Breadcrumb",
   comparisonTable: "Comparison table",
-  compareMissing: "No public source could be verified; this does not mean the other side lacks support",
+  compareMissing:
+    "No public source could be verified; this does not mean the other side lacks support",
   commands: "Common WeChat commands",
   copyCommand: (command) => `Copy command ${command}`,
   copy: "Copy",
@@ -84,5 +87,7 @@ export function seoPageLabels(locale: Locale): SeoPageLabels {
   if (locale === DEFAULT_LOCALE) return zh;
   if (locale === "ja") return ja;
   if (locale === "ko") return ko;
+  if (locale === "es") return seoPageLabelsEs;
+  if (locale === "pt") return pt;
   return en;
 }

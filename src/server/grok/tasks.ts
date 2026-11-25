@@ -6,9 +6,14 @@ import { initGrokTasks } from "./schema";
 import { readGrokHistory } from "./history";
 import { countTextTokens } from "../tokenizer";
 import { AppError } from "../config";
+import { MAX_GENERATED_BYTES, type MediaStore, type OutputAsset } from "../media";
+import { GROK_IMAGE_RULES, GROK_MAX_IMAGES, GROK_MAX_UPLOADS } from "./upload";
 
 const lifetime = 45 * 60_000;
 const maxWakeAttempts = 3;
+// A first wake that Go confirms it never sent is usually a slow cross-border
+// connect from the VPS. Retry it soon; later retries keep the longer backoff.
+const unsentRetryMs = 5_000;
 const id = z.string().uuid();
 const claimArgs = z
   .object({ taskId: id, claimId: id.optional() })
@@ -23,8 +28,11 @@ const finishArgs = z
     receipt: id,
     status: z.enum(["completed", "failed"]),
     text: z.string().max(30000),
+    images: z.array(id).max(GROK_MAX_IMAGES).default([]),
   })
   .strict();
+// Uploaded images stay uncommitted under the task until wechatai_finish sends them.
+const uploadRun = (ref: string) => `grok:${ref}`;
 type Task = {
   ref: string;
   jobId: string;
@@ -59,6 +67,8 @@ export class GrokTasks {
     private relay: OpenClawRelay,
     private plugin: (id: string) => GrokPlugin,
     private prepareWake: (pluginId: string, ref: string) => Promise<Request>,
+    private media: MediaStore,
+    private uploadUrl: (pluginId: string, ref: string, expires: number) => string,
   ) {}
   private get db() {
     return this.storage.sql;
@@ -130,6 +140,7 @@ export class GrokTasks {
           text: row.text,
           history,
           maxOutputTokens: row.claimedOutputLimit ?? row.outputLimit,
+          imageUpload: this.imageUpload(row),
         };
       const receipt = crypto.randomUUID();
       const maxOutputTokens = Math.min(plugin.maxOutputTokens, row.outputLimit);
@@ -153,8 +164,95 @@ export class GrokTasks {
         text: row.text,
         history,
         maxOutputTokens,
+        imageUpload: this.imageUpload(row),
       };
     });
+  }
+  private imageUpload(row: Task) {
+    return {
+      url: this.uploadUrl(row.pluginId, row.ref, row.expires),
+      maxImages: GROK_MAX_IMAGES,
+      maxBytes: MAX_GENERATED_BYTES,
+      usage: `需要回复图片时，用 curl -X PUT --upload-file <图片路径> '<url>' 逐张上传，每次返回一个 imageId。在 wechatai_finish 的 images 中按发送顺序提交，最多 ${GROK_MAX_IMAGES} 张，text 仍写一句文字说明。${GROK_IMAGE_RULES}`,
+    };
+  }
+  async upload(pluginId: string, ref: string, data: Uint8Array) {
+    const open = () => {
+      const row = this.row(pluginId, ref);
+      if (row.state !== "claimed" || row.expires <= Date.now())
+        throw new AppError("grok_upload_closed", "任务已结束或超时，上传已关闭。", 409);
+      this.relay.requireRoute(row.routeId);
+      const { uploads } = this.db
+        .exec<{ uploads: number }>(
+          "SELECT COUNT(*) AS uploads FROM output_assets WHERE runId=?",
+          uploadRun(ref),
+        )
+        .one();
+      if (uploads >= GROK_MAX_UPLOADS)
+        throw new AppError(
+          "grok_upload_limit",
+          `每个任务最多上传 ${GROK_MAX_UPLOADS} 次图片，回传时最多附带 ${GROK_MAX_IMAGES} 张。`,
+          409,
+        );
+      return row;
+    };
+    const row = open();
+    const { sessionId } = this.db
+      .exec<{ sessionId: string }>("SELECT sessionId FROM claw_routes WHERE id=?", row.routeId)
+      .one();
+    let asset: OutputAsset;
+    try {
+      // Unsent uploads expire shortly after the task instead of living for 30 days.
+      asset = await this.media.save(uploadRun(ref), sessionId, data, row.expires + 10 * 60_000);
+    } catch (error) {
+      if (error instanceof AppError && ["image_size", "image_invalid"].includes(error.code))
+        throw new AppError(error.code, GROK_IMAGE_RULES, 422);
+      throw error;
+    }
+    // The R2 write yields. Settlement, cancellation or parallel uploads may have won.
+    const extra = this.db
+      .exec<{ id: string }>(
+        "SELECT id FROM output_assets WHERE runId=? ORDER BY rowid LIMIT -1 OFFSET ?",
+        uploadRun(ref),
+        GROK_MAX_UPLOADS,
+      )
+      .toArray()
+      .some((a) => a.id === asset.id);
+    const current = this.row(pluginId, ref);
+    if (extra || current.state !== "claimed" || current.expires <= Date.now()) {
+      this.media.discard(asset.id);
+      throw new AppError(
+        extra ? "grok_upload_limit" : "grok_upload_closed",
+        extra ? `每个任务最多上传 ${GROK_MAX_UPLOADS} 次图片。` : "任务已结束或超时，上传已关闭。",
+        409,
+      );
+    }
+    return {
+      imageId: asset.id,
+      mime: asset.mime,
+      width: asset.width,
+      height: asset.height,
+      bytes: asset.bytes,
+    };
+  }
+  // Only images uploaded for this task and not yet sent can join its result.
+  private finishedImages(row: Task, ids: string[]) {
+    const unique = [...new Set(ids)];
+    for (const imageId of unique) {
+      const asset = this.media.row(imageId);
+      if (
+        !asset ||
+        asset.runId !== uploadRun(row.ref) ||
+        asset.committed !== 0 ||
+        asset.expiresAt <= Date.now()
+      )
+        throw new AppError(
+          "grok_image_missing",
+          "images 中有图片不存在或不属于这条任务，请重新上传后再回传。",
+          409,
+        );
+    }
+    return unique;
   }
   finish(plugin: GrokPlugin, raw: unknown) {
     const input = finishArgs.parse(raw);
@@ -177,7 +275,11 @@ export class GrokTasks {
             : "任务已成功结算，回传已关闭。",
           409,
         );
-      return this.settle(plugin, row, input.receipt, input.status, input.text);
+      const images =
+        input.status === "completed" && row.state === "claimed"
+          ? this.finishedImages(row, input.images)
+          : [];
+      return this.settle(plugin, row, input.receipt, input.status, input.text, undefined, images);
     });
   }
   private settle(
@@ -187,6 +289,7 @@ export class GrokTasks {
     outcome: "completed" | "failed" | "expired",
     text: string,
     dispatchFailure?: string,
+    images: string[] = [],
   ) {
     const status = outcome === "completed" ? "completed" : "failed";
     const failureMessage =
@@ -199,8 +302,10 @@ export class GrokTasks {
       plugin,
       "event",
       { eventId: row.ref, jobId: row.jobId, routeId: row.routeId, runnerId: receipt, status, text },
-      { failureMessage, claimedOutputLimit: row.claimedOutputLimit ?? undefined },
+      { failureMessage, claimedOutputLimit: row.claimedOutputLimit ?? undefined, images },
     );
+    // The reply has committed the images it sends. Close the rest of this task's uploads.
+    this.media.discardRun(uploadRun(row.ref));
     if (row.state === "claimed" || row.state === "pending") {
       this.db.exec(
         `UPDATE grok_tasks SET due=NULL,outcome=?,answerMessage=(SELECT MAX(m.id) FROM messages m
@@ -241,6 +346,40 @@ export class GrokTasks {
       .toArray();
     await Promise.all(rows.map((row) => this.wake(row)));
   }
+  // A new credential stops the Routine from claiming or finishing open tasks.
+  // Settle each with a WeChat message instead of letting rotation drop it.
+  failForReconnect(pluginId: string, pending: string, claimed: string) {
+    const rows = this.db
+      .exec<Task>(`SELECT ${fields} ${joined} WHERE ${active} AND j.pluginId=?`, pluginId)
+      .toArray();
+    for (const row of rows) {
+      try {
+        this.fail(row, row.state === "claimed" ? claimed : pending);
+      } catch (error) {
+        // A route that is already gone is cleared by the rotation itself.
+        if (!(error instanceof AppError)) throw error;
+      }
+    }
+    return rows.length;
+  }
+  // The old Routine was woken for these but never claimed them. Without this
+  // they would hold their conversation until they expire.
+  failUnclaimedWakes(pluginId: string, message: string) {
+    const rows = this.db
+      .exec<Task>(
+        `SELECT ${fields} ${joined} WHERE ${active} AND j.pluginId=? AND j.state='pending' AND t.attempts>0`,
+        pluginId,
+      )
+      .toArray();
+    for (const row of rows) {
+      try {
+        this.fail(row, message);
+      } catch (error) {
+        if (!(error instanceof AppError)) throw error;
+      }
+    }
+    return rows.length;
+  }
   cancelConnection(connectionId: string) {
     this.db.exec(
       `UPDATE claw_jobs SET state='cancelled',text=''
@@ -271,7 +410,7 @@ export class GrokTasks {
     row: Task,
     attempt: number,
     retryAt: number,
-    { status, receiptDeclined }: GrokWakeResult,
+    { status, receiptDeclined, notSent }: GrokWakeResult,
   ) {
     if (status === "reconcile") return;
     const attempts = status === "rejected" ? maxWakeAttempts : attempt;
@@ -279,6 +418,7 @@ export class GrokTasks {
     const claimable = Number(status === "waiting" || (row.claimable && !receiptDeclined));
     let due = retryAt;
     if (status === "waiting") due = row.expires;
+    else if (notSent && attempt === 1) due = Math.min(row.expires, Date.now() + unsentRetryMs);
     else if (attempts >= maxWakeAttempts) due = claimable ? row.expires : Date.now();
     this.db.exec(
       `UPDATE grok_tasks SET due=?,claimable=?,attempts=? WHERE ref=? AND attempts=?
@@ -313,7 +453,8 @@ export class GrokTasks {
           else
             this.fail(
               current,
-              error instanceof AppError && error.code === "grok_unavailable"
+              error instanceof AppError &&
+                ["grok_unavailable", "grok_setup_incomplete"].includes(error.code)
                 ? `${error.message}本次任务未发送，未扣平台 credits。`
                 : undefined,
             );

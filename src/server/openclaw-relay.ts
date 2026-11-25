@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AppError } from "./config";
 import { countTextTokens, limitTextTokens } from "./tokenizer";
 import { creditUnits } from "./wallet";
+import { IMAGE_CREDITS } from "../shared/credits";
 import { openClawAgentsSchema, type OpenClawAgent } from "../shared/openclaw";
 import { connectorVersionPattern } from "../shared/openclaw-release";
 
@@ -35,12 +36,18 @@ type Hooks = {
   plugin: (id: string) => RemoteAgentPlugin;
   validateRoute: (route: ClawRoute) => void;
   balance: () => number;
+  /** The listed images that were uploaded for this job and not sent yet. */
+  images: (jobId: string, ids: string[]) => string[];
   selectAgent: (pluginId: string, agentId: string) => void;
   deliver: (event: {
     plugin: RemoteAgentPlugin;
     id: string;
     route: ClawRoute;
     text: string;
+    /** Uploaded output assets to commit and send after the text. */
+    images: string[];
+    /** Remaining uploads of this run are discarded once the reply settles. */
+    uploadRun?: string;
     inputTokens: number;
     outputTokens: number;
     units: number;
@@ -49,6 +56,13 @@ type Hooks = {
     command: string;
   }) => void;
 };
+export const MUSE_MAX_IMAGES = 4;
+// Leaves room for a few retried or replaced uploads; only listed images are sent.
+export const MUSE_MAX_UPLOADS = 8;
+export const MUSE_IMAGE_RULES =
+  "只支持完整的 PNG、JPEG 或 WebP 图片，单张不超过 8 MB、2500 万像素。";
+/** Output assets a Muse connector uploads for a job stay under this run until its reply. */
+export const museUploadRun = (jobId: string) => `muse:${jobId}`;
 const eventSchema = z.object({
   eventId: z.string().uuid(),
   routeId: z.string().uuid(),
@@ -56,6 +70,8 @@ const eventSchema = z.object({
   runnerId: z.string().uuid().optional(),
   status: z.enum(["completed", "failed"]).default("completed"),
   text: z.string().max(64000).default(""),
+  // Muse: image IDs the connector uploaded for this job, sent after the text.
+  images: z.array(z.string().uuid()).max(MUSE_MAX_IMAGES).default([]),
 });
 const pollSchema = z.object({
   runnerId: z.string().uuid(),
@@ -318,7 +334,7 @@ export class OpenClawRelay {
       throw new AppError(
         "claw_unpaired",
         plugin.pluginId === "wechatai/grok"
-          ? "请先在 Grok Bot 配置中生成 MCP 凭据并添加到 Bot。"
+          ? "Grok Bot 还没完成配置。请在微伴网页的 Grok Bot 配置中复制配置指令，发给你的 Grok Bot。"
           : `请先在网页的 ${remoteAgentName(plugin.pluginId)} 插件中生成并执行连接命令`,
       );
     const previous = this.sql.exec<Job>("SELECT * FROM claw_jobs WHERE id = ?", id).toArray()[0];
@@ -424,6 +440,20 @@ export class OpenClawRelay {
     const plugin = this.authenticate(pluginId, secret);
     return this.handleTask(plugin, action, raw, { fromConnector: true });
   }
+  /** A claimed Muse job's route and upload lifetime, for its connector's image uploads. */
+  uploadTarget(pluginId: string, jobId: string, runnerId: string) {
+    const job = this.sql
+      .exec<Job>("SELECT * FROM claw_jobs WHERE id = ? AND pluginId = ?", jobId, pluginId)
+      .toArray()[0];
+    if (!job || job.state !== "claimed" || job.runnerId !== runnerId)
+      throw new AppError("claw_job_gone", "任务已结束或取消，图片上传已关闭", 409);
+    this.requireRoute(job.routeId);
+    const route = this.sql
+      .exec<ClawRoute>("SELECT * FROM claw_routes WHERE id = ?", job.routeId)
+      .one();
+    // Claimed jobs expire after 24 hours; their unsent uploads shortly after.
+    return { sessionId: route.sessionId, expiresAt: job.createdAt + 86400000 + 600000 };
+  }
   markSeen(pluginId: string) {
     this.sql.exec("UPDATE claw_connectors SET lastSeen=? WHERE pluginId=?", Date.now(), pluginId);
   }
@@ -437,6 +467,7 @@ export class OpenClawRelay {
       failureMessage?: string;
       historyInputTokens?: number;
       claimedOutputLimit?: number;
+      images?: string[];
     } = {},
   ) {
     const pluginId = plugin.id;
@@ -583,6 +614,8 @@ export class OpenClawRelay {
         throw new AppError("insufficient_credits", "Credits 不足，主动推送暂停", 402);
       if (!job && event.status === "failed")
         throw new AppError("invalid_event", "主动推送必须包含文本");
+      if (event.images.length && (!job || plugin.pluginId !== "wechatai/muse"))
+        throw new AppError("invalid_event", "只有 Muse 的任务回复可以附带图片");
       const failed = event.status === "failed";
       if (!failed && !job && !event.text.trim()) throw new AppError("empty_result", "结果不能为空");
       const outputLimit = Math.min(
@@ -604,13 +637,22 @@ export class OpenClawRelay {
             : text;
       const inputTokens = failed ? 0 : (job?.inputTokens ?? 0);
       const outputTokens = failed ? 0 : countTextTokens(text);
-      const units = job?.lane === "control" ? 0 : creditUnits(inputTokens, outputTokens);
+      const images = failed
+        ? []
+        : (options.images ??
+          (job && event.images.length ? this.hooks.images(job.id, event.images) : []));
+      const units =
+        job?.lane === "control"
+          ? 0
+          : creditUnits(inputTokens, outputTokens) + images.length * IMAGE_CREDITS * 1000;
       const id = `claw:${receiptId}`;
       this.hooks.deliver({
         plugin,
         id,
         route,
         text: displayText,
+        images,
+        uploadRun: plugin.pluginId === "wechatai/muse" && job ? museUploadRun(job.id) : undefined,
         inputTokens,
         outputTokens,
         units,
@@ -629,6 +671,7 @@ export class OpenClawRelay {
         status: "queued",
         cost: units / 1000,
         truncated,
+        ...(images.length ? { images: images.length } : {}),
         // Muse builds its recent transcript from this durable acknowledgement.
         // Keep the accepted text in the receipt so retries cannot change history.
         ...(plugin.pluginId === "wechatai/muse" ? { acceptedText: displayText } : {}),

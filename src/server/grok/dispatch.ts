@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { GROK_DISPATCH_UNAVAILABLE } from "../../shared/grok-bot";
+import { GROK_DISPATCH_UNAVAILABLE, GROK_SETUP_INCOMPLETE } from "../../shared/grok-bot";
 import { backendOrigin, signedRequest } from "../backend-signature";
 import { AppError, secret } from "../config";
 import { encrypt, decrypt } from "../security";
@@ -15,9 +15,15 @@ const credentials = z.object({
   webhookKey: z
     .string()
     .trim()
-    .min(1)
-    .max(2048)
-    .regex(/^[\x21-\x7e]+$/, "请复制 Webhook key，不含 Bearer 前缀"),
+    // A Bot may copy the routine's ready-made header instead of the bare key.
+    .transform((key) => key.replace(/^(authorization:\s*)?bearer\s+/i, ""))
+    .pipe(
+      z
+        .string()
+        .min(1)
+        .max(2048)
+        .regex(/^[\x21-\x7e]+$/, "请复制 Webhook key，不含 Bearer 前缀"),
+    ),
 });
 // Comma-separated PersonalAccount IDs, or "all". Unset keeps Grok Bot hidden.
 export function grokBotEnabled(env: Env, accountId: string) {
@@ -60,6 +66,21 @@ export async function sealGrokWebhook(
     );
   return encrypt(env, JSON.stringify(parsed.data), binding);
 }
+// A Bot may repeat a registration whose response it lost or wants to confirm.
+export async function isStoredGrokWebhook(
+  env: Env,
+  sealed: string,
+  input: unknown,
+  binding: string,
+) {
+  const submitted = credentials.safeParse(input);
+  if (!sealed || !submitted.success) return false;
+  const stored = credentials.parse(JSON.parse(await decrypt(env, sealed, binding)));
+  return (
+    stored.webhookUrl === submitted.data.webhookUrl &&
+    stored.webhookKey === submitted.data.webhookKey
+  );
+}
 export async function prepareGrokWake(
   env: Env,
   accountId: string,
@@ -68,6 +89,7 @@ export async function prepareGrokWake(
   taskId: string,
 ) {
   requireGrokDispatcher(env, accountId);
+  if (!sealed) throw new AppError("grok_setup_incomplete", GROK_SETUP_INCOMPLETE, 409);
   const auth = credentials.parse(JSON.parse(await decrypt(env, sealed, binding)));
   const body = JSON.stringify({ ...auth, taskId });
   const target = new URL(
@@ -86,6 +108,8 @@ export async function prepareGrokWake(
 export type GrokWakeResult = {
   status: "waiting" | "reconcile" | "retry" | "rejected";
   receiptDeclined?: boolean;
+  /** Go confirmed the Routine POST never left the VPS. */
+  notSent?: boolean;
 };
 export async function sendGrokWake(request: Request): Promise<GrokWakeResult> {
   let response: Response;
@@ -97,12 +121,10 @@ export async function sendGrokWake(request: Request): Promise<GrokWakeResult> {
   await response.body?.cancel().catch(() => {});
   if (response.status === 202 || response.status === 204) return { status: "waiting" };
   const receiptDeclined = response.headers.get("X-Wechatai-Grok-Receipt") === "declined";
-  if (
-    response.status === 429 ||
-    (response.status === 502 && receiptDeclined) ||
-    (response.status === 503 && response.headers.get("X-Wechatai-Grok-Wake") === "not-sent")
-  )
-    return { status: "retry", receiptDeclined };
+  const notSent =
+    response.status === 503 && response.headers.get("X-Wechatai-Grok-Wake") === "not-sent";
+  if (response.status === 429 || (response.status === 502 && receiptDeclined) || notSent)
+    return { status: "retry", receiptDeclined, ...(notSent ? { notSent } : {}) };
   if (response.status >= 400 && response.status < 500 && response.status !== 408)
     return { status: "rejected", receiptDeclined };
   return { status: "reconcile" };
