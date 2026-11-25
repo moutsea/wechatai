@@ -1,4 +1,7 @@
-import { AnonymousAnalyticsBudget } from "../src/server/analytics-budget";
+import {
+  AnonymousAnalyticsBudget,
+  anonymousAnalyticsDailyLimit,
+} from "../src/server/analytics-budget";
 import budgetMigration from "../migrations/0020_analytics_budget.sql?raw";
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -7,6 +10,8 @@ import signupMigration from "../migrations/0015_signup_attributions.sql?raw";
 import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
 import worker from "../src/server/index";
 import {
+  analyticsDays,
+  getAdminAnalytics,
   getFunnelSummary,
   getSignupConversions,
   getTrafficSummary,
@@ -57,6 +62,64 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM page_views").run();
   await env.DB.prepare("DELETE FROM signup_attributions").run();
   await env.DB.prepare("DELETE FROM funnel_events").run();
+});
+
+describe("analytics query parameters", () => {
+  it("preserves the administrator's decimal string range and error contract", async () => {
+    for (const [value, expected] of [
+      [undefined, 7],
+      ["1", 1],
+      ["07", 7],
+      ["90", 90],
+    ] as const)
+      expect(analyticsDays(value)).toBe(expected);
+    const invalid = [
+      "",
+      "0",
+      "-1",
+      "91",
+      "1.5",
+      "1e2",
+      "0x7",
+      " 7",
+      "7 ",
+      "NaN",
+      "Infinity",
+      "7abc",
+      "07.0",
+    ];
+    const noDatabase = {
+      DB: {
+        prepare() {
+          throw new Error("Unexpected database access");
+        },
+      },
+    } as unknown as Env;
+    for (const value of invalid) {
+      expect(analyticsDays(value)).toBeNull();
+      await expect(getAdminAnalytics(noDatabase, value)).rejects.toMatchObject({
+        code: "invalid_analytics_range",
+        status: 400,
+      });
+    }
+  });
+
+  it("shares the collector's existing budget defaults and disabled values", () => {
+    for (const [setting, limit] of [
+      [undefined, 10000],
+      ["", 10000],
+      ["  ", 10000],
+      ["0", 0],
+      ["32", 32],
+      ["1e2", 100],
+      ["-1", 0],
+      ["1.5", 0],
+      ["invalid", 0],
+    ] as const)
+      expect(
+        anonymousAnalyticsDailyLimit({ ANALYTICS_DAILY_EVENT_BUDGET: setting } as unknown as Env),
+      ).toBe(limit);
+  });
 });
 
 describe("shared analytics rules", () => {
@@ -360,6 +423,25 @@ describe("getTrafficSummary", () => {
     expect(summary.devices[0]).toMatchObject({ label: "desktop", pv: 6 });
     expect(summary.countries[0]).toMatchObject({ label: "CN", pv: 6 });
     expect(summary.range.days).toBe(7);
+  });
+
+  it("can preserve raw source codes without changing the default administrator result", async () => {
+    await seed();
+    const display = await getTrafficSummary(env, 7);
+    const raw = await getTrafficSummary(env, 7, new Date(), "raw");
+    expect(raw).toEqual({
+      ...display,
+      sources: display.sources.map((row) => ({
+        ...row,
+        label: row.label === "（直接访问）" ? "" : row.label,
+      })),
+      sourceDepth: display.sourceDepth.map((row) => ({
+        ...row,
+        label: row.label === "（直接访问）" ? "" : row.label,
+      })),
+    });
+    expect(raw.sources.some((row) => row.label === "")).toBe(true);
+    expect((await getTrafficSummary(env, 7)).sources).toEqual(display.sources);
   });
 
   it("labels empty buckets by meaning: direct traffic vs unknown", async () => {

@@ -242,6 +242,7 @@ export async function getTrafficSummary(
   env: Env,
   days: number,
   at = new Date(),
+  sourceLabels: "display" | "raw" = "display",
 ): Promise<TrafficSummary> {
   const window = Math.min(Math.max(Math.trunc(days) || 7, 1), ANALYTICS_MAX_DAYS);
   const to = shanghaiDay(at);
@@ -278,6 +279,7 @@ export async function getTrafficSummary(
     ).bind(from, to),
   ]);
 
+  const emptySourceLabel = sourceLabels === "raw" ? "" : "（直接访问）";
   const totalsRow = results[0]?.results?.[0] ?? {};
   const pv = num(totalsRow.pv);
   const sessions = num(totalsRow.sessions);
@@ -305,14 +307,14 @@ export async function getTrafficSummary(
       sessions: num(row.sessions),
     })),
     topPages: bucketRows(2, "（未知）"),
-    sources: bucketRows(3, "（直接访问）"),
+    sources: bucketRows(3, emptySourceLabel),
     countries: bucketRows(4, "（未知）"),
     devices: bucketRows(5, "（未知）"),
     sourceDepth: (results[6]?.results ?? []).map((row) => {
       const sourcePv = num(row.pv);
       const sourceSessions = num(row.sessions);
       return {
-        label: String(row.label ?? "") || "（直接访问）",
+        label: String(row.label ?? "") || emptySourceLabel,
         pv: sourcePv,
         sessions: sourceSessions,
         pagesPerSession:
@@ -454,12 +456,20 @@ export async function getFunnelSummary(
   return summarizeFunnel({ from, to, days: window }, counts);
 }
 
-export async function getAdminAnalytics(env: Env, days?: string): Promise<AdminAnalytics> {
+/** Shared by the administrator and external metrics entry points. */
+export function analyticsDays(days: string | undefined): number | null {
   const window = days === undefined ? 7 : Number(days);
   if (
     days !== undefined &&
     (!/^\d+$/.test(days) || !Number.isInteger(window) || window < 1 || window > ANALYTICS_MAX_DAYS)
   )
+    return null;
+  return window;
+}
+
+export async function getAdminAnalytics(env: Env, days?: string): Promise<AdminAnalytics> {
+  const window = analyticsDays(days);
+  if (window === null)
     throw new AppError(
       "invalid_analytics_range",
       `统计天数须为 1–${ANALYTICS_MAX_DAYS} 的整数`,
