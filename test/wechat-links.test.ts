@@ -5,7 +5,7 @@ import {
   runDurableObjectAlarm,
 } from "cloudflare:test";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import type { WxMessage } from "../src/server/wechat";
+import { wechatVerifyStep, type WxMessage } from "../src/server/wechat";
 import { encrypt } from "../src/server/security";
 import { wechatLinkKey } from "../src/shared/wechat-links";
 import { chatSetupIssue, notificationWechatIssue } from "../src/shared/wechat-readiness";
@@ -573,6 +573,91 @@ describe("WeChat transport binding independent of chat configuration", () => {
     expect((await api(fresh, "wechat.bind")).data.connection.qrUrl).toBe(qr);
     expect((await api(fresh, "wechat.bind", { regenerate: true })).error).toBe("qr_cooldown");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for the digits shown on the phone, retries a mismatch and connects once WeChat accepts them", async () => {
+    const stub = account();
+    const polls: (string | null)[] = [];
+    let accepted = false;
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const target = new URL(new Request(url, init).url);
+      if (!target.pathname.endsWith("get_qrcode_status")) return base(url, init);
+      const code = target.searchParams.get("verify_code");
+      polls.push(code);
+      if (accepted) {
+        expect(code).toBeNull();
+        return base(url, init);
+      }
+      if (code === "2468") {
+        accepted = true;
+        return Response.json({ status: "scaned" });
+      }
+      // A long poll that times out reports "wait" while the phone still shows the digits.
+      if (!code && polls.length > 1) return Response.json({ status: "wait" });
+      return Response.json({ status: code ? "need_verifycode" : "confirmed_but_need_verifycode" });
+    });
+    expect((await api(stub, "wechat.bind")).ok).toBe(true);
+    const poll = async () => {
+      await runDurableObjectAlarm(stub);
+      return (await stub.snapshot()).connection;
+    };
+    expect(await poll()).toMatchObject({ status: "scanned", verifyState: "required" });
+    expect(await poll()).toMatchObject({ status: "scanned", verifyState: "required" });
+    expect((await api(stub, "wechat.verify", { code: "12a" })).error).toBe("invalid_verify_code");
+    const submitted = await api(stub, "wechat.verify", { code: " 11 11 " });
+    expect(submitted.data.connection.verifyState).toBe("checking");
+    expect(JSON.stringify(submitted)).not.toContain("1111");
+    expect(await poll()).toMatchObject({ status: "scanned", verifyState: "rejected" });
+    expect((await api(stub, "wechat.verify", { code: "2468" })).ok).toBe(true);
+    const scanned = await poll();
+    expect(scanned.status).toBe("scanned");
+    expect(scanned.verifyState).toBeUndefined();
+    expect((await poll()).status).toBe("connected");
+    expect(polls).toEqual([null, null, "1111", "2468", null]);
+    expect((await api(stub, "wechat.verify", { code: "2468" })).error).toBe("verify_not_needed");
+    await runInDurableObject(stub, (_, state) => {
+      const stored = state.storage.sql
+        .exec<{ value: string }>("SELECT value FROM settings WHERE key LIKE '%connection%'")
+        .toArray()
+        .map((row) => row.value)
+        .join();
+      expect(stored).not.toContain("verifyCode");
+    });
+  });
+
+  it("stops the bind when WeChat blocks the digits after too many mismatches", async () => {
+    const stub = account();
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      new URL(new Request(url, init).url).pathname.endsWith("get_qrcode_status")
+        ? Response.json({ status: "verify_code_blocked" })
+        : base(url, init),
+    );
+    await api(stub, "wechat.bind");
+    await runDurableObjectAlarm(stub);
+    const { connection } = await stub.snapshot();
+    expect(connection).toMatchObject({ status: "expired", error: expect.stringContaining("多次") });
+    expect(connection.verifyState).toBeUndefined();
+  });
+
+  it("keeps digits submitted while a QR status poll was still open", () => {
+    // The poll left before the digits arrived; they go out on the next poll.
+    expect(wechatVerifyStep("need_verifycode", undefined, "1234")).toEqual({
+      status: "scanned",
+      verifyState: "checking",
+      verifyCode: "1234",
+    });
+    // A retyped code replaces the mismatched one that was in flight.
+    expect(wechatVerifyStep("need_verifycode", "1111", "2222")).toMatchObject({
+      verifyState: "checking",
+      verifyCode: "2222",
+    });
+    expect(wechatVerifyStep("need_verifycode", "1111", "1111")).toMatchObject({
+      verifyState: "rejected",
+      verifyCode: undefined,
+    });
+    expect(wechatVerifyStep("scaned", "1111", "1111")).toBeNull();
   });
 
   it("does not resurrect a disconnected link when an in-flight QR fetch completes", async () => {

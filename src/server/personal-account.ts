@@ -240,6 +240,7 @@ import { qualifyReferral, wechatIdentityHash } from "./referrals";
 import {
   extractText,
   orderedWechatMessages,
+  wechatVerifyStep,
   sendUploadedWechatFile,
   sendText,
   WechatRequestError,
@@ -320,6 +321,8 @@ type Link = Connection & {
   blockedContextId?: string;
   lastPoll?: number;
   pollBaseUrl?: string;
+  /** Digits from the phone, sent with each QR status poll until WeChat accepts them. */
+  verifyCode?: string;
 };
 // Server-created metadata for remote replies awaiting their first send attempt.
 // Once prepared, the final delivery text replaces this metadata so retries and
@@ -2559,6 +2562,7 @@ export class PersonalAccount extends DurableObject<Env> {
       error: savedError,
       qrUrl,
       qrExpires,
+      verifyState,
     } = this.connection(id);
     // Recovery guidance describes the current queue, not a connection fault.
     // Validate cached hints too, so every cancellation path and restart agrees.
@@ -2574,7 +2578,16 @@ export class PersonalAccount extends DurableObject<Env> {
         .toArray().length
     )
       error = CLOUD_REPLY_WAITING_MESSAGE;
-    return { status, botId, hasReplyContext: !!contextToken, lastSeen, error, qrUrl, qrExpires };
+    return {
+      status,
+      botId,
+      hasReplyContext: !!contextToken,
+      lastSeen,
+      error,
+      qrUrl,
+      qrExpires,
+      ...(verifyState && (status === "waiting" || status === "scanned") ? { verifyState } : {}),
+    };
   }
   private createLink(name: unknown) {
     if (typeof name !== "string" || !name.trim() || name.trim().length > 40)
@@ -3865,6 +3878,11 @@ export class PersonalAccount extends DurableObject<Env> {
         data = await this.bind(
           typeof p.id === "string" ? p.id : this.selectedLink(),
           p.regenerate === true,
+        );
+      else if (action === "wechat.verify")
+        data = await this.submitVerifyCode(
+          typeof p.id === "string" ? p.id : this.selectedLink(),
+          p.code,
         );
       else if (action === "wechat.create") {
         this.createLink(p.name);
@@ -5176,6 +5194,36 @@ export class PersonalAccount extends DurableObject<Env> {
     return this.snapshot();
   }
 
+  // WeChat may show digits on the phone after the scan and wait for them before confirming.
+  private async submitVerifyCode(connectionId: string, raw: unknown) {
+    this.requireLink(connectionId, true);
+    const code = typeof raw === "string" ? raw.replace(/\s+/g, "") : "";
+    if (!/^\d{1,12}$/.test(code))
+      throw new AppError("invalid_verify_code", "请输入手机微信上显示的数字", 400);
+    const link = this.connection(connectionId);
+    if (
+      !(link.status === "waiting" || link.status === "scanned") ||
+      !link.verifyState ||
+      (link.qrExpires ?? 0) <= Date.now()
+    )
+      throw new AppError(
+        "verify_not_needed",
+        "当前不需要输入数字。请刷新页面查看连接状态，二维码过期时重新获取。",
+        409,
+      );
+    this.setLinkSetting(connectionId, "connection", {
+      ...link,
+      verifyCode: code,
+      verifyState: "checking",
+    });
+    // Restart the open long poll so the digits go out now.
+    this.wakeWechat();
+    const wake = Date.now() + 1000;
+    const alarm = await this.ctx.storage.getAlarm();
+    if (alarm === null || alarm > wake) await this.ctx.storage.setAlarm(wake);
+    return this.snapshot();
+  }
+
   private reserveQrRequest(connectionId: string) {
     const now = Date.now();
     const recent = this.getSetting<{ id: string; at: number }[]>("wechatQrRequests", []).filter(
@@ -6069,17 +6117,23 @@ export class PersonalAccount extends DurableObject<Env> {
           baseurl?: string;
           redirect_host?: string;
         }>(
-          `get_qrcode_status?qrcode=${encodeURIComponent(link.qrCode)}`,
+          // The digits from the phone ride along on this poll until WeChat accepts them.
+          `get_qrcode_status?qrcode=${encodeURIComponent(link.qrCode)}${
+            link.verifyCode ? `&verify_code=${encodeURIComponent(link.verifyCode)}` : ""
+          }`,
           undefined,
           undefined,
           link.pollBaseUrl,
         );
         if (!result) return;
-        if (
-          this.connection(connectionId).generation !== link.generation ||
-          !this.linkEnabled(connectionId)
-        )
+        // Digits can be submitted while this long poll is open; never drop them.
+        const current = this.connection(connectionId);
+        if (current.generation !== link.generation || !this.linkEnabled(connectionId)) return;
+        const verify = wechatVerifyStep(result.status, link.verifyCode, current.verifyCode);
+        if (verify) {
+          this.setLinkSetting(connectionId, "connection", { ...current, ...verify });
           return;
+        }
         if (
           result.status === "confirmed" &&
           result.bot_token &&
@@ -6143,19 +6197,24 @@ export class PersonalAccount extends DurableObject<Env> {
           });
         } else if (result.status === "scaned_but_redirect" && result.redirect_host) {
           this.setLinkSetting(connectionId, "connection", {
-            ...link,
+            ...current,
             status: "scanned",
             pollBaseUrl: validateWechatHost(`https://${result.redirect_host}`),
           });
         } else {
+          const scanned = result.status === "scaned" || result.status === "scanned";
           this.setLinkSetting(connectionId, "connection", {
-            ...link,
+            ...current,
             status:
               result.status === "expired"
                 ? "expired"
-                : result.status === "scaned" || result.status === "scanned"
+                : scanned || current.verifyState
                   ? "scanned"
                   : "waiting",
+            // "scaned" after digits were sent means WeChat accepted them.
+            ...(scanned || result.status === "expired"
+              ? { verifyCode: undefined, verifyState: undefined }
+              : {}),
           });
         }
       } else {
