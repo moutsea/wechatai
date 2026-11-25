@@ -179,9 +179,9 @@ app.put(`${GROK_UPLOAD_PATH}/:token`, async (c) => {
         result.status as ContentfulStatusCode,
       );
 });
-// Read-only operator metadata uses its own bearer credential. Terminate it
+// Read-only operator metrics use their own bearer credential. Terminate them
 // before the general API body limit and browser session middleware so every
-// result is audited and no request reaches a session, D1 row or account object.
+// result is audited. Aggregate routes read D1 through the metrics dispatcher.
 app.all("/api/metrics", metricsRequest);
 app.all("/api/metrics/*", metricsRequest);
 // Muse connectors upload a finished job's images with their channel token, one

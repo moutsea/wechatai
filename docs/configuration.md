@@ -25,6 +25,8 @@
 
 `METRICS_API_TOKEN` 是可选的独立 Workers Secret。启用时使用单独生成的随机值（至少 32 字符），不得复用 `SERVER_MONITOR_SECRET`、`EXECUTOR_SECRET`、`WECHAT_RECEIVER_SECRET`、`BILLING_NOTIFY_TOKEN`、`BETTER_AUTH_SECRET` 或 `ENCRYPTION_KEY`；未配置、空白或过短时入口关闭。只接受 `Authorization: Bearer <METRICS_API_TOKEN>`，Cookie、登录 Session 和查询参数都不能代替它。
 
+`GET /api/metrics/retention` 提供前向 D1/D7 聚合，窗口、覆盖和不可用原因见[留存接口说明](metrics-retention.md)。
+
 `GET /api/metrics/health` 成功返回固定元数据：
 
 ```json
