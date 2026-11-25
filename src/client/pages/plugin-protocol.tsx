@@ -5,27 +5,136 @@ import remarkGfm from "remark-gfm";
 import { ArrowUpRight, Check, Code2, Copy, FileJson, FileText, Terminal } from "lucide-react";
 import { Brand } from "../ui";
 import { SiteHeader } from "../site-header";
+import { localizedHref, useLocale } from "../locale";
 import { PLUGIN_PROTOCOL_VERSION } from "../../shared/plugins";
 import {
   PLUGIN_API_PATH,
   PLUGIN_MARKDOWN_PATH,
   PLUGIN_SCHEMA_PATH,
   agentDevelopmentPrompt,
-  protocolSections,
+  protocolSections as protocolSectionsZh,
 } from "../../shared/plugin-docs";
+import {
+  agentDevelopmentPromptEn,
+  pluginProtocolSectionsEn,
+} from "../../shared/i18n/en/data/plugin-protocol-en";
 import "./guide.css";
 
-function CopyButton({ text, children = "复制" }: { text: string; children?: ReactNode }) {
+interface ProtocolCopy {
+  readonly copy: string;
+  readonly copied: string;
+  readonly copyFailed: string;
+  readonly reference: string;
+  readonly tocLabel: string;
+  readonly tocHeadingPrefix: string;
+  readonly readingFree: string;
+  readonly llmsLink: string;
+  readonly heroLine1: string;
+  readonly heroLine2: string;
+  readonly heroBody1: string;
+  readonly heroBody2: string;
+  readonly publicDocs: string;
+  readonly agentCardTitle: string;
+  readonly agentCardBody: string;
+  readonly copyForAgent: string;
+  readonly readInstructions: string;
+  readonly resourcesLabel: string;
+  readonly markdownTitle: string;
+  readonly markdownHint: string;
+  readonly apiHint: string;
+  readonly schemaHint: string;
+  readonly availabilityTitle: string;
+  readonly availabilityBefore: string;
+  readonly museLink: string;
+  readonly availabilityAfter: string;
+  readonly footerDisclaimer: string;
+  readonly footerDocs: string;
+}
+
+const protocolCopyZh: ProtocolCopy = {
+  copy: "复制",
+  copied: "已复制",
+  copyFailed: "请选中文字复制",
+  reference: "示例 / REFERENCE",
+  tocLabel: "插件协议目录",
+  tocHeadingPrefix: "协议目录 / V",
+  readingFree: "读取文档免费，不消耗 credits。",
+  llmsLink: "查看 llms.txt",
+  heroLine1: "插件协议，",
+  heroLine2: "从这里开始。",
+  heroBody1: "让不同的模型、工具与 Agent 使用同一种调用格式。",
+  heroBody2: "定义输入与结果，把连接和计量交给平台。",
+  publicDocs: "公开文档 · 无需登录",
+  agentCardTitle: "把协议交给你的 AI",
+  agentCardBody: "复制开发指令，让 AI 先读协议、校验规则和示例，再开始写适配器。",
+  copyForAgent: "复制给 AI agent",
+  readInstructions: "查看完整指令与读取方式",
+  resourcesLabel: "协议文档格式",
+  markdownTitle: "Markdown 原文",
+  markdownHint: "给 AI agent 直接读取",
+  apiHint: "版本、状态与完整示例",
+  schemaHint: "从实际校验规则生成",
+  availabilityTitle: "当前开放范围",
+  availabilityBefore:
+    "内置 LLM 对话、DS Chat 内置插件与平台计量已实现，AI 生图支持图片交付。第三方注册、远程执行、代码上传及第三方媒体接入尚未开放；现在可以按协议编写并在本地验证适配器。 已有 Muse 托管助理？按",
+  museLink: "Muse 接入指南",
+  availabilityAfter:
+    "把它的 hook 接到微信；这是用户自备 Agent 的接入说明，不属于本协议。",
+  footerDisclaimer: "独立产品 · 非微信官方服务",
+  footerDocs: "阅读使用文档",
+};
+
+const protocolCopyEn: ProtocolCopy = {
+  copy: "Copy",
+  copied: "Copied",
+  copyFailed: "Select the text to copy",
+  reference: "EXAMPLE / REFERENCE",
+  tocLabel: "Plugin protocol contents",
+  tocHeadingPrefix: "Protocol contents / V",
+  readingFree: "Reading the docs is free and consumes no credits.",
+  llmsLink: "View llms.txt",
+  heroLine1: "The plugin protocol,",
+  heroLine2: "starting here.",
+  heroBody1: "Let different models, tools and agents use one invocation format.",
+  heroBody2: "Define input and results; leave connection and metering to the platform.",
+  publicDocs: "Public docs · no sign-in",
+  agentCardTitle: "Hand the protocol to your AI",
+  agentCardBody:
+    "Copy the development instruction so your AI reads the protocol, validation rules and examples before writing an adapter.",
+  copyForAgent: "Copy for your AI agent",
+  readInstructions: "See the full instruction and how to read it",
+  resourcesLabel: "Protocol document formats",
+  markdownTitle: "Markdown source",
+  markdownHint: "Read directly by an AI agent",
+  apiHint: "Version, status and complete examples",
+  schemaHint: "Generated from the actual validation rules",
+  availabilityTitle: "Current availability",
+  availabilityBefore:
+    "Built-in LLM chat, the built-in DS Chat plugin and platform metering are implemented, and AI image generation supports image delivery. Third-party registration, remote execution, code upload and third-party media access are not open yet; you can write an adapter against the protocol and verify it locally now. Already have a hosted Muse assistant? Follow the",
+  museLink: "Muse connection guide",
+  availabilityAfter:
+    "to connect its hook to WeChat; that is setup for a user-supplied Agent and is not part of this protocol.",
+  footerDisclaimer: "Independent product · not an official WeChat service",
+  footerDocs: "Read the documentation",
+};
+
+function protocolCopyFor(locale: string): ProtocolCopy {
+  return locale === "en" ? protocolCopyEn : protocolCopyZh;
+}
+
+function CopyButton({ text, label }: { text: string; label?: ReactNode }) {
+  const copy = protocolCopyFor(useLocale().locale);
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => {
     if (status === "idle") return;
     const timer = setTimeout(() => setStatus("idle"), 3500);
     return () => clearTimeout(timer);
   }, [status]);
+  const idleLabel = label ?? copy.copy;
   return (
     <button
       className="protocol-copy"
-      aria-label={textContent(children)}
+      aria-label={textContent(label ?? copy.copy)}
       type="button"
       onClick={async () => {
         try {
@@ -38,7 +147,7 @@ function CopyButton({ text, children = "复制" }: { text: string; children?: Re
     >
       {status === "copied" ? <Check size={14} /> : <Copy size={14} />}
       <span role="status">
-        {status === "copied" ? "已复制" : status === "failed" ? "请选中文字复制" : children}
+        {status === "copied" ? copy.copied : status === "failed" ? copy.copyFailed : idleLabel}
       </span>
     </button>
   );
@@ -55,10 +164,11 @@ function textContent(node: ReactNode): string {
 }
 
 function CodeBlock({ children }: { children?: ReactNode }) {
+  const copy = protocolCopyFor(useLocale().locale);
   return (
     <div className="protocol-code-block">
       <div className="protocol-code-toolbar">
-        <span>示例 / REFERENCE</span>
+        <span>{copy.reference}</span>
         <CopyButton text={textContent(children)} />
       </div>
       <pre tabIndex={0}>{children}</pre>
@@ -68,6 +178,11 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 
 export function PluginProtocol() {
   const { hash } = useLocation();
+  const { locale } = useLocale();
+  const copy = protocolCopyFor(locale);
+  const english = locale === "en";
+  const protocolSections = english ? pluginProtocolSectionsEn : protocolSectionsZh;
+  const developmentPrompt = english ? agentDevelopmentPromptEn : agentDevelopmentPrompt;
   useEffect(() => {
     if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
   }, [hash]);
@@ -81,38 +196,39 @@ export function PluginProtocol() {
               <Code2 size={15} /> WECHATAI DEVELOPERS
             </span>
             <h1>
-              插件协议，
+              {copy.heroLine1}
               <br />
-              从这里开始。
+              {copy.heroLine2}
             </h1>
             <p>
-              让不同的模型、工具与 Agent 使用同一种调用格式。
+              {copy.heroBody1}
               <br />
-              定义输入与结果，把连接和计量交给平台。
+              {copy.heroBody2}
             </p>
             <div className="protocol-badges">
               <span>Protocol {PLUGIN_PROTOCOL_VERSION}</span>
-              <span>公开文档 · 无需登录</span>
+              <span>{copy.publicDocs}</span>
             </div>
           </div>
           <div className="protocol-agent-card">
             <span className="protocol-card-label">
               <Terminal size={17} /> BUILT FOR YOU & YOUR AGENT
             </span>
-            <h2>把协议交给你的 AI</h2>
-            <p>复制开发指令，让 AI 先读协议、校验规则和示例，再开始写适配器。</p>
-            <CopyButton text={agentDevelopmentPrompt}>复制给 AI agent</CopyButton>
+            <h2>{copy.agentCardTitle}</h2>
+            <p>{copy.agentCardBody}</p>
+            <CopyButton text={developmentPrompt} label={copy.copyForAgent} />
             <a href="#quickstart">
-              查看完整指令与读取方式 <ArrowUpRight size={14} />
+              {`${copy.readInstructions} `}
+              <ArrowUpRight size={14} />
             </a>
           </div>
         </section>
-        <div className="protocol-resources" aria-label="协议文档格式">
+        <div className="protocol-resources" aria-label={copy.resourcesLabel}>
           <a href={PLUGIN_MARKDOWN_PATH}>
             <FileText size={21} />
             <span>
-              <strong>Markdown 原文</strong>
-              <small>给 AI agent 直接读取</small>
+              <strong>{copy.markdownTitle}</strong>
+              <small>{copy.markdownHint}</small>
             </span>
             <ArrowUpRight size={17} />
           </a>
@@ -120,7 +236,7 @@ export function PluginProtocol() {
             <Code2 size={21} />
             <span>
               <strong>JSON API</strong>
-              <small>版本、状态与完整示例</small>
+              <small>{copy.apiHint}</small>
             </span>
             <ArrowUpRight size={17} />
           </a>
@@ -128,24 +244,23 @@ export function PluginProtocol() {
             <FileJson size={21} />
             <span>
               <strong>JSON Schema</strong>
-              <small>从实际校验规则生成</small>
+              <small>{copy.schemaHint}</small>
             </span>
             <ArrowUpRight size={17} />
           </a>
         </div>
         <div className="protocol-availability" role="note">
-          <strong>当前开放范围</strong>
+          <strong>{copy.availabilityTitle}</strong>
           <p>
-            内置 LLM 对话、DS Chat 内置插件与平台计量已实现，AI
-            生图支持图片交付。第三方注册、远程执行、代码上传及第三方媒体接入尚未开放；现在可以按协议编写并在本地验证适配器。
-            已有 Muse 托管助理？按<Link to="/developers/muse">Muse 接入指南</Link>
-            把它的 hook 接到微信；这是用户自备 Agent 的接入说明，不属于本协议。
+            {copy.availabilityBefore}
+            <Link to={localizedHref(locale, "/developers/muse")}>{copy.museLink}</Link>
+            {copy.availabilityAfter}
           </p>
         </div>
         <div className="guide-layout protocol-layout">
           <aside className="guide-toc">
-            <nav aria-label="插件协议目录">
-              <span>协议目录 / V{PLUGIN_PROTOCOL_VERSION}</span>
+            <nav aria-label={copy.tocLabel}>
+              <span>{`${copy.tocHeadingPrefix}${PLUGIN_PROTOCOL_VERSION}`}</span>
               {protocolSections.map((section, i) => (
                 <a key={section.id} href={`#${section.id}`}>
                   <small>{String(i + 1).padStart(2, "0")}</small>
@@ -154,10 +269,11 @@ export function PluginProtocol() {
               ))}
             </nav>
             <p>
-              读取文档免费，不消耗 credits。
+              {copy.readingFree}
               <br />
               <a href="/llms.txt">
-                查看 llms.txt <ArrowUpRight size={12} />
+                {`${copy.llmsLink} `}
+                <ArrowUpRight size={12} />
               </a>
             </p>
           </aside>
@@ -174,6 +290,14 @@ export function PluginProtocol() {
                   remarkPlugins={[remarkGfm]}
                   skipHtml
                   components={{
+                    a: ({ href, children }) => {
+                      const target = href?.startsWith("/") ? localizedHref(locale, href) : href;
+                      return target && target !== href ? (
+                        <Link to={target}>{children}</Link>
+                      ) : (
+                        <a href={href}>{children}</a>
+                      );
+                    },
                     pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
                     table: ({ children }) => (
                       <div className="protocol-table-wrap" tabIndex={0}>
@@ -191,9 +315,10 @@ export function PluginProtocol() {
       </main>
       <footer className="guide-footer">
         <Brand />
-        <span>独立产品 · 非微信官方服务</span>
-        <Link to="/docs">
-          阅读使用文档 <ArrowUpRight size={14} />
+        <span>{copy.footerDisclaimer}</span>
+        <Link to={localizedHref(locale, "/docs")}>
+          {`${copy.footerDocs} `}
+          <ArrowUpRight size={14} />
         </Link>
       </footer>
     </div>
