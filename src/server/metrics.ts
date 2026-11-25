@@ -2,6 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { secret } from "./config";
+import { analyticsDays } from "./analytics";
+import { readMetricsTraffic } from "./metrics-traffic";
 import { metricsRevenue } from "./metrics-revenue";
 import { readMetricsRetention, retentionDays } from "./metrics-retention";
 
@@ -12,6 +14,7 @@ const TOKEN_LIMIT_KEY = "metrics:token:shared";
 const HEALTH_PATH = "/api/metrics/health";
 const REVENUE_PATH = "/api/metrics/revenue";
 const RETENTION_PATH = "/api/metrics/retention";
+const TRAFFIC_PATH = "/api/metrics/traffic";
 
 type BillingMode =
   | { available: true; mode: "test" | "live" }
@@ -72,7 +75,13 @@ async function consumeLimit(env: Env, key: string): Promise<LimitResult> {
 }
 
 function routeTemplate(path: string) {
-  if (path === HEALTH_PATH || path === REVENUE_PATH || path === RETENTION_PATH) return path;
+  if (
+    path === HEALTH_PATH ||
+    path === REVENUE_PATH ||
+    path === RETENTION_PATH ||
+    path === TRAFFIC_PATH
+  )
+    return path;
   if (path === "/api/metrics") return "/api/metrics";
   return "/api/metrics/*";
 }
@@ -136,12 +145,19 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
     if (
       c.req.path !== HEALTH_PATH &&
       c.req.path !== REVENUE_PATH &&
-      c.req.path !== RETENTION_PATH
+      c.req.path !== RETENTION_PATH &&
+      c.req.path !== TRAFFIC_PATH
     )
       return respond(c, 404, { error: "not_found" }, "not_found");
     if (c.req.method !== "GET") {
       c.header("Allow", "GET");
       return respond(c, 405, { error: "method_not_allowed" }, "method_not_allowed");
+    }
+
+    if (c.req.path === TRAFFIC_PATH) {
+      const days = analyticsDays(c.req.query("days"));
+      if (days === null) return respond(c, 400, { error: "invalid_query" }, "invalid_query");
+      return respond(c, 200, await readMetricsTraffic(c.env, days), "ok");
     }
 
     if (c.req.path === RETENTION_PATH) {
