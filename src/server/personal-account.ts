@@ -211,6 +211,7 @@ import { invokeImageGeneration } from "./plugins/image-generation";
 import { pluginNotificationText } from "./plugins/notifications";
 import { assetDownload, missingAsset, validAssetId } from "./asset-download";
 import { MediaStore, MEDIA_TTL_MS, type OutputAsset } from "./media";
+import { WECHAT_REPLY_WINDOW_MS, WECHAT_WINDOW_NUDGE_MS } from "../shared/wechat-readiness";
 import {
   imageGenerationInputSchema,
   type ImageGenerationPlugin,
@@ -239,6 +240,7 @@ import { REFERRAL_CREDITS } from "../shared/referrals";
 import { qualifyReferral, wechatIdentityHash } from "./referrals";
 import {
   extractText,
+  isWechatPushRefusal,
   orderedWechatMessages,
   sendUploadedWechatFile,
   sendText,
@@ -320,6 +322,10 @@ type Link = Connection & {
   blockedContextId?: string;
   lastPoll?: number;
   pollBaseUrl?: string;
+  /** WeChat refused a reminder or notification push. Cleared by the user's next message. */
+  pushBlockedAt?: number;
+  /** The reply-window reminder for the window opened by the message at `for`. */
+  windowNudge?: { for: number; retryAt: number; sent?: boolean };
 };
 // Server-created metadata for remote replies awaiting their first send attempt.
 // Once prepared, the final delivery text replaces this metadata so retries and
@@ -329,6 +335,23 @@ type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: stri
 // register its Routine Webhook. Consumed by the first successful registration.
 const grokSetupKey = (pluginId: string) => `grokSetup:${pluginId}`;
 const grokRegisteredKey = (pluginId: string) => `grokRegistered:${pluginId}`;
+function windowNudgeText(need: { nextReminderAt: number | null; notifications: boolean }) {
+  const what =
+    need.nextReminderAt !== null && need.notifications
+      ? "提醒和通知"
+      : need.nextReminderAt !== null
+        ? "提醒"
+        : "通知";
+  return `⏳ 微信只允许在你最近一次发消息后的 24 小时内向你推送。你快 24 小时没在这里发消息了，之后的${what}可能收不到。\n\n发送 /wx help 即可继续接收，不消耗 credits。${
+    need.nextReminderAt !== null
+      ? `\n\n下一条提醒：${beijingTime(need.nextReminderAt)}（北京时间）`
+      : ""
+  }`;
+}
+// A refused push is retried slowly; the user's next message retries it at once.
+const PUSH_REFUSED_RETRY_MS = 30 * 60_000;
+const PUSH_REFUSED_MESSAGE =
+  "微信暂不允许推送，通常是因为接收微信超过 24 小时没有发消息。在微信发送 /wx help 后会继续投递（不消耗 credits）。";
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -884,7 +907,12 @@ export class PersonalAccount extends DurableObject<Env> {
             connectionId,
           );
       }
-      if (received) this.membershipReminders.wake();
+      if (received) {
+        this.membershipReminders.wake();
+        // The user's message reopened WeChat's reply window; send held pushes now.
+        this.personalRecords.wakeWaiting(connectionId);
+        this.notifications.wake(connectionId);
+      }
       // A fallback poll or a lost acknowledgement may race this batch. Merge
       // messages, but never overwrite a cursor advanced by another receiver.
       const cursor =
@@ -899,6 +927,7 @@ export class PersonalAccount extends DurableObject<Env> {
         contextToken: token,
         lastPoll: Date.now(),
         lastSeen: received ? Date.now() : link.lastSeen,
+        pushBlockedAt: received ? undefined : link.pushBlockedAt,
         error: this.sql
           .exec(
             "SELECT 1 FROM inbox WHERE connectionId=? AND state='waiting_context' AND id GLOB 'cloud:*' LIMIT 1",
@@ -2559,6 +2588,7 @@ export class PersonalAccount extends DurableObject<Env> {
       error: savedError,
       qrUrl,
       qrExpires,
+      pushBlockedAt,
     } = this.connection(id);
     // Recovery guidance describes the current queue, not a connection fault.
     // Validate cached hints too, so every cancellation path and restart agrees.
@@ -2574,7 +2604,24 @@ export class PersonalAccount extends DurableObject<Env> {
         .toArray().length
     )
       error = CLOUD_REPLY_WAITING_MESSAGE;
-    return { status, botId, hasReplyContext: !!contextToken, lastSeen, error, qrUrl, qrExpires };
+    const need = this.pushWindowNeed(id, this.connection(id));
+    return {
+      status,
+      botId,
+      hasReplyContext: !!contextToken,
+      lastSeen,
+      error,
+      qrUrl,
+      qrExpires,
+      ...(need || (pushBlockedAt && status === "connected")
+        ? {
+            pushWindow: {
+              until: (lastSeen ?? 0) + WECHAT_REPLY_WINDOW_MS,
+              ...(pushBlockedAt ? { blockedAt: pushBlockedAt } : {}),
+            },
+          }
+        : {}),
+    };
   }
   private createLink(name: unknown) {
     if (typeof name !== "string" || !name.trim() || name.trim().length > 40)
@@ -2841,6 +2888,91 @@ export class PersonalAccount extends DurableObject<Env> {
       if (this.notificationDelivery === delivery) this.notificationDelivery = null;
     }
   }
+  private markPushBlocked(connectionId: string, generation: string) {
+    const link = this.connection(connectionId);
+    if (link.generation !== generation || link.pushBlockedAt) return;
+    this.setLinkSetting(connectionId, "connection", { ...link, pushBlockedAt: Date.now() });
+  }
+  // Scheduled pushes that need WeChat's reply window to outlast the current one.
+  private pushWindowNeed(connectionId: string, link: Link) {
+    if (link.status !== "connected" || !link.contextToken || link.lastSeen === undefined)
+      return null;
+    const until = link.lastSeen + WECHAT_REPLY_WINDOW_MS;
+    const nextReminderAt = this.personalRecords.nextDelivery(connectionId, link.generation, until);
+    const notifications = this.plugins().some(
+      (p) =>
+        p.pluginId === "wechatai/notification" &&
+        p.enabled &&
+        p.connectionId === connectionId &&
+        this.notifications.hasToken(p.id),
+    );
+    return nextReminderAt !== null || notifications
+      ? { until, nextReminderAt, notifications }
+      : null;
+  }
+  private windowNudgeAt(connectionId: string, link: Link) {
+    const need = this.pushWindowNeed(connectionId, link);
+    if (
+      !need ||
+      link.pushBlockedAt ||
+      !link.encryptedCredentials ||
+      !this.linkEnabled(connectionId)
+    )
+      return null;
+    const nudge = link.windowNudge?.for === link.lastSeen ? link.windowNudge : undefined;
+    const at = Math.max(
+      need.until - WECHAT_REPLY_WINDOW_MS + WECHAT_WINDOW_NUDGE_MS,
+      nudge?.retryAt ?? 0,
+    );
+    // Once the window has closed, WeChat would refuse the reminder too.
+    return nudge?.sent || at >= need.until || Date.now() >= need.until ? null : { at, need };
+  }
+  // Before the window closes, ask once for a reply so scheduled pushes still arrive.
+  private async deliverWindowNudges() {
+    for (const { id } of this.receivingLinks()) {
+      const link = this.connection(id);
+      const due = this.windowNudgeAt(id, link);
+      if (!due || Date.now() < due.at) continue;
+      const opened = link.lastSeen!;
+      // A lease: a failed send is retried later, never in a tight loop.
+      const lease = { for: opened, retryAt: Date.now() + 5 * 60_000 };
+      this.setLinkSetting(id, "connection", { ...link, windowNudge: lease });
+      try {
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials!);
+        const current = this.connection(id);
+        if (
+          current.generation !== link.generation ||
+          current.lastSeen !== opened ||
+          !current.contextToken
+        )
+          continue;
+        await sendText(
+          credentials,
+          current.contextToken,
+          `window:${id}:${opened}`,
+          windowNudgeText(due.need),
+          5000,
+        );
+        const latest = this.connection(id);
+        if (latest.generation === link.generation)
+          this.setLinkSetting(id, "connection", {
+            ...latest,
+            windowNudge: { ...lease, sent: true },
+          });
+        console.info(JSON.stringify({ event: "wechat.window_nudge_sent" }));
+      } catch (error) {
+        if (isWechatPushRefusal(error)) this.markPushBlocked(id, link.generation);
+        console.warn(
+          JSON.stringify({
+            event: "wechat.window_nudge_failed",
+            code: error instanceof AppError ? error.code : "window_nudge_error",
+            ret: error instanceof WechatRequestError ? (error.ret ?? null) : null,
+            errcode: error instanceof WechatRequestError ? (error.errcode ?? null) : null,
+          }),
+        );
+      }
+    }
+  }
   private async deliverNotifications() {
     for (const job of this.notifications.due()) {
       if (Date.now() - job.createdAt >= 86400000) {
@@ -2893,11 +3025,15 @@ export class PersonalAccount extends DurableObject<Env> {
         this.notifications.finish(job.id, "sent");
       } catch (error) {
         // Retried sends reuse client_id. Never log the token, message or recipient.
-        this.notifications.retry(
-          job.id,
-          error instanceof AppError ? error.message : "微信发送暂未成功，正在重试",
-          Math.min(300000, 5000 * 2 ** Math.min(job.attempts, 6)),
-        );
+        if (isWechatPushRefusal(error)) {
+          this.markPushBlocked(job.connectionId, job.generation);
+          this.notifications.retry(job.id, PUSH_REFUSED_MESSAGE, PUSH_REFUSED_RETRY_MS);
+        } else
+          this.notifications.retry(
+            job.id,
+            error instanceof AppError ? error.message : "微信发送暂未成功，正在重试",
+            Math.min(300000, 5000 * 2 ** Math.min(job.attempts, 6)),
+          );
       }
     }
   }
@@ -3135,11 +3271,17 @@ export class PersonalAccount extends DurableObject<Env> {
             errcode: failure.errcode,
           }),
         );
+        // Retrying a refused push every minute cannot succeed before the user
+        // writes again, which wakes it, and repeated refusals risk rate limits.
+        const refused = isWechatPushRefusal(error);
+        if (refused) this.markPushBlocked(reminder.connectionId, reminder.generation);
         this.personalRecords.fail(
           reminder,
-          failure.code === "wechat_expired" ? "paused" : "retry",
+          failure.code === "wechat_expired" ? "paused" : refused ? "waiting_context" : "retry",
           failure,
-          Math.min(60000, 5000 * 2 ** Math.min(4, Math.max(0, attempts - 1))),
+          refused
+            ? PUSH_REFUSED_RETRY_MS
+            : Math.min(60000, 5000 * 2 ** Math.min(4, Math.max(0, attempts - 1))),
         );
       }
     }
@@ -3208,6 +3350,10 @@ export class PersonalAccount extends DurableObject<Env> {
             wakeups.push(Math.max(Date.now() + 100, guide.retryAt));
         }
       }
+    }
+    for (const { id } of this.receivingLinks()) {
+      const nudge = this.windowNudgeAt(id, this.connection(id));
+      if (nudge) wakeups.push(Math.max(Date.now() + 100, nudge.at));
     }
     if (this.referralPending()) wakeups.push(Date.now() + 60000);
     if (wakeups.length)
@@ -5977,6 +6123,7 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.refreshCloudAccess();
       await this.flushReminderSchedule();
       await this.flushNotificationSchedule();
+      await this.deliverWindowNudges();
       await this.grok.dispatchDue();
       if (this.referralPending()) await this.retryReferral();
       // Recover AGT before idle WeChat long polls can consume this pass's budget.

@@ -198,6 +198,18 @@ export class NotificationStore {
     );
     this.changed();
   }
+  /** A new message from the user reopens WeChat's reply window; retry held jobs now. */
+  wake(connectionId: string) {
+    const woken = this.sql
+      .exec(
+        "UPDATE notification_jobs SET nextAt=? WHERE connectionId=? AND state='pending' AND nextAt>? RETURNING id",
+        Date.now(),
+        connectionId,
+        Date.now(),
+      )
+      .toArray().length;
+    if (woken) this.changed();
+  }
   cancel(pluginId: string) {
     this.sql.exec(
       "UPDATE notification_jobs SET state='cancelled',text='',error='配置已停用、接收微信已更改或 Token 已撤销' WHERE pluginId=? AND state IN ('pending','sending')",

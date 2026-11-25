@@ -86,7 +86,13 @@ describe("reminder failure diagnostics", () => {
   });
 
   it.each([
-    { body: { ret: -2, errmsg: "private raw response" }, code: "wechat_error", state: "retry" },
+    // A refused push waits for the user's next message instead of retrying every minute.
+    {
+      body: { ret: -2, errmsg: "private raw response" },
+      code: "wechat_error",
+      state: "waiting_context",
+    },
+    { body: { ret: 1, errmsg: "private raw response" }, code: "wechat_error", state: "retry" },
     {
       body: { ret: 0, errcode: -14, errmsg: "private raw response" },
       code: "wechat_expired",

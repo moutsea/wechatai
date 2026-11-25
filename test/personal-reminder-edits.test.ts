@@ -165,7 +165,7 @@ it.each([`${reminderTestDate}T08:00:00+08:00`, `${reminderTestDate}T00:00:00Z`])
     const ids: string[] = [];
     vi.mocked(fetch).mockImplementation(async (_, init) => {
       ids.push(JSON.parse(String(init?.body)).msg.client_id);
-      return Response.json({ ret: ids.length === 1 ? -2 : 0 });
+      return Response.json({ ret: ids.length === 1 ? 1 : 0 });
     });
     clock.mockReturnValue(at + 1000);
     await stub.dispatchPersonalReminders();

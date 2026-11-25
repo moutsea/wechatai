@@ -95,6 +95,11 @@ export type Connection = {
   error?: string;
   qrUrl?: string;
   qrExpires?: number;
+  /**
+   * Present when this link has scheduled reminders or notifications. WeChat
+   * delivers pushes only until `until`, 24 hours after the user's latest message.
+   */
+  pushWindow?: { until: number; blockedAt?: number };
 };
 export type WechatLink = Connection & {
   id: string;

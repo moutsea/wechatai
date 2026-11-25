@@ -562,6 +562,53 @@ describe("receive-only notification plugin", () => {
     expect(second).toBe(first);
     expect((await status(env.ACCOUNTS.get(stub.id), plugin.id)).deliveries[0].state).toBe("sent");
   });
+  it("slows retries of a push WeChat refuses and sends it as soon as the user writes again", async () => {
+    const { stub, plugin, token } = await setup();
+    await send(token);
+    // Built inside the account's call; a test-made body cannot cross objects.
+    vi.mocked(fetch).mockImplementationOnce(async () => Response.json({ ret: -2 }));
+    await stub.dispatchNotifications();
+    expect((await status(stub, plugin.id)).deliveries[0]).toMatchObject({
+      state: "pending",
+      error: expect.stringContaining("/wx help"),
+    });
+    const nextAt = () =>
+      runInDurableObject(
+        stub,
+        (_, state) =>
+          state.storage.sql.exec<{ nextAt: number }>("SELECT nextAt FROM notification_jobs").one()
+            .nextAt,
+      );
+    expect(await nextAt()).toBeGreaterThan(Date.now() + 25 * 60_000);
+    expect((await stub.snapshot()).connection.pushWindow?.blockedAt).toBeGreaterThan(0);
+    await runInDurableObject(stub, (instance, state) =>
+      (
+        instance as unknown as {
+          ingestWechat(...args: unknown[]): unknown;
+        }
+      ).ingestWechat(
+        "default",
+        "g1",
+        "",
+        {
+          msgs: [
+            {
+              message_id: 7,
+              message_type: 1,
+              from_user_id: state.id.toString(),
+              context_token: "fresh",
+              item_list: [{ type: 1, text_item: { text: "/wx help" } }],
+            },
+          ],
+        },
+        { userId: state.id.toString() },
+      ),
+    );
+    expect(await nextAt()).toBeLessThanOrEqual(Date.now());
+    expect((await stub.snapshot()).connection.pushWindow?.blockedAt).toBeUndefined();
+    await stub.dispatchNotifications();
+    expect((await status(stub, plugin.id)).deliveries[0].state).toBe("sent");
+  });
   it("does not resurrect cancelled messages from a delivery batch after token revocation", async () => {
     const { stub, plugin, token } = await setup();
     await send(token, { text: "first" });

@@ -73,6 +73,10 @@ export class WechatRequestError extends AppError {
     super(code, message, status, upstreamStatus);
   }
 }
+/** ret -2 on a push: WeChat refused it, usually because the reply window closed. */
+export function isWechatPushRefusal(error: unknown) {
+  return error instanceof WechatRequestError && (error.ret === -2 || error.errcode === -2);
+}
 export function validateWechatHost(value: string) {
   const u = new URL(value);
   if (

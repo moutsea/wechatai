@@ -539,6 +539,29 @@ export class PersonalRecordsStore {
     this.sql.exec("DELETE FROM personal_records WHERE pluginId=?", pluginId);
     this.sql.exec("DELETE FROM personal_record_state WHERE pluginId=?", pluginId);
   }
+  /** Earliest delivery this link must still receive after `after`, if any. */
+  nextDelivery(connectionId: string, generation: string, after: number) {
+    return this.sql
+      .exec<{ due: number | null }>(
+        "SELECT MIN(dueAt) due FROM personal_reminders WHERE connectionId=? AND generation=? AND state IN ('scheduled','retry','waiting_context') AND dueAt>?",
+        connectionId,
+        generation,
+        after,
+      )
+      .one().due;
+  }
+  /** A new message from the user reopens WeChat's reply window; retry held reminders now. */
+  wakeWaiting(connectionId: string) {
+    const woken = this.sql
+      .exec(
+        "UPDATE personal_reminders SET retryAt=? WHERE connectionId=? AND state='waiting_context' AND retryAt>? RETURNING id",
+        Date.now(),
+        connectionId,
+        Date.now(),
+      )
+      .toArray().length;
+    if (woken) this.changedSchedule();
+  }
   nextReminder() {
     return this.sql
       .exec<{ due: number | null }>(

@@ -64,6 +64,10 @@ export function notificationWechatSetupIssue(
   return null;
 }
 
+/** WeChat accepts bot pushes only for this long after the user's latest message. */
+export const WECHAT_REPLY_WINDOW_MS = 24 * 60 * 60 * 1000;
+/** When pushes are scheduled, the bot asks the user to reply this long after their message. */
+export const WECHAT_WINDOW_NUDGE_MS = 22 * 60 * 60 * 1000;
 export function notificationWechatIssue(
   connection: Pick<WechatLink, "status" | "paused" | "hasReplyContext" | "lastSeen"> | undefined,
   now = Date.now(),
@@ -72,7 +76,7 @@ export function notificationWechatIssue(
   if (setupIssue) return setupIssue;
   // A saved context proves initialization, but does not keep the reply window
   // open forever. Treat age as recovery guidance; WeChat decides delivery.
-  if (connection?.lastSeen !== undefined && now - connection.lastSeen >= 24 * 60 * 60 * 1000)
+  if (connection?.lastSeen !== undefined && now - connection.lastSeen >= WECHAT_REPLY_WINDOW_MS)
     return {
       code: "wechat_reply_window_expired",
       message:
