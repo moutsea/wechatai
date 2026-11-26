@@ -2913,15 +2913,18 @@ export class PersonalAccount extends DurableObject<Env> {
     kind: "reminder" | "notification" | "window",
   ) {
     const link = this.connection(connectionId);
-    // Shows how often WeChat refuses inside its reported 24-hour window.
+    const first = link.generation === generation && !link.pushBlockedAt;
+    // Shows how often WeChat refuses inside its reported 24-hour window. Held
+    // pushes are refused again on every retry; `first` counts each episode once.
     console.warn(
       JSON.stringify({
         event: "wechat.push_refused",
         kind,
+        first,
         sinceLastSeenMs: link.lastSeen === undefined ? null : Date.now() - link.lastSeen,
       }),
     );
-    if (link.generation !== generation || link.pushBlockedAt) return;
+    if (!first) return;
     this.setLinkSetting(connectionId, "connection", { ...link, pushBlockedAt: Date.now() });
   }
   // WeChat accepted a push again. A refusal recorded after this send started

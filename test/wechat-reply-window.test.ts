@@ -280,21 +280,35 @@ describe("WeChat reply window", () => {
     const warn = vi.spyOn(console, "warn");
     const { stub } = await setup("chat-completions", false);
     await connect(stub, { lastSeen: Date.now() - ago });
-    await (await notifier(stub)).send("告警");
+    const alerts = await notifier(stub);
+    await alerts.send("告警");
+    await alerts.send("告警 2");
     await stub.dispatchNotifications();
-    const { error } = await runInDurableObject(stub, (_, state) =>
-      state.storage.sql.exec<{ error: string }>("SELECT error FROM notification_jobs").one(),
+    const errors = await runInDurableObject(stub, (_, state) =>
+      state.storage.sql
+        .exec<{ error: string }>("SELECT error FROM notification_jobs")
+        .toArray()
+        .map((job) => job.error),
     );
-    expect(error).toContain(text);
-    expect(error).toContain("/wx help");
+    expect(errors).toHaveLength(2);
+    for (const error of errors) {
+      expect(error).toContain(text);
+      expect(error).toContain("/wx help");
+    }
     // Logged without identifiers, with the time since the user's last message.
     const refused = warn.mock.calls
       .map(([line]) => String(line))
       .filter((line) => line.includes('"wechat.push_refused"'))
       .map((line) => JSON.parse(line));
-    expect(refused).toEqual([
-      { event: "wechat.push_refused", kind: "notification", sinceLastSeenMs: expect.any(Number) },
-    ]);
+    // Both sends are refused; only the first starts a refusal episode.
+    expect(refused.map((entry) => entry.first)).toEqual([true, false]);
+    for (const entry of refused)
+      expect(entry).toEqual({
+        event: "wechat.push_refused",
+        kind: "notification",
+        first: expect.any(Boolean),
+        sinceLastSeenMs: expect.any(Number),
+      });
     expect(Math.abs(refused[0].sinceLastSeenMs - ago)).toBeLessThan(60_000);
   });
 });
