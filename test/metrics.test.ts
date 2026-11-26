@@ -199,7 +199,7 @@ describe("metrics credentials", () => {
     expect(allConsoleText()).not.toContain(token);
   });
 
-  it.each(["/api/metrics/health", "/api/metrics/revenue"])(
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
     "fails closed when the credential is missing, short or mismatched (%s)",
     async (path) => {
       for (const configured of [undefined, "", "   ", "short", "x".repeat(31)]) {
@@ -226,7 +226,7 @@ describe("metrics credentials", () => {
     },
   );
 
-  it.each(["/api/metrics/health", "/api/metrics/revenue"])(
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
     "does not let an invalid credential consume the shared token quota (%s)",
     async (path) => {
       const limiter = fakeLimiter();
@@ -258,7 +258,7 @@ describe("metrics credentials", () => {
 });
 
 describe("metrics routing boundary", () => {
-  it.each(["/api/metrics/health", "/api/metrics/revenue"])(
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
     "rejects non-GET methods only after authentication (%s)",
     async (path) => {
       for (const method of ["HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]) {
@@ -284,7 +284,7 @@ describe("metrics routing boundary", () => {
     expect(limiter.calls).toEqual([]);
   });
 
-  it.each(["/api/metrics/health", "/api/metrics/revenue"])(
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
     "handles the prefix before the general API body limit (%s)",
     async (path) => {
       const response = await call(bindings(), path, {
@@ -304,6 +304,8 @@ describe("metrics routing boundary", () => {
       "/api/metrics/health/extra",
       "/api/metrics/revenue/extra",
       "/api/metrics/revenue/",
+      "/api/metrics/traffic/extra",
+      "/api/metrics/traffic/",
       "/api/metrics/health%2f..%2fadmin",
     ]) {
       const response = await call(bindings(), path, { headers: bearer() });
@@ -345,60 +347,58 @@ describe("metrics browser session isolation", () => {
     "/api/metrics/health",
     "/api/metrics/revenue",
     "/api/metrics/retention",
+    "/api/metrics/traffic",
     "/api/metrics/overview",
-  ])(
-    "rejects ordinary, admin and Plus cookies without a bearer (%s)",
-    async (path) => {
-      const ordinary = await signUp();
-      const admin = await signUp();
-      const plus = await signUp();
-      await env.DB.prepare("INSERT INTO admin_user(user_id,created_at) VALUES (?,?)")
-        .bind(admin.id, Date.now())
-        .run();
-      await env.ACCOUNTS.getByName(plus.id).applyPayment({
-        id: "test-only-metrics-membership",
-        kind: "membership",
-        months: 1,
-      });
-      const dashboard = await worker.fetch(
-        new Request(`${env.APP_URL}/api/dashboard`, { headers: { cookie: plus.cookie } }),
-        env,
-        createExecutionContext(),
-      );
-      expect(dashboard.status).toBe(200);
-      expect(await dashboard.json()).toMatchObject({ plan: "plus" });
+  ])("rejects ordinary, admin and Plus cookies without a bearer (%s)", async (path) => {
+    const ordinary = await signUp();
+    const admin = await signUp();
+    const plus = await signUp();
+    await env.DB.prepare("INSERT INTO admin_user(user_id,created_at) VALUES (?,?)")
+      .bind(admin.id, Date.now())
+      .run();
+    await env.ACCOUNTS.getByName(plus.id).applyPayment({
+      id: "test-only-metrics-membership",
+      kind: "membership",
+      months: 1,
+    });
+    const dashboard = await worker.fetch(
+      new Request(`${env.APP_URL}/api/dashboard`, { headers: { cookie: plus.cookie } }),
+      env,
+      createExecutionContext(),
+    );
+    expect(dashboard.status).toBe(200);
+    expect(await dashboard.json()).toMatchObject({ plan: "plus" });
 
-      const limiter = fakeLimiter();
-      for (const cookie of [ordinary.cookie, admin.cookie, plus.cookie]) {
-        expect(
-          (
-            await call(bindings({ API_LIMIT: limiter.binding }), path, {
-              headers: { cookie },
-            })
-          ).status,
-        ).toBe(401);
-        expect(
-          (
-            await call(bindings({ API_LIMIT: limiter.binding }), path, {
-              headers: { cookie, ...bearer(otherToken) },
-            })
-          ).status,
-        ).toBe(401);
-      }
+    const limiter = fakeLimiter();
+    for (const cookie of [ordinary.cookie, admin.cookie, plus.cookie]) {
+      expect(
+        (
+          await call(bindings({ API_LIMIT: limiter.binding }), path, {
+            headers: { cookie },
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        (
+          await call(bindings({ API_LIMIT: limiter.binding }), path, {
+            headers: { cookie, ...bearer(otherToken) },
+          })
+        ).status,
+      ).toBe(401);
+    }
 
-      const access = await worker.fetch(
-        new Request(`${env.APP_URL}/api/admin/access`, { headers: { cookie: admin.cookie } }),
-        env,
-        createExecutionContext(),
-      );
-      expect(access.status).toBe(200);
-      expect(await access.json()).toEqual({ isAdmin: true });
-    },
-  );
+    const access = await worker.fetch(
+      new Request(`${env.APP_URL}/api/admin/access`, { headers: { cookie: admin.cookie } }),
+      env,
+      createExecutionContext(),
+    );
+    expect(access.status).toBe(200);
+    expect(await access.json()).toEqual({ isAdmin: true });
+  });
 });
 
 describe("metrics rate limits and audit", () => {
-  it.each(["/api/metrics/health", "/api/metrics/revenue"])(
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
     "limits by trusted client IP before authenticating (%s)",
     async (path) => {
       const limiter = fakeLimiter((key) => (key.startsWith("metrics:ip:") ? "limited" : "ok"));
@@ -412,7 +412,7 @@ describe("metrics rate limits and audit", () => {
     },
   );
 
-  it.each(["/api/metrics/health", "/api/metrics/revenue"])(
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
     "limits the shared credential only after a valid bearer (%s)",
     async (path) => {
       const limiter = fakeLimiter((key) => (key === "metrics:token:shared" ? "limited" : "ok"));
@@ -426,7 +426,7 @@ describe("metrics rate limits and audit", () => {
     },
   );
 
-  it.each(["/api/metrics/health", "/api/metrics/revenue"])(
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
     "fails closed when the limiter binding is missing or throws (%s)",
     async (path) => {
       const { API_LIMIT: _missing, ...withoutLimiter } = bindings();
