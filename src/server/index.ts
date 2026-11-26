@@ -1108,7 +1108,15 @@ app.post(
   "/api/wechat/links/:id/rebind",
   invoke("wechat.bind", (c) => ({ id: c.req.param("id"), regenerate: true })),
 );
+app.post(
+  "/api/wechat/links/:id/verify",
+  invoke("wechat.verify", async (c) => ({ ...(await c.req.json()), id: c.req.param("id") })),
+);
 app.post("/api/wechat/bind", invoke("wechat.bind"));
+app.post(
+  "/api/wechat/verify",
+  invoke("wechat.verify", (c) => c.req.json()),
+);
 app.post("/api/wechat/disconnect", invoke("wechat.disconnect"));
 app.get("/api/billing/catalog", async (c) => c.json(await catalog(c.env)));
 app.post("/api/billing/checkout", async (c) => {

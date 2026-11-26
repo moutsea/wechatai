@@ -1,5 +1,5 @@
 import { ConnectionPrivacy } from "../connection-privacy";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -30,6 +30,58 @@ import { isCloudAgent } from "../../shared/cloud-agent";
 import { isChatModel } from "../../shared/model-compatibility";
 import type { Connection } from "../../shared/types";
 import { remoteAgentName } from "../../shared/remote-agent";
+// WeChat may show digits on the phone after the scan; the bind finishes once they match.
+function VerifyCodeForm({
+  state,
+  onSubmit,
+}: {
+  state: "required" | "checking" | "rejected";
+  onSubmit: (code: string) => Promise<void>;
+}) {
+  const [code, setCode] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setSending(true);
+    setError("");
+    try {
+      await onSubmit(code);
+      setCode("");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSending(false);
+    }
+  };
+  const checking = state === "checking" || sending;
+  return (
+    <form className="wechat-verify" onSubmit={(e) => void submit(e)}>
+      <Smartphone size={40} strokeWidth={1.2} />
+      <strong>输入手机微信上显示的数字</strong>
+      <p>扫码后手机微信会显示一串数字，在这里输入后即可完成连接。</p>
+      <input
+        aria-label="手机微信上显示的数字"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9 ]*"
+        maxLength={16}
+        required
+        value={code}
+        disabled={checking}
+        onChange={(e) => setCode(e.target.value)}
+      />
+      <button className="button" disabled={checking || !code.trim()}>
+        {checking ? "正在验证…" : "提交"}
+      </button>
+      {(error || state === "rejected") && (
+        <div className="form-error" role="alert">
+          {error || "数字不匹配，请对照手机微信重新输入。"}
+        </div>
+      )}
+    </form>
+  );
+}
 // WeChat delivers bot pushes only for 24 hours after the user's latest message.
 function PushWindowNote({ push }: { push: NonNullable<Connection["pushWindow"]> }) {
   const closed = push.until <= Date.now();
@@ -258,7 +310,9 @@ export function Wechat() {
                 : connected
                   ? "已连接"
                   : waiting
-                    ? "等待扫码确认"
+                    ? connection.verifyState
+                      ? "等待输入数字"
+                      : "等待扫码确认"
                     : connection.status === "expired"
                       ? "连接已过期"
                       : "尚未连接"}
@@ -288,7 +342,19 @@ export function Wechat() {
           )}
           {!connected && !paused && (
             <div className="qr-area">
-              {waiting && connection.qrUrl ? (
+              {waiting && connection.verifyState ? (
+                <VerifyCodeForm
+                  state={connection.verifyState}
+                  onSubmit={(code) =>
+                    request(
+                      selected
+                        ? `/wechat/links/${data.selectedConnectionId}/verify`
+                        : "/wechat/verify",
+                      json({ code }),
+                    ).then(() => refresh())
+                  }
+                />
+              ) : waiting && connection.qrUrl ? (
                 <>
                   <QRCodeSVG value={connection.qrUrl} size={192} marginSize={3} fgColor="#294c3d" />
                   <span>
