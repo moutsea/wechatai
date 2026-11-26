@@ -80,7 +80,10 @@ const downgrade = (stub: Account) =>
 const held = (stub: Account) =>
   runInDurableObject(stub, (_, state) => ({
     reminders: state.storage.sql
-      .exec("SELECT 1 FROM personal_reminders WHERE state='waiting_context' AND retryAt>?", Date.now())
+      .exec(
+        "SELECT 1 FROM personal_reminders WHERE state='waiting_context' AND retryAt>?",
+        Date.now(),
+      )
       .toArray().length,
     notifications: state.storage.sql
       .exec("SELECT 1 FROM notification_jobs WHERE state='pending' AND nextAt>?", Date.now())
@@ -274,6 +277,7 @@ describe("WeChat reply window", () => {
     ["inside the window", 2 * hour, "推送条数已到上限"],
   ])("explains a notification refused %s", async (_, ago, text) => {
     wechat(() => Response.json({ ret: -2 }));
+    const warn = vi.spyOn(console, "warn");
     const { stub } = await setup("chat-completions", false);
     await connect(stub, { lastSeen: Date.now() - ago });
     await (await notifier(stub)).send("告警");
@@ -283,5 +287,14 @@ describe("WeChat reply window", () => {
     );
     expect(error).toContain(text);
     expect(error).toContain("/wx help");
+    // Logged without identifiers, with the time since the user's last message.
+    const refused = warn.mock.calls
+      .map(([line]) => String(line))
+      .filter((line) => line.includes('"wechat.push_refused"'))
+      .map((line) => JSON.parse(line));
+    expect(refused).toEqual([
+      { event: "wechat.push_refused", kind: "notification", sinceLastSeenMs: expect.any(Number) },
+    ]);
+    expect(Math.abs(refused[0].sinceLastSeenMs - ago)).toBeLessThan(60_000);
   });
 });

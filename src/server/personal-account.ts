@@ -2907,8 +2907,20 @@ export class PersonalAccount extends DurableObject<Env> {
       if (this.notificationDelivery === delivery) this.notificationDelivery = null;
     }
   }
-  private markPushBlocked(connectionId: string, generation: string) {
+  private markPushBlocked(
+    connectionId: string,
+    generation: string,
+    kind: "reminder" | "notification" | "window",
+  ) {
     const link = this.connection(connectionId);
+    // Shows how often WeChat refuses inside its reported 24-hour window.
+    console.warn(
+      JSON.stringify({
+        event: "wechat.push_refused",
+        kind,
+        sinceLastSeenMs: link.lastSeen === undefined ? null : Date.now() - link.lastSeen,
+      }),
+    );
     if (link.generation !== generation || link.pushBlockedAt) return;
     this.setLinkSetting(connectionId, "connection", { ...link, pushBlockedAt: Date.now() });
   }
@@ -3006,7 +3018,7 @@ export class PersonalAccount extends DurableObject<Env> {
         this.markPushDelivered(id, link.generation, startedAt);
         console.info(JSON.stringify({ event: "wechat.window_nudge_sent" }));
       } catch (error) {
-        if (isWechatPushRefusal(error)) this.markPushBlocked(id, link.generation);
+        if (isWechatPushRefusal(error)) this.markPushBlocked(id, link.generation, "window");
         console.warn(
           JSON.stringify({
             event: "wechat.window_nudge_failed",
@@ -3073,7 +3085,7 @@ export class PersonalAccount extends DurableObject<Env> {
       } catch (error) {
         // Retried sends reuse client_id. Never log the token, message or recipient.
         if (isWechatPushRefusal(error)) {
-          this.markPushBlocked(job.connectionId, job.generation);
+          this.markPushBlocked(job.connectionId, job.generation, "notification");
           this.notifications.retry(
             job.id,
             pushRefusedMessage(this.connection(job.connectionId).lastSeen),
@@ -3327,7 +3339,7 @@ export class PersonalAccount extends DurableObject<Env> {
         // Retrying a refused push every minute cannot succeed before the user
         // writes again, which wakes it, and repeated refusals risk rate limits.
         const refused = isWechatPushRefusal(error);
-        if (refused) this.markPushBlocked(reminder.connectionId, reminder.generation);
+        if (refused) this.markPushBlocked(reminder.connectionId, reminder.generation, "reminder");
         this.personalRecords.fail(
           reminder,
           failure.code === "wechat_expired" ? "paused" : refused ? "waiting_context" : "retry",
