@@ -188,12 +188,12 @@ describe("daily digest expiry independent of delivery prerequisites", () => {
         (await save(stub, plugin.id, { kind: "task", title: "昨天的任务", date: beijingDate(at) }))
           .ok,
       ).toBe(true);
-      vi.mocked(fetch).mockImplementation(async () => Response.json({ ret: -2 }));
+      vi.mocked(fetch).mockImplementation(async () => Response.json({ ret: 1 }));
       clock.mockReturnValue(at + 1000);
       await runDurableObjectAlarm(scheduler(stub));
       const failure = (await list(stub, plugin.id, { kind: "reminder" })).data.records[0]
         .reminderLastFailure;
-      expect(failure).toMatchObject({ ret: -2, dueAt: at });
+      expect(failure).toMatchObject({ ret: 1, dueAt: at });
       if (condition === "plugin")
         expect((await api(stub, "plugin.save", { ...plugin, enabled: false })).ok).toBe(true);
       else

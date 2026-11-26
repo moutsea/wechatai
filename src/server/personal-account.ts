@@ -211,6 +211,7 @@ import { invokeImageGeneration } from "./plugins/image-generation";
 import { pluginNotificationText } from "./plugins/notifications";
 import { assetDownload, missingAsset, validAssetId } from "./asset-download";
 import { MediaStore, MEDIA_TTL_MS, type OutputAsset } from "./media";
+import { WECHAT_REPLY_WINDOW_MS, WECHAT_WINDOW_NUDGE_MS } from "../shared/wechat-readiness";
 import {
   imageGenerationInputSchema,
   type ImageGenerationPlugin,
@@ -239,7 +240,9 @@ import { REFERRAL_CREDITS } from "../shared/referrals";
 import { qualifyReferral, wechatIdentityHash } from "./referrals";
 import {
   extractText,
+  isWechatPushRefusal,
   orderedWechatMessages,
+  wechatVerifyStep,
   sendUploadedWechatFile,
   sendText,
   WechatRequestError,
@@ -320,6 +323,15 @@ type Link = Connection & {
   blockedContextId?: string;
   lastPoll?: number;
   pollBaseUrl?: string;
+  /** Digits from the phone, sent with each QR status poll until WeChat accepts them. */
+  verifyCode?: string;
+  /**
+   * WeChat refused a reminder or notification push. Cleared by the user's next
+   * message or by a later push WeChat accepts.
+   */
+  pushBlockedAt?: number;
+  /** The reply-window reminder for the window opened by the message at `for`. */
+  windowNudge?: { for: number; retryAt: number; sent?: boolean };
 };
 // Server-created metadata for remote replies awaiting their first send attempt.
 // Once prepared, the final delivery text replaces this metadata so retries and
@@ -329,6 +341,33 @@ type RemoteReplySource = { pluginId: string; proactive: boolean; grokName?: stri
 // register its Routine Webhook. Consumed by the first successful registration.
 const grokSetupKey = (pluginId: string) => `grokSetup:${pluginId}`;
 const grokRegisteredKey = (pluginId: string) => `grokRegistered:${pluginId}`;
+function windowNudgeText(need: { nextReminderAt: number | null; notifications: boolean }) {
+  const what =
+    need.nextReminderAt !== null && need.notifications
+      ? "提醒和通知"
+      : need.nextReminderAt !== null
+        ? "提醒"
+        : "通知";
+  return `⏳ 微信只允许在你最近一次发消息后的 24 小时内向你推送。你快 24 小时没在这里发消息了，之后的${what}可能收不到。\n\n发送 /wx help 即可继续接收，不消耗 credits。${
+    need.nextReminderAt !== null
+      ? `\n\n下一条提醒：${beijingTime(need.nextReminderAt)}（北京时间）`
+      : ""
+  }`;
+}
+// A refused push is retried slowly; the user's next message retries a few at once.
+const PUSH_REFUSED_RETRY_MS = 30 * 60_000;
+// WeChat reportedly accepts about ten pushes per user message. Release only a
+// few held pushes per message so the reply to that message still gets through.
+const HELD_PUSH_WAKE_LIMIT = 3;
+// Inside the reply window, a refusal more likely means WeChat's reported cap on
+// pushes per user message.
+function pushRefusedMessage(lastSeen: number | undefined) {
+  return `微信暂不允许推送，${
+    lastSeen !== undefined && Date.now() - lastSeen < WECHAT_REPLY_WINDOW_MS
+      ? "可能是接收微信最近一条消息之后的推送条数已到上限"
+      : "通常是因为接收微信超过 24 小时没有发消息"
+  }。在微信发送 /wx help 后会继续投递（不消耗 credits）。`;
+}
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -884,7 +923,18 @@ export class PersonalAccount extends DurableObject<Env> {
             connectionId,
           );
       }
-      if (received) this.membershipReminders.wake();
+      if (received) {
+        this.membershipReminders.wake();
+        // The user's message reopened WeChat's reply window. Send a few held
+        // pushes now; the rest keep their slow retry.
+        const live = this.livePushPlugins(connectionId);
+        const woken = this.personalRecords.wakeWaiting(
+          connectionId,
+          live.reminders,
+          HELD_PUSH_WAKE_LIMIT,
+        );
+        this.notifications.wake(connectionId, live.notifications, HELD_PUSH_WAKE_LIMIT - woken);
+      }
       // A fallback poll or a lost acknowledgement may race this batch. Merge
       // messages, but never overwrite a cursor advanced by another receiver.
       const cursor =
@@ -899,6 +949,7 @@ export class PersonalAccount extends DurableObject<Env> {
         contextToken: token,
         lastPoll: Date.now(),
         lastSeen: received ? Date.now() : link.lastSeen,
+        pushBlockedAt: received ? undefined : link.pushBlockedAt,
         error: this.sql
           .exec(
             "SELECT 1 FROM inbox WHERE connectionId=? AND state='waiting_context' AND id GLOB 'cloud:*' LIMIT 1",
@@ -2559,6 +2610,8 @@ export class PersonalAccount extends DurableObject<Env> {
       error: savedError,
       qrUrl,
       qrExpires,
+      verifyState,
+      pushBlockedAt,
     } = this.connection(id);
     // Recovery guidance describes the current queue, not a connection fault.
     // Validate cached hints too, so every cancellation path and restart agrees.
@@ -2574,7 +2627,25 @@ export class PersonalAccount extends DurableObject<Env> {
         .toArray().length
     )
       error = CLOUD_REPLY_WAITING_MESSAGE;
-    return { status, botId, hasReplyContext: !!contextToken, lastSeen, error, qrUrl, qrExpires };
+    const need = this.pushWindowNeed(id, this.connection(id));
+    return {
+      status,
+      botId,
+      hasReplyContext: !!contextToken,
+      lastSeen,
+      error,
+      qrUrl,
+      qrExpires,
+      ...(verifyState && (status === "waiting" || status === "scanned") ? { verifyState } : {}),
+      ...(need || (pushBlockedAt && status === "connected")
+        ? {
+            pushWindow: {
+              until: (lastSeen ?? 0) + WECHAT_REPLY_WINDOW_MS,
+              ...(pushBlockedAt ? { blockedAt: pushBlockedAt } : {}),
+            },
+          }
+        : {}),
+    };
   }
   private createLink(name: unknown) {
     if (typeof name !== "string" || !name.trim() || name.trim().length > 40)
@@ -2841,6 +2912,132 @@ export class PersonalAccount extends DurableObject<Env> {
       if (this.notificationDelivery === delivery) this.notificationDelivery = null;
     }
   }
+  private markPushBlocked(
+    connectionId: string,
+    generation: string,
+    kind: "reminder" | "notification" | "window",
+  ) {
+    const link = this.connection(connectionId);
+    const first = link.generation === generation && !link.pushBlockedAt;
+    // Shows how often WeChat refuses inside its reported 24-hour window. Held
+    // pushes are refused again on every retry; `first` counts each episode once.
+    console.warn(
+      JSON.stringify({
+        event: "wechat.push_refused",
+        kind,
+        first,
+        sinceLastSeenMs: link.lastSeen === undefined ? null : Date.now() - link.lastSeen,
+      }),
+    );
+    if (!first) return;
+    this.setLinkSetting(connectionId, "connection", { ...link, pushBlockedAt: Date.now() });
+  }
+  // WeChat accepted a push again. A refusal recorded after this send started
+  // may be newer evidence, so only an older one is cleared.
+  private markPushDelivered(connectionId: string, generation: string, startedAt: number) {
+    const link = this.connection(connectionId);
+    if (link.generation !== generation || !link.pushBlockedAt || link.pushBlockedAt > startedAt)
+      return;
+    this.setLinkSetting(connectionId, "connection", { ...link, pushBlockedAt: undefined });
+  }
+  // Plugins whose scheduled pushes to this link would be sent, matching the
+  // plugin checks made at delivery time.
+  private livePushPlugins(connectionId: string) {
+    const live = { reminders: [] as string[], notifications: [] as string[] };
+    for (const p of this.plugins()) {
+      if (!p.enabled || !this.pluginAvailable(p.id)) continue;
+      if (p.pluginId === "wechatai/personal-assistant") live.reminders.push(p.id);
+      else if (
+        p.pluginId === "wechatai/notification" &&
+        p.connectionId === connectionId &&
+        this.notifications.hasToken(p.id)
+      )
+        live.notifications.push(p.id);
+    }
+    return live;
+  }
+  // Scheduled pushes that need WeChat's reply window to outlast the current one.
+  private pushWindowNeed(connectionId: string, link: Link) {
+    if (link.status !== "connected" || !link.contextToken || link.lastSeen === undefined)
+      return null;
+    const until = link.lastSeen + WECHAT_REPLY_WINDOW_MS;
+    const live = this.livePushPlugins(connectionId);
+    const nextReminderAt = this.personalRecords.nextDelivery(
+      connectionId,
+      link.generation,
+      until,
+      live.reminders,
+    );
+    const notifications = live.notifications.length > 0;
+    return nextReminderAt !== null || notifications
+      ? { until, nextReminderAt, notifications }
+      : null;
+  }
+  private windowNudgeAt(connectionId: string, link: Link) {
+    const need = this.pushWindowNeed(connectionId, link);
+    if (
+      !need ||
+      link.pushBlockedAt ||
+      !link.encryptedCredentials ||
+      !this.linkEnabled(connectionId)
+    )
+      return null;
+    const nudge = link.windowNudge?.for === link.lastSeen ? link.windowNudge : undefined;
+    const at = Math.max(
+      need.until - WECHAT_REPLY_WINDOW_MS + WECHAT_WINDOW_NUDGE_MS,
+      nudge?.retryAt ?? 0,
+    );
+    // Once the window has closed, WeChat would refuse the reminder too.
+    return nudge?.sent || at >= need.until || Date.now() >= need.until ? null : { at, need };
+  }
+  // Before the window closes, ask once for a reply so scheduled pushes still arrive.
+  private async deliverWindowNudges() {
+    for (const { id } of this.receivingLinks()) {
+      const link = this.connection(id);
+      const due = this.windowNudgeAt(id, link);
+      if (!due || Date.now() < due.at) continue;
+      const opened = link.lastSeen!;
+      // A lease: a failed send is retried later, never in a tight loop.
+      const lease = { for: opened, retryAt: Date.now() + 5 * 60_000 };
+      this.setLinkSetting(id, "connection", { ...link, windowNudge: lease });
+      try {
+        const credentials = await this.deliveryCredentials(link.encryptedCredentials!);
+        const current = this.connection(id);
+        if (
+          current.generation !== link.generation ||
+          current.lastSeen !== opened ||
+          !current.contextToken
+        )
+          continue;
+        const startedAt = Date.now();
+        await sendText(
+          credentials,
+          current.contextToken,
+          `window:${id}:${opened}`,
+          windowNudgeText(due.need),
+          5000,
+        );
+        const latest = this.connection(id);
+        if (latest.generation === link.generation)
+          this.setLinkSetting(id, "connection", {
+            ...latest,
+            windowNudge: { ...lease, sent: true },
+          });
+        this.markPushDelivered(id, link.generation, startedAt);
+        console.info(JSON.stringify({ event: "wechat.window_nudge_sent" }));
+      } catch (error) {
+        if (isWechatPushRefusal(error)) this.markPushBlocked(id, link.generation, "window");
+        console.warn(
+          JSON.stringify({
+            event: "wechat.window_nudge_failed",
+            code: error instanceof AppError ? error.code : "window_nudge_error",
+            ret: error instanceof WechatRequestError ? (error.ret ?? null) : null,
+            errcode: error instanceof WechatRequestError ? (error.errcode ?? null) : null,
+          }),
+        );
+      }
+    }
+  }
   private async deliverNotifications() {
     for (const job of this.notifications.due()) {
       if (Date.now() - job.createdAt >= 86400000) {
@@ -2889,15 +3086,25 @@ export class PersonalAccount extends DurableObject<Env> {
         )
           continue;
         const text = `消息来自 ${latest.name.replace(/\s+/g, " ")}（消息提醒插件）。\n\n──────────\n\n${job.title ? `${job.title}\n\n` : ""}${job.text}`;
+        const startedAt = Date.now();
         await sendText(credentials, target.contextToken!, `notify:${job.id}`, text, 5000);
         this.notifications.finish(job.id, "sent");
+        this.markPushDelivered(job.connectionId, job.generation, startedAt);
       } catch (error) {
         // Retried sends reuse client_id. Never log the token, message or recipient.
-        this.notifications.retry(
-          job.id,
-          error instanceof AppError ? error.message : "微信发送暂未成功，正在重试",
-          Math.min(300000, 5000 * 2 ** Math.min(job.attempts, 6)),
-        );
+        if (isWechatPushRefusal(error)) {
+          this.markPushBlocked(job.connectionId, job.generation, "notification");
+          this.notifications.retry(
+            job.id,
+            pushRefusedMessage(this.connection(job.connectionId).lastSeen),
+            PUSH_REFUSED_RETRY_MS,
+          );
+        } else
+          this.notifications.retry(
+            job.id,
+            error instanceof AppError ? error.message : "微信发送暂未成功，正在重试",
+            Math.min(300000, 5000 * 2 ** Math.min(job.attempts, 6)),
+          );
       }
     }
   }
@@ -3096,6 +3303,7 @@ export class PersonalAccount extends DurableObject<Env> {
         }
         const text = pluginNotificationText(personalAssistantManifest, latest.plugin, reminderText);
         attempts = this.personalRecords.startAttempt(reminder);
+        const startedAt = Date.now();
         await sendText(
           credentials,
           latest.link.contextToken!,
@@ -3104,6 +3312,7 @@ export class PersonalAccount extends DurableObject<Env> {
           5000,
         );
         this.personalRecords.finish(reminder);
+        this.markPushDelivered(reminder.connectionId, reminder.generation, startedAt);
         console.info(
           JSON.stringify({
             event: "personal.reminder_delivered",
@@ -3135,11 +3344,17 @@ export class PersonalAccount extends DurableObject<Env> {
             errcode: failure.errcode,
           }),
         );
+        // Retrying a refused push every minute cannot succeed before the user
+        // writes again, which wakes it, and repeated refusals risk rate limits.
+        const refused = isWechatPushRefusal(error);
+        if (refused) this.markPushBlocked(reminder.connectionId, reminder.generation, "reminder");
         this.personalRecords.fail(
           reminder,
-          failure.code === "wechat_expired" ? "paused" : "retry",
+          failure.code === "wechat_expired" ? "paused" : refused ? "waiting_context" : "retry",
           failure,
-          Math.min(60000, 5000 * 2 ** Math.min(4, Math.max(0, attempts - 1))),
+          refused
+            ? PUSH_REFUSED_RETRY_MS
+            : Math.min(60000, 5000 * 2 ** Math.min(4, Math.max(0, attempts - 1))),
         );
       }
     }
@@ -3196,7 +3411,16 @@ export class PersonalAccount extends DurableObject<Env> {
         )
         .toArray()
         .some((row) => activeIds.has(row.connectionId));
-      if (hasPending || !receivingExternally || links.some((l) => l.status !== "connected"))
+      // A link waiting for the phone's digits is not polled until they arrive,
+      // so it only needs a wakeup when its QR code expires.
+      const awaitingDigits = (l: Link) => l.status !== "connected" && l.verifyState && !l.verifyCode;
+      for (const l of links) if (awaitingDigits(l)) wakeups.push(l.qrExpires ?? Date.now() + 1000);
+      const polled = links.filter((l) => !awaitingDigits(l));
+      if (
+        hasPending ||
+        (!receivingExternally && polled.length) ||
+        polled.some((l) => l.status !== "connected")
+      )
         wakeups.push(Date.now() + (links.every((l) => l.error) ? 15000 : hasPending ? 100 : 1000));
       if (receivingExternally) {
         wakeups.push(this.receiver.checkAt(receivingExternally));
@@ -3208,6 +3432,10 @@ export class PersonalAccount extends DurableObject<Env> {
             wakeups.push(Math.max(Date.now() + 100, guide.retryAt));
         }
       }
+    }
+    for (const { id } of this.receivingLinks()) {
+      const nudge = this.windowNudgeAt(id, this.connection(id));
+      if (nudge) wakeups.push(Math.max(Date.now() + 100, nudge.at));
     }
     if (this.referralPending()) wakeups.push(Date.now() + 60000);
     if (wakeups.length)
@@ -3865,6 +4093,11 @@ export class PersonalAccount extends DurableObject<Env> {
         data = await this.bind(
           typeof p.id === "string" ? p.id : this.selectedLink(),
           p.regenerate === true,
+        );
+      else if (action === "wechat.verify")
+        data = await this.submitVerifyCode(
+          typeof p.id === "string" ? p.id : this.selectedLink(),
+          p.code,
         );
       else if (action === "wechat.create") {
         this.createLink(p.name);
@@ -5176,6 +5409,36 @@ export class PersonalAccount extends DurableObject<Env> {
     return this.snapshot();
   }
 
+  // WeChat may show digits on the phone after the scan and wait for them before confirming.
+  private async submitVerifyCode(connectionId: string, raw: unknown) {
+    this.requireLink(connectionId, true);
+    const code = typeof raw === "string" ? raw.replace(/\s+/g, "") : "";
+    if (!/^\d{1,12}$/.test(code))
+      throw new AppError("invalid_verify_code", "请输入手机微信上显示的数字", 400);
+    const link = this.connection(connectionId);
+    if (
+      !(link.status === "waiting" || link.status === "scanned") ||
+      !link.verifyState ||
+      (link.qrExpires ?? 0) <= Date.now()
+    )
+      throw new AppError(
+        "verify_not_needed",
+        "当前不需要输入数字。请刷新页面查看连接状态，二维码过期时重新获取。",
+        409,
+      );
+    this.setLinkSetting(connectionId, "connection", {
+      ...link,
+      verifyCode: code,
+      verifyState: "checking",
+    });
+    // Restart the open long poll so the digits go out now.
+    this.wakeWechat();
+    const wake = Date.now() + 1000;
+    const alarm = await this.ctx.storage.getAlarm();
+    if (alarm === null || alarm > wake) await this.ctx.storage.setAlarm(wake);
+    return this.snapshot();
+  }
+
   private reserveQrRequest(connectionId: string) {
     const now = Date.now();
     const recent = this.getSetting<{ id: string; at: number }[]>("wechatQrRequests", []).filter(
@@ -5977,6 +6240,7 @@ export class PersonalAccount extends DurableObject<Env> {
       await this.refreshCloudAccess();
       await this.flushReminderSchedule();
       await this.flushNotificationSchedule();
+      await this.deliverWindowNudges();
       await this.grok.dispatchDue();
       if (this.referralPending()) await this.retryReferral();
       // Recover AGT before idle WeChat long polls can consume this pass's budget.
@@ -6061,6 +6325,9 @@ export class PersonalAccount extends DurableObject<Env> {
             });
           return;
         }
+        // Like Tencent's client, stop asking WeChat while it waits for the
+        // phone's digits. Submitting them wakes the alarm for the next poll.
+        if (link.verifyState && !link.verifyCode) return;
         const result = await this.pollWechatRequest<{
           status: string;
           bot_token?: string;
@@ -6069,17 +6336,28 @@ export class PersonalAccount extends DurableObject<Env> {
           baseurl?: string;
           redirect_host?: string;
         }>(
-          `get_qrcode_status?qrcode=${encodeURIComponent(link.qrCode)}`,
+          // The digits from the phone ride along on this poll until WeChat accepts them.
+          `get_qrcode_status?qrcode=${encodeURIComponent(link.qrCode)}${
+            link.verifyCode ? `&verify_code=${encodeURIComponent(link.verifyCode)}` : ""
+          }`,
           undefined,
           undefined,
           link.pollBaseUrl,
         );
         if (!result) return;
-        if (
-          this.connection(connectionId).generation !== link.generation ||
-          !this.linkEnabled(connectionId)
-        )
+        // Digits can be submitted while this long poll is open; never drop them.
+        const current = this.connection(connectionId);
+        if (current.generation !== link.generation || !this.linkEnabled(connectionId)) return;
+        const verify = wechatVerifyStep(
+          result.status,
+          link.verifyCode,
+          current.verifyCode,
+          current.verifyState,
+        );
+        if (verify) {
+          this.setLinkSetting(connectionId, "connection", { ...current, ...verify });
           return;
+        }
         if (
           result.status === "confirmed" &&
           result.bot_token &&
@@ -6143,19 +6421,25 @@ export class PersonalAccount extends DurableObject<Env> {
           });
         } else if (result.status === "scaned_but_redirect" && result.redirect_host) {
           this.setLinkSetting(connectionId, "connection", {
-            ...link,
+            ...current,
             status: "scanned",
             pollBaseUrl: validateWechatHost(`https://${result.redirect_host}`),
           });
         } else {
+          const scanned = result.status === "scaned" || result.status === "scanned";
           this.setLinkSetting(connectionId, "connection", {
-            ...link,
+            ...current,
             status:
               result.status === "expired"
                 ? "expired"
-                : result.status === "scaned" || result.status === "scanned"
+                : scanned || current.verifyState
                   ? "scanned"
                   : "waiting",
+            // "scaned" in reply to digits means WeChat accepted them. Without
+            // digits it says nothing about the ones WeChat is waiting for.
+            ...((scanned && link.verifyCode) || result.status === "expired"
+              ? { verifyCode: undefined, verifyState: undefined }
+              : {}),
           });
         }
       } else {
