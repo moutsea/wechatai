@@ -177,11 +177,13 @@ async function wechatResponse<T>(
  * Returns the link fields for a PIN-related QR status, or null for other statuses.
  * `sent` is the code this poll carried; `pending` is the one stored now, which
  * may be newer when the user submitted digits while the long poll was open.
+ * `state` is the stored prompt, kept when a poll without digits asks again.
  */
 export function wechatVerifyStep(
   status: string,
   sent: string | undefined,
   pending: string | undefined,
+  state?: "required" | "checking" | "rejected",
 ) {
   if (status.includes("need_verifycode")) {
     if (pending && pending !== sent)
@@ -189,7 +191,7 @@ export function wechatVerifyStep(
     // Still asked after sending digits: they did not match.
     return {
       status: "scanned",
-      verifyState: sent ? "rejected" : "required",
+      verifyState: sent || state === "rejected" ? "rejected" : "required",
       verifyCode: undefined,
     } as const;
   }

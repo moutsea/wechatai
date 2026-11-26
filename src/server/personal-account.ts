@@ -3209,7 +3209,16 @@ export class PersonalAccount extends DurableObject<Env> {
         )
         .toArray()
         .some((row) => activeIds.has(row.connectionId));
-      if (hasPending || !receivingExternally || links.some((l) => l.status !== "connected"))
+      // A link waiting for the phone's digits is not polled until they arrive,
+      // so it only needs a wakeup when its QR code expires.
+      const awaitingDigits = (l: Link) => l.status !== "connected" && l.verifyState && !l.verifyCode;
+      for (const l of links) if (awaitingDigits(l)) wakeups.push(l.qrExpires ?? Date.now() + 1000);
+      const polled = links.filter((l) => !awaitingDigits(l));
+      if (
+        hasPending ||
+        (!receivingExternally && polled.length) ||
+        polled.some((l) => l.status !== "connected")
+      )
         wakeups.push(Date.now() + (links.every((l) => l.error) ? 15000 : hasPending ? 100 : 1000));
       if (receivingExternally) {
         wakeups.push(this.receiver.checkAt(receivingExternally));
@@ -6109,6 +6118,9 @@ export class PersonalAccount extends DurableObject<Env> {
             });
           return;
         }
+        // Like Tencent's client, stop asking WeChat while it waits for the
+        // phone's digits. Submitting them wakes the alarm for the next poll.
+        if (link.verifyState && !link.verifyCode) return;
         const result = await this.pollWechatRequest<{
           status: string;
           bot_token?: string;
@@ -6129,7 +6141,12 @@ export class PersonalAccount extends DurableObject<Env> {
         // Digits can be submitted while this long poll is open; never drop them.
         const current = this.connection(connectionId);
         if (current.generation !== link.generation || !this.linkEnabled(connectionId)) return;
-        const verify = wechatVerifyStep(result.status, link.verifyCode, current.verifyCode);
+        const verify = wechatVerifyStep(
+          result.status,
+          link.verifyCode,
+          current.verifyCode,
+          current.verifyState,
+        );
         if (verify) {
           this.setLinkSetting(connectionId, "connection", { ...current, ...verify });
           return;
@@ -6211,8 +6228,9 @@ export class PersonalAccount extends DurableObject<Env> {
                 : scanned || current.verifyState
                   ? "scanned"
                   : "waiting",
-            // "scaned" after digits were sent means WeChat accepted them.
-            ...(scanned || result.status === "expired"
+            // "scaned" in reply to digits means WeChat accepted them. Without
+            // digits it says nothing about the ones WeChat is waiting for.
+            ...((scanned && link.verifyCode) || result.status === "expired"
               ? { verifyCode: undefined, verifyState: undefined }
               : {}),
           });
