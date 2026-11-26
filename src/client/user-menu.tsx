@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "./api";
 import { authClient, useAuth } from "./auth";
-import { useLocale } from "./locale";
+import { localizedHref, useLocale } from "./locale";
 import { membershipExpiry } from "./membership";
 import { formatCredits, type Snapshot } from "../shared/types";
 import { userMenuCopy as userMenuCopyJa } from "../shared/i18n/ja/copy/user-menu";
@@ -225,7 +225,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
           </div>
           <Link
             className="account-menu-item"
-            to="/app"
+            to={localizedHref(locale, "/app")}
             ref={dashboardLink}
             onClick={() => setOpen(false)}
           >

@@ -5,7 +5,7 @@ import {
   runDurableObjectAlarm,
 } from "cloudflare:test";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import type { WxMessage } from "../src/server/wechat";
+import { wechatVerifyStep, type WxMessage } from "../src/server/wechat";
 import { encrypt } from "../src/server/security";
 import { wechatLinkKey } from "../src/shared/wechat-links";
 import { chatSetupIssue, notificationWechatIssue } from "../src/shared/wechat-readiness";
@@ -573,6 +573,142 @@ describe("WeChat transport binding independent of chat configuration", () => {
     expect((await api(fresh, "wechat.bind")).data.connection.qrUrl).toBe(qr);
     expect((await api(fresh, "wechat.bind", { regenerate: true })).error).toBe("qr_cooldown");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for the digits shown on the phone, retries a mismatch and connects once WeChat accepts them", async () => {
+    const stub = account();
+    const polls: (string | null)[] = [];
+    let accepted = false;
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const target = new URL(new Request(url, init).url);
+      if (!target.pathname.endsWith("get_qrcode_status")) return base(url, init);
+      const code = target.searchParams.get("verify_code");
+      polls.push(code);
+      if (accepted) {
+        expect(code).toBeNull();
+        return base(url, init);
+      }
+      if (code === "2468") {
+        accepted = true;
+        return Response.json({ status: "scaned" });
+      }
+      return Response.json({ status: code ? "need_verifycode" : "confirmed_but_need_verifycode" });
+    });
+    expect((await api(stub, "wechat.bind")).ok).toBe(true);
+    const poll = async () => {
+      await runDurableObjectAlarm(stub);
+      return (await stub.snapshot()).connection;
+    };
+    const alarmIn = () =>
+      runInDurableObject(stub, async (_, state) => ((await state.storage.getAlarm()) ?? 0) - Date.now());
+    const waiting = await poll();
+    expect(waiting).toMatchObject({ status: "scanned", verifyState: "required" });
+    // WeChat is not asked again until the digits are entered; only the QR expiry wakes the link.
+    expect(await alarmIn()).toBeGreaterThan(60_000);
+    expect(await poll()).toMatchObject({ status: "scanned", verifyState: "required" });
+    expect((await api(stub, "wechat.verify", { code: "12a" })).error).toBe("invalid_verify_code");
+    const submitted = await api(stub, "wechat.verify", { code: " 11 11 " });
+    expect(submitted.data.connection.verifyState).toBe("checking");
+    expect(JSON.stringify(submitted)).not.toContain("1111");
+    expect(await alarmIn()).toBeLessThanOrEqual(1000);
+    expect(await poll()).toMatchObject({ status: "scanned", verifyState: "rejected" });
+    expect(await poll()).toMatchObject({ status: "scanned", verifyState: "rejected" });
+    expect((await api(stub, "wechat.verify", { code: "2468" })).ok).toBe(true);
+    const scanned = await poll();
+    expect(scanned.status).toBe("scanned");
+    expect(scanned.verifyState).toBeUndefined();
+    expect((await poll()).status).toBe("connected");
+    expect(polls).toEqual([null, "1111", "2468", null]);
+    expect((await api(stub, "wechat.verify", { code: "2468" })).error).toBe("verify_not_needed");
+    await runInDurableObject(stub, (_, state) => {
+      const stored = state.storage.sql
+        .exec<{ value: string }>("SELECT value FROM settings WHERE key LIKE '%connection%'")
+        .toArray()
+        .map((row) => row.value)
+        .join();
+      expect(stored).not.toContain("verifyCode");
+    });
+  });
+
+  it("stops the bind when WeChat blocks the digits after too many mismatches", async () => {
+    const stub = account();
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) =>
+      new URL(new Request(url, init).url).pathname.endsWith("get_qrcode_status")
+        ? Response.json({ status: "verify_code_blocked" })
+        : base(url, init),
+    );
+    await api(stub, "wechat.bind");
+    await runDurableObjectAlarm(stub);
+    const { connection } = await stub.snapshot();
+    expect(connection).toMatchObject({ status: "expired", error: expect.stringContaining("多次") });
+    expect(connection.verifyState).toBeUndefined();
+  });
+
+  it("keeps digits submitted while a QR status poll was still open", () => {
+    // The poll left before the digits arrived; they go out on the next poll.
+    expect(wechatVerifyStep("need_verifycode", undefined, "1234")).toEqual({
+      status: "scanned",
+      verifyState: "checking",
+      verifyCode: "1234",
+    });
+    // A retyped code replaces the mismatched one that was in flight.
+    expect(wechatVerifyStep("need_verifycode", "1111", "2222")).toMatchObject({
+      verifyState: "checking",
+      verifyCode: "2222",
+    });
+    expect(wechatVerifyStep("need_verifycode", "1111", "1111")).toMatchObject({
+      verifyState: "rejected",
+      verifyCode: undefined,
+    });
+    expect(wechatVerifyStep("scaned", "1111", "1111")).toBeNull();
+    // A poll without digits that is asked again keeps the mismatch message.
+    expect(wechatVerifyStep("need_verifycode", undefined, undefined, "rejected")).toMatchObject({
+      verifyState: "rejected",
+    });
+    expect(wechatVerifyStep("need_verifycode", undefined, undefined)).toMatchObject({
+      verifyState: "required",
+    });
+  });
+
+  it("keeps the digit prompt when a poll without digits reports a scan", async () => {
+    const stub = account();
+    let polls = 0;
+    let answer = "";
+    const base = vi.mocked(fetch).getMockImplementation()!;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      if (!new URL(new Request(url, init).url).pathname.endsWith("get_qrcode_status"))
+        return base(url, init);
+      polls++;
+      // Settled by a timer inside the account; a test-made promise cannot cross objects.
+      return new Promise<Response>((resolve) => {
+        const check = () =>
+          answer ? resolve(Response.json({ status: answer })) : setTimeout(check, 10);
+        check();
+      });
+    });
+    await api(stub, "wechat.bind");
+    const running = runDurableObjectAlarm(stub);
+    await vi.waitFor(() => expect(polls).toBe(1));
+    // The prompt appeared while this poll, sent without digits, was open.
+    await runInDurableObject(stub, (_, state) => {
+      const key = wechatLinkKey("default", "connection");
+      const row = state.storage.sql
+        .exec<{ value: string }>("SELECT value FROM settings WHERE key=?", key)
+        .one();
+      state.storage.sql.exec(
+        "UPDATE settings SET value=? WHERE key=?",
+        JSON.stringify({ ...JSON.parse(row.value), status: "scanned", verifyState: "required" }),
+        key,
+      );
+    });
+    answer = "scaned";
+    await running;
+    expect((await stub.snapshot()).connection).toMatchObject({
+      status: "scanned",
+      verifyState: "required",
+    });
   });
 
   it("does not resurrect a disconnected link when an in-flight QR fetch completes", async () => {

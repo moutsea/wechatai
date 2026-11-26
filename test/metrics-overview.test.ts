@@ -4,6 +4,7 @@ import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
 import referralMigration from "../migrations/0003_referrals.sql?raw";
 import adminMigration from "../migrations/0005_admin.sql?raw";
+import accountRoutesMigration from "../migrations/0019_account_backend_routes.sql?raw";
 import { adminOverview, saveAdminStats } from "../src/server/admin";
 import { readAdminAccountStats } from "../src/server/admin-account";
 import { metricsOverview, projectMetricsOverview } from "../src/server/metrics-overview";
@@ -16,7 +17,13 @@ const start = today.start - 29 * 86400000;
 const usage = { requests: 3, failedRequests: 2, tokens: 91, credits: 0.123 };
 
 beforeAll(async () => {
-  for (const migration of [authMigration, billingMigration, referralMigration, adminMigration])
+  for (const migration of [
+    authMigration,
+    billingMigration,
+    referralMigration,
+    adminMigration,
+    accountRoutesMigration,
+  ])
     await env.DB.exec(migration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
 beforeEach(async () => {

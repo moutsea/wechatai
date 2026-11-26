@@ -4,6 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { secret } from "./config";
 import { metricsOverview } from "./metrics-overview";
 import { metricsRevenue } from "./metrics-revenue";
+import { readMetricsRetention, retentionDays } from "./metrics-retention";
 
 const TOKEN_NAME = "METRICS_API_TOKEN";
 const TOKEN_MIN_LENGTH = 32;
@@ -11,6 +12,7 @@ const IP_LIMIT_KEY = "metrics:ip:";
 const TOKEN_LIMIT_KEY = "metrics:token:shared";
 const HEALTH_PATH = "/api/metrics/health";
 const REVENUE_PATH = "/api/metrics/revenue";
+const RETENTION_PATH = "/api/metrics/retention";
 const OVERVIEW_PATH = "/api/metrics/overview";
 
 type BillingMode =
@@ -27,7 +29,8 @@ type AuditReason =
   | "method_not_allowed"
   | "not_found"
   | "internal_error"
-  | "billing_unavailable";
+  | "billing_unavailable"
+  | "invalid_query";
 
 type LimitResult = "ok" | "limited" | "unavailable";
 
@@ -71,7 +74,13 @@ async function consumeLimit(env: Env, key: string): Promise<LimitResult> {
 }
 
 function routeTemplate(path: string) {
-  if (path === HEALTH_PATH || path === REVENUE_PATH || path === OVERVIEW_PATH) return path;
+  if (
+    path === HEALTH_PATH ||
+    path === REVENUE_PATH ||
+    path === RETENTION_PATH ||
+    path === OVERVIEW_PATH
+  )
+    return path;
   if (path === "/api/metrics") return "/api/metrics";
   return "/api/metrics/*";
 }
@@ -132,11 +141,22 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
       return respond(c, 429, { error: "rate_limited" }, "token_rate_limited", true);
     }
 
-    if (c.req.path !== HEALTH_PATH && c.req.path !== REVENUE_PATH && c.req.path !== OVERVIEW_PATH)
+    if (
+      c.req.path !== HEALTH_PATH &&
+      c.req.path !== REVENUE_PATH &&
+      c.req.path !== RETENTION_PATH &&
+      c.req.path !== OVERVIEW_PATH
+    )
       return respond(c, 404, { error: "not_found" }, "not_found");
     if (c.req.method !== "GET") {
       c.header("Allow", "GET");
       return respond(c, 405, { error: "method_not_allowed" }, "method_not_allowed");
+    }
+
+    if (c.req.path === RETENTION_PATH) {
+      const days = retentionDays(c.req.queries("days"));
+      if (days === null) return respond(c, 400, { error: "invalid_query" }, "invalid_query");
+      return respond(c, 200, await readMetricsRetention(c.env, days), "ok");
     }
 
     if (c.req.path === REVENUE_PATH) {

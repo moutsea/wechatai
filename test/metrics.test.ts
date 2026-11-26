@@ -341,7 +341,12 @@ describe("metrics routing boundary", () => {
 });
 
 describe("metrics browser session isolation", () => {
-  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/overview"])(
+  it.each([
+    "/api/metrics/health",
+    "/api/metrics/revenue",
+    "/api/metrics/retention",
+    "/api/metrics/overview",
+  ])(
     "rejects ordinary, admin and Plus cookies without a bearer (%s)",
     async (path) => {
       const ordinary = await signUp();

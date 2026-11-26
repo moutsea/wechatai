@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AccountRetention } from "./metrics-retention";
 
 export const adminGiftInputSchema = z
   .object({
@@ -27,6 +28,7 @@ export type AdminDay = AdminUsage & {
 };
 export type AdminPluginUsage = AdminUsage & { pluginId: string; users: number };
 export type AdminAccountStats = AdminUsage & {
+  retention?: AccountRetention;
   activation?: {
     firstModelTestAt: number | null;
     firstWechatConnectedAt: number | null;

@@ -95,6 +95,8 @@ export type Connection = {
   error?: string;
   qrUrl?: string;
   qrExpires?: number;
+  /** WeChat asked for the digits shown on the phone before confirming the bind. */
+  verifyState?: "required" | "checking" | "rejected";
 };
 export type WechatLink = Connection & {
   id: string;

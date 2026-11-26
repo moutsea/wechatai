@@ -183,7 +183,7 @@ describe("Brazilian Portuguese translations", () => {
     expect(localizedHref("zh-CN", "/pricing")).toBe("/pricing");
   });
 
-  it("discovers exactly the five Portuguese modules through the locale loader", async () => {
+  it("discovers the Portuguese public pages and private dashboard through the locale loader", async () => {
     clearRegisteredTranslations();
     // Dynamic on purpose: this case exercises the discovery boundary itself. A
     // static import would register every locale before the isolated cases above.
@@ -192,6 +192,6 @@ describe("Brazilian Portuguese translations", () => {
       .filter((translation) => translation.locale === "pt")
       .map((translation) => translation.path)
       .sort();
-    expect(ptPaths).toEqual([...expectedPaths].sort());
+    expect(ptPaths).toEqual([...expectedPaths, "/app"].sort());
   });
 });

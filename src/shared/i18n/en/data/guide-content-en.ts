@@ -274,7 +274,7 @@ Switching models continues that model's most recently used session. See the [WeC
 2. Click “Get QR code” (“获取二维码”). Scanning does not require a configured model first, and OpenClaw does not need to be installed.
 
 **Reading this site on your phone?** Sign in to the same Wechatai account on a computer or another device, open the same WeChat link to display the QR code, then scan it with phone WeChat.`,
-        afterIllustration: `3. On your phone, open WeChat and go to **Me → Settings → Plugins → WeChat ClawBot “Details” → Connect a new OpenClaw** (“我 → 设置 → 插件 → 微信 ClawBot「详情」→ 连接新的 OpenClaw”). Scan your QR code and confirm on the phone. Some versions label this “Scan” (“扫一扫”).
+        afterIllustration: `3. On your phone, open WeChat and go to **Me → Settings → Plugins → WeChat ClawBot “Details” → Connect a new OpenClaw** (“我 → 设置 → 插件 → 微信 ClawBot「详情」→ 连接新的 OpenClaw”). Scan your QR code and confirm on the phone. Some versions label this “Scan” (“扫一扫”). If phone WeChat shows a number, enter it in the box on the Wechatai page and submit.
 
 If the entry is missing, update phone WeChat to the latest version first. Scan with the WeChat account you plan to use every day. Only one-to-one chats with ClawBot are supported; group chats are not.`,
         followUpIllustration: "wechat-connection",

@@ -24,10 +24,12 @@ import { pricingPageFor } from "./seo-content/pricing";
 import { PLUGIN_LIMITS } from "./plugin-access";
 import { WECHAT_LINK_LIMITS } from "./wechat-links";
 import { MUSE_FAQ } from "./muse-faq";
+import { DEVELOPER_PAGES_EN } from "./i18n/en/developer-pages";
 import {
   DEFAULT_LOCALE,
   hasRegisteredTranslation,
   LOCALE_DEFINITIONS,
+  DASHBOARD_PATH,
   localizedPath,
   normalizePath,
   registeredTranslation,
@@ -78,6 +80,12 @@ export const PRIVATE_PATHS = [
     "/notices",
   ].map((section) => `/app${section}`),
 ];
+
+export function localizedDashboardPaths(): string[] {
+  return registeredTranslationsForPath(DASHBOARD_PATH).map(({ locale }) =>
+    localizedPath(locale, DASHBOARD_PATH),
+  );
+}
 
 const ORGANIZATION_ID = `${SITE_URL}/#organization`;
 const APPLICATION_ID = `${SITE_URL}/#application`;
@@ -551,11 +559,15 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   }
   const developer = findDeveloperPage(path);
   if (developer) {
-    const isArticle = "article" in developer && developer.article === true;
-    const faq = "faq" in developer ? developer.faq : undefined;
+    const english = locale === "en";
+    const page = english
+      ? DEVELOPER_PAGES_EN[path as keyof typeof DEVELOPER_PAGES_EN]
+      : developer;
+    const isArticle = "article" in page && page.article === true;
+    const faq = "faq" in page ? page.faq : undefined;
     return {
-      title: `${developer.title} | ${SITE_NAME}`,
-      description: developer.description,
+      title: english ? page.title : `${page.title} | ${SITE_NAME}`,
+      description: page.description,
       indexable: true,
       canonical,
       ogType: isArticle ? "article" : "website",
@@ -568,35 +580,35 @@ function basePageSeo(path: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
                 "@id": `${canonical}#article`,
                 url: canonical,
                 mainEntityOfPage: canonical,
-                headline: developer.name,
-                description: developer.description,
+                headline: page.name,
+                description: page.description,
                 inLanguage: htmlLang,
                 image: SOCIAL_IMAGE,
-                dateModified: developer.updatedAt,
+                dateModified: page.updatedAt,
                 author: {
                   "@id": ORGANIZATION_ID,
                   "@type": "Organization",
                   name: SITE_NAME,
                   url: `${SITE_URL}/`,
                 },
-                publisher: organizationNode(),
+                publisher: organizationNode(locale),
               }
             : {
                 "@type": "WebPage",
                 "@id": `${canonical}#webpage`,
                 url: canonical,
-                name: developer.name,
-                description: developer.description,
+                name: page.name,
+                description: page.description,
                 inLanguage: htmlLang,
-                dateModified: developer.updatedAt,
+                dateModified: page.updatedAt,
                 about: softwareApplicationRef(),
-                publisher: organizationNode(),
+                publisher: organizationNode(locale),
               },
           // 站内没有 /developers 索引页（只有子路由），中间层给 item 会指向 404，
           // 因此与 landing 页一样用两级：首页 → 当前页。
           breadcrumbList([
-            { name: "首页", item: `${SITE_URL}/` },
-            { name: developer.name, item: canonical },
+            { name: english ? "Home" : "首页", item: `${SITE_URL}/` },
+            { name: page.name, item: canonical },
           ]),
           ...(faq?.length
             ? [
@@ -791,6 +803,18 @@ function translatedPageSeo(path: string, translation: RegisteredTranslation): Pa
 export function getPageSeo(pathname: string, locale: Locale = DEFAULT_LOCALE): PageSeo {
   const normalized = normalizePath(pathname);
   const split = splitLocalePath(normalized);
+  const activeLocale = split?.locale ?? locale;
+  if ((split?.path ?? normalized) === DASHBOARD_PATH && activeLocale !== DEFAULT_LOCALE) {
+    const translation = registeredTranslation(activeLocale, DASHBOARD_PATH);
+    if (!translation) return notFoundPageSeo();
+    const { htmlLang } = LOCALE_DEFINITIONS[activeLocale];
+    return {
+      title: translation.title,
+      description: translation.description,
+      htmlLang,
+      indexable: false,
+    };
+  }
   if (split) {
     const translation = registeredTranslation(split.locale, split.path);
     if (!translation || !publicPathSet.has(split.path)) return notFoundPageSeo();

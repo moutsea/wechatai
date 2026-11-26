@@ -1,7 +1,7 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useRef, type ReactNode } from "react";
 import { X, ArrowUpRight, Sprout, Feather, Code2, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
-export function Brand({ light = false }: { light?: boolean }) {
+export function Brand({ light = false, name }: { light?: boolean; name?: string }) {
   return (
     <span className={`brand ${light ? "light" : ""}`}>
       <span className="brand-mark">
@@ -10,7 +10,11 @@ export function Brand({ light = false }: { light?: boolean }) {
         </svg>
       </span>
       <span>
-        微伴<small>WECHATAI</small>
+        {name ?? (
+          <>
+            微伴<small>WECHATAI</small>
+          </>
+        )}
       </span>
     </span>
   );
@@ -42,12 +46,16 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  closeLabel = "关闭",
+  headerAction,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  closeLabel?: string;
+  headerAction?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -82,7 +90,8 @@ export function Modal({
           <h2 id={titleId}>{title}</h2>
           {description && <p id={descriptionId}>{description}</p>}
         </div>
-        <button className="icon-button" aria-label="关闭" onClick={onClose}>
+        {headerAction}
+        <button className="icon-button" aria-label={closeLabel} onClick={onClose}>
           <X size={20} />
         </button>
       </div>
@@ -158,8 +167,15 @@ export function PageHead({
     </div>
   );
 }
-export function relativeTime(value: number) {
+export function relativeTime(value: number, locale = "zh-CN") {
   const minutes = Math.floor((Date.now() - value) / 60000);
+  if (locale !== "zh-CN") {
+    const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+    if (minutes < 1) return format.format(0, "second");
+    if (minutes < 60) return format.format(-minutes, "minute");
+    if (minutes < 1440) return format.format(-Math.floor(minutes / 60), "hour");
+    return format.format(-Math.floor(minutes / 1440), "day");
+  }
   return minutes < 1
     ? "刚刚"
     : minutes < 60
@@ -167,4 +183,16 @@ export function relativeTime(value: number) {
       : minutes < 1440
         ? `${Math.floor(minutes / 60)} 小时前`
         : `${Math.floor(minutes / 1440)} 天前`;
+}
+
+export function renderCommandCopy(template: string, commands: Record<string, string>) {
+  return template
+    .split(/\{(\w+)\}/)
+    .map((part, index) =>
+      index % 2 ? (
+        <code key={index}>{commands[part]}</code>
+      ) : (
+        <Fragment key={index}>{part}</Fragment>
+      ),
+    );
 }

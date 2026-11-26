@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { ChevronDown } from "lucide-react";
-import { useLocation } from "react-router-dom";
-import { LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
+import { Link, useLocation } from "react-router-dom";
+import { DASHBOARD_PATH, LOCALE_DEFINITIONS, localizedPath } from "../shared/i18n";
 import { languageCopy as languageCopyKo } from "../shared/i18n/ko/copy/site-header";
 import { headerCopy as headerCopyJa } from "../shared/i18n/ja/copy/site-header";
 import { languageCopy as languageCopyPt } from "../shared/i18n/pt/copy/site-header";
@@ -10,14 +10,15 @@ import { useLocale } from "./locale";
 /**
  * One trigger plus a menu of the languages published for this exact page.
  *
- * Items are real links: switching language reloads the whole document so `lang`,
- * `og:locale` and the prerendered body stay consistent. Renders nothing when the
- * current page has no published translation.
+ * Public pages load the prerendered document. The dashboard changes locale
+ * in place so an open setup flow keeps its step and selected use case.
  */
 export function LanguageSwitcher() {
   const { locale, path, alternates } = useLocale();
   const { search, hash } = useLocation();
-  const suffix = alternates.includes("pt") || alternates.includes("es") ? search + hash : "";
+  const dashboard = path === DASHBOARD_PATH;
+  const suffix =
+    dashboard || alternates.includes("pt") || alternates.includes("es") ? search + hash : "";
   const [open, setOpen] = useState(false);
   // The menu hangs from the trigger's right edge unless that would cross the
   // viewport's left edge, e.g. when a wrapped header puts the trigger on the left.
@@ -67,7 +68,7 @@ export function LanguageSwitcher() {
             ? languageCopyPt.navigation
             : locale === "es"
               ? "Idioma"
-            : "语言";
+              : "语言";
   const currentLabel =
     (locale === "ko" ? languageCopyKo.labels[locale] : undefined) ??
     LOCALE_DEFINITIONS[locale].label;
@@ -159,16 +160,23 @@ export function LanguageSwitcher() {
                 : locale === "pt"
                   ? languageCopyPt.labels[target]
                   : undefined;
-            return (
-              <a
-                key={target}
-                role="menuitem"
-                href={localizedPath(target, path) + suffix}
-                hrefLang={definition.htmlLang}
-                lang={localized ? undefined : definition.htmlLang}
-                aria-current={target === locale ? "true" : undefined}
-                onClick={() => setOpen(false)}
-              >
+            const href = localizedPath(target, path) + suffix;
+            const props = {
+              role: "menuitem",
+              hrefLang: definition.htmlLang,
+              lang: localized ? undefined : definition.htmlLang,
+              "aria-current": target === locale ? (true as const) : undefined,
+              onClick: () => {
+                setOpen(false);
+                if (dashboard) triggerRef.current?.focus();
+              },
+            };
+            return dashboard ? (
+              <Link key={target} to={href} {...props}>
+                {localized ?? definition.label}
+              </Link>
+            ) : (
+              <a key={target} href={href} {...props}>
                 {localized ?? definition.label}
               </a>
             );

@@ -224,7 +224,8 @@ function StartLink({
   onClick?: () => void;
 }) {
   const { data: session } = useAuth();
-  const destination = authReturnPath(authenticatedTo);
+  const { locale } = useLocale();
+  const destination = authReturnPath(localizedHref(locale, authenticatedTo));
   return (
     <Link
       className={className}

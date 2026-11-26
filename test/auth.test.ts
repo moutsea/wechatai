@@ -278,6 +278,7 @@ describe("Google and GitHub OAuth", () => {
     ["/pricing?interval=year", 987605],
     ["/pt/pricing?interval=month#plan-month", 987606],
     ["/pt/pricing?interval=year#plan-year", 987607],
+    ["/es/app?source=setup#help", 987608],
   ])("returns new and existing OAuth users to %s after authorization", async (path, id) => {
     const returnTo = authReturnPath(path);
     const callback = path.includes("#") ? new URL(returnTo, env.APP_URL).href : returnTo;
@@ -302,6 +303,11 @@ describe("Google and GitHub OAuth", () => {
     expect(authReturnPath("/ko/pricing?interval=year#plan-year")).toBe(
       "/ko/pricing?interval=year#plan-year",
     );
+    for (const locale of ["en", "ja", "ko", "es", "pt"]) {
+      const target = `/${locale}/app?source=setup#help`;
+      expect(authReturnPath(target)).toBe(target);
+      expect(authReturnPath(`/${locale}/app/channels`)).toBe("/app");
+    }
     for (const path of [
       null,
       "https://evil.example",
