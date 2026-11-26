@@ -28,6 +28,7 @@ import {
 } from "../../shared/wechat-readiness";
 import { isCloudAgent } from "../../shared/cloud-agent";
 import { isChatModel } from "../../shared/model-compatibility";
+import type { Connection } from "../../shared/types";
 import { remoteAgentName } from "../../shared/remote-agent";
 // WeChat may show digits on the phone after the scan; the bind finishes once they match.
 function VerifyCodeForm({
@@ -79,6 +80,36 @@ function VerifyCodeForm({
         </div>
       )}
     </form>
+  );
+}
+// WeChat delivers bot pushes only for 24 hours after the user's latest message.
+function PushWindowNote({ push }: { push: NonNullable<Connection["pushWindow"]> }) {
+  const closed = push.until <= Date.now();
+  if (push.blockedAt || closed)
+    return (
+      <div className="form-error" role="status">
+        {!push.blockedAt
+          ? "已超过 24 小时没在微信发消息，提醒和通知可能发不出去。"
+          : closed
+            ? "微信拒绝了最近的提醒或通知推送，通常是因为超过 24 小时没在微信发消息。"
+            : // Reportedly WeChat also caps pushes per user message.
+              "微信拒绝了最近的提醒或通知推送。你 24 小时内发过消息，可能是这条消息之后的推送条数已到微信的上限。"}
+        在微信发送 <code>/wx help</code> 即可恢复，不消耗 credits；24
+        小时内未送达的提醒和通知会继续补发。
+      </div>
+    );
+  const until = new Date(push.until).toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return (
+    <div className="simple-note">
+      提醒和通知可推送至 {until}
+      。微信只允许在你最近一次发消息后的 24 小时内推送，快到期时微伴会在微信里提醒你回复。
+    </div>
   );
 }
 export function Wechat() {
@@ -361,6 +392,7 @@ export function Wechat() {
             </div>
           )}
           {connection.error && <div className="form-error">{connection.error}</div>}
+          {connected && connection.pushWindow && <PushWindowNote push={connection.pushWindow} />}
           {connected && (
             <div className="simple-note">
               每次扫码连接后，在微信发送任意一条消息，就会收到一次微伴的招呼和命令速查链接。 发送{" "}

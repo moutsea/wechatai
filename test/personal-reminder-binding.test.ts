@@ -42,7 +42,7 @@ async function prepare(state = "scheduled", repeat = "daily", scope = "shared") 
   expect(created.ok).toBe(true);
   if (state === "waiting_context") await connect(stub, { contextToken: "" });
   vi.mocked(fetch).mockImplementation(async () =>
-    Response.json({ ret: state === "paused" ? -14 : state === "retry" ? -2 : 0 }),
+    Response.json({ ret: state === "paused" ? -14 : state === "retry" ? 1 : 0 }),
   );
   clock.mockReturnValue(morning + 1000);
   await runDurableObjectAlarm(scheduler(stub));
@@ -222,7 +222,7 @@ describe("block reasons belong to their occurrence", () => {
       ).toBe(true);
       clock.mockReturnValue(at + 1000);
       if (withSendFailure) {
-        vi.mocked(fetch).mockImplementation(async () => Response.json({ ret: -2 }));
+        vi.mocked(fetch).mockImplementation(async () => Response.json({ ret: 1 }));
         await runDurableObjectAlarm(scheduler(stub));
         clock.mockReturnValue(at + 6000);
       }
