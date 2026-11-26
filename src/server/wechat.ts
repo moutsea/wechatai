@@ -172,6 +172,45 @@ async function wechatResponse<T>(
     );
   return { data, httpStatus: response.status };
 }
+/**
+ * WeChat can ask for the digits shown on the phone before it confirms a bind.
+ * Returns the link fields for a PIN-related QR status, or null for other statuses.
+ * `sent` is the code this poll carried; `pending` is the one stored now, which
+ * may be newer when the user submitted digits while the long poll was open.
+ * `state` is the stored prompt, kept when a poll without digits asks again.
+ */
+export function wechatVerifyStep(
+  status: string,
+  sent: string | undefined,
+  pending: string | undefined,
+  state?: "required" | "checking" | "rejected",
+) {
+  if (status.includes("need_verifycode")) {
+    if (pending && pending !== sent)
+      return { status: "scanned", verifyState: "checking", verifyCode: pending } as const;
+    // Still asked after sending digits: they did not match.
+    return {
+      status: "scanned",
+      verifyState: sent || state === "rejected" ? "rejected" : "required",
+      verifyCode: undefined,
+    } as const;
+  }
+  if (status === "verify_code_blocked")
+    return {
+      status: "expired",
+      verifyState: undefined,
+      verifyCode: undefined,
+      error: "数字多次输入错误，请稍后重新获取二维码。",
+    } as const;
+  if (status === "binded_redirect")
+    return {
+      status: "expired",
+      verifyState: undefined,
+      verifyCode: undefined,
+      error: "微信没有返回新的连接凭据，这个 ClawBot 可能已在别处连接。请重新获取二维码再试。",
+    } as const;
+  return null;
+}
 export function extractText(message: WxMessage) {
   return (message.item_list ?? [])
     .map((i) => {
