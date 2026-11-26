@@ -356,8 +356,15 @@ const PUSH_REFUSED_RETRY_MS = 30 * 60_000;
 // WeChat reportedly accepts about ten pushes per user message. Release only a
 // few held pushes per message so the reply to that message still gets through.
 const HELD_PUSH_WAKE_LIMIT = 3;
-const PUSH_REFUSED_MESSAGE =
-  "微信暂不允许推送，通常是因为接收微信超过 24 小时没有发消息。在微信发送 /wx help 后会继续投递（不消耗 credits）。";
+// Inside the reply window, a refusal more likely means WeChat's reported cap on
+// pushes per user message.
+function pushRefusedMessage(lastSeen: number | undefined) {
+  return `微信暂不允许推送，${
+    lastSeen !== undefined && Date.now() - lastSeen < WECHAT_REPLY_WINDOW_MS
+      ? "可能是接收微信最近一条消息之后的推送条数已到上限"
+      : "通常是因为接收微信超过 24 小时没有发消息"
+  }。在微信发送 /wx help 后会继续投递（不消耗 credits）。`;
+}
 const CLOUD_REPLY_WAITING_MESSAGE =
   "云端结果暂未送达，已保留。请在微信发送 /wx help 后继续接收，无需重新提交任务。该命令不消耗 credits。";
 
@@ -3067,7 +3074,11 @@ export class PersonalAccount extends DurableObject<Env> {
         // Retried sends reuse client_id. Never log the token, message or recipient.
         if (isWechatPushRefusal(error)) {
           this.markPushBlocked(job.connectionId, job.generation);
-          this.notifications.retry(job.id, PUSH_REFUSED_MESSAGE, PUSH_REFUSED_RETRY_MS);
+          this.notifications.retry(
+            job.id,
+            pushRefusedMessage(this.connection(job.connectionId).lastSeen),
+            PUSH_REFUSED_RETRY_MS,
+          );
         } else
           this.notifications.retry(
             job.id,

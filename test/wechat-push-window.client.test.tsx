@@ -75,13 +75,24 @@ it("says how long scheduled pushes can still arrive", async () => {
 });
 
 it.each([
-  ["WeChat refused a push", { until: Date.now() + 3600_000, blockedAt: Date.now() }, "微信拒绝了"],
-  ["the window closed", { until: Date.now() - 1000 }, "已超过 24 小时"],
+  [
+    "WeChat refused a push inside the window",
+    { until: Date.now() + 3600_000, blockedAt: Date.now() },
+    "推送条数已到微信的上限",
+  ],
+  [
+    "WeChat refused a push after the window closed",
+    { until: Date.now() - 1000, blockedAt: Date.now() - 1000 },
+    "通常是因为超过 24 小时",
+  ],
+  ["the window closed", { until: Date.now() - 1000 }, "已超过 24 小时没在微信发消息"],
 ])("tells the user to write when %s", async (_, pushWindow, text) => {
   connected(pushWindow);
   await mount();
   expect(container.textContent).toContain(text);
   expect(container.textContent).toContain("即可恢复");
+  // The user wrote within 24 hours; the note must not say otherwise.
+  if (pushWindow.until > Date.now()) expect(container.textContent).not.toContain("超过 24 小时");
 });
 
 it("shows nothing for a link without scheduled pushes", async () => {

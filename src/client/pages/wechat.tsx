@@ -32,12 +32,16 @@ import type { Connection } from "../../shared/types";
 import { remoteAgentName } from "../../shared/remote-agent";
 // WeChat delivers bot pushes only for 24 hours after the user's latest message.
 function PushWindowNote({ push }: { push: NonNullable<Connection["pushWindow"]> }) {
-  if (push.blockedAt || push.until <= Date.now())
+  const closed = push.until <= Date.now();
+  if (push.blockedAt || closed)
     return (
       <div className="form-error" role="status">
-        {push.blockedAt
-          ? "微信拒绝了最近的提醒或通知推送，通常是因为超过 24 小时没在微信发消息。"
-          : "已超过 24 小时没在微信发消息，提醒和通知可能发不出去。"}
+        {!push.blockedAt
+          ? "已超过 24 小时没在微信发消息，提醒和通知可能发不出去。"
+          : closed
+            ? "微信拒绝了最近的提醒或通知推送，通常是因为超过 24 小时没在微信发消息。"
+            : // Reportedly WeChat also caps pushes per user message.
+              "微信拒绝了最近的提醒或通知推送。你 24 小时内发过消息，可能是这条消息之后的推送条数已到微信的上限。"}
         在微信发送 <code>/wx help</code> 即可恢复，不消耗 credits；24
         小时内未送达的提醒和通知会继续补发。
       </div>

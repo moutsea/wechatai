@@ -268,4 +268,20 @@ describe("WeChat reply window", () => {
     expect(await kinds()).toEqual(["personal", "notify", "notify"]);
     expect(await held(stub)).toEqual({ reminders: 0, notifications: 1 });
   });
+
+  it.each([
+    ["after the window closed", 30 * hour, "超过 24 小时没有发消息"],
+    ["inside the window", 2 * hour, "推送条数已到上限"],
+  ])("explains a notification refused %s", async (_, ago, text) => {
+    wechat(() => Response.json({ ret: -2 }));
+    const { stub } = await setup("chat-completions", false);
+    await connect(stub, { lastSeen: Date.now() - ago });
+    await (await notifier(stub)).send("告警");
+    await stub.dispatchNotifications();
+    const { error } = await runInDurableObject(stub, (_, state) =>
+      state.storage.sql.exec<{ error: string }>("SELECT error FROM notification_jobs").one(),
+    );
+    expect(error).toContain(text);
+    expect(error).toContain("/wx help");
+  });
 });
