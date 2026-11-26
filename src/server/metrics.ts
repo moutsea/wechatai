@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { secret } from "./config";
+import { metricsOverview } from "./metrics-overview";
 import { metricsRevenue } from "./metrics-revenue";
 import { readMetricsRetention, retentionDays } from "./metrics-retention";
 
@@ -12,6 +13,7 @@ const TOKEN_LIMIT_KEY = "metrics:token:shared";
 const HEALTH_PATH = "/api/metrics/health";
 const REVENUE_PATH = "/api/metrics/revenue";
 const RETENTION_PATH = "/api/metrics/retention";
+const OVERVIEW_PATH = "/api/metrics/overview";
 
 type BillingMode =
   | { available: true; mode: "test" | "live" }
@@ -72,7 +74,13 @@ async function consumeLimit(env: Env, key: string): Promise<LimitResult> {
 }
 
 function routeTemplate(path: string) {
-  if (path === HEALTH_PATH || path === REVENUE_PATH || path === RETENTION_PATH) return path;
+  if (
+    path === HEALTH_PATH ||
+    path === REVENUE_PATH ||
+    path === RETENTION_PATH ||
+    path === OVERVIEW_PATH
+  )
+    return path;
   if (path === "/api/metrics") return "/api/metrics";
   return "/api/metrics/*";
 }
@@ -103,7 +111,7 @@ function respond(
 /**
  * Dedicated read-only operator metadata and aggregate endpoints. It is mounted before the
  * general API body limit and browser session middleware, so it never reads a
- * request body, queries a session, or reaches account Durable Objects.
+ * request body, queries a browser session, or reaches account Durable Objects.
  */
 export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   c.header("Cache-Control", "no-store");
@@ -136,7 +144,8 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
     if (
       c.req.path !== HEALTH_PATH &&
       c.req.path !== REVENUE_PATH &&
-      c.req.path !== RETENTION_PATH
+      c.req.path !== RETENTION_PATH &&
+      c.req.path !== OVERVIEW_PATH
     )
       return respond(c, 404, { error: "not_found" }, "not_found");
     if (c.req.method !== "GET") {
@@ -161,6 +170,8 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
         );
       return respond(c, 200, await metricsRevenue(c.env, mode.mode), "ok");
     }
+
+    if (c.req.path === OVERVIEW_PATH) return respond(c, 200, await metricsOverview(c.env), "ok");
 
     return respond(
       c,

@@ -42,6 +42,7 @@
 已支付毛额聚合通过 `GET /api/metrics/revenue` 提供，复用本节的专用 Bearer、限流与审计。字段、累计与每日窗口、退款未知及历史订阅覆盖限制见[已支付毛额 API](metrics-revenue.md)。
 
 - `GET /api/metrics/health` 只返回元数据，`authenticated` 表示专用凭据通过鉴权。
+- `GET /api/metrics/overview` 提供用户、活跃与平台用量快照聚合，字段、窗口与未知值语义见[概览接口说明](metrics-overview.md)。以 coverage 为准，不自动在读路径写同步。
 - `billingMode` 仅在支付密钥可可靠识别时返回 `available: true` 与 `mode: test|live`；未配置返回 `billing_not_configured`，无法识别返回 `billing_mode_unknown`。不会调用 Stripe，也不返回密钥或账号信息。
 - 认证失败返回 401；已知路径的非 GET 方法返回 405（`Allow: GET`）；未知路径返回 404；限流返回 429（`Retry-After: 60`）；限流绑定不可用返回 503。所有响应带 `Cache-Control: no-store` 与 `X-Robots-Tag: noindex, nofollow`。
 - 限流复用 `API_LIMIT`，在每个 Cloudflare 节点内分别按 IP 和有效凭据计 120 次/60 秒；这不是全球严格配额。无效凭据不消耗有效凭据额度。
