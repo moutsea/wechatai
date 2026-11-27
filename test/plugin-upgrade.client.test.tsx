@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { LocaleProvider } from "../src/client/locale";
 import { Plugins } from "../src/client/pages/plugins";
 import { Billing } from "../src/client/pages/billing";
 import { useApp } from "../src/client/context";
@@ -94,10 +95,13 @@ async function mount(path = "/app/plugins") {
   await act(async () =>
     root.render(
       <MemoryRouter key={path} initialEntries={[path]}>
-        <Routes>
-          <Route path="/app/plugins" element={<Plugins />} />
-          <Route path="/app/billing" element={<Billing />} />
-        </Routes>
+        <LocaleProvider>
+          <Routes>
+            <Route path="/app/plugins" element={<Plugins />} />
+            <Route path="/app/billing" element={<Billing />} />
+            <Route path="/ko/app/plugins" element={<Plugins />} />
+          </Routes>
+        </LocaleProvider>
       </MemoryRouter>,
     ),
   );
@@ -405,4 +409,21 @@ it("allows Plus users to configure cloud and additional plugins without a paywal
   expect(dialog().querySelector("form")).not.toBeNull();
   expect(container.querySelector(".plugin-upgrade-plans")).toBeNull();
   expect(request).not.toHaveBeenCalled();
+});
+
+it("uses Korean fixed plan titles and accessible names in the Free upgrade modal", async () => {
+  await mount("/ko/app/plugins?plugin=wechatai%2Fcloud-agent&action=create");
+  const plans = [...dialog().querySelectorAll(".plugin-upgrade-plan")];
+  expect(plans.map((plan) => plan.querySelector("h3")?.textContent)).toEqual([
+    "Plus 월간 결제",
+    "Plus 연간 결제",
+  ]);
+  expect(plans.map((plan) => plan.getAttribute("aria-label"))).toEqual([
+    "Plus 월간 결제",
+    "Plus 연간 결제",
+  ]);
+  expect(
+    plans.map((plan) => plan.querySelector(".plugin-upgrade-price strong")?.textContent),
+  ).toEqual(["¥9.9", "¥88"]);
+  expect(dialog().textContent).not.toMatch(/\p{Script=Han}/u);
 });

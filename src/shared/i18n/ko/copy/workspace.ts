@@ -13,6 +13,8 @@ import { CLOUD_AGENT_FILE_LIMITS_NOTE } from "../../../cloud-agent";
 import { PLUGIN_SHORTCUT_HINT, LEGACY_NUMERIC_SHORTCUT_HINT } from "../../../plugin-shortcut";
 
 export const workspaceLabels: Record<string, string> = {
+  "Plus 月付": "Plus 월간 결제",
+  "Plus 年付": "Plus 연간 결제",
   "DeepSeek 原生搜索": "DeepSeek 네이티브 검색",
   "https://你的搜索服务/search": "https://search.example.com/search",
   "会员到期或插件超出名额时，连接状态和日志明确说明暂停原因及恢复方式。":

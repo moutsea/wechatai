@@ -1,4 +1,4 @@
-import { workspaceError } from "../workspace-copy";
+import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/plugin-upgrade-modal-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/plugin-upgrade-modal-page";
@@ -140,12 +140,12 @@ export function PluginUpgradeModal({
               <article
                 key={preset.id}
                 className={`plugin-upgrade-plan${annual ? " annual" : ""}`}
-                aria-label={preset.name}
+                aria-label={workspaceLabel(locale, preset.name)}
               >
                 <span className="plugin-upgrade-badge">
                   {annual ? pageCopy["年付更划算"] : pageCopy["灵活选择"]}
                 </span>
-                <h3>{preset.name}</h3>
+                <h3>{workspaceLabel(locale, preset.name)}</h3>
                 <p className="plugin-upgrade-price">
                   <strong>¥{offer?.price ?? preset.amount / 100}</strong>
                   <span>/ {annual ? pageCopy["年"] : pageCopy["月"]}</span>

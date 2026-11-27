@@ -170,7 +170,9 @@ export function ChannelConnectionFields({
             needsKey
               ? formatCopy(pageCopy["填写{value0} API Key"], {
                   value0: provider
-                    ? formatCopy(pageCopy[" {value0} 的"], { value0: provider.name })
+                    ? formatCopy(pageCopy[" {value0} 的"], {
+                        value0: workspaceLabel(locale, provider.name),
+                      })
                     : pageCopy["此渠道的"],
                 })
               : pageCopy["已加密保存，留空则不更改"]

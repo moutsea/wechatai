@@ -247,3 +247,17 @@ pnpm test:openclaw 退出 0，27 tests、27 pass、0 fail。暂存后 pnpm check
 最终构建共检索 351 个资产和运行时代码文件，需求文档标题、完整卡号和路径命中为零。临时测试密钥副本清理检查通过。桌面和窄屏截图使用最终构建重新生成。
 
 提交前再次查询同仓 OPEN PR，结果为 []；远端 main 仍为 3f329352ac0d73da0ee1611ce4169bbfd7fe1443。本卡使用 feature/f78c690a-ko-app-subroutes 分支，提交和 PR 中记录最终 HEAD。PR base main，交付供独立评审；合并和部署由部署与验收阶段负责。
+
+## 2026-11-28 首次返工进度
+
+独立评审基线为 `3f329352ac0d73da0ee1611ce4169bbfd7fe1443`，被打回 HEAD 为 `ee219086ace95039011041b1e112870b7ff958a6`。两项意见分别为支付返回语言（AC2）和固定产品标签漏译（AC3）。本节记录返工进度，整卡验收仍待两项修复和全量复验。
+
+### AC3 固定标签修复
+
+升级弹窗直接消费 BILLING_OFFERS 的中文名称，渠道 API Key placeholder 直接消费 provider.name。现已统一通过既有 workspaceLabel 消费固定标签，补充两条韩语套餐名称，并复用已有提供商名称译文。
+
+新增回归测试先在原代码上执行。升级弹窗用例实得 `Plus 月付`、`Plus 年付`，1 项失败、20 项通过。Kimi 与 Qwen placeholder 两个同根因用例失败，原有 5 项通过。修复后两文件分别为 21 项和 7 项全部通过，套餐金额断言覆盖 ¥9.9 与 ¥88。Node 22.23.5 下 lint、typecheck 退出 0，git diff --check 通过。日志保存在 `/tmp/f78c690a-rework/p2-*-before.log`、`p2-*-after.log`、`p2-lint.log`、`p2-typecheck.log`。
+
+### AC2 支付返回实现范围待确认
+
+已核对创建订单、Stripe 会话复用与恢复、成功/取消返回、portal 和插件继续配置链路。当前订单未保存返回语言，checkout 使用订单 ID 生成幂等键。为使本地化返回参数在失败重试时保持稳定，拟将经过允许列表校验的返回路径随订单持久化。该方案需给 billing_order 增加一个兼容旧订单的字段，涉及需求原定范围外的 schema 迁移，待用户确认后实施。整卡全量复验、推送 PR #56 与复审交接在此项完成后执行。

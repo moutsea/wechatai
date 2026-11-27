@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { LocaleProvider } from "../src/client/locale";
 import { ChannelConnectionFields } from "../src/client/channel-connection-fields";
 import type { Channel, ChannelInput } from "../src/shared/types";
 
@@ -78,4 +79,24 @@ describe("channel provider fields", () => {
     expect(html).toContain("Coding Plan 专用入口");
     expect(html).toContain("套餐可能限制接入工具");
   });
+});
+
+it.each([
+  ["kimi", "Kimi (Moonshot AI)"],
+  ["qwen", "Qwen (Alibaba Cloud Bailian)"],
+])("localizes the fixed %s provider name in the Korean API key placeholder", (providerId, name) => {
+  const html = renderToStaticMarkup(
+    <MemoryRouter initialEntries={["/ko/app/channels?new=1"]}>
+      <LocaleProvider>
+        <ChannelConnectionFields
+          form={form}
+          providerId={providerId}
+          disabled={false}
+          onChange={() => {}}
+          onProviderChange={() => {}}
+        />
+      </LocaleProvider>
+    </MemoryRouter>,
+  );
+  expect(html).toContain(`placeholder=" ${name}의 API 키 입력"`);
 });
