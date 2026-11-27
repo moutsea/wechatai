@@ -110,7 +110,13 @@ const notFoundRoutes = [notFoundRoute];
 function appRouteTarget(pathname: string) {
   const split = splitLocalePath(pathname);
   if (!split) return { routes, pathname };
-  if (!hasRegisteredTranslation(split.locale, split.path)) return { routes: notFoundRoutes, pathname };
+  if (
+    split.locale === "ko" &&
+    (split.path === DASHBOARD_PATH || split.path.startsWith(`${DASHBOARD_PATH}/`))
+  )
+    return { routes: localizedWorkspaceRoutes, pathname };
+  if (!hasRegisteredTranslation(split.locale, split.path))
+    return { routes: notFoundRoutes, pathname };
   if (split.path === DASHBOARD_PATH) return { routes: localizedWorkspaceRoutes, pathname };
   return { routes: localizedRoutes, pathname: split.path };
 }

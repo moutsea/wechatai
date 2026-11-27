@@ -1,3 +1,8 @@
+import { workspaceError } from "../workspace-copy";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/personal-daily-reminder-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/personal-daily-reminder-page";
+import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState, type FormEvent } from "react";
 import { Bell } from "lucide-react";
 import { useApp } from "../context";
@@ -29,6 +34,9 @@ export function DailyTasksReminder({
   refreshKey: number;
   onSaved: () => void;
 }) {
+  const { locale } = useLocale();
+  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+
   const { request, notify } = useApp();
   const [record, setRecord] = useState<PersonalRecord | null>(null);
   const [enabled, setEnabled] = useState(false);
@@ -58,7 +66,7 @@ export function DailyTasksReminder({
         setLoaded(true);
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message);
+        if (!cancelled) setError(workspaceError(e, locale));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -66,17 +74,19 @@ export function DailyTasksReminder({
     return () => {
       cancelled = true;
     };
-  }, [plugin.id, connectionId, refreshKey, request]);
+  }, [plugin.id, connectionId, refreshKey, request, locale]);
   const save = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
     const parsed = dailyTasksReminderSchema.safeParse({ enabled, ...(enabled ? { time } : {}) });
     if (!parsed.success) {
-      setError(parsed.error.issues[0].message);
+      setError(
+        workspaceError({ message: parsed.error.issues[0].message, code: "invalid_input" }, locale),
+      );
       return;
     }
     if (!enabled && !record) {
-      notify("每日待办提醒未启用");
+      notify(pageCopy["每日待办提醒未启用"]);
       return;
     }
     setBusy(true);
@@ -89,7 +99,7 @@ export function DailyTasksReminder({
             ? {
                 kind: "reminder",
                 reminderType: "daily_tasks",
-                title: "今日待办",
+                title: pageCopy["今日待办"],
                 date: beijingDate(),
                 repeat: "daily",
                 reminderEnabled: true,
@@ -100,10 +110,14 @@ export function DailyTasksReminder({
           revision: record?.revision,
         }),
       );
-      notify(enabled ? `已设置每天 ${time} 提醒今日待办` : "每日待办提醒已关闭");
+      notify(
+        enabled
+          ? formatCopy(pageCopy["已设置每天 {value0} 提醒今日待办"], { value0: time })
+          : pageCopy["每日待办提醒已关闭"],
+      );
       onSaved();
     } catch (e) {
-      setError((e as Error).message);
+      setError(workspaceError(e as Error, locale));
     } finally {
       setBusy(false);
     }
@@ -112,12 +126,17 @@ export function DailyTasksReminder({
     <form className="personal-daily-reminder" onSubmit={save}>
       <div className="personal-daily-heading">
         <Bell size={16} />
-        <strong>每日待办提醒</strong>
+        <strong>{pageCopy["每日待办提醒"]}</strong>
       </div>
-      <p>每天汇总当天未完成的待办，通过微信发送；没有待办就不打扰，不消耗 credits。</p>
+      <p>
+        {pageCopy["每天汇总当天未完成的待办，通过微信发送；没有待办就不打扰，不消耗 credits。"]}
+      </p>
       <p className="form-note">
-        受微信最近互动后的 24 小时回复窗口限制，请定期向 ClawBot
-        发消息。当天发送失败可重试，跨天不再补发；不保证必达。
+        {
+          pageCopy[
+            "受微信最近互动后的 24 小时回复窗口限制，请定期向 ClawBot 发消息。当天发送失败可重试，跨天不再补发；不保证必达。"
+          ]
+        }
       </p>
       <div className="personal-daily-controls">
         <label className="personal-enabled">
@@ -127,10 +146,10 @@ export function DailyTasksReminder({
             onChange={(e) => setEnabled(e.target.checked)}
             disabled={!writable || busy || loading || !loaded}
           />
-          启用
+          {pageCopy["启用"]}
         </label>
         <label>
-          北京时间
+          {pageCopy["北京时间"]}
           <input
             type="time"
             required={enabled}
@@ -143,12 +162,12 @@ export function DailyTasksReminder({
           className="button secondary small"
           disabled={!writable || busy || loading || !loaded}
         >
-          {loading ? "正在读取…" : "保存设置"}
+          {loading ? pageCopy["正在读取…"] : pageCopy["保存设置"]}
         </button>
       </div>
       {record && <ReminderFailureNotice record={record} />}
       {!connectionId && !plugin.reminderConnectionId && (
-        <p>请先在助理配置中选择接收共享提醒的微信链接。</p>
+        <p>{pageCopy["请先在助理配置中选择接收共享提醒的微信链接。"]}</p>
       )}
       {error && (
         <p role="alert" className="form-error">

@@ -1,3 +1,5 @@
+import { useLocale, localizedHref } from "./locale";
+import { dashboardCopy } from "../shared/i18n/dashboard";
 import { Component, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -41,17 +43,21 @@ export class LoadErrorBoundary extends Component<LoadErrorBoundaryProps, LoadErr
 
 export function RouteLoadErrorBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
+  const { locale } = useLocale();
+  const ko = locale === "ko" && (pathname === "/ko/app" || pathname.startsWith("/ko/app/"));
   return (
     <LoadErrorBoundary
       resetKey={pathname}
       fallback={
         <main className="full-state" role="alert">
-          <h1>页面未能加载</h1>
-          <p>请检查网络后重新加载页面。</p>
+          <h1>{ko ? dashboardCopy.ko.shell.loadFailed : "页面未能加载"}</h1>
+          <p>{ko ? dashboardCopy.ko.shell.refreshFailed : "请检查网络后重新加载页面。"}</p>
           <button type="button" className="button" onClick={reloadPage}>
-            重新加载页面
+            {ko ? dashboardCopy.ko.shell.reload : "重新加载页面"}
           </button>
-          <a href="/">返回首页</a>
+          <a href={ko ? localizedHref(locale, "/app") : "/"}>
+            {ko ? dashboardCopy.ko.shell.workspace : "返回首页"}
+          </a>
         </main>
       }
     >

@@ -16,7 +16,7 @@ import { useLocale } from "./locale";
 export function LanguageSwitcher() {
   const { locale, path, alternates } = useLocale();
   const { search, hash } = useLocation();
-  const dashboard = path === DASHBOARD_PATH;
+  const dashboard = path === DASHBOARD_PATH || path.startsWith(`${DASHBOARD_PATH}/`);
   const suffix =
     dashboard || alternates.includes("pt") || alternates.includes("es") ? search + hash : "";
   const [open, setOpen] = useState(false);

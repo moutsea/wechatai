@@ -167,13 +167,22 @@ export function detectChannelProvider(connection: Connection): string {
   );
 }
 
-export function selectChannelProvider(form: ChannelInput, providerId: string): ChannelInput {
+export function selectChannelProvider(
+  form: ChannelInput,
+  providerId: string,
+  displayName: (name: string) => string = (name) => name,
+): ChannelInput {
   const provider = channelProvider(providerId);
   if (!provider) return form; // Custom mode keeps the exact configuration for editing.
   const previous = channelProvider(detectChannelProvider(form));
   return {
     ...form,
-    name: !form.name.trim() || form.name === previous?.name ? provider.name : form.name,
+    name:
+      !form.name.trim() ||
+      form.name === previous?.name ||
+      (previous && form.name === displayName(previous.name))
+        ? displayName(provider.name)
+        : form.name,
     protocol: provider.protocol,
     baseUrl: provider.baseUrl,
     // Never carry a typed credential into another provider or plan.

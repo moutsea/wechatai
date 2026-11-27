@@ -14,6 +14,7 @@ import { useAuth } from "./auth";
 import { authReturnPath } from "../shared/auth";
 import { useWechatConnectionTracker } from "./wechat-connection-tracker";
 import { useLocale } from "./locale";
+import { localizedPath } from "../shared/i18n";
 import { dashboardCopy } from "../shared/i18n/dashboard";
 import { LanguageSwitcher } from "./language-switcher";
 type AppState = {
@@ -155,7 +156,17 @@ export function AppProvider({
   const toast =
     notice ?? (showRefreshFailure ? { text: copy.refreshFailed, error: true } : null);
   return (
-    <State.Provider value={{ data, request, refresh, isAdmin, base: "/app", user, notify }}>
+    <State.Provider
+      value={{
+        data,
+        request,
+        refresh,
+        isAdmin,
+        base: locale === "ko" ? localizedPath(locale, "/app") : "/app",
+        user,
+        notify,
+      }}
+    >
       {failure && !data ? (
         <div className="full-state">
           <LanguageSwitcher />
