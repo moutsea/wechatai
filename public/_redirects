@@ -6,3 +6,7 @@
 
 # Keep task detail URLs and query parameters while serving the private task shell.
 /app/tasks/* /app/tasks 200
+
+/pt/app/tasks/* /pt/app/tasks 200
+
+/pt/app/* /pt/app 200

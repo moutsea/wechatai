@@ -133,12 +133,11 @@ describe("Brazilian Portuguese translations", () => {
     ]);
     const home = getPageSeo("/pt");
     const homeGraph = home.structuredData?.["@graph"] as Array<Record<string, unknown>>;
-    const application = homeGraph.find(
-      (node) => node["@type"] === "SoftwareApplication",
-    ) as Record<string, unknown>;
-    expect(application.featureList).toContain(
-      "Use sua própria API key e endpoint de modelo",
-    );
+    const application = homeGraph.find((node) => node["@type"] === "SoftwareApplication") as Record<
+      string,
+      unknown
+    >;
+    expect(application.featureList).toContain("Use sua própria API key e endpoint de modelo");
   });
 
   it("adds exactly the five Portuguese URLs to the sitemap and keeps existing lastmods", () => {
@@ -146,11 +145,19 @@ describe("Brazilian Portuguese translations", () => {
     registerTranslations("pt", translations, "T10 fixture");
     const after = renderSitemap();
     const beforeLines = new Set(before.split("\n"));
-    const added = after.split("\n").filter((line) => line.includes("<url>") && !beforeLines.has(line));
+    const added = after
+      .split("\n")
+      .filter((line) => line.includes("<url>") && !beforeLines.has(line));
     const addedPaths = added
       .map((line) => /<loc>https:\/\/wechatai\.app([^<]*)<\/loc>/.exec(line)?.[1])
       .sort();
-    expect(addedPaths).toEqual(["/pt", "/pt/pricing", "/pt/wechat-ai", "/pt/wechat-bot", "/pt/wechat-deepseek"]);
+    expect(addedPaths).toEqual([
+      "/pt",
+      "/pt/pricing",
+      "/pt/wechat-ai",
+      "/pt/wechat-bot",
+      "/pt/wechat-deepseek",
+    ]);
     for (const line of before.split("\n").filter((value) => value.includes("<url>"))) {
       expect(after, line).toContain(line);
     }
@@ -192,6 +199,24 @@ describe("Brazilian Portuguese translations", () => {
       .filter((translation) => translation.locale === "pt")
       .map((translation) => translation.path)
       .sort();
-    expect(ptPaths).toEqual([...expectedPaths, "/app"].sort());
+    expect(ptPaths).toEqual(
+      [
+        ...expectedPaths,
+        "/app",
+        ...[
+          "admin",
+          "assistants",
+          "billing",
+          "channels",
+          "credits",
+          "invite",
+          "notices",
+          "plugins",
+          "sessions",
+          "tasks",
+          "wechat",
+        ].map((section) => `/app/${section}`),
+      ].sort(),
+    );
   });
 });

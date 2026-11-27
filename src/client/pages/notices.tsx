@@ -1,3 +1,4 @@
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { useEffect, useState } from "react";
 import { CheckCheck, ChevronLeft, ChevronRight, Bell } from "lucide-react";
 import { useApp } from "../context";
@@ -7,6 +8,8 @@ import { unreadNoticeCount, type UserNotices } from "../../shared/site-notices";
 import { ConnectorUpdateCard } from "../connector-update-notice";
 
 export function Notices() {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { request, base } = useApp();
   const { open, busy, readAll, version, readConnectorUpdate } = useNotices();
   const [page, setPage] = useState(1);
@@ -26,7 +29,7 @@ export function Notices() {
         }
       })
       .catch((e) => {
-        if (!controller.signal.aborted) setError(e.message);
+        if (!controller.signal.aborted) setError(errorText(e));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -36,9 +39,9 @@ export function Notices() {
   return (
     <div className="notices-page page-enter">
       <PageHead
-        eyebrow="NOTICES"
-        title="通知"
-        description="产品更新、使用提示和服务公告，都在这里。"
+        eyebrow={copyText("NOTICES")}
+        title={copyText("通知")}
+        description={copyText("产品更新、使用提示和服务公告，都在这里。")}
         action={
           <button
             className="button secondary"
@@ -46,7 +49,7 @@ export function Notices() {
             onClick={() => data && void readAll(data)}
           >
             <CheckCheck size={16} />
-            全部已读
+            {copyText("全部已读")}
           </button>
         }
       />
@@ -55,12 +58,12 @@ export function Notices() {
           <div className="notice-empty" role="alert">
             <p>{error}</p>
             <button className="button secondary" onClick={() => setRetry((v) => v + 1)}>
-              重新加载
+              {copyText("重新加载")}
             </button>
           </div>
         ) : loading ? (
           <p className="notice-empty" role="status">
-            正在加载通知…
+            {copyText("正在加载通知…")}
           </p>
         ) : data && (data.items.length || data.connectorUpdate) ? (
           <>
@@ -79,17 +82,21 @@ export function Notices() {
         ) : (
           <div className="notice-empty">
             <Bell size={28} />
-            <h2>暂时没有通知</h2>
-            <p>有新消息时，右上角的小铃铛会提醒你。</p>
+            <h2>{copyText("暂时没有通知")}</h2>
+            <p>{copyText("有新消息时，右上角的小铃铛会提醒你。")}</p>
           </div>
         )}
       </section>
       {data && data.totalPages > 1 && (
-        <nav className="notice-pagination" aria-label="通知分页">
-          <span>共 {data.total} 条</span>
+        <nav className="notice-pagination" aria-label={copyText("通知分页")}>
+          <span>
+            {copyText("共 ")}
+            {data.total}
+            {copyText(" 条")}
+          </span>
           <button
             className="icon-button"
-            aria-label="上一页"
+            aria-label={copyText("上一页")}
             disabled={loading || page <= 1}
             onClick={() => setPage(page - 1)}
           >
@@ -100,7 +107,7 @@ export function Notices() {
           </span>
           <button
             className="icon-button"
-            aria-label="下一页"
+            aria-label={copyText("下一页")}
             disabled={loading || page >= data.totalPages}
             onClick={() => setPage(page + 1)}
           >

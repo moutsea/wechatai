@@ -1,3 +1,5 @@
+import { useLocale } from "../locale";
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -76,17 +78,19 @@ async function taskRequest<T>(
 }
 
 function TaskResult({ id, content }: { id: string; content: string }) {
+  const copyText = useWorkspaceText();
   return (
     <>
       <div className="cloud-task-content cloud-task-result">
         <ChatMarkdown content={content} id={`cloud-${id}`} />
       </div>
-      <CopyMessage text={content} label="复制结果" />
+      <CopyMessage text={content} label={copyText("复制结果")} />
     </>
   );
 }
 
 function TaskStatus({ task }: { task: CloudAgentTask }) {
+  const copyText = useWorkspaceText();
   return (
     <span className={`cloud-task-status ${task.status}`}>
       {task.status === "completed" ? (
@@ -98,11 +102,11 @@ function TaskStatus({ task }: { task: CloudAgentTask }) {
       ) : (
         <Square size={14} />
       )}
-      {labels[task.status]}
+      {copyText(labels[task.status])}
       {task.stopping
         ? task.status === "finalizing"
-          ? " · 正在取消文件接收"
-          : " · 停止确认中"
+          ? copyText(" · 正在取消文件接收")
+          : copyText(" · 停止确认中")
         : ""}
     </span>
   );
@@ -114,6 +118,7 @@ function storageSize(bytes: number) {
 }
 
 function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
+  const copyText = useWorkspaceText();
   const { request } = useApp();
   const [usage, setUsage] = useState<CloudAgentStorageUsage | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,7 +142,7 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
     void taskRequest(
       (signal) => request<CloudAgentStorageUsage>("/cloud/storage", { signal }),
       controller,
-      "读取空间用量超时",
+      copyText("读取空间用量超时"),
     )
       .then(
         (result) => {
@@ -154,14 +159,14 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
     return () => controller.abort();
   }, [request, revision]);
   return (
-    <section className="panel cloud-storage" aria-label="云端空间">
+    <section className="panel cloud-storage" aria-label={copyText("云端空间")}>
       <div className="cloud-storage-heading">
         <span className="cloud-storage-icon">
           <HardDrive size={19} />
         </span>
         <div>
-          <h2>云端空间</h2>
-          <span>同账号的 Agent 共享</span>
+          <h2>{copyText("云端空间")}</h2>
+          <span>{copyText("同账号的 Agent 共享")}</span>
         </div>
       </div>
       <div className="cloud-storage-summary">
@@ -171,23 +176,33 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
               "zh-CN",
             )}
           </strong>
-          <span>MiB 总容量</span>
+          <span>{copyText("MiB 总容量")}</span>
         </p>
         <p className="cloud-storage-used">
           {usage
-            ? `已用 ${storageSize(usage.usedBytes)} / ${storageSize(usage.maxTotalBytes)}`
-            : `每账号 ${storageSize(CLOUD_AGENT_STORAGE_BYTES)}`}
+            ? copyText("已用 {value0} / {value1}", {
+                value0: copyText(storageSize(usage.usedBytes)),
+                value1: copyText(storageSize(usage.maxTotalBytes)),
+              })
+            : copyText("每账号 {value0}", {
+                value0: copyText(storageSize(CLOUD_AGENT_STORAGE_BYTES)),
+              })}
         </p>
         {usage && (
           <>
             <progress
-              aria-label="云端空间占用"
+              aria-label={copyText("云端空间占用")}
               max={usage.maxTotalBytes}
               value={Math.min(usage.maxTotalBytes, usage.usedBytes + usage.reservedBytes)}
             />
             <p className="cloud-storage-available">
-              可用 {storageSize(usage.availableBytes)}
-              {usage.reservedBytes > 0 && `，任务写入预留 ${storageSize(usage.reservedBytes)}`}。
+              {copyText("可用 ")}
+              {copyText(storageSize(usage.availableBytes))}
+              {usage.reservedBytes > 0 &&
+                copyText("，任务写入预留 {value0}", {
+                  value0: copyText(storageSize(usage.reservedBytes)),
+                })}
+              。
             </p>
           </>
         )}
@@ -198,28 +213,34 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
         onClick={() => setRevision((value) => value + 1)}
       >
         <RefreshCw size={13} className={loading ? "cloud-task-spinner" : undefined} />
-        {loading ? "正在读取用量…" : "刷新用量"}
+        {loading ? copyText("正在读取用量…") : copyText("刷新用量")}
       </button>
       {error && (
         <p className="form-error" role="status">
-          用量暂时无法读取，请刷新重试。{usage && "当前显示上次读取的用量。"}
+          {copyText("用量暂时无法读取，请刷新重试。")}
+          {usage && copyText("当前显示上次读取的用量。")}
         </p>
       )}
       <details className="cloud-storage-notes">
         <summary>
-          空间与文件说明 <ChevronDown size={14} />
+          {copyText("空间与文件说明 ")}
+          <ChevronDown size={14} />
         </summary>
         <p className="form-note">
-          同账号的小薇
-          共用此空间，用于工作文件、附件及任务运行数据。空间不足时无法继续写入。删除任务记录不会释放云端空间。
+          {copyText(
+            "同账号的小薇 共用此空间，用于工作文件、附件及任务运行数据。空间不足时无法继续写入。删除任务记录不会释放云端空间。",
+          )}
         </p>
-        <p className="form-note">{CLOUD_AGENT_FILE_LIMITS_NOTE}</p>
+        <p className="form-note">{copyText(CLOUD_AGENT_FILE_LIMITS_NOTE)}</p>
       </details>
     </section>
   );
 }
 
 export function CloudTasks() {
+  const errorText = useWorkspaceError();
+  const { locale } = useLocale();
+  const copyText = useWorkspaceText();
   const { request, notify, data, base } = useApp();
   const [params, setParams] = useSearchParams();
   const { id } = useParams();
@@ -256,14 +277,14 @@ export function CloudTasks() {
                 }))
               : request<CloudAgentTaskPage>(path, { signal }),
           controller,
-          "加载云端任务超时，请重试。",
+          copyText("加载云端任务超时，请重试。"),
         );
         if (!controller.signal.aborted) setPage({ path, data: result });
       } catch (e) {
         // A transient refresh failure must not erase results or stop their polling.
         if (!controller.signal.aborted) {
           if (e instanceof ApiError && [401, 403, 404].includes(e.status)) setPage(null);
-          setLoad({ path, loading: false, error: (e as Error).message });
+          setLoad({ path, loading: false, error: errorText(e) });
         }
       } finally {
         if (!controller.signal.aborted) setLoad((current) => ({ ...current, loading: false }));
@@ -304,7 +325,7 @@ export function CloudTasks() {
             signal,
           }),
         controller,
-        "停止请求超时。",
+        copyText("停止请求超时。"),
       );
       if (pendingStop.current !== controller) return;
       setPage((current) =>
@@ -321,22 +342,26 @@ export function CloudTasks() {
       notify(
         updated.stopping
           ? updated.status === "finalizing"
-            ? "正在取消文件接收，本次不扣 credits。已发生的模型 API 费用以服务商账单为准。"
-            : "已请求停止，等待云端确认。已发生的外部操作无法撤销，费用以最终结算为准。"
+            ? copyText(
+                "正在取消文件接收，本次不扣 credits。已发生的模型 API 费用以服务商账单为准。",
+              )
+            : copyText("已请求停止，等待云端确认。已发生的外部操作无法撤销，费用以最终结算为准。")
           : updated.status === "cancelled"
-            ? "任务已停止，费用以最终结算为准。"
+            ? copyText("任务已停止，费用以最终结算为准。")
             : updated.status === "finalizing"
-              ? "任务已结束，正在处理结果，无法再停止。"
+              ? copyText("任务已结束，正在处理结果，无法再停止。")
               : updated.status === "completed"
-                ? "任务已完成，无法再停止。"
-                : "任务状态已更新，请查看最新结果。",
+                ? copyText("任务已完成，无法再停止。")
+                : copyText("任务状态已更新，请查看最新结果。"),
       );
     } catch (e) {
       if (pendingStop.current === controller)
         notify(
           e instanceof ApiError
-            ? e.message
-            : `${(e as Error).message} 停止请求是否受理尚未确认，正在重新查询任务状态。`,
+            ? errorText(e)
+            : copyText("{value0} 停止请求是否受理尚未确认，正在重新查询任务状态。", {
+                value0: errorText(e),
+              }),
           true,
         );
     } finally {
@@ -359,19 +384,21 @@ export function CloudTasks() {
     <div className={`page-enter cloud-tasks${id ? " cloud-task-detail" : ""}`}>
       <PageHead
         eyebrow="XIAOWEI"
-        title={id ? "任务详情" : "云端任务"}
-        description="小薇在微伴云端帮你做事。进度、处理结果和生成文件都在这里。"
+        title={id ? copyText("任务详情") : copyText("云端任务")}
+        description={copyText("小薇在微伴云端帮你做事。进度、处理结果和生成文件都在这里。")}
         action={
           <div className="cloud-tasks-actions">
             <Link className="button secondary" to={`${base}/plugins`}>
-              配置小薇 <ArrowUpRight size={15} />
+              {copyText("配置小薇 ")}
+              <ArrowUpRight size={15} />
             </Link>
             <button
               className="button secondary"
               disabled={loading || Boolean(busy)}
               onClick={refresh}
             >
-              <RefreshCw size={15} className={loading ? "cloud-task-spinner" : undefined} /> 刷新
+              <RefreshCw size={15} className={loading ? "cloud-task-spinner" : undefined} />
+              {copyText(" 刷新")}
             </button>
           </div>
         }
@@ -383,14 +410,17 @@ export function CloudTasks() {
               {id ? (
                 <Link className="text-link" to={`${base}/tasks${search}`}>
                   <ArrowLeft size={15} />
-                  返回任务列表
+                  {copyText("返回任务列表")}
                 </Link>
               ) : (
                 <>
-                  <h2>{cursor ? "更早的任务" : "任务记录"}</h2>
+                  <h2>{cursor ? copyText("更早的任务") : copyText("任务记录")}</h2>
                   {currentPage && (
                     <span>
-                      本页 {tasks.length} 个任务{running > 0 && ` · ${running} 个进行中`}
+                      {copyText("本页 ")}
+                      {tasks.length}
+                      {copyText(" 个任务")}
+                      {running > 0 && copyText(" · {value0} 个进行中", { value0: running })}
                     </span>
                   )}
                 </>
@@ -399,33 +429,33 @@ export function CloudTasks() {
             {running > 0 && (
               <span className="cloud-tasks-live">
                 <span />
-                自动更新中
+                {copyText("自动更新中")}
               </span>
             )}
             {!id && cursor && (
               <Link className="text-link" to={`${base}/tasks${latestSearch}`}>
-                返回最新任务
+                {copyText("返回最新任务")}
               </Link>
             )}
           </div>
           {!id && plugin && (
             <p className="cloud-task-filter">
-              仅显示该插件的任务。
+              {copyText("仅显示该插件的任务。")}
               <button className="text-link" onClick={() => setParams({}, { replace: true })}>
-                查看全部
+                {copyText("查看全部")}
               </button>
             </p>
           )}
           {error && (
             <p className="form-error cloud-task-notice" role="alert">
-              {currentPage && "刷新失败，当前显示上次加载的任务。"}
+              {currentPage && copyText("刷新失败，当前显示上次加载的任务。")}
               {error}
             </p>
           )}
           {loading && !currentPage ? (
             <div className="panel cloud-tasks-loading" role="status">
               <Loader2 size={22} className="cloud-task-spinner" />
-              正在加载云端任务…
+              {copyText("正在加载云端任务…")}
             </div>
           ) : tasks.length ? (
             <div className="cloud-task-list">
@@ -444,7 +474,7 @@ export function CloudTasks() {
                             className="cloud-task-title"
                             to={`${base}/tasks/${encodeURIComponent(task.id)}${search}`}
                           >
-                            {task.prompt.slice(0, 120) || "（内容已删除）"}
+                            {task.prompt.slice(0, 120) || copyText("（内容已删除）")}
                           </Link>
                         )}
                       </h2>
@@ -455,32 +485,36 @@ export function CloudTasks() {
                     <TaskStatus task={task} />
                   </div>
                   {task.unconfirmed && (
-                    <p className="cloud-task-notice">正在确认云端是否已接收任务</p>
+                    <p className="cloud-task-notice">{copyText("正在确认云端是否已接收任务")}</p>
                   )}
                   {id && (
-                    <section aria-label="任务要求" className="cloud-task-request">
-                      <h3>任务要求</h3>
-                      <pre className="cloud-task-content">{task.prompt || "（内容已删除）"}</pre>
+                    <section aria-label={copyText("任务要求")} className="cloud-task-request">
+                      <h3>{copyText("任务要求")}</h3>
+                      <pre className="cloud-task-content">
+                        {task.prompt || copyText("（内容已删除）")}
+                      </pre>
                     </section>
                   )}
                   {task.result &&
                     (id ? (
-                      <section aria-label="任务结果" className="cloud-task-output">
-                        <h3>任务结果</h3>
+                      <section aria-label={copyText("任务结果")} className="cloud-task-output">
+                        <h3>{copyText("任务结果")}</h3>
                         <TaskResult id={task.id} content={task.result} />
                       </section>
                     ) : (
                       <details className="cloud-task-preview">
                         <summary>
-                          查看结果 <ChevronDown size={15} />
+                          {copyText("查看结果 ")}
+                          <ChevronDown size={15} />
                         </summary>
                         <TaskResult id={task.id} content={task.result} />
                       </details>
                     ))}
                   {task.files?.length ? (
-                    <section aria-label="生成文件" className="cloud-task-files">
+                    <section aria-label={copyText("生成文件")} className="cloud-task-files">
                       <h3>
-                        生成文件 <span>{task.files.length}</span>
+                        {copyText("生成文件 ")}
+                        <span>{task.files.length}</span>
                       </h3>
                       <div className="cloud-task-file-list">
                         {task.files.map((file) => (
@@ -499,13 +533,15 @@ export function CloudTasks() {
                           </a>
                         ))}
                       </div>
-                      <p className="form-note">文件保留 30 天；清空或删除所属会话后不可下载。</p>
+                      <p className="form-note">
+                        {copyText("文件保留 30 天；清空或删除所属会话后不可下载。")}
+                      </p>
                     </section>
                   ) : null}
                   {task.error && (
                     <p className="form-error cloud-task-error">
                       <TriangleAlert size={16} />
-                      {task.error}
+                      {errorText(task.error)}
                     </p>
                   )}
                   <div className="cloud-task-footer">
@@ -515,15 +551,17 @@ export function CloudTasks() {
                         title={new Date(task.createdAt).toLocaleString("zh-CN")}
                       >
                         <Clock3 size={13} />
-                        {relativeTime(task.createdAt)}
+                        {relativeTime(task.createdAt, locale === "pt" ? "pt-BR" : "zh-CN")}
                       </time>
                       <span>
                         <Coins size={13} />
                         {task.credits !== undefined
-                          ? `已结算 · ${task.credits.toFixed(3)} credits`
+                          ? copyText("已结算 · {value0} credits", {
+                              value0: task.credits.toFixed(3),
+                            })
                           : active(task.status)
-                            ? "费用待结算"
-                            : "暂无扣费记录"}
+                            ? copyText("费用待结算")
+                            : copyText("暂无扣费记录")}
                       </span>
                       {(task.delivery !== "pending" || !active(task.status) || task.stale) && (
                         <span
@@ -533,12 +571,12 @@ export function CloudTasks() {
                         >
                           <MessageCircle size={13} />
                           {task.delivery === "sent"
-                            ? "已送达微信"
+                            ? copyText("已送达微信")
                             : task.delivery === "stale" || task.stale
-                              ? "结果仅保留在任务页，不再发送微信"
+                              ? copyText("结果仅保留在任务页，不再发送微信")
                               : task.delivery === "failed"
-                                ? "微信未送达"
-                                : "等待发送微信"}
+                                ? copyText("微信未送达")
+                                : copyText("等待发送微信")}
                         </span>
                       )}
                     </div>
@@ -551,11 +589,11 @@ export function CloudTasks() {
                         <Square size={12} />
                         {task.canCancelFiles
                           ? busy === task.id
-                            ? "正在取消…"
-                            : "取消文件接收"
+                            ? copyText("正在取消…")
+                            : copyText("取消文件接收")
                           : busy === task.id
-                            ? "正在请求停止…"
-                            : "停止"}
+                            ? copyText("正在请求停止…")
+                            : copyText("停止")}
                       </button>
                     )}
                   </div>
@@ -567,16 +605,24 @@ export function CloudTasks() {
               <Empty
                 icon={<Cloud size={26} />}
                 title={
-                  plugin ? "该插件暂无云端任务" : cursor ? "没有更早的云端任务" : "还没有云端任务"
+                  plugin
+                    ? copyText("该插件暂无云端任务")
+                    : cursor
+                      ? copyText("没有更早的云端任务")
+                      : copyText("还没有云端任务")
                 }
                 description={
                   plugin || cursor
-                    ? "已接收的云端任务会显示在这里，可返回全部任务查看其他记录。"
+                    ? copyText("已接收的云端任务会显示在这里，可返回全部任务查看其他记录。")
                     : !data.cloudAgent.ready
-                      ? "小薇暂时不可用，已有任务记录仍可查看。"
+                      ? copyText("小薇暂时不可用，已有任务记录仍可查看。")
                       : data.plan === "plus"
-                        ? "在插件页配置小薇后，从微信发送文字或附件处理要求，即可在这里查看进度与结果。"
-                        : "小薇已向 Plus 会员开放。开通后可配置自己的模型，从微信提交任务。"
+                        ? copyText(
+                            "在插件页配置小薇后，从微信发送文字或附件处理要求，即可在这里查看进度与结果。",
+                          )
+                        : copyText(
+                            "小薇已向 Plus 会员开放。开通后可配置自己的模型，从微信提交任务。",
+                          )
                 }
                 action={
                   !plugin && !cursor ? (
@@ -589,10 +635,10 @@ export function CloudTasks() {
                       }
                     >
                       {!data.cloudAgent.ready
-                        ? "查看使用指南"
+                        ? copyText("查看使用指南")
                         : data.plan === "plus"
-                          ? "配置小薇"
-                          : "了解 Plus"}
+                          ? copyText("配置小薇")
+                          : copyText("了解 Plus")}
                       <ArrowUpRight size={15} />
                     </Link>
                   ) : undefined
@@ -601,16 +647,17 @@ export function CloudTasks() {
             </div>
           )}
           {!id && currentPage?.nextCursor && (
-            <nav className="cloud-task-pagination" aria-label="任务分页">
+            <nav className="cloud-task-pagination" aria-label={copyText("任务分页")}>
               <Link className="button secondary" to={`${base}/tasks?${olderQuery}`}>
-                查看更早任务
+                {copyText("查看更早任务")}
               </Link>
             </nav>
           )}
           {tasks.some(canStop) && (
             <p className="form-note cloud-task-stop-note">
-              执行中的任务停止需等待云端确认，费用以最终结算为准；文件接收可取消，取消后本次不扣
-              credits。已发生的模型 API 费用以服务商账单为准。
+              {copyText(
+                "执行中的任务停止需等待云端确认，费用以最终结算为准；文件接收可取消，取消后本次不扣 credits。已发生的模型 API 费用以服务商账单为准。",
+              )}
             </p>
           )}
         </div>
@@ -619,14 +666,19 @@ export function CloudTasks() {
           <section className="cloud-tasks-help">
             <h2>
               <MessageCircle size={17} />
-              在微信里继续
+              {copyText("在微信里继续")}
             </h2>
-            <p>先发附件，再发送完整处理要求。任务在后台执行，完成后会尝试回复原微信会话。</p>
+            <p>
+              {copyText(
+                "先发附件，再发送完整处理要求。任务在后台执行，完成后会尝试回复原微信会话。",
+              )}
+            </p>
             <Link className="text-link" to="/docs/cloud-agent">
-              查看使用指南 <ArrowUpRight size={14} />
+              {copyText("查看使用指南 ")}
+              <ArrowUpRight size={14} />
             </Link>
             <p className="cloud-tasks-retention">
-              清空或删除会话会清除对应任务内容，并请求停止未结束的任务。
+              {copyText("清空或删除会话会清除对应任务内容，并请求停止未结束的任务。")}
             </p>
           </section>
         </aside>

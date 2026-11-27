@@ -5,10 +5,13 @@ export function authReturnPath(value: string | null): string {
   if (!value?.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/app";
   try {
     const url = new URL(value, "https://wechatai.app");
+    const localized = splitLocalePath(url.pathname);
+    if (localized?.locale === "pt" && /%5c|%2f/i.test(url.pathname)) return "/app";
     return url.origin === "https://wechatai.app" &&
       (url.pathname === DASHBOARD_PATH ||
         url.pathname.startsWith("/app/") ||
-        splitLocalePath(url.pathname)?.path === DASHBOARD_PATH ||
+        localized?.path === DASHBOARD_PATH ||
+        (localized?.locale === "pt" && localized.path.startsWith(`${DASHBOARD_PATH}/`)) ||
         url.pathname === "/pricing" ||
         url.pathname === "/en/pricing" ||
         url.pathname === "/ja/pricing" ||

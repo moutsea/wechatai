@@ -1,3 +1,5 @@
+import { useWorkspaceText } from "./workspace-copy";
+import { localizedHref, useLocale } from "./locale";
 import { Component, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -41,17 +43,19 @@ export class LoadErrorBoundary extends Component<LoadErrorBoundaryProps, LoadErr
 
 export function RouteLoadErrorBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
+  const { locale } = useLocale();
+  const copyText = useWorkspaceText();
   return (
     <LoadErrorBoundary
       resetKey={pathname}
       fallback={
         <main className="full-state" role="alert">
-          <h1>页面未能加载</h1>
-          <p>请检查网络后重新加载页面。</p>
+          <h1>{copyText("页面未能加载")}</h1>
+          <p>{copyText("请检查网络后重新加载页面。")}</p>
           <button type="button" className="button" onClick={reloadPage}>
-            重新加载页面
+            {copyText("重新加载页面")}
           </button>
-          <a href="/">返回首页</a>
+          <a href={localizedHref(locale, "/")}>{copyText("返回首页")}</a>
         </main>
       }
     >

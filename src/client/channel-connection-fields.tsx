@@ -1,3 +1,4 @@
+import { useWorkspaceText } from "./workspace-copy";
 import { ConnectionPrivacy } from "./connection-privacy";
 import type { ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
@@ -28,23 +29,24 @@ export function ChannelConnectionFields({
   importAction?: ReactNode;
   importStatus?: ReactNode;
 }) {
+  const copyText = useWorkspaceText();
   const provider = channelProvider(providerId);
   const needsKey = channelNeedsApiKey(previous, form);
   const nameFields = (
     <>
       <label>
-        渠道名称
+        {copyText("渠道名称")}
         <input
           required={!provider}
           maxLength={40}
           disabled={disabled}
           value={form.name}
           onChange={(e) => onChange("name", e.target.value)}
-          placeholder={provider?.name || "例如：我的模型服务"}
+          placeholder={provider ? copyText(provider.name) : copyText("例如：我的模型服务")}
         />
       </label>
       <label>
-        备注（可选）
+        {copyText("备注（可选）")}
         <input
           maxLength={160}
           disabled={disabled}
@@ -58,7 +60,7 @@ export function ChannelConnectionFields({
     <>
       <div className="channel-name-field">
         <div className="channel-name-label">
-          <label htmlFor="channel-provider">服务商</label>
+          <label htmlFor="channel-provider">{copyText("服务商")}</label>
           {importAction}
         </div>
         <select
@@ -68,26 +70,28 @@ export function ChannelConnectionFields({
           value={providerId}
           onChange={(e) => onProviderChange(e.target.value)}
         >
-          <optgroup label="模型 API 服务">
+          <optgroup label={copyText("模型 API 服务")}>
             {CHANNEL_PROVIDERS.filter((p) => !p.codingPlan).map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {copyText(p.name)}
               </option>
             ))}
           </optgroup>
-          <optgroup label="Coding Plan 专用入口">
+          <optgroup label={copyText("Coding Plan 专用入口")}>
             {CHANNEL_PROVIDERS.filter((p) => p.codingPlan).map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {copyText(p.name)}
               </option>
             ))}
           </optgroup>
-          <option value="custom">自定义（第三方渠道 / 其他协议）</option>
+          <option value="custom">{copyText("自定义（第三方渠道 / 其他协议）")}</option>
         </select>
-        {provider?.note && <small>{provider.note}</small>}
+        {provider?.note && <small>{copyText(provider.note)}</small>}
         {provider?.codingPlan && (
           <small>
-            请使用对应套餐的 Key。套餐可能限制接入工具，是否允许此用途请以服务商说明为准。
+            {copyText(
+              "请使用对应套餐的 Key。套餐可能限制接入工具，是否允许此用途请以服务商说明为准。",
+            )}
           </small>
         )}
         {importStatus}
@@ -96,7 +100,7 @@ export function ChannelConnectionFields({
         <>
           {nameFields}
           <label>
-            接口协议
+            {copyText("接口协议")}
             <select
               disabled={disabled}
               value={form.protocol}
@@ -104,7 +108,7 @@ export function ChannelConnectionFields({
             >
               {Object.entries(protocolLabels).map(([value, label]) => (
                 <option value={value} key={value}>
-                  {label}
+                  {copyText(label)}
                 </option>
               ))}
             </select>
@@ -121,7 +125,9 @@ export function ChannelConnectionFields({
               onChange={(e) => onChange("baseUrl", e.target.value)}
               placeholder="https://api.example.com"
             />
-            <small>填写服务商提供的 Base URL，或粘贴完整接口地址。系统按所选协议补全路径。</small>
+            <small>
+              {copyText("填写服务商提供的 Base URL，或粘贴完整接口地址。系统按所选协议补全路径。")}
+            </small>
           </label>
         </>
       )}
@@ -136,7 +142,8 @@ export function ChannelConnectionFields({
               target="_blank"
               rel="noopener noreferrer"
             >
-              服务商说明 <ExternalLink size={12} />
+              {copyText("服务商说明 ")}
+              <ExternalLink size={12} />
             </a>
           )}
         </div>
@@ -151,11 +158,15 @@ export function ChannelConnectionFields({
           onChange={(e) => onChange("apiKey", e.target.value)}
           placeholder={
             needsKey
-              ? `填写${provider ? ` ${provider.name} 的` : "此渠道的"} API Key`
-              : "已加密保存，留空则不更改"
+              ? copyText("填写{value0} API Key", {
+                  value0: provider ? copyText(provider.name) : copyText("此渠道"),
+                })
+              : copyText("已加密保存，留空则不更改")
           }
         />
-        {needsKey && previous && <small>服务地址已更改，需要填写对应的 API Key。</small>}
+        {needsKey && previous && (
+          <small>{copyText("服务地址已更改，需要填写对应的 API Key。")}</small>
+        )}
       </div>
       {provider && (
         <div className="provider-connection-meta">
@@ -166,14 +177,14 @@ export function ChannelConnectionFields({
             disabled={disabled}
             onClick={() => onProviderChange("custom")}
           >
-            自定义接口
+            {copyText("自定义接口")}
           </button>
         </div>
       )}
       <ModelEndpointPreview baseUrl={form.baseUrl} protocol={form.protocol} />
       {provider && (
         <details className="advanced-fields provider-advanced">
-          <summary>更多设置 · 渠道名称、备注</summary>
+          <summary>{copyText("更多设置 · 渠道名称、备注")}</summary>
           <div className="provider-advanced-fields">{nameFields}</div>
         </details>
       )}

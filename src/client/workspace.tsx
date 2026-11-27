@@ -2,6 +2,8 @@ import { NoticeProvider } from "./notices";
 import { Notices } from "./pages/notices";
 import { lazy, Suspense, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { useLocale, localizedHref } from "./locale";
+import { dashboardCopy } from "../shared/i18n/dashboard";
 import { AppProvider } from "./context";
 import { Shell } from "./shell";
 import { Dashboard } from "./pages/dashboard";
@@ -22,6 +24,8 @@ const CloudTasks = lazy(() =>
 );
 const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: module.Admin })));
 export function Workspace() {
+  const { locale } = useLocale();
+  const loading = dashboardCopy[locale].shell.loading;
   const [historyRevision, setHistoryRevision] = useState(0);
   return (
     <AppProvider>
@@ -36,7 +40,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      正在加载插件…
+                      {locale === "pt" ? loading : "正在加载插件…"}
                     </div>
                   }
                 >
@@ -50,7 +54,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      正在加载云端任务…
+                      {locale === "pt" ? loading : "正在加载云端任务…"}
                     </div>
                   }
                 >
@@ -66,7 +70,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      正在加载会话记录…
+                      {locale === "pt" ? loading : "正在加载会话记录…"}
                     </div>
                   }
                 >
@@ -81,12 +85,18 @@ export function Workspace() {
             <Route
               path="admin"
               element={
-                <Suspense fallback={<div className="full-state">正在加载管理后台…</div>}>
+                <Suspense
+                  fallback={
+                    <div className="full-state">
+                      {locale === "pt" ? loading : "正在加载管理后台…"}
+                    </div>
+                  }
+                >
                   <Admin />
                 </Suspense>
               }
             />
-            <Route path="*" element={<Navigate to="/app" replace />} />
+            <Route path="*" element={<Navigate to={localizedHref(locale, "/app")} replace />} />
           </Routes>
         </Shell>
       </NoticeProvider>

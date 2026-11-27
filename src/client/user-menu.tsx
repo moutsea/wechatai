@@ -251,7 +251,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
               <>
                 <Link
                   className="account-credit-balance"
-                  to="/app/credits"
+                  to={localizedHref(locale, "/app/credits")}
                   onClick={() => setOpen(false)}
                 >
                   <span>
@@ -288,7 +288,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
                   </p>
                   <Link
                     className="button small full"
-                    to="/app/billing"
+                    to={localizedHref(locale, "/app/billing")}
                     onClick={() => setOpen(false)}
                   >
                     {plus ? copy.renew : copy.upgrade}
@@ -299,7 +299,7 @@ export function UserMenu({ user }: { user: MenuUser }) {
             ) : null}
           </div>
           {isAdmin && (
-            <Link className="account-menu-item" to="/app/admin" onClick={() => setOpen(false)}>
+            <Link className="account-menu-item" to={localizedHref(locale, "/app/admin")} onClick={() => setOpen(false)}>
               <ShieldCheck size={17} />
               {copy.admin}
               <ArrowUpRight size={15} className="account-menu-arrow" />

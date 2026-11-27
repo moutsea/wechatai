@@ -1,3 +1,5 @@
+import { useLocale } from "./locale";
+import { dashboardCopy } from "../shared/i18n/dashboard";
 import { Fragment, useEffect, useId, useRef, type ReactNode } from "react";
 import { X, ArrowUpRight, Sprout, Feather, Code2, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -46,7 +48,7 @@ export function Modal({
   children,
   onClose,
   wide = false,
-  closeLabel = "关闭",
+  closeLabel,
   headerAction,
 }: {
   title: string;
@@ -57,6 +59,7 @@ export function Modal({
   closeLabel?: string;
   headerAction?: ReactNode;
 }) {
+  const { locale } = useLocale();
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -91,7 +94,11 @@ export function Modal({
           {description && <p id={descriptionId}>{description}</p>}
         </div>
         {headerAction}
-        <button className="icon-button" aria-label={closeLabel} onClick={onClose}>
+        <button
+          className="icon-button"
+          aria-label={closeLabel ?? (locale === "pt" ? dashboardCopy.pt.shell.close : "关闭")}
+          onClick={onClose}
+        >
           <X size={20} />
         </button>
       </div>

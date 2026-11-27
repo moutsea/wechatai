@@ -1,3 +1,4 @@
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { useEffect, useState } from "react";
 import { useApp } from "../context";
 import { Modal } from "../ui";
@@ -12,6 +13,8 @@ type Summary = {
   contextStart: number;
 };
 export function RoleSummary({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { request, notify } = useApp();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [text, setText] = useState("");
@@ -27,7 +30,7 @@ export function RoleSummary({ sessionId, onClose }: { sessionId: string; onClose
         }
       })
       .catch((e: Error) => {
-        if (current) setError(e.message);
+        if (current) setError(errorText(e));
       });
     return () => {
       current = false;
@@ -39,18 +42,18 @@ export function RoleSummary({ sessionId, onClose }: { sessionId: string; onClose
     setError("");
     try {
       await request(`/sessions/${sessionId}/summary`, json({ ...summary, text }, "PATCH"));
-      notify("剧情摘要已更新，下次对话生效");
+      notify(copyText("剧情摘要已更新，下次对话生效"));
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
   }
   return (
     <Modal
-      title="剧情摘要"
-      description="修正这段故事的记忆，不改动原始聊天记录。"
+      title={copyText("剧情摘要")}
+      description={copyText("修正这段故事的记忆，不改动原始聊天记录。")}
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -63,11 +66,12 @@ export function RoleSummary({ sessionId, onClose }: { sessionId: string; onClose
       >
         <div className="form-body role-summary">
           <p className="guide-note">
-            长对话会自动整理摘要。你也可以补充或修正时间、地点、关系、约定和未完成的线索。摘要仅用于当前会话；编辑不扣
-            credits，下次随对话发送时计入输入。
+            {copyText(
+              "长对话会自动整理摘要。你也可以补充或修正时间、地点、关系、约定和未完成的线索。摘要仅用于当前会话；编辑不扣 credits，下次随对话发送时计入输入。",
+            )}
           </p>
           <label>
-            当前记忆
+            {copyText("当前记忆")}
             <textarea
               disabled={!summary || busy}
               maxLength={12000}
@@ -75,15 +79,15 @@ export function RoleSummary({ sessionId, onClose }: { sessionId: string; onClose
               value={text}
               placeholder={
                 summary
-                  ? "暂未生成摘要，最近的对话仍会作为上下文。也可以在这里补充故事记忆。"
-                  : "正在读取…"
+                  ? copyText("暂未生成摘要，最近的对话仍会作为上下文。也可以在这里补充故事记忆。")
+                  : copyText("正在读取…")
               }
               onChange={(e) => setText(e.target.value)}
             />
           </label>
           <small>
-            {text.length.toLocaleString()} / 12,000 字符。清空摘要会遗忘已压缩的剧情；/reset
-            可重置整个上下文。
+            {text.length.toLocaleString()}
+            {copyText(" / 12,000 字符。清空摘要会遗忘已压缩的剧情；/reset 可重置整个上下文。")}
           </small>
           {error && (
             <div className="form-error" role="alert">
@@ -93,10 +97,10 @@ export function RoleSummary({ sessionId, onClose }: { sessionId: string; onClose
         </div>
         <div className="modal-actions">
           <button type="button" className="button secondary" disabled={busy} onClick={onClose}>
-            关闭
+            {copyText("关闭")}
           </button>
           <button className="button" disabled={!summary || busy}>
-            {busy ? "正在保存…" : "保存摘要"}
+            {busy ? copyText("正在保存…") : copyText("保存摘要")}
           </button>
         </div>
       </form>

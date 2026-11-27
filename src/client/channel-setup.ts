@@ -1,3 +1,4 @@
+import { formatCopy } from "../shared/i18n/dashboard";
 import { api, json } from "./api";
 import { channelNeedsApiKey } from "../shared/channel-providers";
 import type { Channel, ChannelInput, ModelImportResult } from "../shared/types";
@@ -29,18 +30,29 @@ export async function saveChannelSetup(
   return { channel };
 }
 
-export function modelImportMessage(result: ModelImportResult, limit: number) {
+export function modelImportMessage(
+  result: ModelImportResult,
+  limit: number,
+  copyText = formatCopy,
+) {
   const parts = [
     result.imported
-      ? `已导入 ${result.imported} 个模型`
+      ? copyText("已导入 {count} 个模型", { count: result.imported })
       : result.total
-        ? "没有新模型可导入"
-        : "上游未返回可导入的模型，请手动添加模型",
+        ? copyText("没有新模型可导入")
+        : copyText("上游未返回可导入的模型，请手动添加模型"),
   ];
-  if (result.existing) parts.push(`${result.existing} 个已存在`);
-  if (result.invalid) parts.push(`跳过 ${result.invalid} 条无效记录`);
+  if (result.existing) parts.push(copyText("{count} 个已存在", { count: result.existing }));
+  if (result.invalid) parts.push(copyText("跳过 {count} 条无效记录", { count: result.invalid }));
   if (result.incompatible)
-    parts.push(`跳过 ${result.incompatible} 个与当前协议不兼容的模型，可调整渠道协议后重新获取`);
-  if (result.limited) parts.push(`渠道最多 ${limit} 个模型，另有 ${result.limited} 个未导入`);
+    parts.push(
+      copyText("跳过 {count} 个与当前协议不兼容的模型，可调整渠道协议后重新获取", {
+        count: result.incompatible,
+      }),
+    );
+  if (result.limited)
+    parts.push(
+      copyText("渠道最多 {limit} 个模型，另有 {count} 个未导入", { limit, count: result.limited }),
+    );
   return parts.join("；");
 }

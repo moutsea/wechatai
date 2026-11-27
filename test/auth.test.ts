@@ -279,6 +279,8 @@ describe("Google and GitHub OAuth", () => {
     ["/pt/pricing?interval=month#plan-month", 987606],
     ["/pt/pricing?interval=year#plan-year", 987607],
     ["/es/app?source=setup#help", 987608],
+    ["/pt/app/channels?channel=abc#settings", 987609],
+    ["/pt/app/tasks/task-1?source=list#result", 987610],
   ])("returns new and existing OAuth users to %s after authorization", async (path, id) => {
     const returnTo = authReturnPath(path);
     const callback = path.includes("#") ? new URL(returnTo, env.APP_URL).href : returnTo;
@@ -306,7 +308,9 @@ describe("Google and GitHub OAuth", () => {
     for (const locale of ["en", "ja", "ko", "es", "pt"]) {
       const target = `/${locale}/app?source=setup#help`;
       expect(authReturnPath(target)).toBe(target);
-      expect(authReturnPath(`/${locale}/app/channels`)).toBe("/app");
+      expect(authReturnPath(`/${locale}/app/channels`)).toBe(
+        locale === "pt" ? "/pt/app/channels" : "/app",
+      );
     }
     for (const path of [
       null,

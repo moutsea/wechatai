@@ -1,3 +1,4 @@
+import { useWorkspaceText } from "./workspace-copy";
 import { modelEndpoint } from "../shared/model-endpoint";
 import type { Protocol } from "../shared/types";
 
@@ -8,6 +9,7 @@ export function ModelEndpointPreview({
   baseUrl: string;
   protocol: Protocol;
 }) {
+  const copyText = useWorkspaceText();
   let endpoint = "";
   try {
     const url = new URL(baseUrl.trim());
@@ -31,7 +33,7 @@ export function ModelEndpointPreview({
       aria-live="polite"
       aria-atomic="true"
     >
-      <span className="model-endpoint-preview-title">实际请求地址</span>
+      <span className="model-endpoint-preview-title">{copyText("实际请求地址")}</span>
       {endpoint ? (
         <div className="model-endpoint-preview-url">
           <span>POST</span>
@@ -40,8 +42,8 @@ export function ModelEndpointPreview({
       ) : (
         <small>
           {baseUrl.trim()
-            ? "请输入有效的 HTTP(S) 服务地址，不要包含密钥、查询参数或 # 片段。"
-            : "填写 Base URL 后显示。"}
+            ? copyText("请输入有效的 HTTP(S) 服务地址，不要包含密钥、查询参数或 # 片段。")
+            : copyText("填写 Base URL 后显示。")}
         </small>
       )}
     </div>

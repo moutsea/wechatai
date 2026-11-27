@@ -18,6 +18,14 @@ const dashboardLocales = new Map(
     localizedPath(locale, DASHBOARD_PATH), LOCALE_DEFINITIONS[locale].htmlLang,
   ]),
 );
+const {
+  module: { default: portugueseDashboard },
+} = await runnerImport(
+  fileURLToPath(new URL("../src/shared/i18n/pt/dashboard.ts", import.meta.url)),
+);
+for (const page of portugueseDashboard) {
+  dashboardLocales.set(localizedPath("pt", page.path), LOCALE_DEFINITIONS.pt.htmlLang);
+}
 const htmlFile = (path) => (path === "/" ? "index.html" : `${path.slice(1)}.html`);
 const museIndexLinks = [
   "(https://wechatai.app/wechat-muse)",
@@ -801,12 +809,17 @@ if (process.argv[2]) {
     "/app/billing",
     "/app/credits",
     ...dashboardLocales.keys(),
+    "/pt/app/tasks/deployment-smoke?plugin=smoke&cursor=smoke",
   ]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);
     const html = await response.text();
     const expectedLocale = localeByPath.get(new URL(path, origin).pathname);
-    const htmlLang = dashboardLocales.get(path) ?? expectedLocale?.htmlLang ?? defaultLocale.htmlLang;
+    const htmlLang =
+      dashboardLocales.get(path) ??
+      (path.startsWith("/pt/app/tasks/")
+        ? LOCALE_DEFINITIONS.pt.htmlLang
+        : expectedLocale?.htmlLang ?? defaultLocale.htmlLang);
     assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
     if (expectedLocale) {
       assert(

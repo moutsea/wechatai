@@ -481,12 +481,12 @@ test("keeps the signed-in Portuguese account menu usable on mobile", async ({ pa
   const menu = page.getByRole("dialog", { name: "Menu da conta", exact: true });
   await expect(menu.getByRole("link", { name: "Abrir o painel" })).toHaveAttribute("href", "/pt/app");
   const balance = menu.getByRole("link", { name: /Saldo de créditos/ });
-  await expect(balance).toHaveAttribute("href", "/app/credits");
+  await expect(balance).toHaveAttribute("href", "/pt/app/credits");
   await expect(balance).toContainText("1.234");
   await expect(menu.getByText("Conta gratuita", { exact: true })).toBeVisible();
   await expect(menu.getByRole("link", { name: "Fazer upgrade para o Plus" })).toHaveAttribute(
     "href",
-    "/app/billing",
+    "/pt/app/billing",
   );
   await expect(menu.getByRole("button", { name: "Sair", exact: true })).toBeInViewport();
   await expect(menu).not.toContainText(/\p{Script=Han}/u);

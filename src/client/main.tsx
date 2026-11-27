@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { BrowserRouter, matchRoutes, useLocation, useRoutes, type RouteObject } from "react-router-dom";
 import "../shared/i18n/load";
 import { DASHBOARD_PATH, hasRegisteredTranslation, splitLocalePath } from "../shared/i18n";
+import { useWorkspaceText } from "./workspace-copy";
 import { LocaleProvider } from "./locale";
 import { AuthProvider } from "./auth";
 import { Landing } from "./public-pages";
@@ -110,6 +111,8 @@ const notFoundRoutes = [notFoundRoute];
 function appRouteTarget(pathname: string) {
   const split = splitLocalePath(pathname);
   if (!split) return { routes, pathname };
+  if (split.locale === "pt" && split.path.startsWith(`${DASHBOARD_PATH}/`))
+    return { routes: localizedWorkspaceRoutes, pathname };
   if (!hasRegisteredTranslation(split.locale, split.path)) return { routes: notFoundRoutes, pathname };
   if (split.path === DASHBOARD_PATH) return { routes: localizedWorkspaceRoutes, pathname };
   return { routes: localizedRoutes, pathname: split.path };
@@ -162,6 +165,14 @@ function ScrollReset({ initialDocument }: { initialDocument?: DocumentState }) {
   }, [pathname, hash, key, initialDocument]);
   return null;
 }
+function PageLoading() {
+  const copyText = useWorkspaceText();
+  return (
+    <div className="full-state" role="status">
+      {copyText("正在加载页面…")}
+    </div>
+  );
+}
 function mountApp(initialDocument?: DocumentState, stopInitialTracking?: () => void) {
   // Preserve the existing root when Vite refreshes this module during development.
   const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
@@ -175,13 +186,7 @@ function mountApp(initialDocument?: DocumentState, stopInitialTracking?: () => v
             <PageViewTracker onReady={stopInitialTracking} />
             <DocumentInputProvider initialDocument={initialDocument}>
               <RouteLoadErrorBoundary>
-                <Suspense
-                  fallback={
-                    <div className="full-state" role="status">
-                      正在加载页面…
-                    </div>
-                  }
-                >
+                <Suspense fallback={<PageLoading />}>
                   <ScrollReset initialDocument={initialDocument} />
                   <AppRoutes />
                 </Suspense>

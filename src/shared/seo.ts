@@ -82,8 +82,8 @@ export const PRIVATE_PATHS = [
 ];
 
 export function localizedDashboardPaths(): string[] {
-  return registeredTranslationsForPath(DASHBOARD_PATH).map(({ locale }) =>
-    localizedPath(locale, DASHBOARD_PATH),
+  return PRIVATE_PATHS.flatMap((path) =>
+    registeredTranslationsForPath(path).map(({ locale }) => localizedPath(locale, path)),
   );
 }
 
@@ -804,8 +804,15 @@ export function getPageSeo(pathname: string, locale: Locale = DEFAULT_LOCALE): P
   const normalized = normalizePath(pathname);
   const split = splitLocalePath(normalized);
   const activeLocale = split?.locale ?? locale;
-  if ((split?.path ?? normalized) === DASHBOARD_PATH && activeLocale !== DEFAULT_LOCALE) {
-    const translation = registeredTranslation(activeLocale, DASHBOARD_PATH);
+  const workspacePath = split?.path ?? normalized;
+  if (
+    activeLocale !== DEFAULT_LOCALE &&
+    (workspacePath === DASHBOARD_PATH ||
+      (activeLocale === "pt" && workspacePath.startsWith(`${DASHBOARD_PATH}/`)))
+  ) {
+    const translation =
+      registeredTranslation(activeLocale, workspacePath) ??
+      registeredTranslation(activeLocale, DASHBOARD_PATH);
     if (!translation) return notFoundPageSeo();
     const { htmlLang } = LOCALE_DEFINITIONS[activeLocale];
     return {

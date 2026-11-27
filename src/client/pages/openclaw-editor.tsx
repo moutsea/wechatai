@@ -1,3 +1,4 @@
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import {
   pluginShortcutForEdit,
   pluginShortcutPatternForEdit,
@@ -44,6 +45,8 @@ export function OpenClawEditor({
   onSaved: (id: string) => void;
   onComplete: (id: string) => void;
 }) {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { data, base, request, refresh, notify } = useApp();
   const agentName = remoteAgentName(`wechatai/${kind}`);
   const [saved, setSaved] = useState(plugin === "new" ? null : plugin);
@@ -53,7 +56,11 @@ export function OpenClawEditor({
   const [form, setForm] = useState<OpenClawInput>(() =>
     editSchema.parse(
       plugin === "new"
-        ? { name: agentName, shortcut: kind === "openclaw" ? "claw" : kind }
+        ? {
+            name: agentName,
+            shortcut: kind === "openclaw" ? "claw" : kind,
+            waitingMessage: copyText(OPENCLAW_WAITING_MESSAGE),
+          }
         : plugin,
     ),
   );
@@ -95,12 +102,14 @@ export function OpenClawEditor({
           stopped = true;
           setPairing(null);
           setSaved((p) => (p ? { ...p, ...state } : p));
-          helpers.current.notify(`${agentName} 已连接，可以去微信聊天了`);
+          helpers.current.notify(
+            copyText("{value0} 已连接，可以去微信聊天了", { value0: agentName }),
+          );
           void helpers.current.refresh();
           helpers.current.onComplete(pluginId);
         }
       } catch {
-        if (!stopped) setPollError("暂时无法更新连接状态，正在重试…");
+        if (!stopped) setPollError(copyText("暂时无法更新连接状态，正在重试…"));
       } finally {
         if (!stopped) timer = setTimeout(() => void poll(), pairing ? 3000 : 10000);
       }
@@ -139,7 +148,7 @@ export function OpenClawEditor({
     try {
       await action();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -172,18 +181,20 @@ export function OpenClawEditor({
     await run(async () => {
       const p = await persist();
       notify(
-        remoteAgentConnection(p).connectedBefore ? "配置已保存" : "配置已保存，完成连接后即可使用",
+        remoteAgentConnection(p).connectedBefore
+          ? copyText("配置已保存")
+          : copyText("配置已保存，完成连接后即可使用"),
       );
       onComplete(p.id);
     });
   }
   return (
     <Modal
-      title={`连接 ${agentName}`}
+      title={copyText("连接 {value0}", { value0: agentName })}
       description={
         kind === "muse"
-          ? "让 Muse 托管助理，在微信里接收任务并回复。"
-          : "让自己的助手，从电脑走进微信。"
+          ? copyText("让 Muse 托管助理，在微信里接收任务并回复。")
+          : copyText("让自己的助手，从电脑走进微信。")
       }
       onClose={() => {
         if (!busy) onClose();
@@ -197,30 +208,30 @@ export function OpenClawEditor({
           <div>
             <strong>
               {connected
-                ? `${agentName} 已连接`
+                ? copyText("{value0} 已连接", { value0: agentName })
                 : pairing
-                  ? `等待 ${agentName} 连接`
+                  ? copyText("等待 {value0} 连接", { value0: agentName })
                   : saved
-                    ? `${agentName} ${connection.label}`
-                    : "一条命令，自动配置"}
+                    ? `${agentName} ${copyText(connection.label)}`
+                    : copyText("一条命令，自动配置")}
             </strong>
             <p>
               {connected
                 ? isLegacyNumericShortcut(saved?.shortcut)
-                  ? "请在「更多设置」中修改纯数字别名，再使用 /use 进入对话。"
-                  : "在微信发送 /use " + saved?.shortcut + "，即可开始对话。"
+                  ? copyText("请在「更多设置」中修改纯数字别名，再使用 /use 进入对话。")
+                  : copyText("在微信发送 /use ") + saved?.shortcut + copyText("，即可开始对话。")
                 : saved
-                  ? connection.description
+                  ? errorText(connection.description)
                   : kind === "muse"
-                    ? "把连接指令发给 Muse，由它安装并启用接收消息的 hook。"
-                    : "自动安装渠道、选择默认助手并完成配对，无需填写密钥。"}
+                    ? copyText("把连接指令发给 Muse，由它安装并启用接收消息的 hook。")
+                    : copyText("自动安装渠道、选择默认助手并完成配对，无需填写密钥。")}
             </p>
           </div>
         </div>
         {limited && (
           <p className="plugin-config-renew" role="status">
-            <Link to={`${base}/billing`}>查看会员 / 续费 Plus</Link> ·{" "}
-            <Link to={`${base}/plugins`}>管理插件名额</Link>
+            <Link to={`${base}/billing`}>{copyText("查看会员 / 续费 Plus")}</Link> ·{" "}
+            <Link to={`${base}/plugins`}>{copyText("管理插件名额")}</Link>
           </p>
         )}
         {!connected && !pairing && !limited && (
@@ -228,26 +239,30 @@ export function OpenClawEditor({
             <li>
               <span>1</span>
               <div>
-                <strong>生成连接命令</strong>
-                <p>为你的账号创建一次性配对信息。</p>
+                <strong>{copyText("生成连接命令")}</strong>
+                <p>{copyText("为你的账号创建一次性配对信息。")}</p>
               </div>
             </li>
             <li>
               <span>2</span>
               <div>
-                <strong>{kind === "muse" ? "把指令发给 Muse" : "在命令行终端执行"}</strong>
+                <strong>
+                  {kind === "muse" ? copyText("把指令发给 Muse") : copyText("在命令行终端执行")}
+                </strong>
                 <p>
                   {kind === "muse"
-                    ? "在 Muse 主聊天中粘贴指令，让它完成安装、注册并启用 hook。"
-                    : `打开运行 ${agentName} 的电脑或服务器上的命令行终端，粘贴并执行。`}
+                    ? copyText("在 Muse 主聊天中粘贴指令，让它完成安装、注册并启用 hook。")
+                    : copyText("打开运行 {value0} 的电脑或服务器上的命令行终端，粘贴并执行。", {
+                        value0: agentName,
+                      })}
                 </p>
               </div>
             </li>
             <li>
               <span>3</span>
               <div>
-                <strong>回到微信，开始聊天</strong>
-                <p>连接成功后会自动关闭弹窗，无需手动刷新。</p>
+                <strong>{copyText("回到微信，开始聊天")}</strong>
+                <p>{copyText("连接成功后会自动关闭弹窗，无需手动刷新。")}</p>
               </div>
             </li>
           </ol>
@@ -256,20 +271,31 @@ export function OpenClawEditor({
           <div className="claw-command-panel">
             <div className="claw-command-heading">
               <strong>
-                {kind === "muse" ? "复制后发送到 Muse 主聊天" : "在命令行终端粘贴并执行"}
+                {kind === "muse"
+                  ? copyText("复制后发送到 Muse 主聊天")
+                  : copyText("在命令行终端粘贴并执行")}
               </strong>
               <small>
                 {secondsLeft
-                  ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} 后过期`
-                  : "命令已过期"}
+                  ? copyText("{value0}:{value1} 后过期", {
+                      value0: Math.floor(secondsLeft / 60),
+                      value1: String(secondsLeft % 60).padStart(2, "0"),
+                    })
+                  : copyText("命令已过期")}
               </small>
             </div>
             <p>
               {kind === "muse"
-                ? "由 Muse 在自己的托管环境中执行安装，并按输出说明启用 hook。配对完成后仍需等待 hook 实际上线。"
-                : `请在运行 ${agentName} 的电脑或服务器上打开命令行终端，再执行下方命令。`}
+                ? copyText(
+                    "由 Muse 在自己的托管环境中执行安装，并按输出说明启用 hook。配对完成后仍需等待 hook 实际上线。",
+                  )
+                : copyText("请在运行 {value0} 的电脑或服务器上打开命令行终端，再执行下方命令。", {
+                    value0: agentName,
+                  })}
             </p>
-            <pre aria-label={`${agentName} 连接命令`}>{pairing.command}</pre>
+            <pre aria-label={copyText("{value0} 连接命令", { value0: agentName })}>
+              {pairing.command}
+            </pre>
             <button
               type="button"
               className="button small"
@@ -282,20 +308,26 @@ export function OpenClawEditor({
               }
             >
               {copied ? <Check size={15} /> : <Copy size={15} />}
-              {copied ? "已复制" : kind === "muse" ? "复制 Muse 连接指令" : "复制连接命令"}
+              {copied
+                ? copyText("已复制")
+                : kind === "muse"
+                  ? copyText("复制 Muse 连接指令")
+                  : copyText("复制连接命令")}
             </button>
             <p>
               {kind === "muse"
-                ? "指令含一次性配对信息，只发给自己的 Muse，不要公开分享。需要 Muse 托管环境支持 hook。"
-                : "命令仅用于本次连接，请勿转发。支持 macOS、Linux 和 WSL。"}
+                ? copyText(
+                    "指令含一次性配对信息，只发给自己的 Muse，不要公开分享。需要 Muse 托管环境支持 hook。",
+                  )
+                : copyText("命令仅用于本次连接，请勿转发。支持 macOS、Linux 和 WSL。")}
             </p>
             <div className="claw-waiting">
               <LoaderCircle size={14} className={secondsLeft ? "claw-spin" : ""} />
               {status?.pairingClaimed
-                ? "配对完成，等待渠道上线…"
+                ? copyText("配对完成，等待渠道上线…")
                 : secondsLeft
-                  ? "等待执行，连接后此处会自动更新"
-                  : "尚未完成连接，请重新生成命令"}
+                  ? copyText("等待执行，连接后此处会自动更新")
+                  : copyText("尚未完成连接，请重新生成命令")}
             </div>
           </div>
         )}
@@ -304,12 +336,14 @@ export function OpenClawEditor({
         )}
         {kind === "hermes" && status?.hasKey && !status.nativeCommands && !pairing && (
           <p className="muted">
-            当前连接器尚不支持 Agent 原生命令。点击「重新连接」，生成并执行新命令即可升级。
+            {copyText(
+              "当前连接器尚不支持 Agent 原生命令。点击「重新连接」，生成并执行新命令即可升级。",
+            )}
           </p>
         )}
         {agents.length > 1 && (
           <label>
-            使用哪个助手？
+            {copyText("使用哪个助手？")}
             <select
               value={form.agentId}
               onChange={(e) => {
@@ -320,18 +354,22 @@ export function OpenClawEditor({
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
-                  {a.isDefault ? " · 默认助手" : ""}（{a.id}）
+                  {a.isDefault ? copyText(" · 默认助手") : ""}（{a.id}）
                 </option>
               ))}
             </select>
             <small>
-              切换后点击「保存配置」。将开始新的远端会话，旧任务停止向微信推送，历史记录保留。
+              {copyText(
+                "切换后点击「保存配置」。将开始新的远端会话，旧任务停止向微信推送，历史记录保留。",
+              )}
             </small>
           </label>
         )}
         {agents.length === 1 && (
           <p className="claw-agent-label">
-            当前助手 <strong>{agents[0].name}</strong> · 自动识别
+            {copyText("当前助手 ")}
+            <strong>{agents[0].name}</strong>
+            {copyText(" · 自动识别")}
           </p>
         )}
         <div className="claw-connect-actions">
@@ -342,26 +380,29 @@ export function OpenClawEditor({
             onClick={() => void connect()}
           >
             {busy
-              ? "处理中…"
+              ? copyText("处理中…")
               : pairing
-                ? "重新生成命令"
+                ? copyText("重新生成命令")
                 : connected || saved?.hasKey
-                  ? "重新连接"
-                  : `连接 ${agentName}`}
+                  ? copyText("重新连接")
+                  : copyText("连接 {value0}", { value0: agentName })}
           </button>
           <a href={`/developers/${kind}`} target="_blank" rel="noreferrer" className="text-link">
-            查看教程 <ExternalLink size={13} />
+            {copyText("查看教程 ")}
+            <ExternalLink size={13} />
           </a>
         </div>
         {!connected && !limited && (
           <p className="claw-install-note">
             {kind === "muse" ? (
-              "需要已有 Muse 托管助理及 hook 功能。安装程序保存配对，Muse 负责注册并启用 hook；不会创建新的微信连接。"
+              copyText(
+                "需要已有 Muse 托管助理及 hook 功能。安装程序保存配对，Muse 负责注册并启用 hook；不会创建新的微信连接。",
+              )
             ) : (
               <>
-                需要已安装{" "}
-                {kind === "hermes" ? "Hermes Agent（当前稳定版）" : "OpenClaw 2026.6.10+"}
-                。执行后会安装微伴渠道并重启 Gateway，请等待当前任务完成后再连接。
+                {copyText("需要已安装")}{" "}
+                {kind === "hermes" ? copyText("Hermes Agent（当前稳定版）") : "OpenClaw 2026.6.10+"}
+                {copyText("。执行后会安装微伴渠道并重启 Gateway，请等待当前任务完成后再连接。")}
               </>
             )}
           </p>
@@ -369,8 +410,10 @@ export function OpenClawEditor({
         {pairing && (connected || (kind === "muse" && saved?.hasKey)) && (
           <p className="claw-install-note">
             {kind === "muse"
-              ? "重新配对会替换旧连接，旧会话推送将停止。请等待当前任务完成且结果回传后再连接；网络、权限或额度暂停时，先恢复原 hook 完成回传。"
-              : "执行新命令后会替换旧连接并重启 Gateway，旧会话推送将停止。"}
+              ? copyText(
+                  "重新配对会替换旧连接，旧会话推送将停止。请等待当前任务完成且结果回传后再连接；网络、权限或额度暂停时，先恢复原 hook 完成回传。",
+                )
+              : copyText("执行新命令后会替换旧连接并重启 Gateway，旧会话推送将停止。")}
           </p>
         )}
         {pollError && (
@@ -388,12 +431,13 @@ export function OpenClawEditor({
         <div className="form-body claw-preferences">
           <details>
             <summary>
-              更多设置<span>名称、用量与消息提示</span>
+              {copyText("更多设置")}
+              <span>{copyText("名称、用量与消息提示")}</span>
             </summary>
             <div className="claw-preferences-body">
               <div className="form-grid">
                 <label>
-                  插件名称
+                  {copyText("插件名称")}
                   <input
                     value={form.name}
                     onChange={(e) => update("name", e.target.value)}
@@ -402,10 +446,10 @@ export function OpenClawEditor({
                   />
                 </label>
                 <label>
-                  快捷名称
+                  {copyText("快捷名称")}
                   <input
                     pattern={pluginShortcutPatternForEdit(saved?.shortcut)}
-                    title={PLUGIN_SHORTCUT_HINT}
+                    title={copyText(PLUGIN_SHORTCUT_HINT)}
                     value={form.shortcut}
                     onChange={(e) => update("shortcut", e.target.value)}
                     required
@@ -413,12 +457,15 @@ export function OpenClawEditor({
                   />
                   <small>
                     {keepingLegacyShortcut
-                      ? LEGACY_NUMERIC_SHORTCUT_HINT
-                      : `别名不能是纯数字。@${form.shortcut} 单次调用；/use ${form.shortcut} 进入`}
+                      ? copyText(LEGACY_NUMERIC_SHORTCUT_HINT)
+                      : copyText("别名不能是纯数字。@{value0} 单次调用；/use {value1} 进入", {
+                          value0: form.shortcut,
+                          value1: form.shortcut,
+                        })}
                   </small>
                 </label>
                 <label>
-                  单条输入上限（tokens）
+                  {copyText("单条输入上限（tokens）")}
                   <input
                     type="number"
                     min={256}
@@ -434,12 +481,13 @@ export function OpenClawEditor({
                     <option value={2000000}>2M</option>
                   </datalist>
                   <small>
-                    默认 128K，最高可设 2M。仅计算本条文字，{agentName}
-                    的历史、系统提示词和工具输入由它自行管理。
+                    {copyText("默认 128K，最高可设 2M。仅计算本条文字，")}
+                    {agentName}
+                    {copyText("的历史、系统提示词和工具输入由它自行管理。")}
                   </small>
                 </label>
                 <label>
-                  回复上限（tokens）
+                  {copyText("回复上限（tokens）")}
                   <input
                     type="number"
                     min={256}
@@ -449,7 +497,9 @@ export function OpenClawEditor({
                   />
                   {kind === "muse" && (
                     <small>
-                      超出上限的回复会裁剪并附上提示，提示不计费。可让 Muse 精简或分段回复。
+                      {copyText(
+                        "超出上限的回复会裁剪并附上提示，提示不计费。可让 Muse 精简或分段回复。",
+                      )}
                     </small>
                   )}
                 </label>
@@ -460,7 +510,7 @@ export function OpenClawEditor({
                   checked={form.enabled}
                   onChange={(e) => update("enabled", e.target.checked)}
                 />
-                启用插件
+                {copyText("启用插件")}
               </label>
               <label className="check-label">
                 <input
@@ -468,33 +518,34 @@ export function OpenClawEditor({
                   checked={form.allowProactive}
                   onChange={(e) => update("allowProactive", e.target.checked)}
                 />
-                接收定时任务和后台结果推送
+                {copyText("接收定时任务和后台结果推送")}
               </label>
               <WaitingMessageField
                 value={form}
-                defaultMessage={OPENCLAW_WAITING_MESSAGE}
+                defaultMessage={copyText(OPENCLAW_WAITING_MESSAGE)}
                 onChange={(value) => setForm((f) => ({ ...f, ...value }))}
               />
               <p className="form-note">
-                只计算发送和返回的文字：5,000 输入 tokens = 1 credit，输出权重 ×8。{agentName}
-                内部的模型与工具调用不计入微伴用量。当前支持文字和带转写的语音。
+                {copyText("只计算发送和返回的文字：5,000 输入 tokens = 1 credit，输出权重 ×8。")}
+                {agentName}
+                {copyText("内部的模型与工具调用不计入微伴用量。当前支持文字和带转写的语音。")}
               </p>
             </div>
           </details>
           {!!status?.deliveries.length && (
             <details>
-              <summary>最近投递</summary>
+              <summary>{copyText("最近投递")}</summary>
               <ul className="claw-deliveries">
                 {status.deliveries.map((d) => (
                   <li key={d.id}>
                     {new Date(d.createdAt).toLocaleString()} ·{" "}
                     {d.state === "done"
-                      ? "已投递"
+                      ? copyText("已投递")
                       : d.state === "waiting_context"
-                        ? "等待你在微信发送新消息后重试"
+                        ? copyText("等待你在微信发送新消息后重试")
                         : d.state === "failed"
-                          ? "投递失败"
-                          : "等待投递"}
+                          ? copyText("投递失败")
+                          : copyText("等待投递")}
                   </li>
                 ))}
               </ul>
@@ -515,15 +566,15 @@ export function OpenClawEditor({
                     setStatus(null);
                     setSaved({ ...saved, hasKey: false, lastSeen: 0, agents: [] });
                     await refresh();
-                    notify(`${agentName} 已断开`);
+                    notify(copyText("{value0} 已断开", { value0: agentName }));
                   })
                 }
               >
-                断开连接
+                {copyText("断开连接")}
               </button>
             )}
             <button type="submit" className="button" disabled={busy || limited}>
-              保存配置
+              {copyText("保存配置")}
             </button>
           </div>
         )}
