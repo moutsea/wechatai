@@ -1212,6 +1212,10 @@ code {
   margin-bottom: 32px;
   gap: 20px;
 }
+:lang(ko) .workspace .page-head > .text-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .page-head h1 {
   font-size: 29px;
   margin: 12px 0 9px;

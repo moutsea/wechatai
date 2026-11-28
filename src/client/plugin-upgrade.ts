@@ -20,7 +20,7 @@ export function rememberPluginUpgrade(email: string, target: PluginUpgradeTarget
   }
 }
 
-export function pluginUpgradeReturnPath(email: string): string | null {
+export function pluginUpgradeReturnPath(email: string, base = "/app"): string | null {
   try {
     const target = JSON.parse(sessionStorage.getItem(storageKey(email)) ?? "null");
     if (
@@ -32,7 +32,7 @@ export function pluginUpgradeReturnPath(email: string): string | null {
       return null;
     const params = new URLSearchParams({ plugin: target.kind, action: target.action });
     if (target.action === "edit") params.set("config", target.id);
-    return `/app/plugins?${params}`;
+    return `${base}/plugins?${params}`;
   } catch {
     return null;
   }

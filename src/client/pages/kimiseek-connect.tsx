@@ -1,3 +1,4 @@
+import { balanceCopy as koBalanceCopy } from "../../shared/i18n/ko/copy/workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, LoaderCircle, RefreshCw } from "lucide-react";
 import { useApp } from "../context";
@@ -170,6 +171,18 @@ export function KimiseekBalance({
   onRecharge: () => void;
   disabled: boolean;
 }) {
+  const { locale } = useLocale();
+  const balanceCopy =
+    locale === "ko"
+      ? koBalanceCopy
+      : {
+          unavailable: "余额暂不可用",
+          title: "KimiSeek 余额",
+          loading: "读取中…",
+          refresh: "刷新 KimiSeek 余额",
+          updated: "最近更新 {time}",
+          recharge: "充值",
+        };
   const { request } = useApp();
   const [balance, setBalance] = useState<{ amount: number; checkedAt: number } | null>(null);
   const [error, setError] = useState("");
@@ -183,12 +196,12 @@ export function KimiseekBalance({
       setBalance(await request("/kimiseek/balance"));
       setError("");
     } catch {
-      setError("余额暂不可用");
+      setError(balanceCopy.unavailable);
     } finally {
       inFlight.current = false;
       setLoading(false);
     }
-  }, [request]);
+  }, [request, balanceCopy.unavailable]);
   useEffect(() => {
     void refresh();
     const update = () => {
@@ -206,14 +219,24 @@ export function KimiseekBalance({
   return (
     <div className="kimiseek-balance">
       <div>
-        <span>KimiSeek 余额</span>
-        <strong>{error || (balance ? `¥${balance.amount.toFixed(2)}` : "读取中…")}</strong>
+        <span>{balanceCopy.title}</span>
+        <strong>
+          {error || (balance ? `¥${balance.amount.toFixed(2)}` : balanceCopy.loading)}
+        </strong>
       </div>
       <button
         className="icon-button"
-        aria-label="刷新 KimiSeek 余额"
+        aria-label={balanceCopy.refresh}
         title={
-          balance ? `最近更新 ${new Date(balance.checkedAt).toLocaleTimeString()}` : "刷新余额"
+          balance
+            ? formatCopy(balanceCopy.updated, {
+                time: new Date(balance.checkedAt).toLocaleTimeString(
+                  locale === "ko" ? "ko-KR" : undefined,
+                ),
+              })
+            : locale === "ko"
+              ? balanceCopy.refresh
+              : "刷新余额"
         }
         disabled={loading}
         onClick={() => void refresh()}
@@ -221,7 +244,7 @@ export function KimiseekBalance({
         {loading ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />}
       </button>
       <button className="text-button" disabled={disabled} onClick={onRecharge}>
-        充值 <ExternalLink size={13} />
+        {balanceCopy.recharge} <ExternalLink size={13} />
       </button>
     </div>
   );

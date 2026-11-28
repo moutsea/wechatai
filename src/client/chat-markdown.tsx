@@ -1,10 +1,18 @@
+import { useLocale } from "./locale";
+import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/chat-markdown-page";
+import { copy as koCopy } from "../shared/i18n/ko/copy/chat-markdown-page";
+import { formatCopy } from "../shared/i18n/dashboard";
 import { Children, isValidElement, memo, useEffect, useState, type ReactNode } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import { Check, Copy, Image as ImageIcon } from "lucide-react";
 
-export function CopyMessage({ text, label = "复制回答" }: { text: string; label?: string }) {
+export function CopyMessage({ text, label }: { text: string; label?: string }) {
+  const { locale } = useLocale();
+  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+
+  label ??= pageCopy["复制回答"];
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => {
     if (status === "idle") return;
@@ -27,7 +35,11 @@ export function CopyMessage({ text, label = "复制回答" }: { text: string; la
     >
       {status === "copied" ? <Check size={13} /> : <Copy size={13} />}
       <span role="status">
-        {status === "copied" ? "已复制" : status === "failed" ? "请选中文字复制" : label}
+        {status === "copied"
+          ? pageCopy["已复制"]
+          : status === "failed"
+            ? pageCopy["请选中文字复制"]
+            : label}
       </span>
     </button>
   );
@@ -44,16 +56,19 @@ function textContent(node: ReactNode): string {
 }
 
 function CodeBlock({ children }: { children?: ReactNode }) {
+  const { locale } = useLocale();
+  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+
   const child = Children.toArray(children)[0];
   const className = isValidElement<{ className?: string }>(child) ? child.props.className : "";
-  const language = /language-([\w+-]+)/.exec(className || "")?.[1] || "文本";
+  const language = /language-([\w+-]+)/.exec(className || "")?.[1] || pageCopy["文本"];
   return (
     <div className="chat-code">
       <div className="chat-code-head">
         <span>{language}</span>
-        <CopyMessage text={textContent(children)} label="复制代码" />
+        <CopyMessage text={textContent(children)} label={pageCopy["复制代码"]} />
       </div>
-      <pre tabIndex={0} aria-label={`${language} 代码`}>
+      <pre tabIndex={0} aria-label={formatCopy(pageCopy["{value0} 代码"], { value0: language })}>
         {children}
       </pre>
     </div>
@@ -62,23 +77,27 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 
 // Never fetch model-provided remote images until the reader explicitly opens them.
 function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+  const { locale } = useLocale();
+  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const local = Boolean(src && /^\/api\/assets\/[0-9a-f-]{36}$/.test(src));
-  if (!src || (!local && !/^https?:\/\//i.test(src))) return <span>{alt || "图片"}</span>;
+  if (!src || (!local && !/^https?:\/\//i.test(src))) return <span>{alt || pageCopy["图片"]}</span>;
   return (
     <span className="chat-image">
       {!open && !local ? (
         <button type="button" onClick={() => setOpen(true)}>
           <ImageIcon size={16} />
-          查看图片{alt && `：${alt}`}
+          {pageCopy["查看图片"]}
+          {alt && `：${alt}`}
         </button>
       ) : failed ? (
-        <span>图片暂时无法显示</span>
+        <span>{pageCopy["图片暂时无法显示"]}</span>
       ) : (
         <img
           src={src}
-          alt={alt || "回复中的图片"}
+          alt={alt || pageCopy["回复中的图片"]}
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
@@ -87,7 +106,7 @@ function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
       )}
       {(open || local) && (
         <a href={src} target="_blank" rel="noopener noreferrer">
-          打开原图 ↗
+          {pageCopy["打开原图 ↗"]}
         </a>
       )}
     </span>
@@ -101,14 +120,17 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   content: string;
   id: string;
 }) {
+  const { locale } = useLocale();
+  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+
   return (
     <div className="chat-markdown">
       <Markdown
         remarkPlugins={[remarkGfm, remarkBreaks]}
         remarkRehypeOptions={{
           clobberPrefix: `chat-${id}-`,
-          footnoteLabel: "注释",
-          footnoteBackLabel: "返回正文",
+          footnoteLabel: pageCopy["注释"],
+          footnoteBackLabel: pageCopy["返回正文"],
         }}
         skipHtml
         urlTransform={(url) => {
@@ -129,7 +151,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
               className="chat-table"
               tabIndex={0}
               role="region"
-              aria-label="回复中的表格，可横向滚动"
+              aria-label={pageCopy["回复中的表格，可横向滚动"]}
             >
               <table>{children}</table>
             </div>
