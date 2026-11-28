@@ -213,3 +213,20 @@ Kandev 现有工作树接管仍受仓库未关联限制，评审使用本文件�
 本轮最终 `pnpm check` 通过，Worker 114 个文件、2514 项测试通过，客户端 44 个文件、497 项测试通过，lint、类型检查、构建与 SEO 全部通过。新增两项弹窗回归由修前失败转为修后通过，完整浏览器套件为 344 passed，OpenClaw 为 27 passed。截图调整后再次执行 lint 和类型检查，均通过。真实 HTTP 49 项及 HTTP SEO 通过，内部文档和四张截图返回 404，`/api/docs` 返回 401。331 个构建运行文件对内部文档标识零命中。预览进程与临时测试密钥已清理。
 
 本轮证据统一位于 `/tmp/93062de0-rework2/`，包含 `browser-red.log`、`browser-green.log`、`check.log`、`browser-full.log`、`openclaw.log`、`lint.log`、`typecheck.log`、`http.log`、`seo-http.log` 和 `isolation.json`。金额、周期名称与公开定价页按现有共享档位及葡语词典核对。
+
+
+## 第三次独立评审返工（2026-11-28）
+
+独立评审唯一 P1 为支付返回时会话查询晚于工作台数据，账单页首次挂载以空 email 读取返回意图，真实账户随后到达又触发清除，最终停在中文账单页。
+
+本轮复用仓库按账户 key 挂载组件的模式，将账单返回状态绑定到当前 email。身份从空值变为登录账户时重新初始化对应返回意图，恢复葡语账单地址后按已有逻辑消费记录。后续主动切换语种继续使用用户选择。
+
+新增真实构建浏览器回归，Free 用户在 390px 页面从 Xiaowei 升级进入模拟支付，取消返回时将会话响应延迟 1 秒。测试检查葡语账单、query/hash、回跳意图消费、葡语插件配置入口，以及后续主动访问中文账单。修前因实际返回 `/app/billing` 失败，日志位于 `/tmp/93062de0-rework3/browser-red.log`。账单 API 和 Stripe 使用测试替身。
+
+修后同一回归为 1 passed，日志位于 `/tmp/93062de0-rework3/browser-green.log`。手机截图已核对葡语账单标题、取消支付提示及返回插件入口。
+
+- [会话延迟返回后的手机账单截图](pt-app-subroutes/delayed-session-return-mobile.png)
+
+本轮 `pnpm check` 退出 0，Worker 2514 项与客户端 497 项通过，lint、类型检查、构建和 SEO 通过。完整浏览器 345 项通过，包含新增延迟会话回归及既有五条支付返回回归。OpenClaw 27 项通过。真实 HTTP 50 项及 HTTP SEO 通过，内部文档和五张截图返回 404，`/api/docs` 返回 401。331 个构建运行文件对内部文档标识扫描零命中，临时预览及测试密钥已清理。证据统一位于 `/tmp/93062de0-rework3/`。
+
+评审原始独立探针在修后构建上为 7 passed，包含此前稳定失败的延迟会话场景，结果见 `/tmp/93062de0-rework3/independent-green.log`。

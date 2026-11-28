@@ -41,15 +41,20 @@ const plusYearlyPerMonth = approxYuan(plusYearlyAmount / 12);
 
 export function Billing() {
   const { user } = useApp();
+  // The session can arrive after dashboard data, so arrival state belongs to the account.
+  return <AccountBilling key={user.email} email={user.email} />;
+}
+
+function AccountBilling({ email }: { email: string }) {
   const location = useLocation();
-  // Read once on arrival, before payment polling or localized content mounts.
-  const [returnPath, setReturnPath] = useState(() => billingReturnPath(user.email));
+  // Read once per account, before payment polling or localized content mounts.
+  const [returnPath, setReturnPath] = useState(() => billingReturnPath(email));
   useEffect(() => {
     if (!returnPath || returnPath === location.pathname) {
-      clearBillingReturn(user.email);
+      clearBillingReturn(email);
       setReturnPath(null);
     }
-  }, [returnPath, location.pathname, user.email]);
+  }, [returnPath, location.pathname, email]);
   if (returnPath && returnPath !== location.pathname)
     return <Navigate to={`${returnPath}${location.search}${location.hash}`} replace />;
   return <BillingContent />;

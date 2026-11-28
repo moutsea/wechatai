@@ -731,3 +731,80 @@ for (const entry of ["plugin", "billing", "portal"] as const) {
     });
   }
 }
+
+test("Portuguese payment return restores locale when session arrives after dashboard", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  const snapshot = await fixture(page);
+  snapshot.plan = "free";
+  snapshot.planUntil = 0;
+  let returning = false;
+  await page.route("**/api/auth/get-session", async (route) => {
+    if (returning) await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.fulfill({
+      json: {
+        user: { id: "fixture", name: "Alex", email: "alex@example.test" },
+        session: { id: "session", userId: "fixture", token: "fixture" },
+      },
+    });
+  });
+  await page.route("**/api/billing/catalog", (route) =>
+    route.fulfill({
+      json: {
+        mode: "test",
+        offers: BILLING_OFFERS.map((offer) => ({
+          ...offer,
+          price: offer.amount / 100,
+          currency: "cny",
+          enabled: true,
+        })),
+      },
+    }),
+  );
+  await page.route("**/api/billing/subscription", (route) => route.fulfill({ json: null }));
+  const stripeUrl = "https://checkout.stripe.com/delayed-session-fixture";
+  await page.route("**/api/billing/checkout", (route) => {
+    expect(route.request().postDataJSON()).toEqual({ offerId: "plus_monthly" });
+    return route.fulfill({ json: { url: stripeUrl } });
+  });
+  const suffix = "?checkout=cancelled&offer=plus_monthly#plans";
+  await page.route(stripeUrl, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<a href="${origin}/app/billing${suffix}">Return to workspace</a>`,
+    }),
+  );
+  await page.goto(`${origin}/pt/app/plugins`);
+  await page.getByRole("button", { name: "Configurar Xiaowei", exact: true }).click();
+  await page.getByRole("button", { name: "Assinar Plus mensal", exact: true }).click();
+  await expect(page).toHaveURL(stripeUrl);
+  returning = true;
+  await page.getByRole("link", { name: "Return to workspace", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/pt/app/billing${suffix}`);
+  await expect(
+    page.getByRole("heading", { name: "Assinatura e créditos", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
+  const back = page.getByRole("link", { name: "Voltar à configuração do plugin", exact: true });
+  await expect(back).toHaveAttribute(
+    "href",
+    "/pt/app/plugins?plugin=wechatai%2Fcloud-agent&action=create",
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => sessionStorage.getItem("wechatai:billing-return:alex@example.test")),
+    )
+    .toBeNull();
+  await mkdir("test-results/pt-workspace", { recursive: true });
+  await page.screenshot({
+    path: "test-results/pt-workspace/delayed-session-return-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
+  await back.click();
+  await expect(page).toHaveURL(
+    `${origin}/pt/app/plugins?plugin=wechatai%2Fcloud-agent&action=create`,
+  );
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.goto(`${origin}/app/billing`);
+  await expect(page.getByRole("heading", { name: "会员与 credits", exact: true })).toBeVisible();
+});
