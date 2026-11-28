@@ -5,7 +5,7 @@ import { copy as koCopy } from "../../shared/i18n/ko/copy/billing-page";
 import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -31,6 +31,7 @@ import {
 } from "../../shared/billing";
 import { approxYuan, OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
 import { clearPluginUpgrade, pluginUpgradeReturnPath } from "../plugin-upgrade";
+import { billingReturnPath, clearBillingReturn, rememberBillingReturn } from "../billing-return";
 
 /** 年付省多少、折合月价多少，都从 BILLING_OFFERS 推导：写死的「省 ¥49」早就和 990/8800 不符了。 */
 const plusMonthlyAmount = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")?.amount ?? 0;
@@ -39,6 +40,22 @@ const plusYearlySaving = (plusMonthlyAmount * 12 - plusYearlyAmount) / 100;
 const plusYearlyPerMonth = approxYuan(plusYearlyAmount / 12);
 
 export function Billing() {
+  const { user } = useApp();
+  const location = useLocation();
+  // Read once on arrival, before payment polling or localized content mounts.
+  const [returnPath, setReturnPath] = useState(() => billingReturnPath(user.email));
+  useEffect(() => {
+    if (!returnPath || returnPath === location.pathname) {
+      clearBillingReturn(user.email);
+      setReturnPath(null);
+    }
+  }, [returnPath, location.pathname, user.email]);
+  if (returnPath && returnPath !== location.pathname)
+    return <Navigate to={`${returnPath}${location.search}${location.hash}`} replace />;
+  return <BillingContent />;
+}
+
+function BillingContent() {
   const { locale } = useLocale();
   const pageCopy =
     locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
@@ -158,6 +175,7 @@ export function Billing() {
         !["checkout.stripe.com", "billing.stripe.com"].includes(url.hostname)
       )
         throw new Error(pageCopy["支付链接无效"]);
+      rememberBillingReturn(user.email, base);
       window.location.assign(r.url);
     } catch (e) {
       notify(workspaceError(e as Error, locale), true);

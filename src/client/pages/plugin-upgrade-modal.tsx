@@ -16,6 +16,7 @@ import { json } from "../api";
 import { trackFunnel } from "../analytics-client";
 import { rememberPluginUpgrade, type PluginUpgradeTarget } from "../plugin-upgrade";
 import { Modal } from "../ui";
+import { rememberBillingReturn } from "../billing-return";
 
 const plusOffers = BILLING_OFFERS.filter((offer) => offer.kind === "plus");
 
@@ -84,6 +85,7 @@ export function PluginUpgradeModal({
       if (url.protocol !== "https:" || url.hostname !== "checkout.stripe.com")
         throw new Error(pageCopy["支付链接无效，请重试。"]);
       rememberPluginUpgrade(user.email, target);
+      rememberBillingReturn(user.email, base);
       window.location.assign(result.url);
     } catch (e) {
       setError(workspaceError(e as Error, locale));

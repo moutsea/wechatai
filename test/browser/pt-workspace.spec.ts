@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFile, mkdir } from "node:fs/promises";
 import { extname } from "node:path";
+import { BILLING_OFFERS } from "../../src/shared/billing-offers";
 import type { Snapshot } from "../../src/shared/types";
 import { createFakeApi } from "../support/fake-api";
 import { emptyFunnelSummary } from "../../src/shared/funnel-report";
@@ -559,3 +560,127 @@ test("connection and post-save model import failures use Portuguese", async ({ p
   await expect(page.locator(".channel-card")).toHaveCount(1);
   await portugueseUi(page);
 });
+
+for (const entry of ["plugin", "billing", "portal"] as const) {
+  const outcomes = entry === "portal" ? ["portal"] : ["success", "cancelled"];
+  for (const outcome of outcomes) {
+    test(`Portuguese ${entry} preserves locale after Stripe ${outcome}`, async ({ page }) => {
+      await page.setViewportSize({ width: outcome === "cancelled" ? 390 : 1280, height: 900 });
+      const snapshot = await fixture(page, { models: true });
+      snapshot.plan = "free";
+      snapshot.planUntil = 0;
+      await page.route("**/api/billing/catalog", (route) =>
+        route.fulfill({
+          json: {
+            mode: "test",
+            offers: BILLING_OFFERS.map((offer) => ({
+              ...offer,
+              price: offer.amount / 100,
+              currency: "cny",
+              enabled: true,
+            })),
+          },
+        }),
+      );
+      await page.route("**/api/billing/subscription", (route) =>
+        route.fulfill({
+          json:
+            entry === "portal"
+              ? {
+                  id: "sub_fixture",
+                  offerId: "plus_monthly",
+                  status: "active",
+                  cancelAtPeriodEnd: false,
+                  periodEnd: Date.now() + 86400000,
+                }
+              : null,
+        }),
+      );
+      const stripeUrl =
+        entry === "portal"
+          ? "https://billing.stripe.com/return-fixture"
+          : "https://checkout.stripe.com/return-fixture";
+      const requests: unknown[] = [];
+      await page.route(`**/api/billing/${entry === "portal" ? "portal" : "checkout"}`, (route) => {
+        requests.push(route.request().postDataJSON());
+        return route.fulfill({ json: { url: stripeUrl } });
+      });
+      await page.route("**/api/billing/checkout-status?*", (route) =>
+        route.fulfill({
+          json: { status: "paid", kind: "plus", credits: 0 },
+        }),
+      );
+      // Existing Stripe sessions return to this canonical path, including reused pending orders.
+      const suffix =
+        outcome === "portal"
+          ? ""
+          : `?checkout=${outcome}&offer=plus_monthly${outcome === "success" ? "&session_id=cs_fixture" : ""}#plans`;
+      await page.route(stripeUrl, (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body: `<a href="${origin}/app/billing${suffix}">Return to workspace</a>`,
+        }),
+      );
+      if (entry === "billing") {
+        await page.goto(`${origin}/pt/app/billing?offer=plus_monthly`);
+        await page.locator(".plus-plan button.button").click();
+      } else {
+        await page.goto(`${origin}/pt/app/plugins`);
+        await page.getByRole("button", { name: "Configurar Xiaowei", exact: true }).click();
+        if (entry === "portal") {
+          await page.getByRole("link", { name: "Gerenciar assinatura existente" }).first().click();
+          await expect(page).toHaveURL(`${origin}/pt/app/billing`);
+          await page.getByRole("button", { name: "Gerenciar assinatura", exact: true }).click();
+        } else {
+          await page.getByRole("button", { name: "Assinar Plus mensal", exact: true }).click();
+        }
+      }
+      await expect(page).toHaveURL(stripeUrl);
+      expect(requests).toEqual([entry === "portal" ? {} : { offerId: "plus_monthly" }]);
+      if (outcome !== "cancelled") snapshot.plan = "plus";
+      await page.getByRole("link", { name: "Return to workspace" }).click();
+      await expect(page).toHaveURL(`${origin}/pt/app/billing${suffix}`);
+      await expect(
+        page.getByRole("heading", { name: "Assinatura e créditos", exact: true }),
+      ).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute("lang", "pt-BR");
+      if (outcome === "success")
+        await expect(page.getByRole("status")).toContainText("Pagamento concluído");
+      if (entry === "plugin" && outcome === "cancelled") {
+        await mkdir("test-results/pt-workspace", { recursive: true });
+        await page.screenshot({
+          path: "test-results/pt-workspace/upgrade-return-mobile.png",
+          fullPage: true,
+          animations: "disabled",
+        });
+      }
+      if (entry !== "billing") {
+        const back = page.getByRole("link", {
+          name:
+            outcome === "cancelled"
+              ? "Voltar à configuração do plugin"
+              : "Continuar a configuração do plugin",
+        });
+        await expect(back).toHaveAttribute(
+          "href",
+          "/pt/app/plugins?plugin=wechatai%2Fcloud-agent&action=create",
+        );
+        await back.click();
+        await expect(page).toHaveURL(
+          `${origin}/pt/app/plugins?plugin=wechatai%2Fcloud-agent&action=create`,
+        );
+        await expect(page.getByRole("dialog")).toBeVisible();
+      }
+      // The intent is consumed, so a later deliberate visit can use the default locale.
+      if (entry === "billing") {
+        await page.locator(".site-language-trigger").click();
+        await page.getByRole("menuitem", { name: "Chinês", exact: true }).click();
+      } else {
+        await page.goto(`${origin}/app/billing`);
+      }
+      await expect(
+        page.getByRole("heading", { name: "会员与 credits", exact: true }),
+      ).toBeVisible();
+    });
+  }
+}
