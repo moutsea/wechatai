@@ -10,8 +10,6 @@ import "./admin-analytics.css";
 const periods = [1, 7, 30, 90];
 const number = (n: number) => n.toLocaleString("zh-CN");
 const percent = (n: number) => `${(n * 100).toFixed(1)}%`;
-const sourceName = (label: string) =>
-  label.startsWith("utm:") ? `UTM · ${label.slice(4)}` : label;
 
 function TrafficTrend({ traffic }: { traffic: TrafficSummary }) {
   const copyText = useWorkspaceText();
@@ -180,6 +178,10 @@ function FunnelPanel({ funnel }: { funnel: FunnelSummary }) {
 
 export function AnalyticsReport({ data }: { data: AnalyticsData }) {
   const copyText = useWorkspaceText();
+  const sourceName = (label: string) => {
+    if (label === "（直接访问）") return copyText("（直接访问）");
+    return label.startsWith("utm:") ? `UTM · ${label.slice(4)}` : label;
+  };
   const { traffic, conversions, funnel } = data;
   const depth = new Map(traffic.sourceDepth.map((source) => [source.label, source]));
   return (

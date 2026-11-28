@@ -852,6 +852,7 @@ export const workspaceCopy: Readonly<Record<string, string>> = {
   来源: "Fuente",
   每会话页数: "Páginas por sesión",
   暂无来源记录: "Sin fuentes registradas",
+  "（直接访问）": "(Acceso directo)",
   "直接访问表示未获得外部来源，也可能来自未传递来源的应用。ChatGPT、Perplexity 等引荐只代表可识别的点击，不等于 AI 提及或引用总量。各来源的访客数分别去重，同一访客可出现在多个来源中。":
     "El acceso directo indica que no se obtuvo una fuente externa y puede proceder de aplicaciones que la omiten. Las referencias de ChatGPT, Perplexity y similares representan clics identificables, sin medir el total de menciones o citas de IA. Los visitantes se deduplican por fuente y pueden aparecer en varias.",
   落地页注册转化: "Registros por página de entrada",

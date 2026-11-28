@@ -341,3 +341,33 @@ SEO checks passed: rendered pages, metadata, indexing boundaries and social imag
 AC1–AC9 的本地实现与验证完成。AC10 的独立评审及 OPEN PR 由后续工作流步骤执行，独立评审须覆盖本卡最终提交的完整 diff。开 PR 阶段重新核对 main、独立 PASS 对应 HEAD 及重叠 PR。支付返回的 sessionStorage 降级行为和本节记录的既有 OpenClaw 间歇测试失败应一并交接。
 
 提交前最后一次 GitHub 读回 main 为 `3f329352ac0d73da0ee1611ce4169bbfd7fe1443`，唯一 OPEN PR 仍为 #56、非 draft，head `ee219086ace95039011041b1e112870b7ff958a6`。当前开发步骤完成后交由独立评审，最终提交 SHA 登记在本卡计划与交接回执。
+
+
+## 2026-11-28 首轮返工记录
+
+本轮处理独立评审指出的 P2 / AC3 来源标签漏译。返工起点为 `db7d1be61374c7e4b30d044827402aa543073407`，整卡评审基线为 `3f329352ac0d73da0ee1611ce4169bbfd7fe1443`。
+
+### 根因与修复
+
+采集端将 UTM 来源存入 `utm_source`，来源归类 `SOURCE_EXPR` 优先输出 `utm:<值>`，其次输出 referrer 主机名，缺失来源输出空串。`getAdminAnalytics` 调用 `getTrafficSummary` 的既有 display 模式，将空串生成为固定标签“（直接访问）”，并让来源及浏览深度使用相同标签匹配。管理页的 `sourceName` 原先直接展示该固定标签，漏接产品文案取词。
+
+将该格式化函数放到 `AnalyticsReport` 的取词上下文内，对固定标签调用 `useWorkspaceText`，在现有西班牙语词典补入 `(Acceso directo)`。UTM 原文及域名继续按既有来源格式展示，深度匹配使用 API 原始标签。
+
+### 回归证据
+
+扩展现有浏览器 fixture 接受有数据的管理报表，在 1280px 和 390px 分别从 `/es/app/admin` 点击 `Tráfico`。断言固定标签译文、中文 UTM 来源 `通知`、`google.com` 以及各来源 PV、访客数、会话数和每会话页数，再对照 `/app/admin?tab=analytics` 的中文显示。
+
+修复前运行 `pnpm test:browser es-workspace.spec.ts --grep 'populated admin traffic'`，两项均失败，期望 `(Acceso directo)1111`，实际 `（直接访问）1111`。日志为 `/tmp/beb5e395-rework-before.log`。
+
+修复后 `pnpm check` 退出 0，服务端 114 文件 / 2511 项、客户端 42 文件 / 487 项均通过，lint、typecheck、build 和 SEO 通过。日志为 `/tmp/beb5e395-rework-check.log`。
+
+同一新增回归在修复后的构建上输出 `2 passed (5.1s)`，日志为 `/tmp/beb5e395-rework-after.log`。已目视检查两种宽度的真实页面截图，固定译文及来源行可读。
+
+- 桌面截图为 `internal-docs/es-app-subroutes/admin-traffic-desktop.png`。
+- 窄屏截图为 `internal-docs/es-app-subroutes/admin-traffic-mobile.png`。
+
+全量 `pnpm test:browser` 输出 `341 passed (4.4m)`，日志为 `/tmp/beb5e395-rework-browser.log`。`pnpm test:openclaw` 为 27 项通过，日志为 `/tmp/beb5e395-rework-openclaw.log`。
+
+运行使用 Node v22.23.5。浏览器启动和 workerd 本地监听受到沙箱权限限制，连接器测试初次在沙箱子进程退出，获准在沙箱外复跑后各套均完成。重活串行，执行期间观察到另一项 `next build` 时暂停浏览器测试，待其结束后继续。
+
+返工后的独立复审覆盖整卡基线至最终 HEAD 的完整需求和差异，提交身份及完整验证记录同步写入任务计划。

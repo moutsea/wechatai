@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFile, mkdir } from "node:fs/promises";
 import { extname } from "node:path";
 import type { Snapshot } from "../../src/shared/types";
+import type { AdminAnalytics } from "../../src/shared/analytics";
 import { createFakeApi } from "../support/fake-api";
 import { emptyFunnelSummary } from "../../src/shared/funnel-report";
 
@@ -33,6 +34,7 @@ async function fixture(
     models?: boolean;
     ledger?: boolean;
     connectionError?: boolean;
+    analytics?: AdminAnalytics;
   } = {},
 ) {
   const fake = createFakeApi();
@@ -233,7 +235,7 @@ async function fixture(
     if (path === "/api/admin/analytics") {
       const range = { from: "2026-11-28", to: "2026-11-28", days: 1 };
       return route.fulfill({
-        json: {
+        json: options.analytics ?? {
           traffic: {
             range,
             totals: { pv: 0, visitorDays: 0, sessions: 0, pagesPerSession: 0 },
@@ -465,6 +467,62 @@ test("admin overview, tabs and notice editor use Spanish", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible();
   await spanishUi(page);
 });
+
+for (const width of [1280, 390])
+  test(`populated admin traffic localizes fixed labels at ${width}px`, async ({ page }) => {
+    const range = { from: "2026-11-28", to: "2026-11-28", days: 1 };
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page, {
+      admin: true,
+      analytics: {
+        traffic: {
+          range,
+          totals: { pv: 4, visitorDays: 3, sessions: 3, pagesPerSession: 1.33 },
+          daily: [{ day: range.from, pv: 4, uv: 3, sessions: 3 }],
+          sources: [
+            { label: "utm:通知", pv: 2, visitorDays: 1 },
+            { label: "google.com", pv: 1, visitorDays: 1 },
+            { label: "（直接访问）", pv: 1, visitorDays: 1 },
+          ],
+          sourceDepth: [
+            { label: "utm:通知", pv: 2, sessions: 1, pagesPerSession: 2 },
+            { label: "google.com", pv: 1, sessions: 1, pagesPerSession: 1 },
+            { label: "（直接访问）", pv: 1, sessions: 1, pagesPerSession: 1 },
+          ],
+          topPages: [{ label: "/pricing", pv: 4, visitorDays: 3 }],
+          countries: [],
+          devices: [],
+        },
+        conversions: {
+          total: 0,
+          unattributed: 0,
+          sessions: 3,
+          rate: 0,
+          rows: [],
+          sourceRows: [],
+        },
+        funnel: emptyFunnelSummary(range),
+      },
+    });
+    await page.goto(`${origin}/es/app/admin`);
+    await page.getByRole("button", { name: "Tráfico", exact: true }).click();
+    const sources = page.getByRole("table", { name: "Fuentes de tráfico", exact: true });
+    await expect(sources.locator("tbody tr")).toHaveText([
+      "UTM · 通知2112",
+      "google.com1111",
+      "(Acceso directo)1111",
+    ]);
+    await mkdir("test-results/es-workspace", { recursive: true });
+    await page.screenshot({
+      path: `test-results/es-workspace/admin-traffic-${width}.png`,
+      fullPage: true,
+      animations: "disabled",
+    });
+    await page.goto(`${origin}/app/admin?tab=analytics`);
+    await expect(
+      page.getByRole("table", { name: "访问来源", exact: true }).locator("tbody tr"),
+    ).toHaveText(["UTM · 通知2112", "google.com1111", "（直接访问）1111"]);
+  });
 
 test("all plugin configuration dialogs and character settings use Spanish", async ({ page }) => {
   await fixture(page, { models: true });
