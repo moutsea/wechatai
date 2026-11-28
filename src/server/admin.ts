@@ -1,7 +1,9 @@
 import { accountForAdmin, type AdminGrant } from "./account-route";
 import { AppError } from "./config";
 import { billingMode } from "./billing";
+import { billingRevenueQueries } from "./billing-revenue";
 import { dayWindow } from "./wallet";
+import { retentionCollectionSql, RETENTION_DAY_MS } from "./account-retention";
 import { adminGiftInputSchema } from "../shared/admin";
 import type {
   AdminAccountStats,
@@ -73,10 +75,23 @@ export async function giftAdminMembership(
 }
 
 export async function saveAdminStats(env: Env, id: string, data: AdminAccountStats) {
-  await env.DB.prepare(`INSERT INTO admin_account_stats(user_id,synced_at,data) VALUES (?,?,?)
-    ON CONFLICT(user_id) DO UPDATE SET synced_at=excluded.synced_at,data=excluded.data
+  // Existing observations win on replay. JSON merge preserves days and the first
+  // collection marker even when a legacy or membership refresh omits retention.
+  // Check the route in the same write so a cutover during the RPC fails closed.
+  const snapshot = data.retention
+    ? { ...data, retention: { ...data.retention, startedAt: Date.now() } }
+    : data;
+  await env.DB.prepare(`INSERT INTO admin_account_stats(user_id,synced_at,data)
+    VALUES (?, ?, CASE WHEN EXISTS(SELECT 1 FROM account_backend_routes WHERE owner_id=? )
+      THEN json_set(?, '$.retention.sourceUnavailable', json('true')) ELSE ? END)
+    ON CONFLICT(user_id) DO UPDATE SET synced_at=excluded.synced_at,
+      data=CASE WHEN json_type(admin_account_stats.data,'$.retention')='object'
+        THEN json_set(excluded.data,'$.retention',
+          json_patch(COALESCE(json_extract(excluded.data,'$.retention'),'{}'),
+            json_extract(admin_account_stats.data,'$.retention')))
+        ELSE excluded.data END
     WHERE excluded.synced_at>admin_account_stats.synced_at`)
-    .bind(id, data.sampledAt, JSON.stringify(data))
+    .bind(id, data.sampledAt, id, JSON.stringify(snapshot), JSON.stringify(snapshot))
     .run();
 }
 
@@ -89,18 +104,27 @@ export async function syncAdminStats(
   if (cursor != null && (typeof cursor !== "string" || cursor.length > 128))
     throw new AppError("invalid_cursor", "无效的同步位置");
   const rows = (
-    await env.DB.prepare(`SELECT u.id,s.synced_at FROM user u
+    await env.DB.prepare(`SELECT u.id,u.createdAt,s.synced_at FROM user u
     LEFT JOIN admin_account_stats s ON s.user_id=u.id WHERE u.id>? ORDER BY u.id LIMIT 11`)
       .bind(cursor || "")
-      .all<{ id: string; synced_at: number | null }>()
+      .all<{ id: string; createdAt: number; synced_at: number | null }>()
   ).results;
+  const collection = await env.DB.prepare(retentionCollectionSql)
+    .bind(Date.now())
+    .first<{ startedAt: number | null }>();
+  const collectionStart =
+    collection?.startedAt == null
+      ? undefined
+      : dayWindow(collection.startedAt).start + RETENTION_DAY_MS;
   const batch = rows.slice(0, 10);
   let failed = 0;
   for (let i = 0; i < batch.length; i += 2) {
     const results = await Promise.allSettled(
       batch.slice(i, i + 2).map(async (row) => {
         if (row.synced_at && row.synced_at > Date.now() - 30000) return;
-        const stats = await (await accountForAdmin(env, row.id, grant)).adminStats();
+        const stats = await (
+          await accountForAdmin(env, row.id, grant)
+        ).adminStats(row.createdAt, collectionStart);
         await saveAdminStats(env, row.id, stats);
       }),
     );
@@ -114,35 +138,64 @@ const createdMillis =
   "CASE WHEN u.createdAt<100000000000 THEN u.createdAt*1000 ELSE u.createdAt END";
 const value = (field: string) => `json_extract(s.data,'$.${field}')`;
 
-export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOverview> {
+// Inspect existing snapshots in the same batch as their aggregates, so a sync
+// cannot race the completeness check. Missing or invalid old fields stay unknown.
+function snapshotCoverageColumns() {
+  const numeric = (source: string, fields: string[]) =>
+    fields
+      .map(
+        (field) =>
+          `COALESCE(json_type(${source},'$.${field}') IN ('integer','real') AND json_extract(${source},'$.${field}')>=0,0)`,
+      )
+      .join(" AND ");
+  const usage = ["requests", "tokens", "credits"];
+  const rowChecks = [
+    ["daily", [...usage, "failedRequests"]],
+    ["pluginUsage", usage],
+  ] as const;
+  return `,
+    COUNT(CASE WHEN s.user_id IS NOT NULL AND NOT (
+      ${numeric("s.data", ["sampledAt", "planUntil", "links", "connected", "channels", "models", "plugins", "sessions", ...usage, "failedRequests", "purchasedCredits", "debt"])}
+      AND ${value("sampledAt")}=s.synced_at
+      AND ${rowChecks
+        .map(
+          ([field, fields]) => `
+        COALESCE(json_type(s.data,'$.${field}')='array',0)
+        AND NOT EXISTS(SELECT 1 FROM json_each(s.data,'$.${field}') row WHERE
+          row.type!='object' OR NOT (${numeric("row.value", [...fields])})
+          OR COALESCE(json_type(row.value,'$.day')='text',0)=0
+          ${field === "pluginUsage" ? "OR COALESCE(json_type(row.value,'$.pluginId')='text',0)=0" : ""}
+        )`,
+        )
+        .join(" AND ")}
+    ) THEN 1 END) legacySnapshots`;
+}
+
+export async function adminOverview(
+  env: Env,
+  now = Date.now(),
+  options: { snapshotCoverage?: boolean; publicPluginIds?: readonly string[] } = {},
+): Promise<AdminOverview> {
   const mode = billingMode(env);
   const start = dayWindow(now).start - 29 * 86400000;
   const startDay = dayWindow(start).day;
   const endDay = dayWindow(now).day;
   const db = env.DB.withSession("first-primary");
+  const [paymentSummary, paymentDays] = billingRevenueQueries(db, mode, start, now);
   const results = await db.batch<Record<string, string | number | null>>([
     db
       .prepare(`SELECT COUNT(*) users, COUNT(s.user_id) synced, MIN(s.synced_at) oldest, MAX(s.synced_at) newest,
       COALESCE(SUM(${value("planUntil")}>?),0) plus,
-      ${["links", "connected", "channels", "models", "plugins", "sessions", "requests", "failedRequests", "tokens", "credits", "purchasedCredits", "debt"].map((k) => `COALESCE(SUM(${value(k)}),0) ${k}`).join(",")}
+      ${["links", "connected", "channels", "models", "plugins", "sessions", "requests", "failedRequests", "tokens", "credits", "purchasedCredits", "debt"].map((k) => `COALESCE(SUM(${value(k)}),0) ${k}`).join(",")}${options.snapshotCoverage ? snapshotCoverageColumns() : ""}
       FROM user u LEFT JOIN admin_account_stats s ON s.user_id=u.id`)
       .bind(now),
-    db
-      .prepare(`SELECT COALESCE(SUM(amount),0)/100.0 revenue, COUNT(*) paidOrders, COUNT(DISTINCT user_id) payingUsers,
-      COALESCE(SUM(CASE WHEN kind='plus' THEN amount ELSE 0 END),0)/100.0 membershipRevenue,
-      COALESCE(SUM(CASE WHEN kind='credits' THEN amount ELSE 0 END),0)/100.0 creditsRevenue
-      FROM billing_order WHERE mode=? AND status='paid' AND currency='cny'`)
-      .bind(mode),
+    paymentSummary,
     db.prepare("SELECT COUNT(*) rewardedReferrals FROM referral WHERE status='rewarded'"),
     db
       .prepare(`SELECT strftime('%Y-%m-%d',(${createdMillis})/1000,'unixepoch','+8 hours') day, COUNT(*) newUsers
       FROM user u WHERE (${createdMillis})>=? AND (${createdMillis})<=? GROUP BY day`)
       .bind(start, now),
-    db
-      .prepare(`SELECT strftime('%Y-%m-%d',COALESCE(paid_at,created_at)/1000,'unixepoch','+8 hours') day,
-      SUM(amount)/100.0 revenue, COUNT(*) paidOrders FROM billing_order
-      WHERE mode=? AND status='paid' AND currency='cny' AND COALESCE(paid_at,created_at)>=? AND COALESCE(paid_at,created_at)<=? GROUP BY day`)
-      .bind(mode, start, now),
+    paymentDays,
     db
       .prepare(`SELECT json_extract(d.value,'$.day') day,
       COUNT(DISTINCT CASE WHEN json_extract(d.value,'$.requests')>0 THEN s.user_id END) activeUsers,
@@ -157,11 +210,13 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
       SUM(json_extract(p.value,'$.requests')) requests, SUM(json_extract(p.value,'$.tokens')) tokens,
       SUM(json_extract(p.value,'$.credits')) credits
       FROM admin_account_stats s JOIN user u ON u.id=s.user_id, json_each(s.data,'$.pluginUsage') p
-      WHERE json_extract(p.value,'$.day') BETWEEN ? AND ? GROUP BY pluginId ORDER BY requests DESC LIMIT 20`)
-      .bind(startDay, endDay),
+      WHERE json_extract(p.value,'$.day') BETWEEN ? AND ?
+      ${options.publicPluginIds ? `AND json_extract(p.value,'$.pluginId') IN (${options.publicPluginIds.map(() => "?").join(",")})` : ""}
+      GROUP BY pluginId ORDER BY requests DESC, pluginId ASC LIMIT 20`)
+      .bind(startDay, endDay, ...(options.publicPluginIds ?? [])),
   ]);
   const stats = results[0].results[0] as AdminOverview["summary"] & AdminOverview["coverage"];
-  const { synced, oldest, newest, ...summary } = stats;
+  const { synced, oldest, newest, legacySnapshots, ...summary } = stats;
   const days = new Map<string, Partial<AdminDay>>();
   for (const result of results.slice(3, 6))
     for (const row of result.results) {
@@ -186,7 +241,7 @@ export async function adminOverview(env: Env, now = Date.now()): Promise<AdminOv
   return {
     mode,
     generatedAt: now,
-    coverage: { synced, oldest, newest },
+    coverage: { synced, oldest, newest, ...(options.snapshotCoverage ? { legacySnapshots } : {}) },
     summary: {
       ...summary,
       ...results[1].results[0],

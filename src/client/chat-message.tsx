@@ -1,3 +1,6 @@
+import { useLocale } from "./locale";
+import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/chat-message-page";
+import { copy as koCopy } from "../shared/i18n/ko/copy/chat-message-page";
 import { ChevronDown, MessageCircle, RotateCcw } from "lucide-react";
 import { formatCredits, type ChatMessage } from "../shared/types";
 import { ChatMarkdown, CopyMessage } from "./chat-markdown";
@@ -23,6 +26,9 @@ export function ChatMessageBubble({
   modelName?: string;
   avatar?: string;
 }) {
+  const { locale } = useLocale();
+  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+
   if (message.role === "system")
     return (
       <div className="context-divider">
@@ -34,11 +40,11 @@ export function ChatMessageBubble({
   return (
     <article
       className={`chat-message ${message.role}`}
-      aria-label={isUser ? "我的消息" : "模型回复"}
+      aria-label={isUser ? pageCopy["我的消息"] : pageCopy["模型回复"]}
     >
       {isUser ? (
         <span className="message-avatar user" aria-hidden="true">
-          我
+          {pageCopy["我"]}
         </span>
       ) : (
         <ModelAvatar src={avatar} />
@@ -46,13 +52,13 @@ export function ChatMessageBubble({
       <div className="message-body">
         <div className="message-label">
           <span title={isUser ? undefined : message.model}>
-            {isUser ? "我" : modelName || message.model || "AI"}
+            {isUser ? pageCopy["我"] : modelName || message.model || "AI"}
           </span>
           <time
             dateTime={new Date(message.createdAt).toISOString()}
-            title={new Date(message.createdAt).toLocaleString("zh-CN")}
+            title={new Date(message.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : "zh-CN")}
           >
-            {new Date(message.createdAt).toLocaleTimeString("zh-CN", {
+            {new Date(message.createdAt).toLocaleTimeString(locale === "ko" ? "ko-KR" : "zh-CN", {
               hour: "2-digit",
               minute: "2-digit",
             })}
@@ -74,8 +80,10 @@ export function ChatMessageBubble({
                 <ChevronDown size={12} />
               </summary>
               <span>
-                {message.inputTokens.toLocaleString()} 输入 ·{" "}
-                {message.outputTokens.toLocaleString()} 输出{message.estimated && "（估算）"}
+                {message.inputTokens.toLocaleString()}
+                {pageCopy[" 输入 ·"]} {message.outputTokens.toLocaleString()}
+                {pageCopy[" 输出"]}
+                {message.estimated && pageCopy["（估算）"]}
               </span>
             </details>
           </div>

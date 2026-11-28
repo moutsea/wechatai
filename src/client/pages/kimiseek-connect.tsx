@@ -1,13 +1,21 @@
+import { balanceCopy as koBalanceCopy } from "../../shared/i18n/ko/copy/workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, LoaderCircle, RefreshCw } from "lucide-react";
 import { useApp } from "../context";
-import { json } from "../api";
+import { ApiError, json } from "../api";
 import { trackChannelModelImport, trackFunnel } from "../analytics-client";
 import type { ModelImportResult } from "../../shared/types";
 import { kimiseekEmailError } from "../../shared/kimiseek-errors";
+import { dashboardCopy, formatCopy } from "../../shared/i18n/dashboard";
+import { useLocale } from "../locale";
+
+type ConnectError = { message: string; code?: string; timedOut?: boolean };
+type ConnectResult = { message?: string; modelImport?: ModelImportResult };
 
 export function useKimiseekConnect(onComplete: () => void) {
   const { request, refresh, notify } = useApp();
+  const { locale } = useLocale();
+  const copy = dashboardCopy[locale].onboarding;
   const [pending, setPending] = useState<{
     id: string;
     url: string;
@@ -15,14 +23,38 @@ export function useKimiseekConnect(onComplete: () => void) {
     operation: "connect" | "recharge";
   } | null>(null);
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState("");
-  const [errorCode, setErrorCode] = useState<string>();
+  const [error, setError] = useState<ConnectError | null>(null);
+  const showResult = useRef<{
+    success: (operation: "connect" | "recharge", result: ConnectResult) => void;
+    failure: (failure: ConnectError) => void;
+  }>({ success: () => {}, failure: () => {} });
+  showResult.current = {
+    success: (operation, { message, modelImport }) => {
+      if (locale === "zh-CN" && message) return notify(message);
+      if (operation === "recharge") return notify(copy.kimiseekRecharged);
+      const details = [copy.kimiseekLinked];
+      if (modelImport) {
+        details.push(formatCopy(copy.kimiseekImported, { count: modelImport.imported }));
+        if (modelImport.existing)
+          details.push(formatCopy(copy.kimiseekExisting, { count: modelImport.existing }));
+        if (modelImport.limited)
+          details.push(formatCopy(copy.kimiseekLimited, { count: modelImport.limited }));
+      }
+      notify(details.join(" · "));
+    },
+    failure: (failure) => notify(connectErrorMessage(failure, locale), true),
+  };
   const complete = useRef(onComplete);
   complete.current = onComplete;
   useEffect(() => {
     if (!pending) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
+    const fail = (failure: ConnectError) => {
+      setPending(null);
+      setError(failure);
+      showResult.current.failure(failure);
+    };
     const poll = async () => {
       try {
         const result = await request<{
@@ -40,22 +72,25 @@ export function useKimiseekConnect(onComplete: () => void) {
           setPending(null);
           complete.current();
           await refresh();
-          notify(result.message ?? "KimiSeek 已关联");
+          showResult.current.success(pending.operation, result);
           window.dispatchEvent(new Event("kimiseek-balance-refresh"));
           return;
         }
         if (result.status === "failed") {
-          setErrorCode(result.errorCode);
-          throw new Error(result.message ?? "关联未完成，请重试");
+          fail({
+            message: result.message ?? dashboardCopy["zh-CN"].onboarding.kimiseekFailed,
+            code: result.errorCode,
+          });
+          return;
         }
-        if (Date.now() > pending.expires) throw new Error("关联已超时，请重新点击导入");
+        if (Date.now() > pending.expires) {
+          fail({ message: dashboardCopy["zh-CN"].onboarding.kimiseekTimeout, timedOut: true });
+          return;
+        }
         timer = setTimeout(() => void poll(), 1500);
       } catch (e) {
-        if (!stopped) {
-          setPending(null);
-          setError((e as Error).message);
-          notify((e as Error).message, true);
-        }
+        if (!stopped)
+          fail({ message: (e as Error).message, code: e instanceof ApiError ? e.code : undefined });
       }
     };
     void poll();
@@ -63,16 +98,15 @@ export function useKimiseekConnect(onComplete: () => void) {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [pending, request, refresh, notify]);
+  }, [pending, request, refresh]);
   const start = async (operation: "connect" | "recharge") => {
     if (pending || starting) return;
-    setError("");
-    setErrorCode(undefined);
+    setError(null);
     const popup = window.open("about:blank", "_blank");
     if (popup) {
       popup.opener = null;
-      popup.document.title = "正在连接 KimiSeek…";
-      popup.document.body.textContent = "正在连接 KimiSeek，请稍候…";
+      popup.document.title = copy.kimiseekPopupTitle;
+      popup.document.body.textContent = copy.kimiseekPopupBody;
     }
     setStarting(true);
     try {
@@ -84,16 +118,36 @@ export function useKimiseekConnect(onComplete: () => void) {
       if (popup) popup.location.replace(result.url);
     } catch (e) {
       popup?.close();
-      setError((e as Error).message);
-      notify((e as Error).message, true);
+      const failure = {
+        message: (e as Error).message,
+        code: e instanceof ApiError ? e.code : undefined,
+      };
+      setError(failure);
+      showResult.current.failure(failure);
     } finally {
       setStarting(false);
     }
   };
-  return { busy: starting || Boolean(pending), start, pendingUrl: pending?.url, error, errorCode };
+  return {
+    busy: starting || Boolean(pending),
+    start,
+    pendingUrl: pending?.url,
+    error: error ? connectErrorMessage(error, locale) : "",
+    errorCode: error?.code,
+  };
+}
+
+function connectErrorMessage(error: ConnectError, locale: keyof typeof dashboardCopy) {
+  if (locale === "zh-CN") return error.message;
+  const copy = dashboardCopy[locale].onboarding;
+  if (error.code === "EMAIL_VERIFICATION_REQUIRED") return copy.kimiseekVerify;
+  if (error.code === "EMAIL_DOMAIN_BLOCKED") return copy.kimiseekDomain;
+  return error.timedOut ? copy.kimiseekTimeout : copy.kimiseekFailed;
 }
 
 export function KimiseekConnectError({ message, code }: { message: string; code?: string }) {
+  const { locale } = useLocale();
+  const copy = dashboardCopy[locale].onboarding;
   const policy = kimiseekEmailError(code);
   return (
     <span className="form-error" role="alert">
@@ -102,7 +156,7 @@ export function KimiseekConnectError({ message, code }: { message: string; code?
         <>
           {" "}
           <a className="text-link" href={policy.href} target="_blank" rel="noopener noreferrer">
-            {policy.label}
+            {policy.code === "EMAIL_VERIFICATION_REQUIRED" ? copy.verifyEmail : copy.manualSetup}
           </a>
         </>
       )}
@@ -117,6 +171,18 @@ export function KimiseekBalance({
   onRecharge: () => void;
   disabled: boolean;
 }) {
+  const { locale } = useLocale();
+  const balanceCopy =
+    locale === "ko"
+      ? koBalanceCopy
+      : {
+          unavailable: "余额暂不可用",
+          title: "KimiSeek 余额",
+          loading: "读取中…",
+          refresh: "刷新 KimiSeek 余额",
+          updated: "最近更新 {time}",
+          recharge: "充值",
+        };
   const { request } = useApp();
   const [balance, setBalance] = useState<{ amount: number; checkedAt: number } | null>(null);
   const [error, setError] = useState("");
@@ -130,12 +196,12 @@ export function KimiseekBalance({
       setBalance(await request("/kimiseek/balance"));
       setError("");
     } catch {
-      setError("余额暂不可用");
+      setError(balanceCopy.unavailable);
     } finally {
       inFlight.current = false;
       setLoading(false);
     }
-  }, [request]);
+  }, [request, balanceCopy.unavailable]);
   useEffect(() => {
     void refresh();
     const update = () => {
@@ -153,14 +219,24 @@ export function KimiseekBalance({
   return (
     <div className="kimiseek-balance">
       <div>
-        <span>KimiSeek 余额</span>
-        <strong>{error || (balance ? `¥${balance.amount.toFixed(2)}` : "读取中…")}</strong>
+        <span>{balanceCopy.title}</span>
+        <strong>
+          {error || (balance ? `¥${balance.amount.toFixed(2)}` : balanceCopy.loading)}
+        </strong>
       </div>
       <button
         className="icon-button"
-        aria-label="刷新 KimiSeek 余额"
+        aria-label={balanceCopy.refresh}
         title={
-          balance ? `最近更新 ${new Date(balance.checkedAt).toLocaleTimeString()}` : "刷新余额"
+          balance
+            ? formatCopy(balanceCopy.updated, {
+                time: new Date(balance.checkedAt).toLocaleTimeString(
+                  locale === "ko" ? "ko-KR" : undefined,
+                ),
+              })
+            : locale === "ko"
+              ? balanceCopy.refresh
+              : "刷新余额"
         }
         disabled={loading}
         onClick={() => void refresh()}
@@ -168,7 +244,7 @@ export function KimiseekBalance({
         {loading ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />}
       </button>
       <button className="text-button" disabled={disabled} onClick={onRecharge}>
-        充值 <ExternalLink size={13} />
+        {balanceCopy.recharge} <ExternalLink size={13} />
       </button>
     </div>
   );

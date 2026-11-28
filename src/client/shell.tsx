@@ -26,18 +26,21 @@ import { useApp } from "./context";
 import { Brand, Modal } from "./ui";
 import { formatCredits } from "../shared/types";
 import { MembershipNotice } from "./membership-notice";
+import { localizedHref, useLocale } from "./locale";
+import { LanguageSwitcher } from "./language-switcher";
+import { dashboardCopy } from "../shared/i18n/dashboard";
 const items = [
-  { path: "", label: "概览", en: "Overview", icon: LayoutDashboard },
-  { path: "/channels", label: "渠道与模型", en: "Channels", icon: Cpu },
-  { path: "/plugins", label: "插件", en: "Plugins", icon: Puzzle },
-  { path: "/tasks", label: "云端任务", en: "Cloud tasks", icon: Cloud },
-  { path: "/wechat", label: "微信连接", en: "Connection", icon: Link2 },
-  { path: "/sessions", label: "会话记录", en: "Conversations", icon: MessagesSquare },
-  { path: "/billing", label: "会员与 credits", en: "Membership", icon: Coins },
-  { path: "/credits", label: "额度明细", en: "Credit history", icon: ReceiptText },
-  { path: "/notices", label: "通知", en: "Notices", icon: Bell },
-  { path: "/invite", label: "邀请好友", en: "Invite friends", icon: Gift },
-];
+  { path: "", label: "overview", icon: LayoutDashboard },
+  { path: "/channels", label: "channels", icon: Cpu },
+  { path: "/plugins", label: "plugins", icon: Puzzle },
+  { path: "/tasks", label: "tasks", icon: Cloud },
+  { path: "/wechat", label: "wechat", icon: Link2 },
+  { path: "/sessions", label: "sessions", icon: MessagesSquare },
+  { path: "/billing", label: "billing", icon: Coins },
+  { path: "/credits", label: "credits", icon: ReceiptText },
+  { path: "/notices", label: "notices", icon: Bell },
+  { path: "/invite", label: "invite", icon: Gift },
+] as const;
 export function Shell({
   children,
   onHistoryCleared,
@@ -46,8 +49,11 @@ export function Shell({
   onHistoryCleared?: () => void;
 }) {
   const { data, base, isAdmin, user, request, refresh, notify } = useApp();
+  const { locale } = useLocale();
+  const { shell: copy, dashboard } = dashboardCopy[locale];
+  const overview = localizedHref(locale, base);
   const navigation = isAdmin
-    ? [...items, { path: "/admin", label: "管理后台", en: "Admin", icon: ShieldCheck }]
+    ? [...items, { path: "/admin", label: "admin" as const, icon: ShieldCheck }]
     : items;
   const [mobile, setMobile] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -56,10 +62,10 @@ export function Shell({
   const location = useLocation();
   const navigate = useNavigate();
   const page =
-    navigation.find(
-      (i) =>
-        location.pathname === base + i.path ||
-        (i.path && location.pathname.startsWith(`${base}${i.path}/`)),
+    navigation.find((i) =>
+      i.path
+        ? location.pathname === base + i.path || location.pathname.startsWith(`${base}${i.path}/`)
+        : location.pathname === overview,
     ) || items[0];
   const clear = async () => {
     setBusy(true);
@@ -69,9 +75,9 @@ export function Shell({
       await refresh();
       setConfirm(false);
       setSettings(false);
-      notify("会话记录和云端任务内容已删除，未结束的云端任务已请求停止。");
+      notify(copy.deleted);
     } catch (e) {
-      notify((e as Error).message, true);
+      notify(locale === "zh-CN" ? (e as Error).message : copy.deleteFailed, true);
     } finally {
       setBusy(false);
     }
@@ -81,28 +87,29 @@ export function Shell({
       {mobile && (
         <button
           className="sidebar-overlay"
-          aria-label="收起导航"
+          aria-label={copy.collapseNav}
           onClick={() => setMobile(false)}
         />
       )}
       <aside className={`sidebar ${mobile ? "open" : ""}`}>
-        <Link to="/" className="sidebar-brand">
-          <Brand />
+        <Link to={localizedHref(locale, "/")} className="sidebar-brand">
+          <Brand name={locale === "zh-CN" ? undefined : copy.brand} />
         </Link>
         <div className="workspace-label">
-          <span className="tiny-dot" /> 个人工作台<span>PERSONAL</span>
+          <span className="tiny-dot" /> {copy.personalWorkspace}
+          <span>PERSONAL</span>
         </div>
-        <nav aria-label="主导航">
+        <nav aria-label={copy.navigation}>
           {navigation.map((item) => (
             <NavLink
               key={item.path}
-              to={base + item.path}
+              to={item.path ? base + item.path : overview}
               end={!item.path}
               onClick={() => setMobile(false)}
               className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
             >
               <item.icon size={19} />
-              <span>{item.label}</span>
+              <span>{copy[item.label]}</span>
               {item.path === "/sessions" && <span className="nav-plus">PLUS</span>}
             </NavLink>
           ))}
@@ -110,26 +117,30 @@ export function Shell({
         <div className="sidebar-bottom">
           <div className="balance-card">
             <div>
-              <span>可用 Credits</span>
+              <span>{dashboard.availableCredits}</span>
               <span className="tiny-dot" />
             </div>
-            <strong>{formatCredits(data?.wallet.balance ?? 0)}</strong>
-            <p>让每一次好奇，都有回应。</p>
+            <strong>{formatCredits(data?.wallet.balance ?? 0, locale)}</strong>
+            <p>{copy.balanceTagline}</p>
             <Link to={`${base}/billing`}>
-              管理额度
+              {copy.manageCredits}
               <ArrowUpRight size={15} />
             </Link>
           </div>
-          <Link className="sidebar-help" to="/docs" onClick={() => setMobile(false)}>
+          <Link
+            className="sidebar-help"
+            to={localizedHref(locale, "/docs")}
+            onClick={() => setMobile(false)}
+          >
             <CircleHelp size={17} />
-            文档
+            {copy.docs}
             <ArrowUpRight size={14} />
           </Link>
           <button className="user-row" onClick={() => setSettings(true)}>
-            <span className="avatar">{user.name.slice(0, 1) || "你"}</span>
+            <span className="avatar">{user.name.slice(0, 1) || copy.avatar}</span>
             <span>
-              <strong>{user.name || "我的账户"}</strong>
-              <small>{data?.plan === "plus" ? "Plus 会员" : "Free 账户"}</small>
+              <strong>{user.name || copy.account}</strong>
+              <small>{data?.plan === "plus" ? copy.plusAccount : copy.freeAccount}</small>
             </span>
             <Settings2 size={16} />
           </button>
@@ -140,14 +151,14 @@ export function Shell({
           <div className="breadcrumb">
             <button
               className="mobile-menu icon-button"
-              aria-label="展开导航"
+              aria-label={copy.expandNav}
               onClick={() => setMobile(true)}
             >
               <Menu size={20} />
             </button>
-            <span>工作台</span>
+            <span>{copy.workspace}</span>
             <ChevronRight size={14} />
-            <strong>{page.label}</strong>
+            <strong>{copy[page.label]}</strong>
           </div>
           <div className="topbar-actions">
             <Link
@@ -155,9 +166,10 @@ export function Shell({
               className={`connection-pill ${data?.connection.status === "connected" ? "connected" : ""}`}
             >
               <span className="tiny-dot" />
-              {data?.connection.status === "connected" ? "微信已连接" : "微信待连接"}
+              {data?.connection.status === "connected" ? copy.connected : copy.disconnected}
             </Link>
             <NoticeBell />
+            <LanguageSwitcher />
             <span className="topbar-divider" />
             <span className="plan-label">{data?.plan === "plus" ? "PLUS" : "FREE"}</span>
           </div>
@@ -172,29 +184,34 @@ export function Shell({
           ) : (
             <div className="loading-state">
               <span className="spinner" />
-              <p>正在准备你的工作台…</p>
+              <p>{copy.loading}</p>
             </div>
           )}
         </main>
         <footer className="workspace-footer">
-          <span>微伴，让 AI 走进日常。</span>
-          <span>独立开发产品，与微信及腾讯无官方关联</span>
+          <span>{copy.footerTagline}</span>
+          <span>{copy.independent}</span>
           <span>© {new Date().getFullYear()} Wechatai</span>
         </footer>
       </div>
       {settings && (
-        <Modal title="我的账户" description={user.email} onClose={() => setSettings(false)}>
+        <Modal
+          title={copy.account}
+          description={user.email}
+          closeLabel={copy.close}
+          onClose={() => setSettings(false)}
+        >
           <div className="settings-body">
             <div className="settings-note">
               <ShieldCheck />
               <div>
-                <strong>你的数据，由你掌握</strong>
-                <p>删除平台记录不会删除微信里的消息，也不会退回已使用的 credits。</p>
+                <strong>{copy.dataControl}</strong>
+                <p>{copy.deleteNote}</p>
               </div>
             </div>
             <button className="button danger-outline" onClick={() => setConfirm(true)}>
               <Trash2 size={16} />
-              删除全部会话记录
+              {copy.deleteHistory}
             </button>
             <button
               className="button secondary"
@@ -203,33 +220,34 @@ export function Shell({
                 setBusy(true);
                 try {
                   const result = await authClient.signOut();
-                  if (result.error) throw new Error("退出登录失败，请重试。");
-                  navigate("/", { replace: true });
+                  if (result.error) throw new Error(copy.signOutFailed);
+                  navigate(localizedHref(locale, "/"), { replace: true });
                 } catch {
-                  notify("退出登录失败，请重试。", true);
+                  notify(copy.signOutFailed, true);
                 } finally {
                   setBusy(false);
                 }
               }}
             >
               <LogOut size={16} />
-              退出登录
+              {copy.signOut}
             </button>
           </div>
         </Modal>
       )}
       {confirm && (
         <Modal
-          title="删除全部会话记录？"
-          description="所有会话、归档、聊天内容及云端任务内容将从平台删除，无法恢复。未结束的云端任务会请求停止，并停止向微信投递结果；已发生的外部操作无法撤销。微信里的消息和已产生的计费记录会保留。"
+          title={copy.deleteTitle}
+          description={copy.deleteDescription}
+          closeLabel={copy.close}
           onClose={() => setConfirm(false)}
         >
           <div className="modal-actions">
             <button className="button secondary" onClick={() => setConfirm(false)}>
-              保留记录
+              {copy.keepHistory}
             </button>
             <button className="button danger" disabled={busy} onClick={() => void clear()}>
-              {busy ? "正在删除…" : "确认永久删除"}
+              {busy ? copy.deleting : copy.confirmDelete}
             </button>
           </div>
         </Modal>

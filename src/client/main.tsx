@@ -2,7 +2,7 @@ import React, { lazy, Suspense, useLayoutEffect, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { BrowserRouter, matchRoutes, useLocation, useRoutes, type RouteObject } from "react-router-dom";
 import "../shared/i18n/load";
-import { hasRegisteredTranslation, splitLocalePath } from "../shared/i18n";
+import { DASHBOARD_PATH, hasRegisteredTranslation, splitLocalePath } from "../shared/i18n";
 import { LocaleProvider } from "./locale";
 import { AuthProvider } from "./auth";
 import { Landing } from "./public-pages";
@@ -86,6 +86,14 @@ const publicRoutes: AppRoute[] = [
   { path: "/developers/plugins", element: <PluginProtocol />, preload: PluginProtocol.preload },
 ];
 const localizedRoutes = [...publicRoutes, notFoundRoute];
+const workspaceElement = (
+  <Suspense fallback={<WorkspaceSkeleton />}>
+    <Workspace />
+  </Suspense>
+);
+const localizedWorkspaceRoutes: AppRoute[] = [
+  { path: `/:locale${DASHBOARD_PATH}/*`, element: workspaceElement },
+];
 const routes: AppRoute[] = [
   ...publicRoutes,
   { path: "/login", element: <AuthPage /> },
@@ -94,14 +102,7 @@ const routes: AppRoute[] = [
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/guide", element: <Guide />, preload: Guide.preload },
-  {
-    path: "/app/*",
-    element: (
-      <Suspense fallback={<WorkspaceSkeleton />}>
-        <Workspace />
-      </Suspense>
-    ),
-  },
+  { path: `${DASHBOARD_PATH}/*`, element: workspaceElement },
   notFoundRoute,
 ];
 const notFoundRoutes = [notFoundRoute];
@@ -109,9 +110,15 @@ const notFoundRoutes = [notFoundRoute];
 function appRouteTarget(pathname: string) {
   const split = splitLocalePath(pathname);
   if (!split) return { routes, pathname };
-  return hasRegisteredTranslation(split.locale, split.path)
-    ? { routes: localizedRoutes, pathname: split.path }
-    : { routes: notFoundRoutes, pathname };
+  if (
+    split.locale === "ko" &&
+    (split.path === DASHBOARD_PATH || split.path.startsWith(`${DASHBOARD_PATH}/`))
+  )
+    return { routes: localizedWorkspaceRoutes, pathname };
+  if (!hasRegisteredTranslation(split.locale, split.path))
+    return { routes: notFoundRoutes, pathname };
+  if (split.path === DASHBOARD_PATH) return { routes: localizedWorkspaceRoutes, pathname };
+  return { routes: localizedRoutes, pathname: split.path };
 }
 
 function AppRoutes() {

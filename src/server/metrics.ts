@@ -3,6 +3,11 @@ import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { secret } from "./config";
 import { getActivationMetrics, parseActivationRange } from "./metrics-activation";
+import { analyticsDays } from "./analytics";
+import { readMetricsTraffic } from "./metrics-traffic";
+import { metricsOverview } from "./metrics-overview";
+import { metricsRevenue } from "./metrics-revenue";
+import { readMetricsRetention, retentionDays } from "./metrics-retention";
 
 const TOKEN_NAME = "METRICS_API_TOKEN";
 const TOKEN_MIN_LENGTH = 32;
@@ -10,6 +15,10 @@ const IP_LIMIT_KEY = "metrics:ip:";
 const TOKEN_LIMIT_KEY = "metrics:token:shared";
 const HEALTH_PATH = "/api/metrics/health";
 const ACTIVATION_PATH = "/api/metrics/activation";
+const REVENUE_PATH = "/api/metrics/revenue";
+const RETENTION_PATH = "/api/metrics/retention";
+const TRAFFIC_PATH = "/api/metrics/traffic";
+const OVERVIEW_PATH = "/api/metrics/overview";
 
 type BillingMode =
   | { available: true; mode: "test" | "live" }
@@ -24,8 +33,9 @@ type AuditReason =
   | "rate_limit_unavailable"
   | "method_not_allowed"
   | "not_found"
-  | "invalid_query"
-  | "internal_error";
+  | "internal_error"
+  | "billing_unavailable"
+  | "invalid_query";
 
 type LimitResult = "ok" | "limited" | "unavailable";
 
@@ -69,8 +79,15 @@ async function consumeLimit(env: Env, key: string): Promise<LimitResult> {
 }
 
 function routeTemplate(path: string) {
-  if (path === HEALTH_PATH) return HEALTH_PATH;
-  if (path === ACTIVATION_PATH) return ACTIVATION_PATH;
+  if (
+    path === HEALTH_PATH ||
+    path === ACTIVATION_PATH ||
+    path === REVENUE_PATH ||
+    path === RETENTION_PATH ||
+    path === TRAFFIC_PATH ||
+    path === OVERVIEW_PATH
+  )
+    return path;
   if (path === "/api/metrics") return "/api/metrics";
   return "/api/metrics/*";
 }
@@ -99,9 +116,9 @@ function respond(
 }
 
 /**
- * Dedicated read-only operator endpoints. It is mounted before the
+ * Dedicated read-only operator metadata and aggregate endpoints. It is mounted before the
  * general API body limit and browser session middleware, so it never reads a
- * request body, queries a session, or reaches account Durable Objects.
+ * request body, queries a browser session, or reaches account Durable Objects.
  */
 export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
   const observedUntil = Date.now();
@@ -132,7 +149,14 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
       return respond(c, 429, { error: "rate_limited" }, "token_rate_limited", true);
     }
 
-    if (c.req.path !== HEALTH_PATH && c.req.path !== ACTIVATION_PATH)
+    if (
+      c.req.path !== HEALTH_PATH &&
+      c.req.path !== ACTIVATION_PATH &&
+      c.req.path !== REVENUE_PATH &&
+      c.req.path !== RETENTION_PATH &&
+      c.req.path !== TRAFFIC_PATH &&
+      c.req.path !== OVERVIEW_PATH
+    )
       return respond(c, 404, { error: "not_found" }, "not_found");
     if (c.req.method !== "GET") {
       c.header("Allow", "GET");
@@ -144,6 +168,32 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
       if (!range) return respond(c, 400, { error: "invalid_query" }, "invalid_query");
       return respond(c, 200, await getActivationMetrics(c.env, range, observedUntil), "ok");
     }
+
+    if (c.req.path === TRAFFIC_PATH) {
+      const days = analyticsDays(c.req.query("days"));
+      if (days === null) return respond(c, 400, { error: "invalid_query" }, "invalid_query");
+      return respond(c, 200, await readMetricsTraffic(c.env, days), "ok");
+    }
+
+    if (c.req.path === RETENTION_PATH) {
+      const days = retentionDays(c.req.queries("days"));
+      if (days === null) return respond(c, 400, { error: "invalid_query" }, "invalid_query");
+      return respond(c, 200, await readMetricsRetention(c.env, days), "ok");
+    }
+
+    if (c.req.path === REVENUE_PATH) {
+      const mode = billingMode(c.env);
+      if (!mode.available)
+        return respond(
+          c,
+          503,
+          { error: "unavailable", available: false, reason: mode.reason, billingMode: mode },
+          "billing_unavailable",
+        );
+      return respond(c, 200, await metricsRevenue(c.env, mode.mode), "ok");
+    }
+
+    if (c.req.path === OVERVIEW_PATH) return respond(c, 200, await metricsOverview(c.env), "ok");
 
     return respond(
       c,
@@ -159,6 +209,10 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
     );
   } catch {
     // Do not log or return error.message/stack.
-    return respond(c, 503, { error: "unavailable" }, "internal_error");
+    const body =
+      c.req.path === REVENUE_PATH
+        ? { error: "unavailable", available: false, reason: "revenue_unavailable" }
+        : { error: "unavailable" };
+    return respond(c, 503, body, "internal_error");
   }
 }

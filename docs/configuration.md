@@ -17,13 +17,15 @@
 | `KIMISEEK_CONNECT_SECRET`                   | 可选 KimiSeek 关联，须与对端共享配置一致            |
 | `BILLING_NOTIFY_TOKEN`                      | 可选管理员付款通知；来自消息提醒插件                |
 | `BILLING_NOTIFY_SCOPE`                      | `all`（默认）或 `first_payment`                     |
-| `METRICS_API_TOKEN`                         | 可选只读运营元数据；独立随机值，至少 32 字符        |
+| `METRICS_API_TOKEN`                         | 可选只读运营 API；独立随机值，至少 32 字符          |
 
 不要直接更换已有生产环境的加密密钥，否则旧凭据可能无法解密。迁移时同时保留数据库、文件和对应密钥备份。
 
 ### 只读运营 API
 
 `METRICS_API_TOKEN` 是可选的独立 Workers Secret。启用时使用单独生成的随机值（至少 32 字符），不得复用 `SERVER_MONITOR_SECRET`、`EXECUTOR_SECRET`、`WECHAT_RECEIVER_SECRET`、`BILLING_NOTIFY_TOKEN`、`BETTER_AUTH_SECRET` 或 `ENCRYPTION_KEY`；未配置、空白或过短时入口关闭。只接受 `Authorization: Bearer <METRICS_API_TOKEN>`，Cookie、登录 Session 和查询参数都不能代替它。
+
+`GET /api/metrics/retention` 提供前向 D1/D7 聚合，窗口、覆盖和不可用原因见[留存接口说明](metrics-retention.md)。
 
 `GET /api/metrics/health` 成功返回固定元数据：
 
@@ -37,7 +39,10 @@
 }
 ```
 
-- 本接口只证明元数据鉴权，不包含 traffic、overview、revenue、activation、retention 等业务指标，也不证明支付可用。
+已支付毛额聚合通过 `GET /api/metrics/revenue` 提供，复用本节的专用 Bearer、限流与审计。字段、累计与每日窗口、退款未知及历史订阅覆盖限制见[已支付毛额 API](metrics-revenue.md)。
+
+- `GET /api/metrics/health` 只返回元数据，`authenticated` 表示专用凭据通过鉴权。
+- `GET /api/metrics/overview` 提供用户、活跃与平台用量快照聚合，字段、窗口与未知值语义见[概览接口说明](metrics-overview.md)。以 coverage 为准，不自动在读路径写同步。
 - `billingMode` 仅在支付密钥可可靠识别时返回 `available: true` 与 `mode: test|live`；未配置返回 `billing_not_configured`，无法识别返回 `billing_mode_unknown`。不会调用 Stripe，也不返回密钥或账号信息。
 - 认证失败返回 401；已知路径的非 GET 方法返回 405（`Allow: GET`）；未知路径返回 404；限流返回 429（`Retry-After: 60`）；限流绑定不可用返回 503。所有响应带 `Cache-Control: no-store` 与 `X-Robots-Tag: noindex, nofollow`。
 - 限流复用 `API_LIMIT`，在每个 Cloudflare 节点内分别按 IP 和有效凭据计 120 次/60 秒；这不是全球严格配额。无效凭据不消耗有效凭据额度。

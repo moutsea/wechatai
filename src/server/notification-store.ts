@@ -198,6 +198,26 @@ export class NotificationStore {
     );
     this.changed();
   }
+  /**
+   * A new message from the user reopens WeChat's reply window. Retry up to
+   * `limit` held jobs from these plugins now, oldest first.
+   */
+  wake(connectionId: string, pluginIds: string[], limit: number) {
+    if (limit <= 0 || !pluginIds.length) return 0;
+    const now = Date.now();
+    const woken = this.sql
+      .exec(
+        "UPDATE notification_jobs SET nextAt=? WHERE id IN (SELECT id FROM notification_jobs WHERE connectionId=? AND state='pending' AND nextAt>? AND pluginId IN (SELECT value FROM json_each(?)) ORDER BY createdAt LIMIT ?) RETURNING id",
+        now,
+        connectionId,
+        now,
+        JSON.stringify(pluginIds),
+        limit,
+      )
+      .toArray().length;
+    if (woken) this.changed();
+    return woken;
+  }
   cancel(pluginId: string) {
     this.sql.exec(
       "UPDATE notification_jobs SET state='cancelled',text='',error='配置已停用、接收微信已更改或 Token 已撤销' WHERE pluginId=? AND state IN ('pending','sending')",

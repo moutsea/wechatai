@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { access, readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { runnerImport } from "vite";
-import { splitLocalePath } from "../src/shared/i18n/index.ts";
+import { AVAILABLE_LOCALES, DASHBOARD_PATH, DEFAULT_LOCALE, LOCALE_DEFINITIONS, localizedPath, splitLocalePath } from "../src/shared/i18n/index.ts";
 import { museGuide } from "../src/shared/muse-docs.ts";
 
 // Verify the actual deployable output; metadata-only tests cannot catch an empty SPA shell.
@@ -13,6 +13,17 @@ const {
 } = await runnerImport(fileURLToPath(new URL("./locale-expectations.ts", import.meta.url)));
 const localeByPath = new Map(localePageGroups.flat().map((page) => [page.path, page]));
 const publicPaths = [...localeByPath.keys()];
+const dashboardLocales = new Map(
+  AVAILABLE_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE).map((locale) => [
+    localizedPath(locale, DASHBOARD_PATH), LOCALE_DEFINITIONS[locale].htmlLang,
+  ]),
+);
+for (const section of [
+  "channels", "assistants", "plugins", "tasks", "wechat", "sessions",
+  "billing", "credits", "invite", "notices", "admin",
+]) {
+  dashboardLocales.set(`/ko/app/${section}`, LOCALE_DEFINITIONS.ko.htmlLang);
+}
 const htmlFile = (path) => (path === "/" ? "index.html" : `${path.slice(1)}.html`);
 const museIndexLinks = [
   "(https://wechatai.app/wechat-muse)",
@@ -403,6 +414,15 @@ const dynamicStart = ruleLines.findIndex((rule) => /[*:]/.test(rule.split(/\s+/)
 assert(dynamicStart >= 0, "_redirects keeps the splat rewrite");
 assert(ruleLines.length - dynamicStart <= 100, "_redirects stays within 100 dynamic rules");
 const staticRuleIndex = new Map(ruleLines.map((rule, index) => [rule, index]));
+for (const path of dashboardLocales.keys()) {
+  if (!path.startsWith("/ko/app/")) continue;
+  assert(
+    staticRuleIndex.get(`${path} ${path} 200`) < dynamicStart,
+    `${path}: private shell precedes the workspace fallback`,
+  );
+}
+assert(redirectRules.includes("/ko/app/tasks/* /ko/app/tasks 200"), "Korean task detail rewrite");
+assert(redirectRules.includes("/ko/app/* /ko/app 200"), "Korean unknown route fallback");
 for (const path of ["/guide", "/guide/", "/guide.html"]) {
   assert(
     redirectRules.includes(`${path} /docs/getting-started 301`),
@@ -572,11 +592,18 @@ for (const file of [
   "app/notices.html",
   "app/credits.html",
   "app/admin.html",
+  ...[...dashboardLocales.keys()].map(htmlFile),
   "404.html",
 ]) {
   const html = await read(file);
   assert(html.includes('content="noindex, follow"'), `${file}: noindex`);
   assert(!html.includes('rel="canonical"'), `${file}: no public canonical`);
+}
+for (const [path, lang] of dashboardLocales) {
+  const html = await read(htmlFile(path));
+  assert(html.includes(`<html lang="${lang}">`), `${path}: HTML lang`);
+  assert(!html.includes("hreflang="), `${path}: no public hreflang`);
+  assert(!html.includes("正在加载微伴工作台"), `${path}: localized loading text`);
 }
 assert((await read("404.html")).includes("这个页面没有找到。"));
 const robots = await read("robots.txt");
@@ -663,8 +690,8 @@ const localizedFiles = (await readdir(dir, { recursive: true })).filter(
 );
 assert.deepEqual(
   localizedFiles.sort(),
-  translations.map(({ path }) => htmlFile(path)).sort(),
-  "localized HTML: exactly the registered public URLs",
+  [...translations.map(({ path }) => htmlFile(path)), ...[...dashboardLocales.keys()].map(htmlFile)].sort(),
+  "localized HTML: exactly the registered public URLs and private dashboard shells",
 );
 for (const group of localePageGroups) {
   for (const expected of group) {
@@ -788,12 +815,19 @@ if (process.argv[2]) {
     "/app/notices",
     "/app/billing",
     "/app/credits",
+    ...dashboardLocales.keys(),
+    "/ko/app/tasks/deployment-smoke",
+    "/ko/app/tasks/deployment-smoke?plugin=smoke&cursor=smoke",
   ]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);
     const html = await response.text();
     const expectedLocale = localeByPath.get(new URL(path, origin).pathname);
-    const { htmlLang } = expectedLocale ?? defaultLocale;
+    const htmlLang = dashboardLocales.get(path) ?? (
+      path.startsWith("/ko/app/tasks/")
+        ? LOCALE_DEFINITIONS.ko.htmlLang
+        : expectedLocale?.htmlLang ?? defaultLocale.htmlLang
+    );
     assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
     if (expectedLocale) {
       assert(

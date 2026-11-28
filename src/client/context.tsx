@@ -13,6 +13,10 @@ import { api, ApiError } from "./api";
 import { useAuth } from "./auth";
 import { authReturnPath } from "../shared/auth";
 import { useWechatConnectionTracker } from "./wechat-connection-tracker";
+import { useLocale } from "./locale";
+import { localizedPath } from "../shared/i18n";
+import { dashboardCopy } from "../shared/i18n/dashboard";
+import { LanguageSwitcher } from "./language-switcher";
 type AppState = {
   data: Snapshot | null;
   refresh: () => Promise<void>;
@@ -43,6 +47,8 @@ export function AppProvider({
   children: ReactNode;
 }) {
   const [data, setData] = useState<Snapshot | null>(null);
+  const { locale } = useLocale();
+  const copy = dashboardCopy[locale].shell;
   useWechatConnectionTracker(data);
   const [isAdmin, setIsAdmin] = useState(false);
   const { data: session, refetch: refreshSession, requireSignIn } = useAuth();
@@ -125,6 +131,9 @@ export function AppProvider({
     };
   }, [refresh]);
   useEffect(() => {
+    setNotice(null);
+  }, [locale]);
+  useEffect(() => {
     if (notice) {
       const timer = setTimeout(() => setNotice(null), 5000);
       return () => clearTimeout(timer);
@@ -145,15 +154,26 @@ export function AppProvider({
   }, [data?.connections.map((l) => `${l.id}:${l.status}:${l.paused}`).join(","), refresh]);
   const showRefreshFailure = Boolean(data && failure && !notice);
   const toast =
-    notice ?? (showRefreshFailure ? { text: "数据刷新失败，已保留当前内容。", error: true } : null);
+    notice ?? (showRefreshFailure ? { text: copy.refreshFailed, error: true } : null);
   return (
-    <State.Provider value={{ data, request, refresh, isAdmin, base: "/app", user, notify }}>
+    <State.Provider
+      value={{
+        data,
+        request,
+        refresh,
+        isAdmin,
+        base: locale === "ko" ? localizedPath(locale, "/app") : "/app",
+        user,
+        notify,
+      }}
+    >
       {failure && !data ? (
         <div className="full-state">
-          <h2>暂时没能打开工作台</h2>
-          <p>{failure}</p>
+          <LanguageSwitcher />
+          <h2>{copy.loadFailed}</h2>
+          {locale === "zh-CN" && <p>{failure}</p>}
           <button className="button" onClick={() => void refresh()}>
-            重新加载
+            {copy.reload}
           </button>
         </div>
       ) : (
@@ -167,11 +187,11 @@ export function AppProvider({
           {toast.text}
           {showRefreshFailure && (
             <button className="toast-retry" onClick={() => void refresh()}>
-              重试刷新
+              {copy.retryRefresh}
             </button>
           )}
           <button
-            aria-label="关闭通知"
+            aria-label={copy.closeToast}
             onClick={() => (showRefreshFailure ? setFailure("") : setNotice(null))}
           >
             ×

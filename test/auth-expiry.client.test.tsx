@@ -3,6 +3,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AuthProvider, useAuth } from "../src/client/auth";
+import { LocaleProvider } from "../src/client/locale";
 import { AppProvider, useApp } from "../src/client/context";
 import { AuthPage } from "../src/client/pages/auth-page";
 import { ForgotPasswordPage } from "../src/client/pages/auth-recovery";
@@ -136,24 +137,34 @@ async function render(path = returnTo) {
     root.render(
       <AuthProvider>
         <MemoryRouter initialEntries={[path]}>
-          <Location />
-          <Identity />
-          <Link to={`/login?returnTo=${encodeURIComponent(returnTo)}`}>打开登录页</Link>
-          <Link to="/away">离开工作台</Link>
-          <Routes>
-            <Route
-              path="/app/*"
-              element={
-                <AppProvider request={request}>
-                  <WorkspaceProbe />
-                </AppProvider>
-              }
-            />
-            <Route path="/login" element={<AuthPage />} />
-            <Route path="/register" element={<AuthPage register />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/away" element={<h1>其他页面</h1>} />
-          </Routes>
+          <LocaleProvider>
+            <Location />
+            <Identity />
+            <Link to={`/login?returnTo=${encodeURIComponent(returnTo)}`}>打开登录页</Link>
+            <Link to="/away">离开工作台</Link>
+            <Routes>
+              <Route
+                path="/app/*"
+                element={
+                  <AppProvider request={request}>
+                    <WorkspaceProbe />
+                  </AppProvider>
+                }
+              />
+              <Route
+                path="/ko/app/*"
+                element={
+                  <AppProvider request={request}>
+                    <WorkspaceProbe />
+                  </AppProvider>
+                }
+              />
+              <Route path="/login" element={<AuthPage />} />
+              <Route path="/register" element={<AuthPage register />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/away" element={<h1>其他页面</h1>} />
+            </Routes>
+          </LocaleProvider>
         </MemoryRouter>
       </AuthProvider>,
     ),
@@ -360,4 +371,21 @@ it("does not navigate back after leaving a pending sign-in confirmation", async 
   expect(container.querySelector('[data-testid="identity"]')?.textContent).toBe(
     "new-user:Signed in:again@example.test",
   );
+});
+
+it("returns an expired Korean workspace session to the same URL after sign-in", async () => {
+  const target = "/ko/app/channels?channel=abc#settings";
+  window.history.replaceState({}, "", target);
+  await render(target);
+  await expire();
+  expect(new URL(location()!, "https://example.test").searchParams.get("returnTo")).toBe(target);
+  await fill('input[type="email"]', "again@example.test");
+  await fill('input[type="password"]', "test-password");
+  dashboardReply = async () => snapshot;
+  auth.session.refetch.mockImplementation(async () => {
+    auth.session.data = auth.signedIn;
+  });
+  await click("登录工作台");
+  expect(location()).toBe(target);
+  expect(container.querySelector('[data-testid="workspace"]')?.textContent).toBe("ready");
 });

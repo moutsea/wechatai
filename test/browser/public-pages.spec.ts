@@ -479,7 +479,7 @@ test("keeps the signed-in Portuguese account menu usable on mobile", async ({ pa
   const trigger = page.getByRole("button", { name: "Menu do usuário", exact: true });
   await trigger.click();
   const menu = page.getByRole("dialog", { name: "Menu da conta", exact: true });
-  await expect(menu.getByRole("link", { name: "Abrir o painel" })).toHaveAttribute("href", "/app");
+  await expect(menu.getByRole("link", { name: "Abrir o painel" })).toHaveAttribute("href", "/pt/app");
   const balance = menu.getByRole("link", { name: /Saldo de créditos/ });
   await expect(balance).toHaveAttribute("href", "/app/credits");
   await expect(balance).toContainText("1.234");
@@ -1868,11 +1868,11 @@ test("keeps signed-in account controls English on both marketing pages", async (
   ]) {
     await page.goto(`${origin}${path}`);
     await expect(page.locator(freeCard).getByRole("link", { name: "Open workspace" }))
-      .toHaveAttribute("href", "/app");
+      .toHaveAttribute("href", "/en/app");
     await expect(page.getByRole("navigation", { name: "Language", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "User menu", exact: true }).click();
     const menu = page.getByRole("dialog", { name: "Account menu", exact: true });
-    await expect(menu.getByRole("link", { name: "Open workspace" })).toHaveAttribute("href", "/app");
+    await expect(menu.getByRole("link", { name: "Open workspace" })).toHaveAttribute("href", "/en/app");
     await expect(menu.getByRole("link", { name: "Upgrade membership" }))
       .toHaveAttribute("href", "/app/billing");
     await expect(menu.getByRole("button", { name: "Log out" })).toBeVisible();
@@ -1931,7 +1931,7 @@ test("serves the English homepage and pricing page without Chinese page copy", a
 });
 
 for (const [path, card, note, register] of [
-  ["/ja", ".landing-plan-free", ".landing-plan-note", "/register?returnTo=%2Fapp"],
+  ["/ja", ".landing-plan-free", ".landing-plan-note", "/register?returnTo=%2Fja%2Fapp"],
   ["/ja/pricing", ".plan-free", ".plan-note", "/register"],
 ]) {
   test(`describes the free plan without promising no registration on ${path}`, async ({ page }) => {
@@ -2045,7 +2045,7 @@ test("opens a Japanese account menu for signed-in pricing visitors", async ({ pa
   const menu = page.getByRole("dialog", { name: "アカウントメニュー", exact: true });
   await expect(menu.getByRole("link", { name: "ワークスペースを開く" })).toHaveAttribute(
     "href",
-    "/app",
+    "/ja/app",
   );
   await expect(menu.getByRole("link", { name: "クレジット残高" })).toBeVisible();
   await expect(menu).toContainText("Plus 会員");
@@ -2170,9 +2170,9 @@ test("keeps the signed-in Korean pricing account menu in Korean", async ({ page 
   await page.getByRole("button", { name: "사용자 메뉴", exact: true }).click();
   const menu = page.getByRole("dialog", { name: "계정 메뉴", exact: true });
   await expect(menu.getByRole("link", { name: "워크스페이스 열기" }))
-    .toHaveAttribute("href", "/app");
+    .toHaveAttribute("href", "/ko/app");
   await expect(menu.getByRole("link", { name: "멤버십 갱신" }))
-    .toHaveAttribute("href", "/app/billing");
+    .toHaveAttribute("href", "/ko/app/billing");
   await expect(menu.getByRole("button", { name: "로그아웃" })).toBeVisible();
   await expect(menu).not.toContainText(/\p{Script=Han}/u);
 });

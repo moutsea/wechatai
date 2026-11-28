@@ -4,5 +4,21 @@
 /guide/ /docs/getting-started 301
 /guide.html /docs/getting-started 301
 
+# Serve each registered Korean shell before the workspace fallback.
+/ko/app/channels /ko/app/channels 200
+/ko/app/assistants /ko/app/assistants 200
+/ko/app/plugins /ko/app/plugins 200
+/ko/app/tasks /ko/app/tasks 200
+/ko/app/wechat /ko/app/wechat 200
+/ko/app/sessions /ko/app/sessions 200
+/ko/app/billing /ko/app/billing 200
+/ko/app/credits /ko/app/credits 200
+/ko/app/invite /ko/app/invite 200
+/ko/app/notices /ko/app/notices 200
+/ko/app/admin /ko/app/admin 200
+
 # Keep task detail URLs and query parameters while serving the private task shell.
 /app/tasks/* /app/tasks 200
+
+/ko/app/tasks/* /ko/app/tasks 200
+/ko/app/* /ko/app 200

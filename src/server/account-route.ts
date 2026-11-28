@@ -87,7 +87,17 @@ export async function accountForAdmin(env: Env, ownerId: string, grant: AdminGra
   if (!route) return env.ACCOUNTS.getByName(ownerId);
   const call = routedCommand(env, route, { scope: "admin", ...grant });
   return {
-    adminStats: async () => (await call("adminStats", [])) as AdminAccountStats,
+    adminStats: async (
+      registeredAt?: number,
+      _collectionStart?: number,
+    ): Promise<AdminAccountStats> => {
+      const stats = (await call("adminStats", [])) as AdminAccountStats;
+      // Go imports usage, but has no complete native settlement coverage yet.
+      // Keep the existing zero-argument RPC compatible and mark this source unknown.
+      if (registeredAt !== undefined)
+        stats.retention = { startedAt: Date.now(), days: {}, sourceUnavailable: true };
+      return stats;
+    },
     adminMembership: async () => (await call("adminMembership", [])) as AdminMembership,
     adminGiftPlus: async (actor: string, payload: AdminGiftInput) =>
       (await call("adminGiftPlus", [actor, payload])) as AdminGiftResult & { ok: true },

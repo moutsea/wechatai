@@ -1,3 +1,6 @@
+import { dashboardCopy } from "../shared/i18n/dashboard";
+import { useLocale } from "./locale";
+
 /**
  * `/app` 懒加载时的骨架屏。
  *
@@ -6,9 +9,10 @@
  * 再等真正的组件替换。
  */
 export function WorkspaceSkeleton() {
+  const { locale } = useLocale();
   return (
     <div className="ws-skeleton" role="status" aria-live="polite">
-      <span className="visually-hidden">正在加载工作台…</span>
+      <span className="visually-hidden">{dashboardCopy[locale].shell.loadingSkeleton}</span>
       <div className="ws-skeleton-bar">
         <span className="ws-skeleton-block ws-skeleton-logo" />
         <div className="ws-skeleton-nav">

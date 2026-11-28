@@ -1,4 +1,4 @@
-import { env, createExecutionContext } from "cloudflare:test";
+import { env, createExecutionContext, runInDurableObject } from "cloudflare:test";
 import {
   beforeAll,
   beforeEach,
@@ -24,6 +24,8 @@ import budgetMigration from "../migrations/0020_analytics_budget.sql?raw";
 import { authEmailMigration, verifiedFixtureCookie } from "./auth-fixtures";
 import * as auth from "../src/server/auth";
 import worker from "../src/server/index";
+import { saveAdminStats } from "../src/server/admin";
+import type { MetricsOverview } from "../src/shared/metrics-overview";
 
 const token = "test-only-metrics-token-0123456789abcdef";
 const otherToken = "test-only-other-token-fedcba9876543210";
@@ -54,7 +56,7 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await env.DB.batch(
-    ["admin_user", "session", "account", "user"].map((table) =>
+    ["admin_account_stats", "admin_user", "session", "account", "user"].map((table) =>
       env.DB.prepare(`DELETE FROM ${table}`),
     ),
   );
@@ -82,7 +84,7 @@ function bindings(overrides: Record<string, unknown> = {}): Env {
   return {
     ...env,
     METRICS_API_TOKEN: token,
-    STRIPE_SECRET_KEY: "",
+    STRIPE_SECRET_KEY: "sk_test_metrics_fixture",
     API_LIMIT: fakeLimiter().binding,
     ...overrides,
   } as unknown as Env;
@@ -197,38 +199,44 @@ describe("metrics credentials", () => {
     expect(allConsoleText()).not.toContain(token);
   });
 
-  it("fails closed when the credential is missing, short or mismatched", async () => {
-    for (const configured of [undefined, "", "   ", "short", "x".repeat(31)]) {
-      const response = await call(bindings({ METRICS_API_TOKEN: configured }), undefined, {
-        headers: bearer(),
-      });
-      expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: "unauthorized" });
-    }
-    for (const authorization of [
-      "",
-      `Bearer ${otherToken}`,
-      token,
-      `Basic ${token}`,
-      "Bearer ",
-      `Bearer  ${token}`,
-    ]) {
-      const response = await call(bindings(), undefined, {
-        headers: { authorization },
-      });
-      expect(response.status).toBe(401);
-      expect(await response.json()).toEqual({ error: "unauthorized" });
-    }
-  });
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
+    "fails closed when the credential is missing, short or mismatched (%s)",
+    async (path) => {
+      for (const configured of [undefined, "", "   ", "short", "x".repeat(31)]) {
+        const response = await call(bindings({ METRICS_API_TOKEN: configured }), path, {
+          headers: bearer(),
+        });
+        expect(response.status).toBe(401);
+        expect(await response.json()).toEqual({ error: "unauthorized" });
+      }
+      for (const authorization of [
+        "",
+        `Bearer ${otherToken}`,
+        token,
+        `Basic ${token}`,
+        "Bearer ",
+        `Bearer  ${token}`,
+      ]) {
+        const response = await call(bindings(), path, {
+          headers: { authorization },
+        });
+        expect(response.status).toBe(401);
+        expect(await response.json()).toEqual({ error: "unauthorized" });
+      }
+    },
+  );
 
-  it("does not let an invalid credential consume the shared token quota", async () => {
-    const limiter = fakeLimiter();
-    const response = await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
-      headers: bearer(otherToken),
-    });
-    expect(response.status).toBe(401);
-    expect(limiter.calls).toEqual([`metrics:ip:${ip}`]);
-  });
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
+    "does not let an invalid credential consume the shared token quota (%s)",
+    async (path) => {
+      const limiter = fakeLimiter();
+      const response = await call(bindings({ API_LIMIT: limiter.binding }), path, {
+        headers: bearer(otherToken),
+      });
+      expect(response.status).toBe(401);
+      expect(limiter.calls).toEqual([`metrics:ip:${ip}`]);
+    },
+  );
 
   it("reports only reliably recognized Stripe modes", async () => {
     const cases = [
@@ -250,19 +258,23 @@ describe("metrics credentials", () => {
 });
 
 describe("metrics routing boundary", () => {
-  it("rejects non-GET methods only after authentication", async () => {
-    for (const method of ["HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]) {
-      const unauthenticated = await call(bindings(), undefined, { method });
-      expect(unauthenticated.status).toBe(401);
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
+    "rejects non-GET methods only after authentication (%s)",
+    async (path) => {
+      for (const method of ["HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]) {
+        const unauthenticated = await call(bindings(), path, { method });
+        expect(unauthenticated.status).toBe(401);
 
-      const response = await call(bindings(), undefined, { method, headers: bearer() });
-      expect(response.status).toBe(405);
-      expect(response.headers.get("allow")).toBe("GET");
-      expect(response.headers.get("access-control-allow-origin")).toBeNull();
-      if (method !== "HEAD") expect(await response.json()).toEqual({ error: "method_not_allowed" });
-      else expect(await response.text()).toBe("");
-    }
-  });
+        const response = await call(bindings(), path, { method, headers: bearer() });
+        expect(response.status).toBe(405);
+        expect(response.headers.get("allow")).toBe("GET");
+        expect(response.headers.get("access-control-allow-origin")).toBeNull();
+        if (method !== "HEAD")
+          expect(await response.json()).toEqual({ error: "method_not_allowed" });
+        else expect(await response.text()).toBe("");
+      }
+    },
+  );
 
   it("keeps the public health probe independent of metrics auth and limits", async () => {
     const limiter = fakeLimiter();
@@ -272,29 +284,36 @@ describe("metrics routing boundary", () => {
     expect(limiter.calls).toEqual([]);
   });
 
-  it("handles the prefix before the general API body limit", async () => {
-    const response = await call(bindings(), undefined, {
-      method: "POST",
-      headers: { ...bearer(), "content-type": "application/octet-stream" },
-      body: new Uint8Array(200 * 1024),
-    });
-    expect(response.status).toBe(405);
-  });
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
+    "handles the prefix before the general API body limit (%s)",
+    async (path) => {
+      const response = await call(bindings(), path, {
+        method: "POST",
+        headers: { ...bearer(), "content-type": "application/octet-stream" },
+        body: new Uint8Array(200 * 1024),
+      });
+      expect(response.status).toBe(405);
+    },
+  );
 
-  it("returns 404 for unregistered metrics paths", async () => {
+  it("returns 404 for paths outside the supported routes", async () => {
     for (const path of [
       "/api/metrics",
       "/api/metrics/",
-      "/api/metrics/overview",
+      "/api/metrics/overview/extra",
       "/api/metrics/health/extra",
       "/api/metrics/activation/extra",
+      "/api/metrics/revenue/extra",
+      "/api/metrics/revenue/",
+      "/api/metrics/traffic/extra",
+      "/api/metrics/traffic/",
       "/api/metrics/health%2f..%2fadmin",
     ]) {
       const response = await call(bindings(), path, { headers: bearer() });
       expect(response.status).toBe(404);
       expect(await response.json()).toEqual({ error: "not_found" });
     }
-    const unknownPost = await call(bindings(), "/api/metrics/overview", {
+    const unknownPost = await call(bindings(), "/api/metrics/overview/extra", {
       method: "POST",
       headers: bearer(),
     });
@@ -325,7 +344,14 @@ describe("metrics routing boundary", () => {
 });
 
 describe("metrics browser session isolation", () => {
-  it("rejects ordinary, admin and Plus cookies without a bearer", async () => {
+  it.each([
+    "/api/metrics/health",
+    "/api/metrics/revenue",
+    "/api/metrics/retention",
+    "/api/metrics/traffic",
+    "/api/metrics/overview",
+    "/api/metrics/activation?from_ms=0&to_ms=1",
+  ])("rejects ordinary, admin and Plus cookies without a bearer (%s)", async (path) => {
     const ordinary = await signUp();
     const admin = await signUp();
     const plus = await signUp();
@@ -347,22 +373,20 @@ describe("metrics browser session isolation", () => {
 
     const limiter = fakeLimiter();
     for (const cookie of [ordinary.cookie, admin.cookie, plus.cookie]) {
-      for (const path of ["/api/metrics/health", "/api/metrics/activation?from_ms=0&to_ms=1"]) {
-        expect(
-          (
-            await call(bindings({ API_LIMIT: limiter.binding }), path, {
-              headers: { cookie },
-            })
-          ).status,
-        ).toBe(401);
-        expect(
-          (
-            await call(bindings({ API_LIMIT: limiter.binding }), path, {
-              headers: { cookie, ...bearer(otherToken) },
-            })
-          ).status,
-        ).toBe(401);
-      }
+      expect(
+        (
+          await call(bindings({ API_LIMIT: limiter.binding }), path, {
+            headers: { cookie },
+          })
+        ).status,
+      ).toBe(401);
+      expect(
+        (
+          await call(bindings({ API_LIMIT: limiter.binding }), path, {
+            headers: { cookie, ...bearer(otherToken) },
+          })
+        ).status,
+      ).toBe(401);
     }
 
     const access = await worker.fetch(
@@ -376,41 +400,50 @@ describe("metrics browser session isolation", () => {
 });
 
 describe("metrics rate limits and audit", () => {
-  it("limits by trusted client IP before authenticating", async () => {
-    const limiter = fakeLimiter((key) => (key.startsWith("metrics:ip:") ? "limited" : "ok"));
-    const response = await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
-      headers: bearer(otherToken),
-    });
-    expect(response.status).toBe(429);
-    expect(response.headers.get("retry-after")).toBe("60");
-    expect(await response.json()).toEqual({ error: "rate_limited" });
-    expect(limiter.calls).toEqual([`metrics:ip:${ip}`]);
-  });
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
+    "limits by trusted client IP before authenticating (%s)",
+    async (path) => {
+      const limiter = fakeLimiter((key) => (key.startsWith("metrics:ip:") ? "limited" : "ok"));
+      const response = await call(bindings({ API_LIMIT: limiter.binding }), path, {
+        headers: bearer(otherToken),
+      });
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("60");
+      expect(await response.json()).toEqual({ error: "rate_limited" });
+      expect(limiter.calls).toEqual([`metrics:ip:${ip}`]);
+    },
+  );
 
-  it("limits the shared credential only after a valid bearer", async () => {
-    const limiter = fakeLimiter((key) => (key === "metrics:token:shared" ? "limited" : "ok"));
-    const response = await call(bindings({ API_LIMIT: limiter.binding }), undefined, {
-      headers: bearer(),
-    });
-    expect(response.status).toBe(429);
-    expect(response.headers.get("retry-after")).toBe("60");
-    expect(limiter.calls).toEqual([`metrics:ip:${ip}`, "metrics:token:shared"]);
-    expect(limiter.calls.join(" ")).not.toContain(token);
-  });
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
+    "limits the shared credential only after a valid bearer (%s)",
+    async (path) => {
+      const limiter = fakeLimiter((key) => (key === "metrics:token:shared" ? "limited" : "ok"));
+      const response = await call(bindings({ API_LIMIT: limiter.binding }), path, {
+        headers: bearer(),
+      });
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("60");
+      expect(limiter.calls).toEqual([`metrics:ip:${ip}`, "metrics:token:shared"]);
+      expect(limiter.calls.join(" ")).not.toContain(token);
+    },
+  );
 
-  it("fails closed when the limiter binding is missing or throws", async () => {
-    const { API_LIMIT: _missing, ...withoutLimiter } = bindings();
-    for (const b of [
-      withoutLimiter as unknown as Env,
-      bindings({
-        API_LIMIT: { limit: async () => Promise.reject(new Error("LIMITER_SENTINEL")) },
-      }),
-    ]) {
-      const response = await call(b, undefined, { headers: bearer() });
-      expect(response.status).toBe(503);
-      expect(await response.json()).toEqual({ error: "unavailable" });
-    }
-  });
+  it.each(["/api/metrics/health", "/api/metrics/revenue", "/api/metrics/traffic"])(
+    "fails closed when the limiter binding is missing or throws (%s)",
+    async (path) => {
+      const { API_LIMIT: _missing, ...withoutLimiter } = bindings();
+      for (const b of [
+        withoutLimiter as unknown as Env,
+        bindings({
+          API_LIMIT: { limit: async () => Promise.reject(new Error("LIMITER_SENTINEL")) },
+        }),
+      ]) {
+        const response = await call(b, path, { headers: bearer() });
+        expect(response.status).toBe(503);
+        expect(await response.json()).toEqual({ error: "unavailable" });
+      }
+    },
+  );
 
   it("emits one whitelisted audit record per result without request data", async () => {
     const sentinels = {
@@ -491,16 +524,184 @@ describe("metrics rate limits and audit", () => {
     const clientIp = "203.0.113.240";
     for (let i = 0; i < 120; i += 1) {
       expect(
-        (await call(b, undefined, { headers: bearer() }, clientIp)).status,
+        (
+          await call(
+            b,
+            i === 119 ? "/api/metrics/revenue" : "/api/metrics/health",
+            { headers: bearer() },
+            clientIp,
+          )
+        ).status,
         `request ${i + 1}`,
       ).toBe(200);
     }
-    const ipLimited = await call(b, undefined, { headers: bearer() }, clientIp);
+    const ipLimited = await call(b, "/api/metrics/revenue", { headers: bearer() }, clientIp);
     expect(ipLimited.status).toBe(429);
     expect(ipLimited.headers.get("retry-after")).toBe("60");
 
-    const tokenLimited = await call(b, undefined, { headers: bearer() }, "203.0.113.241");
+    const tokenLimited = await call(
+      b,
+      "/api/metrics/revenue",
+      { headers: bearer() },
+      "203.0.113.241",
+    );
     expect(tokenLimited.status).toBe(429);
     expect(tokenLimited.headers.get("retry-after")).toBe("60");
+  });
+});
+
+describe("metrics overview HTTP boundary", () => {
+  const path = "/api/metrics/overview";
+
+  it("authenticates before reading aggregates and rejects all non-GET methods", async () => {
+    const database = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("PRIVATE_DB_SENTINEL");
+        },
+      },
+    );
+    for (const configured of [undefined, "", "   ", "short", "x".repeat(31)]) {
+      const response = await call(bindings({ METRICS_API_TOKEN: configured, DB: database }), path, {
+        headers: bearer(),
+      });
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: "unauthorized" });
+    }
+    for (const authorization of ["", "Bearer ", "Bearer short", `Bearer ${otherToken}`]) {
+      const response = await call(bindings({ DB: database }), path, { headers: { authorization } });
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: "unauthorized" });
+    }
+    for (const method of ["HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"]) {
+      expect((await call(bindings({ DB: database }), path, { method })).status).toBe(401);
+      const response = await call(bindings({ DB: database }), path, { method, headers: bearer() });
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("GET");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      if (method === "HEAD") expect(await response.text()).toBe("");
+    }
+    expect(allConsoleText()).not.toContain("PRIVATE_DB_SENTINEL");
+  });
+
+  it("uses one read-only batch without session, account, sync or outbound side effects", async () => {
+    const id = "PRIVATE_OVERVIEW_USER";
+    const sampledAt = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO user(id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,1,?,?)",
+    )
+      .bind(
+        id,
+        "PRIVATE_OVERVIEW_NAME",
+        "PRIVATE_OVERVIEW_EMAIL@example.test",
+        sampledAt,
+        sampledAt,
+      )
+      .run();
+    const account = env.ACCOUNTS.getByName(id);
+    await saveAdminStats(env, id, await account.adminStats());
+    const accountState = () =>
+      runInDurableObject(account, async (_, state) => ({
+        alarm: await state.storage.getAlarm(),
+        settings: state.storage.sql.exec("SELECT * FROM settings").toArray(),
+        credits: state.storage.sql.exec("SELECT * FROM credit_buckets").toArray(),
+        debt: state.storage.sql.exec("SELECT * FROM credit_debt").toArray(),
+        usage: state.storage.sql.exec("SELECT * FROM usage").toArray(),
+      }));
+    const databaseState = () =>
+      env.DB.batch([
+        env.DB.prepare("SELECT * FROM user"),
+        env.DB.prepare("SELECT * FROM admin_account_stats"),
+        env.DB.prepare("SELECT * FROM billing_order"),
+      ]).then((results) => results.map((result) => result.results));
+    const beforeAccount = await accountState();
+    const beforeDB = await databaseState();
+    const session = env.DB.withSession("first-primary");
+    const prepare = vi.fn((sql: string) => {
+      expect(sql.trim()).toMatch(/^SELECT\b/);
+      return session.prepare(sql);
+    });
+    const batch = vi.fn(session.batch.bind(session));
+    const withSession = vi.fn(() => ({ prepare, batch }));
+    const accountAccess = vi.fn(() => {
+      throw new Error("PRIVATE_DO_SENTINEL");
+    });
+    const createAuth = vi.spyOn(auth, "createAuth");
+    const outbound = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("PRIVATE_FETCH_SENTINEL"));
+    const response = await call(
+      bindings({ DB: { withSession }, ACCOUNTS: new Proxy({}, { get: accountAccess }) }),
+      `${path}?q=PRIVATE_QUERY_SENTINEL`,
+      { headers: { ...bearer(), cookie: "PRIVATE_COOKIE_SENTINEL" } },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+    const result = await response.json<MetricsOverview>();
+    expect(result.summary.users).toBe(1);
+    expect(result.coverage).toMatchObject({ syncedUsers: 1, complete: true });
+    expect(result.summary.snapshot.value?.requests).toBe(0);
+    expect(result.daily).toHaveLength(30);
+    expect(JSON.stringify(result)).not.toMatch(
+      /PRIVATE_|email|isAdmin|revenue|paidOrders|activation/,
+    );
+    expect(withSession).toHaveBeenCalledExactlyOnceWith("first-primary");
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(prepare).toHaveBeenCalledTimes(7);
+    expect(createAuth).not.toHaveBeenCalled();
+    expect(accountAccess).not.toHaveBeenCalled();
+    expect(outbound).not.toHaveBeenCalled();
+    expect(await accountState()).toEqual(beforeAccount);
+    expect(await databaseState()).toEqual(beforeDB);
+    expect(auditRecords()).toEqual([
+      {
+        event: "metrics.request",
+        at: expect.any(String),
+        route: path,
+        method: "GET",
+        status: 200,
+        rateLimited: false,
+        reason: "ok",
+      },
+    ]);
+    expect(allConsoleText()).not.toMatch(/PRIVATE_/);
+    expect(allConsoleText()).not.toContain(token);
+  });
+
+  it("shares the existing IP and token limits and fails closed on database errors", async () => {
+    for (const limitedKey of [`metrics:ip:${ip}`, "metrics:token:shared"]) {
+      const limiter = fakeLimiter((key) => (key === limitedKey ? "limited" : "ok"));
+      const response = await call(bindings({ API_LIMIT: limiter.binding }), path, {
+        headers: bearer(),
+      });
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe("60");
+      expect(await response.json()).toEqual({ error: "rate_limited" });
+    }
+    for (const API_LIMIT of [undefined, fakeLimiter(() => "throw").binding]) {
+      const response = await call(bindings({ API_LIMIT }), path, { headers: bearer() });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "unavailable" });
+    }
+    const response = await call(
+      bindings({
+        DB: {
+          withSession() {
+            throw new Error("PRIVATE_DATABASE_ERROR");
+          },
+        },
+      }),
+      path,
+      { headers: bearer() },
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "unavailable" });
+    expect(auditRecords().map((record) => record.status)).toEqual([429, 429, 503, 503, 503]);
+    expect(auditRecords().at(-1)).toMatchObject({ route: path, reason: "internal_error" });
+    expect(allConsoleText()).not.toMatch(/PRIVATE_|LIMITER_SENTINEL/);
+    expect(allConsoleText()).not.toContain(token);
   });
 });

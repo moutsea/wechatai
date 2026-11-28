@@ -694,7 +694,7 @@ code {
   font-size: var(--text-sm);
   line-height: 1.6;
   letter-spacing: 0.03em;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .banner-chat-question {
   justify-self: end;
@@ -1212,6 +1212,10 @@ code {
   margin-bottom: 32px;
   gap: 20px;
 }
+:lang(ko) .workspace .page-head > .text-link {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .page-head h1 {
   font-size: 29px;
   margin: 12px 0 9px;
@@ -1679,6 +1683,29 @@ code {
 }
 .qr-area > svg {
   max-width: 100%;
+}
+.wechat-verify {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(100%, 280px);
+  text-align: center;
+}
+.wechat-verify strong {
+  color: var(--ink);
+}
+.wechat-verify p {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.wechat-verify input {
+  width: 100%;
+  font-size: 1.4rem;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+.wechat-verify .form-error {
+  width: 100%;
 }
 .connected-visual {
   display: flex;

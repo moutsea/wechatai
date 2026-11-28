@@ -1,3 +1,5 @@
+import type { Locale } from "../shared/i18n";
+import { workspaceError, workspaceLabel } from "./workspace-copy";
 import { compareConnectorVersions } from "../shared/openclaw-release";
 import type { OpenClawStatus } from "../shared/openclaw";
 import type { PluginAccessIssue } from "../shared/plugin-access";
@@ -26,7 +28,11 @@ const descriptions = {
   paused: "此配置已暂停，请查看会员与插件设置",
 } as const;
 
-export function remoteAgentConnection(connection: Connection, now = Date.now()) {
+export function remoteAgentConnection(
+  connection: Connection,
+  now = Date.now(),
+  locale: Locale = "zh-CN",
+) {
   if (connection.pluginId === "wechatai/grok" && !connection.access) {
     // Older Workers did not report it; their configurations always had a Webhook.
     const webhook = connection.webhookReady !== false;
@@ -38,14 +44,20 @@ export function remoteAgentConnection(connection: Connection, now = Date.now()) 
     const ready = connection.hasKey && webhook && !settingUp && !unused;
     return {
       state: connection.hasKey ? ("waiting" as const) : ("pending" as const),
-      label: ready ? "已配置" : settingUp ? "等待 Bot 完成配置" : unused ? "待 Bot 连接" : "待配置",
-      description: ready
-        ? "在微信发送 @快捷名 加文字验证收发；Webhook 按消息触发。"
-        : settingUp
-          ? "把配置指令发给 Grok Bot，由它添加连接器、创建 Routine 并登记 Webhook。"
-          : unused
-            ? "Grok Bot 还没用当前凭据连上微伴。请让它按配置指令完成连接，或在配置中重新开放登记。"
-            : "生成配置指令并发给你的 Grok Bot，由它完成连接。",
+      label: workspaceLabel(
+        locale,
+        ready ? "已配置" : settingUp ? "等待 Bot 完成配置" : unused ? "待 Bot 连接" : "待配置",
+      ),
+      description: workspaceLabel(
+        locale,
+        ready
+          ? "在微信发送 @快捷名 加文字验证收发；Webhook 按消息触发。"
+          : settingUp
+            ? "把配置指令发给 Grok Bot，由它添加连接器、创建 Routine 并登记 Webhook。"
+            : unused
+              ? "Grok Bot 还没用当前凭据连上微伴。请让它按配置指令完成连接，或在配置中重新开放登记。"
+              : "生成配置指令并发给你的 Grok Bot，由它完成连接。",
+      ),
       connectedBefore: connection.hasKey && webhook,
     };
   }
@@ -61,13 +73,22 @@ export function remoteAgentConnection(connection: Connection, now = Date.now()) 
           : "offline";
   return {
     state,
-    label: connection.access?.code === "membership_expired" ? "会员到期已暂停" : labels[state],
-    description: connection.access?.message ?? descriptions[state],
+    label: workspaceLabel(
+      locale,
+      connection.access?.code === "membership_expired" ? "会员到期已暂停" : labels[state],
+    ),
+    description: connection.access
+      ? workspaceError(connection.access, locale)
+      : workspaceLabel(locale, descriptions[state]),
     connectedBefore: connection.hasKey && lastSeen > 0,
   };
 }
 
-export function openClawUpgradeState(status: OpenClawStatus, now = Date.now()) {
+export function openClawUpgradeState(
+  status: OpenClawStatus,
+  now = Date.now(),
+  locale: Locale = "zh-CN",
+) {
   const comparison = compareConnectorVersions(
     status.connectorVersion ?? "",
     status.connectorUpdate?.version ?? "",
@@ -75,12 +96,15 @@ export function openClawUpgradeState(status: OpenClawStatus, now = Date.now()) {
   const fresh =
     remoteAgentConnection(status, now).state === "online" &&
     (status.versionSeenAt ?? 0) > now - 60000;
-  if (comparison === null) return { state: "unknown", label: "版本待检测", confirmed: false };
-  if (comparison < 0) return { state: "outdated", label: "有更新", confirmed: false };
-  if (!fresh) return { state: "offline", label: "等待上线确认", confirmed: false };
+  if (comparison === null)
+    return { state: "unknown", label: workspaceLabel(locale, "版本待检测"), confirmed: false };
+  if (comparison < 0)
+    return { state: "outdated", label: workspaceLabel(locale, "有更新"), confirmed: false };
+  if (!fresh)
+    return { state: "offline", label: workspaceLabel(locale, "等待上线确认"), confirmed: false };
   return {
     state: "current",
-    label: comparison > 0 ? "运行版本高于本站版本" : "已是最新版本",
+    label: workspaceLabel(locale, comparison > 0 ? "运行版本高于本站版本" : "已是最新版本"),
     confirmed: true,
   };
 }

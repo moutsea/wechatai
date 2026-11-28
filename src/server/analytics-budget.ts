@@ -46,8 +46,12 @@ export class AnonymousAnalyticsBudget {
   }
 }
 const budget = new AnonymousAnalyticsBudget();
-export function allowAnonymousAnalytics(env: Env) {
+export function anonymousAnalyticsDailyLimit(env: Env): number {
   const setting = secret(env, "ANALYTICS_DAILY_EVENT_BUDGET", false);
   const limit = setting ? Number(setting) : 10_000;
-  return budget.take(env.DB, Number.isSafeInteger(limit) && limit >= 0 ? limit : 0);
+  return Number.isSafeInteger(limit) && limit >= 0 ? limit : 0;
+}
+
+export function allowAnonymousAnalytics(env: Env) {
+  return budget.take(env.DB, anonymousAnalyticsDailyLimit(env));
 }
