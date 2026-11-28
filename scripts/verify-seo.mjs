@@ -18,6 +18,14 @@ const dashboardLocales = new Map(
     localizedPath(locale, DASHBOARD_PATH), LOCALE_DEFINITIONS[locale].htmlLang,
   ]),
 );
+const {
+  module: { default: spanishDashboard },
+} = await runnerImport(
+  fileURLToPath(new URL("../src/shared/i18n/es/dashboard.ts", import.meta.url)),
+);
+for (const page of spanishDashboard) {
+  dashboardLocales.set(localizedPath("es", page.path), LOCALE_DEFINITIONS.es.htmlLang);
+}
 const htmlFile = (path) => (path === "/" ? "index.html" : `${path.slice(1)}.html`);
 const museIndexLinks = [
   "(https://wechatai.app/wechat-muse)",
@@ -408,6 +416,16 @@ const dynamicStart = ruleLines.findIndex((rule) => /[*:]/.test(rule.split(/\s+/)
 assert(dynamicStart >= 0, "_redirects keeps the splat rewrite");
 assert(ruleLines.length - dynamicStart <= 100, "_redirects stays within 100 dynamic rules");
 const staticRuleIndex = new Map(ruleLines.map((rule, index) => [rule, index]));
+const spanishFallback = staticRuleIndex.get("/es/app/* /es/app 200");
+assert(spanishFallback !== undefined, "Spanish unknown routes retain their private shell");
+for (const page of spanishDashboard.filter((page) => page.path !== DASHBOARD_PATH)) {
+  const path = localizedPath("es", page.path);
+  const index = staticRuleIndex.get(`${path} ${path} 200`);
+  assert(index !== undefined && index < spanishFallback, `${path}: exact shell before fallback`);
+}
+const spanishTasks = staticRuleIndex.get("/es/app/tasks/* /es/app/tasks 200");
+assert(spanishTasks !== undefined && spanishTasks < spanishFallback, "Spanish task details precede fallback");
+
 for (const path of ["/guide", "/guide/", "/guide.html"]) {
   assert(
     redirectRules.includes(`${path} /docs/getting-started 301`),
@@ -801,12 +819,17 @@ if (process.argv[2]) {
     "/app/billing",
     "/app/credits",
     ...dashboardLocales.keys(),
+    "/es/app/tasks/deployment-smoke?plugin=smoke&cursor=smoke",
   ]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);
     const html = await response.text();
     const expectedLocale = localeByPath.get(new URL(path, origin).pathname);
-    const htmlLang = dashboardLocales.get(path) ?? expectedLocale?.htmlLang ?? defaultLocale.htmlLang;
+    const htmlLang =
+      dashboardLocales.get(path) ??
+      (path.startsWith("/es/app/tasks/")
+        ? LOCALE_DEFINITIONS.es.htmlLang
+        : expectedLocale?.htmlLang ?? defaultLocale.htmlLang);
     assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
     if (expectedLocale) {
       assert(

@@ -6,3 +6,18 @@
 
 # Keep task detail URLs and query parameters while serving the private task shell.
 /app/tasks/* /app/tasks 200
+
+# Spanish private shells precede the unknown-workspace fallback.
+/es/app/channels /es/app/channels 200
+/es/app/assistants /es/app/assistants 200
+/es/app/plugins /es/app/plugins 200
+/es/app/tasks /es/app/tasks 200
+/es/app/wechat /es/app/wechat 200
+/es/app/sessions /es/app/sessions 200
+/es/app/billing /es/app/billing 200
+/es/app/credits /es/app/credits 200
+/es/app/invite /es/app/invite 200
+/es/app/notices /es/app/notices 200
+/es/app/admin /es/app/admin 200
+/es/app/tasks/* /es/app/tasks 200
+/es/app/* /es/app 200

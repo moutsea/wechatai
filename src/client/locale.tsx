@@ -57,9 +57,9 @@ export function useLocale(): LocaleContextValue {
 /** Keeps query strings and fragments and prefixes only registered translations. */
 export function localizedHref(locale: Locale, href: string) {
   if (locale === DEFAULT_LOCALE) return href;
-  const [beforeHash, hash] = href.split("#");
-  const [path, query] = beforeHash.split("?");
+  const [, path, suffix] = /^([^?#]*)(.*)$/.exec(href)!;
   const base = path || "/";
-  if (!hasRegisteredTranslation(locale, base)) return href;
-  return `${localizedPath(locale, base)}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
+  const spanishWorkspace = locale === "es" && (base === "/app" || base.startsWith("/app/"));
+  if (!spanishWorkspace && !hasRegisteredTranslation(locale, base)) return href;
+  return `${localizedPath(locale, base)}${suffix}`;
 }

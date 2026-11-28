@@ -143,8 +143,8 @@ export function centsAmount(cents: number) {
 }
 export const beijingDate = (now = Date.now()) =>
   new Date(now + 8 * 3600000).toISOString().slice(0, 10);
-export const beijingTime = (time: number) =>
-  new Intl.DateTimeFormat("zh-CN", {
+export const beijingTime = (time: number, locale = "zh-CN") =>
+  new Intl.DateTimeFormat(locale, {
     timeZone: "Asia/Shanghai",
     dateStyle: "medium",
     timeStyle: "short",

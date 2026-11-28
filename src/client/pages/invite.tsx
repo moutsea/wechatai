@@ -1,3 +1,4 @@
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -18,6 +19,8 @@ import { referralStatusLabel, type ReferralSummary } from "../../shared/referral
 import "./invite.css";
 
 export function Invite() {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { request, notify, base, data } = useApp();
   const [summary, setSummary] = useState<ReferralSummary | null>(null);
   const [error, setError] = useState("");
@@ -33,7 +36,7 @@ export function Invite() {
           setError("");
         }
       } catch (e) {
-        if (!controller.signal.aborted) setError((e as Error).message);
+        if (!controller.signal.aborted) setError(errorText(e));
       }
     };
     void load();
@@ -50,21 +53,21 @@ export function Invite() {
     try {
       await navigator.clipboard.writeText(summary.url);
       trackFunnel("invite_share_click");
-      notify("邀请链接已复制，发给好友即可");
+      notify(copyText("邀请链接已复制，发给好友即可"));
     } catch {
       input.current?.select();
-      notify("已选中邀请链接，请手动复制");
+      notify(copyText("已选中邀请链接，请手动复制"));
     }
   };
   return (
     <div className="page-enter invite-page">
       <PageHead
-        eyebrow="BETTER WITH FRIENDS"
-        title="邀请好友"
-        description="把微信里的 AI 分享给朋友，一起多聊一点。"
+        eyebrow={copyText("BETTER WITH FRIENDS")}
+        title={copyText("邀请好友")}
+        description={copyText("把微信里的 AI 分享给朋友，一起多聊一点。")}
         action={
           <Link className="button secondary" to={`${base}/credits`}>
-            额度明细
+            {copyText("额度明细")}
             <ArrowUpRight size={16} />
           </Link>
         }
@@ -73,14 +76,19 @@ export function Invite() {
         <div className="invite-hero-top">
           <div>
             <span className="invite-kicker">
-              <Gift size={17} /> 好友同行礼
+              <Gift size={17} />
+              {copyText(" 好友同行礼")}
             </span>
             <h2>
-              你和好友，各得 <strong>500</strong> credits
+              {copyText("你和好友，各得 ")}
+              <strong>500</strong> credits
             </h2>
-            <p>好友通过你的链接注册，首次微信 AI 对话的完整回复送达后，奖励会自动到账。</p>
+            <p>
+              {copyText("好友通过你的链接注册，首次微信 AI 对话的完整回复送达后，奖励会自动到账。")}
+            </p>
             <span className="invite-permanent">
-              <Check size={15} /> 永久有效 · Free 与 Plus 均可参与
+              <Check size={15} />
+              {copyText(" 永久有效 · Free 与 Plus 均可参与")}
             </span>
           </div>
           <div className="invite-gift" aria-hidden="true">
@@ -88,7 +96,7 @@ export function Invite() {
           </div>
         </div>
         <div className="invite-link-box">
-          <label htmlFor="invite-url">你的专属邀请链接</label>
+          <label htmlFor="invite-url">{copyText("你的专属邀请链接")}</label>
           <div className="invite-copy-row">
             <Link2 size={18} aria-hidden="true" />
             <input
@@ -96,12 +104,12 @@ export function Invite() {
               ref={input}
               readOnly
               value={summary?.url || ""}
-              placeholder="正在生成邀请链接…"
+              placeholder={copyText("正在生成邀请链接…")}
               onFocus={(e) => e.target.select()}
             />
             <button className="button" disabled={!summary?.url} onClick={() => void copy()}>
               <Copy size={16} />
-              复制链接
+              {copyText("复制链接")}
             </button>
           </div>
         </div>
@@ -110,7 +118,7 @@ export function Invite() {
         <div className="form-error" role="alert">
           {error}{" "}
           <button className="text-link" onClick={() => setRetry((n) => n + 1)}>
-            重新加载
+            {copyText("重新加载")}
           </button>
         </div>
       )}
@@ -119,26 +127,28 @@ export function Invite() {
           <Gift size={19} />
           <span>
             {summary.received === "pending"
-              ? "你已接受好友邀请。配置自己的模型后，可直接聊天，或启用已开放的 Plus 云端助手小薇（默认沿用微信普通模型，也可单独指定）。在微信完成首次 AI 对话并收到完整回复后，即可领取 500 credits。"
+              ? copyText(
+                  "你已接受好友邀请。配置自己的模型后，可直接聊天，或启用已开放的 Plus 云端助手小薇（默认沿用微信普通模型，也可单独指定）。在微信完成首次 AI 对话并收到完整回复后，即可领取 500 credits。",
+                )
               : summary.received === "rewarded"
-                ? "你的 500 credits 受邀奖励已到账，永久有效。"
+                ? copyText("你的 500 credits 受邀奖励已到账，永久有效。")
                 : summary.received === "qualified"
-                  ? "首次对话已完成，正在发放双方的邀请奖励。"
-                  : "当前微信不符合新用户奖励条件，你仍然可以正常使用微伴。"}
+                  ? copyText("首次对话已完成，正在发放双方的邀请奖励。")
+                  : copyText("当前微信不符合新用户奖励条件，你仍然可以正常使用微伴。")}
           </span>
           {summary.received === "pending" && (
             <Link to={`${base}/wechat`}>
-              连接微信
+              {copyText("连接微信")}
               <ArrowUpRight size={15} />
             </Link>
           )}
         </div>
       )}
-      <div className="invite-stats" aria-label="邀请统计">
+      <div className="invite-stats" aria-label={copyText("邀请统计")}>
         {[
-          ["已邀请注册", summary?.registered, "位好友"],
-          ["已完成邀请", summary?.completed, "位好友"],
-          ["累计获得奖励", summary?.earned, "credits"],
+          [copyText("已邀请注册"), summary?.registered, copyText("位好友")],
+          [copyText("已完成邀请"), summary?.completed, copyText("位好友")],
+          [copyText("累计获得奖励"), summary?.earned, "credits"],
         ].map(([label, value, unit]) => (
           <div key={String(label)}>
             <span>{label}</span>
@@ -151,12 +161,16 @@ export function Invite() {
       </div>
       <div className="invite-steps">
         {[
-          [Link2, "分享专属链接", "把邀请链接发给还没注册的好友。"],
-          [UserRoundPlus, "好友注册并连接", "支持邮箱、Google 或 GitHub 注册。"],
+          [Link2, copyText("分享专属链接"), copyText("把邀请链接发给还没注册的好友。")],
+          [
+            UserRoundPlus,
+            copyText("好友注册并连接"),
+            copyText("支持邮箱、Google 或 GitHub 注册。"),
+          ],
           [
             MessageCircle,
-            "聊一次，双方到账",
-            "首次微信 AI 对话的完整回复送达后，各得 500 credits。",
+            copyText("聊一次，双方到账"),
+            copyText("首次微信 AI 对话的完整回复送达后，各得 500 credits。"),
           ],
         ].map(([Icon, title, description], i) => {
           const StepIcon = Icon as typeof Link2;
@@ -176,10 +190,10 @@ export function Invite() {
           );
         })}
       </div>
-      <SectionTitle title="邀请记录">
+      <SectionTitle title={copyText("邀请记录")}>
         <button
           className="icon-button"
-          aria-label="刷新邀请记录"
+          aria-label={copyText("刷新邀请记录")}
           onClick={() => setRetry((n) => n + 1)}
         >
           <RefreshCw size={15} />
@@ -187,9 +201,9 @@ export function Invite() {
       </SectionTitle>
       <div className="panel invite-records">
         <div className="invite-record-head">
-          <span>好友</span>
-          <span>注册时间</span>
-          <span>奖励状态</span>
+          <span>{copyText("好友")}</span>
+          <span>{copyText("注册时间")}</span>
+          <span>{copyText("奖励状态")}</span>
         </div>
         {summary?.recent.length ? (
           summary.recent.map((row) => (
@@ -199,21 +213,26 @@ export function Invite() {
                 {new Date(row.createdAt).toLocaleDateString("zh-CN")}
               </time>
               <span className={`tag ${row.status === "rewarded" ? "invite-rewarded" : ""}`}>
-                {row.status === "rewarded" ? "+500 credits" : referralStatusLabel[row.status]}
+                {row.status === "rewarded"
+                  ? "+500 credits"
+                  : copyText(referralStatusLabel[row.status])}
               </span>
             </div>
           ))
         ) : (
           <div className="invite-empty">
             <UserRoundPlus size={26} />
-            <strong>{summary ? "第一位好友，从一条链接开始" : "正在加载邀请记录…"}</strong>
-            <p>成功邀请后，你可以在这里查看进度。最近保留展示 30 条。</p>
+            <strong>
+              {summary ? copyText("第一位好友，从一条链接开始") : copyText("正在加载邀请记录…")}
+            </strong>
+            <p>{copyText("成功邀请后，你可以在这里查看进度。最近保留展示 30 条。")}</p>
           </div>
         )}
       </div>
       <p className="invite-rules">
-        仅限通过邀请链接注册的新用户；首次有效邀请归属保留 30
-        天，注册后不可更改。每个新账户、同一微信仅能领取一次受邀奖励，不支持自邀。模型连接测试、微信命令和失败对话不计入。奖励永久有效，到账时会优先抵扣已有欠额。
+        {copyText(
+          "仅限通过邀请链接注册的新用户；首次有效邀请归属保留 30 天，注册后不可更改。每个新账户、同一微信仅能领取一次受邀奖励，不支持自邀。模型连接测试、微信命令和失败对话不计入。奖励永久有效，到账时会优先抵扣已有欠额。",
+        )}
       </p>
     </div>
   );

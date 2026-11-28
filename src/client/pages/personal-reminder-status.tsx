@@ -1,3 +1,5 @@
+import { useLocale } from "../locale";
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { AlertTriangle } from "lucide-react";
 import {
   beijingTime,
@@ -15,28 +17,46 @@ export const reminderStatuses: Record<string, string> = {
   expired: "未送达，已过期",
 };
 
-function nextStep(record: PersonalRecord, failure: ReminderFailureReason | undefined) {
+function nextStep(
+  record: PersonalRecord,
+  failure: ReminderFailureReason | undefined,
+  copyText: ReturnType<typeof useWorkspaceText>,
+) {
   const state = record.reminderState;
-  if (state === "expired") return "已停止补发。若仍需提醒，请编辑并保存一个新的提醒时间。";
+  if (state === "expired")
+    return copyText("已停止补发。若仍需提醒，请编辑并保存一个新的提醒时间。");
   if (state === "blocked")
     return record.repeat === "none"
-      ? "请检查接收微信，再编辑并保存一个新的提醒时间。"
-      : "请检查接收微信，再编辑并重新保存提醒；系统将按原周期恢复下一次未来提醒。";
+      ? copyText("请检查接收微信，再编辑并保存一个新的提醒时间。")
+      : copyText("请检查接收微信，再编辑并重新保存提醒；系统将按原周期恢复下一次未来提醒。");
   if (failure?.code === "wechat_expired")
-    return "请在微信链接页面重新扫码连接，再编辑并重新保存提醒。";
+    return copyText("请在微信链接页面重新扫码连接，再编辑并重新保存提醒。");
   if (failure?.code === "reminder_plugin_paused")
-    return "请启用个人助理或恢复套餐；恢复后会继续尝试尚未过期的提醒。";
-  if (state === "paused") return "请检查接收微信的连接和套餐；恢复后会继续尝试尚未过期的提醒。";
-  if (state === "scheduled") return "本次已停止补发，下一次仍会按计划尝试。请检查接收微信的连接。";
+    return copyText("请启用个人助理或恢复套餐；恢复后会继续尝试尚未过期的提醒。");
+  if (state === "paused")
+    return copyText("请检查接收微信的连接和套餐；恢复后会继续尝试尚未过期的提醒。");
+  if (state === "scheduled")
+    return copyText("本次已停止补发，下一次仍会按计划尝试。请检查接收微信的连接。");
   const dailyTasks = record.reminderType === "daily_tasks";
-  const retryWindow = dailyTasks ? "预定提醒当天（北京时间）" : "预定时间后的 24 小时内";
-  const cutoff = dailyTasks ? "，跨天后不再补发" : "";
+  const retryWindow = dailyTasks
+    ? copyText("预定提醒当天（北京时间）")
+    : copyText("预定时间后的 24 小时内");
+  const cutoff = dailyTasks ? copyText("，跨天后不再补发") : "";
   if (state === "waiting_context" || failure?.ret === -2 || failure?.errcode === -2)
-    return `请先向接收微信发送一条消息。系统会在${retryWindow}继续重试${cutoff}。`;
-  return `系统会在${retryWindow}自动重试${cutoff}；持续失败请检查微信连接或联系管理员。`;
+    return copyText("请先向接收微信发送一条消息。系统会在{value0}继续重试{value1}。", {
+      value0: retryWindow,
+      value1: cutoff,
+    });
+  return copyText("系统会在{value0}自动重试{value1}；持续失败请检查微信连接或联系管理员。", {
+    value0: retryWindow,
+    value1: cutoff,
+  });
 }
 
 export function ReminderFailureNotice({ record }: { record: PersonalRecord }) {
+  const { locale } = useLocale();
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const failure = record.reminderLastFailure;
   const state = record.reminderState ?? "";
   // Scheduled rows may describe a missed occurrence before nextReminderAt.
@@ -57,12 +77,12 @@ export function ReminderFailureNotice({ record }: { record: PersonalRecord }) {
   if (!problem && !failure) return null;
   const title =
     state === "expired"
-      ? "这条提醒未送达，已过期"
+      ? copyText("这条提醒未送达，已过期")
       : state === "scheduled"
-        ? "上次提醒未送达"
+        ? copyText("上次提醒未送达")
         : state === "retry"
-          ? "提醒发送失败，正在重试"
-          : "提醒尚未送达，需要处理";
+          ? copyText("提醒发送失败，正在重试")
+          : copyText("提醒尚未送达，需要处理");
   return (
     <div className={`personal-reminder-failure${problem ? " needs-attention" : ""}`}>
       {problem && (
@@ -70,29 +90,43 @@ export function ReminderFailureNotice({ record }: { record: PersonalRecord }) {
           <AlertTriangle size={16} aria-hidden="true" />
           <div>
             <strong>{title}</strong>
-            <p>{currentReason?.message || record.reminderError || "暂未记录具体原因。"}</p>
-            <p>{nextStep(record, currentReason)}</p>
-            {state === "expired" && !currentReason && <p>这条历史提醒未保留原始失败原因。</p>}
+            <p>
+              {errorText(currentReason ?? record.reminderError ?? copyText("暂未记录具体原因。"))}
+            </p>
+            <p>{nextStep(record, currentReason, copyText)}</p>
+            {state === "expired" && !currentReason && (
+              <p>{copyText("这条历史提醒未保留原始失败原因。")}</p>
+            )}
           </div>
         </div>
       )}
       {failure && (
         <details>
-          <summary>查看最近失败详情</summary>
-          <p>对应提醒时间：{beijingTime(failure.dueAt)}（北京时间）</p>
+          <summary>{copyText("查看最近失败详情")}</summary>
           <p>
-            失败时间：
-            {failure.at === null ? "历史记录未保存时间" : `${beijingTime(failure.at)}（北京时间）`}
+            {copyText("对应提醒时间：")}
+            {beijingTime(failure.dueAt, locale === "es" ? "es" : "zh-CN")}
+            {copyText("（北京时间）")}
           </p>
-          <p>失败原因：{failure.message}</p>
           <p>
-            错误标识：<code>{failure.code}</code>
+            {copyText("失败时间：")}
+            {failure.at === null
+              ? copyText("历史记录未保存时间")
+              : copyText("{value0}（北京时间）", { value0: beijingTime(failure.at, locale === "es" ? "es" : "zh-CN") })}
+          </p>
+          <p>
+            {copyText("失败原因：")}
+            {errorText(failure)}
+          </p>
+          <p>
+            {copyText("错误标识：")}
+            <code>{failure.code}</code>
             {failure.upstreamStatus !== undefined && ` · HTTP ${failure.upstreamStatus}`}
             {failure.ret !== undefined && ` · ret=${failure.ret}`}
             {failure.errcode !== undefined && ` · errcode=${failure.errcode}`}
           </p>
           {(!problem || !currentFailure || !!currentBlock) && (
-            <p>以上为历史失败记录，当前提醒状态以页面显示为准。</p>
+            <p>{copyText("以上为历史失败记录，当前提醒状态以页面显示为准。")}</p>
           )}
         </details>
       )}

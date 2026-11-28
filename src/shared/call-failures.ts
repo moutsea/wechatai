@@ -33,7 +33,11 @@ export const callFailureReasons: Record<string, string> = {
   personal_recovery_missing: "任务恢复进度不完整",
 };
 
-export function callFailureReason(code: string | null, status: number | null = null) {
+export function callFailureReason(
+  code: string | null,
+  status: number | null = null,
+  translate = (text: string) => text,
+) {
   const reason = callFailureReasons[code ?? ""] ?? callFailureReasons.request_failed;
   const detail =
     status === 401 || status === 403
@@ -45,5 +49,5 @@ export function callFailureReason(code: string | null, status: number | null = n
           : status !== null && status >= 500
             ? "上游服务异常"
             : "";
-  return `${reason}${status ? `（HTTP ${status}${detail ? ` · ${detail}` : ""}）` : ""}`;
+  return `${translate(reason)}${status ? `（HTTP ${status}${detail ? ` · ${translate(detail)}` : ""}）` : ""}`;
 }

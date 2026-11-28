@@ -1,3 +1,4 @@
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, LoaderCircle, RefreshCw } from "lucide-react";
 import { useApp } from "../context";
@@ -12,6 +13,7 @@ type ConnectError = { message: string; code?: string; timedOut?: boolean };
 type ConnectResult = { message?: string; modelImport?: ModelImportResult };
 
 export function useKimiseekConnect(onComplete: () => void) {
+  const errorText = useWorkspaceError();
   const { request, refresh, notify } = useApp();
   const { locale } = useLocale();
   const copy = dashboardCopy[locale].onboarding;
@@ -89,7 +91,7 @@ export function useKimiseekConnect(onComplete: () => void) {
         timer = setTimeout(() => void poll(), 1500);
       } catch (e) {
         if (!stopped)
-          fail({ message: (e as Error).message, code: e instanceof ApiError ? e.code : undefined });
+          fail({ message: errorText(e), code: e instanceof ApiError ? e.code : undefined });
       }
     };
     void poll();
@@ -118,7 +120,7 @@ export function useKimiseekConnect(onComplete: () => void) {
     } catch (e) {
       popup?.close();
       const failure = {
-        message: (e as Error).message,
+        message: errorText(e),
         code: e instanceof ApiError ? e.code : undefined,
       };
       setError(failure);
@@ -170,6 +172,7 @@ export function KimiseekBalance({
   onRecharge: () => void;
   disabled: boolean;
 }) {
+  const copyText = useWorkspaceText();
   const { request } = useApp();
   const [balance, setBalance] = useState<{ amount: number; checkedAt: number } | null>(null);
   const [error, setError] = useState("");
@@ -183,7 +186,7 @@ export function KimiseekBalance({
       setBalance(await request("/kimiseek/balance"));
       setError("");
     } catch {
-      setError("余额暂不可用");
+      setError(copyText("余额暂不可用"));
     } finally {
       inFlight.current = false;
       setLoading(false);
@@ -206,14 +209,20 @@ export function KimiseekBalance({
   return (
     <div className="kimiseek-balance">
       <div>
-        <span>KimiSeek 余额</span>
-        <strong>{error || (balance ? `¥${balance.amount.toFixed(2)}` : "读取中…")}</strong>
+        <span>{copyText("KimiSeek 余额")}</span>
+        <strong>
+          {error || (balance ? `¥${balance.amount.toFixed(2)}` : copyText("读取中…"))}
+        </strong>
       </div>
       <button
         className="icon-button"
-        aria-label="刷新 KimiSeek 余额"
+        aria-label={copyText("刷新 KimiSeek 余额")}
         title={
-          balance ? `最近更新 ${new Date(balance.checkedAt).toLocaleTimeString()}` : "刷新余额"
+          balance
+            ? copyText("最近更新 {value0}", {
+                value0: new Date(balance.checkedAt).toLocaleTimeString(),
+              })
+            : copyText("刷新余额")
         }
         disabled={loading}
         onClick={() => void refresh()}
@@ -221,7 +230,8 @@ export function KimiseekBalance({
         {loading ? <LoaderCircle size={14} className="spin" /> : <RefreshCw size={14} />}
       </button>
       <button className="text-button" disabled={disabled} onClick={onRecharge}>
-        充值 <ExternalLink size={13} />
+        {copyText("充值 ")}
+        <ExternalLink size={13} />
       </button>
     </div>
   );

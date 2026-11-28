@@ -1,3 +1,4 @@
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import {
   cloudAgentAvailabilityIssue,
   CLOUD_AGENT_NAME,
@@ -40,6 +41,7 @@ function PluginAlias({
   onManage: PluginMaintenance;
   paused: boolean;
 }) {
+  const copyText = useWorkspaceText();
   const [shortcut, setShortcut] = useState(plugin.shortcut);
   return (
     <form
@@ -50,12 +52,12 @@ function PluginAlias({
       }}
     >
       <label>
-        {paused ? "修改暂停配置的别名" : "修改别名"}
+        {paused ? copyText("修改暂停配置的别名") : copyText("修改别名")}
         <input
           required
           maxLength={24}
           pattern={PLUGIN_SHORTCUT_PATTERN}
-          title={PLUGIN_SHORTCUT_HINT}
+          title={copyText(PLUGIN_SHORTCUT_HINT)}
           value={shortcut}
           disabled={busy}
           onChange={(event) => setShortcut(event.target.value)}
@@ -65,7 +67,7 @@ function PluginAlias({
         className="button secondary small"
         disabled={busy || shortcut.trim() === plugin.shortcut}
       >
-        保存别名
+        {copyText("保存别名")}
       </button>
     </form>
   );
@@ -147,6 +149,8 @@ export function PluginLibrary({
   onView: (kind: PluginKind) => void;
   onResume: (plugin: UserPlugin) => void;
 }) {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { data, base } = useApp();
   if (!data) return null;
   const canAdd = canAddPlugin(data.plan, data.plugins?.length ?? 0);
@@ -156,7 +160,10 @@ export function PluginLibrary({
   const visible = library.filter(({ id }) => id !== "wechatai/grok" || data.grokBotVisible);
   return (
     <div className="plugin-library">
-      {visible.map(({ id, name, description, tags }) => {
+      {visible.map(({ id, name: sourceName, description: sourceDescription, tags: sourceTags }) => {
+        const name = copyText(sourceName);
+        const description = copyText(sourceDescription);
+        const tags = sourceTags.map((tag) => copyText(tag));
         const configs = (data.plugins ?? []).filter((p) => p.pluginId === id);
         const conflicts = configs.filter((p) => shortcutConflicts.has(p.shortcut.toLowerCase()));
         const usable = configs.filter((p) => availableIds.has(p.id));
@@ -177,43 +184,43 @@ export function PluginLibrary({
           (id === "wechatai/grok" && !data.grokBotReady);
         const cloudLabel = cloudUnavailable
           ? configs.length
-            ? "服务未就绪"
-            : "暂未开放"
+            ? copyText("服务未就绪")
+            : copyText("暂未开放")
           : id === "wechatai/cloud-agent" && configs.length
             ? data.plan !== "plus"
-              ? "需开通或续费 Plus"
+              ? copyText("需开通或续费 Plus")
               : !enabled
-                ? "已停用"
-                : "已配置"
+                ? copyText("已停用")
+                : copyText("已配置")
             : null;
         const defaultStatusLabel = !configs.length
-          ? "未配置"
+          ? copyText("未配置")
           : !allowed
-            ? "已暂停"
+            ? copyText("已暂停")
             : id === "wechatai/notification"
               ? !enabled
-                ? "已停用"
+                ? copyText("已停用")
                 : notificationReady
-                  ? "已配置"
-                  : "待设置 Token"
+                  ? copyText("已配置")
+                  : copyText("待设置 Token")
               : !remote.length
-                ? "已配置"
+                ? copyText("已配置")
                 : !enabled
-                  ? "已停用"
+                  ? copyText("已停用")
                   : id === "wechatai/grok" && connection
-                    ? connection.label
+                    ? copyText(connection.label)
                     : online.length
-                      ? "已连接"
+                      ? copyText("已连接")
                       : connectedBefore
-                        ? "已离线"
+                        ? copyText("已离线")
                         : available.some((p) => p.hasKey)
-                          ? "等待上线"
-                          : "待连接";
+                          ? copyText("等待上线")
+                          : copyText("待连接");
         const statusLabel = cloudLabel ?? defaultStatusLabel;
         const positiveStatus =
           allowed &&
           (id === "wechatai/cloud-agent"
-            ? cloudLabel === "已配置"
+            ? cloudLabel === copyText("已配置")
             : id === "wechatai/notification"
               ? notificationReady
               : remote.length
@@ -222,11 +229,11 @@ export function PluginLibrary({
         const actionLabel =
           id === "wechatai/notification"
             ? configs.some((p) => p.hasKey)
-              ? "管理 Token"
-              : "设置 Token"
+              ? copyText("管理 Token")
+              : copyText("设置 Token")
             : resume && allowed
-              ? "继续连接"
-              : "查看配置";
+              ? copyText("继续连接")
+              : copyText("查看配置");
         return (
           <article className="plugin-entry" key={id} aria-label={name}>
             <div className="plugin-entry-icon">
@@ -239,13 +246,16 @@ export function PluginLibrary({
                   {positiveStatus ? <Check size={13} /> : null}
                   {statusLabel}
                   {configs.length > 1 &&
-                    ` · ${online.length ? `${online.length}/` : ""}${configs.length} 组`}
+                    copyText(" · {value0}{value1} 组", {
+                      value0: online.length ? `${online.length}/` : "",
+                      value1: configs.length,
+                    })}
                 </span>
               </div>
               <p>{description}</p>
               <div className="plugin-entry-tags">
                 {id === "wechatai/cloud-agent" && data.cloudAgent.adminPreview && (
-                  <span>管理员内测</span>
+                  <span>{copyText("管理员内测")}</span>
                 )}
                 {tags.map((tag) => (
                   <span key={tag}>{tag}</span>
@@ -253,7 +263,7 @@ export function PluginLibrary({
               </div>
               {id === "wechatai/web-research" && (
                 <small className="plugin-attribution">
-                  基于{" "}
+                  {copyText("基于")}{" "}
                   <a
                     href="https://github.com/deepseek-ai/deepseek-harness"
                     target="_blank"
@@ -261,38 +271,45 @@ export function PluginLibrary({
                   >
                     DeepSeek Harness
                   </a>{" "}
-                  开源项目开发
+                  {copyText("开源项目开发")}
                 </small>
               )}
               {(configs.length > 0 || cloudUnavailable) && (
                 <div className="plugin-entry-summary">
                   {representative && (
                     <code>
-                      {id === "wechatai/notification" ? "HTTP 推送" : `@${representative.shortcut}`}
+                      {id === "wechatai/notification"
+                        ? copyText("HTTP 推送")
+                        : `@${representative.shortcut}`}
                     </code>
                   )}
                   <span>
-                    {(id === "wechatai/cloud-agent" && cloudAvailability?.message) ||
-                      (id === "wechatai/grok" && cloudUnavailable && GROK_DISPATCH_UNAVAILABLE) ||
+                    {(id === "wechatai/cloud-agent" &&
+                      cloudAvailability &&
+                      errorText(cloudAvailability)) ||
+                      (id === "wechatai/grok" &&
+                        cloudUnavailable &&
+                        copyText(GROK_DISPATCH_UNAVAILABLE)) ||
                       (!allowed
-                        ? "超出当前套餐的插件上限"
+                        ? copyText("超出当前套餐的插件上限")
                         : !enabled
-                          ? "配置已停用"
+                          ? copyText("配置已停用")
                           : connection && connection.state !== "online"
-                            ? connection.description
+                            ? errorText(connection.description)
                             : id === "wechatai/notification"
                               ? representative.hasKey
-                                ? "Token 已配置"
-                                : "待生成专属 Token"
+                                ? copyText("Token 已配置")
+                                : copyText("待生成专属 Token")
                               : active
-                                ? "微信默认使用中"
-                                : "在任意对话中单次调用")}
+                                ? copyText("微信默认使用中")
+                                : copyText("在任意对话中单次调用"))}
                   </span>
                 </div>
               )}
               {conflicts.length > 0 && (
                 <button className="text-link shortcut-conflict" onClick={() => onView(id)}>
-                  {conflicts.length} 组配置的别名重复 · 查看并修改
+                  {conflicts.length}
+                  {copyText(" 组配置的别名重复 · 查看并修改")}
                 </button>
               )}
             </div>
@@ -303,40 +320,43 @@ export function PluginLibrary({
                   onClick={() => (resume && allowed ? onResume(representative) : onView(id))}
                   aria-label={
                     id === "wechatai/notification"
-                      ? `消息提醒：${actionLabel}`
+                      ? copyText("消息提醒：{value0}", { value0: actionLabel })
                       : resume && allowed
-                        ? `继续连接 ${name}`
-                        : `查看 ${name} 配置`
+                        ? copyText("继续连接 {value0}", { value0: name })
+                        : copyText("查看 {value0} 配置", { value0: name })
                   }
                 >
                   {actionLabel} <ArrowRight size={15} />
                 </button>
               ) : cloudUnavailable ? (
                 <button className="button secondary small" disabled>
-                  暂未开放
+                  {copyText("暂未开放")}
                 </button>
               ) : data.plan === "free" && (id === "wechatai/cloud-agent" || !canAdd) ? (
                 <button
                   className="button secondary small"
                   onClick={() => onConfigure(id)}
-                  aria-label={`配置 ${name}`}
+                  aria-label={copyText("配置 {value0}", { value0: name })}
                 >
-                  <Plus size={15} /> 配置插件
+                  <Plus size={15} />
+                  {copyText(" 配置插件")}
                 </button>
               ) : !data.assistants.length &&
                 !isRemoteAgentId(id) &&
                 id !== "wechatai/notification" &&
                 id !== "wechatai/cloud-agent" ? (
                 <Link className="button secondary small" to={`${base}/channels`}>
-                  先添加模型 <ArrowRight size={15} />
+                  {copyText("先添加模型 ")}
+                  <ArrowRight size={15} />
                 </Link>
               ) : (
                 <button
                   className="button small"
                   onClick={() => onConfigure(id)}
-                  aria-label={`配置 ${name}`}
+                  aria-label={copyText("配置 {value0}", { value0: name })}
                 >
-                  <Plus size={15} /> 配置插件
+                  <Plus size={15} />
+                  {copyText(" 配置插件")}
                 </button>
               )}
             </div>
@@ -374,6 +394,8 @@ export function PluginConfiguration({
   onAction: (id: string, action: "activate" | "exit") => void;
   onManage: PluginMaintenance;
 }) {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { data, base } = useApp();
   if (!data) return null;
   const configs = (data.plugins ?? []).filter((p) => p.pluginId === kind);
@@ -381,7 +403,7 @@ export function PluginConfiguration({
     configs.find((p) => p.id === selectedId) ??
     configs.find((p) => p.id === data.currentSession?.pluginInstanceId) ??
     configs[0];
-  const title = library.find((p) => p.id === kind)!.name;
+  const title = copyText(library.find((p) => p.id === kind)!.name);
   const allowed = !!selected && pluginAvailable(data.plan, data.plugins ?? [], selected.id);
   const canAdd = canAddPlugin(data.plan, data.plugins?.length ?? 0);
   const shortcutConflicts = conflictingShortcuts([...data.assistants, ...(data.plugins ?? [])]);
@@ -400,7 +422,13 @@ export function PluginConfiguration({
     : null;
   const cloud = isCloudAgent(selected) ? selected : null;
   const cloudAvailability = cloudAgentAvailabilityIssue(data.plan, data.cloudAgent);
-  const cloudIssue = cloud ? (cloudAvailability?.message ?? cloud.access?.message) : null;
+  const cloudIssue = cloud
+    ? cloudAvailability
+      ? errorText(cloudAvailability)
+      : cloud.access
+        ? errorText(cloud.access)
+        : undefined
+    : null;
   const needsUpgrade = data.plan === "free" && (kind === "wechatai/cloud-agent" || !canAdd);
   const grokUnavailable = kind === "wechatai/grok" && !data.grokBotReady;
   const canConfigure =
@@ -415,11 +443,11 @@ export function PluginConfiguration({
   const incomplete = connection && !connection.connectedBefore;
   return (
     <Modal
-      title={`${title} 配置`}
+      title={copyText("{value0} 配置", { value0: title })}
       description={
         kind === "wechatai/notification"
-          ? "设置专属 Token，查看推送接口与投递记录。"
-          : "查看连接信息，管理在微信中的使用方式。"
+          ? copyText("设置专属 Token，查看推送接口与投递记录。")
+          : copyText("查看连接信息，管理在微信中的使用方式。")
       }
       onClose={onClose}
       wide={kind === "wechatai/notification"}
@@ -441,7 +469,7 @@ export function PluginConfiguration({
               />
               {configs.length > 1 ? (
                 <label>
-                  选择配置
+                  {copyText("选择配置")}
                   <select
                     value={selected.id}
                     disabled={busy}
@@ -451,8 +479,8 @@ export function PluginConfiguration({
                       <option key={p.id} value={p.id}>
                         {p.name}
                         {p.pluginId === "wechatai/notification" ? "" : ` · @${p.shortcut}`}
-                        {shortcutConflicts.has(p.shortcut.toLowerCase()) && " · 别名重复"}
-                        {isRemoteAgent(p) && ` · ${remoteAgentConnection(p).label}`}
+                        {shortcutConflicts.has(p.shortcut.toLowerCase()) && copyText(" · 别名重复")}
+                        {isRemoteAgent(p) && ` · ${copyText(remoteAgentConnection(p).label)}`}
                       </option>
                     ))}
                   </select>
@@ -464,32 +492,33 @@ export function PluginConfiguration({
                 className={`plugin-status ${allowed && !cloudIssue && !grokUnavailable && selected.enabled && (!connection || connection.state === "online") ? "configured" : ""}`}
               >
                 {!allowed
-                  ? "已暂停"
+                  ? copyText("已暂停")
                   : !selected.enabled
-                    ? "已停用"
+                    ? copyText("已停用")
                     : cloudIssue || grokUnavailable
-                      ? "服务不可用"
-                      : (connection?.label ?? "已启用")}
+                      ? copyText("服务不可用")
+                      : (connection?.label ?? copyText("已启用"))}
               </span>
             </div>
             {selected.pluginId === "wechatai/personal-assistant" && (
               <button className="button secondary" onClick={() => onRecords(selected)}>
-                查看笔记、账目与提醒 <ArrowRight size={15} />
+                {copyText("查看笔记、账目与提醒 ")}
+                <ArrowRight size={15} />
               </button>
             )}
             {selected.pluginId === "wechatai/notification" ? (
               <>
                 <dl className="plugin-config-details">
                   <div>
-                    <dt>接收微信</dt>
+                    <dt>{copyText("接收微信")}</dt>
                     <dd>
                       {data.connections.find((c) => c.id === selected.connectionId)?.name ??
-                        "链接已删除，请修改配置"}
+                        copyText("链接已删除，请修改配置")}
                     </dd>
                   </div>
                   <div>
-                    <dt>使用费用</dt>
-                    <dd>不调用模型，不扣 credits</dd>
+                    <dt>{copyText("使用费用")}</dt>
+                    <dd>{copyText("不调用模型，不扣 credits")}</dd>
                   </div>
                 </dl>
                 <NotificationAccess key={selected.id} plugin={selected} />
@@ -498,7 +527,7 @@ export function PluginConfiguration({
               <>
                 <dl className="plugin-config-details">
                   <div>
-                    <dt>快捷名称</dt>
+                    <dt>{copyText("快捷名称")}</dt>
                     <dd>
                       <code>@{selected.shortcut}</code>
                     </dd>
@@ -506,194 +535,230 @@ export function PluginConfiguration({
                   <div>
                     <dt>
                       {isRemoteAgentId(kind)
-                        ? `${remoteAgentName(kind)} 助手`
+                        ? copyText("{value0} 助手", { value0: remoteAgentName(kind) })
                         : kind === "wechatai/image-generation"
-                          ? "生图模型"
-                          : "回答模型"}
+                          ? copyText("生图模型")
+                          : copyText("回答模型")}
                     </dt>
                     <dd>
                       {isRemoteAgent(selected) ? (
                         (selected.agents?.find((a) => a.id === selected.agentId)?.name ??
                         (kind === "wechatai/grok"
-                          ? "拥有该 Routine 的 Grok Bot"
+                          ? copyText("拥有该 Routine 的 Grok Bot")
                           : selected.hasKey
                             ? selected.agentId
-                            : "连接后自动识别"))
+                            : copyText("连接后自动识别")))
                       ) : model ? (
                         <>
-                          {isCloudAgent(selected) && !selected.modelId && "默认模型："}
+                          {isCloudAgent(selected) && !selected.modelId && copyText("默认模型：")}
                           {model.channelName} / {model.name}
                           <code className="plugin-model-id">{model.model}</code>
                         </>
                       ) : isCloudAgent(selected) && !selected.modelId ? (
-                        "尚未配置默认文本模型"
+                        copyText("尚未配置默认文本模型")
                       ) : (
-                        "模型已删除"
+                        copyText("模型已删除")
                       )}
                     </dd>
                   </div>
                   {selected.pluginId === "wechatai/personal-assistant" ? (
                     <>
                       <div>
-                        <dt>默认币种</dt>
+                        <dt>{copyText("默认币种")}</dt>
                         <dd>{selected.currency}</dd>
                       </div>
                       <div>
-                        <dt>提醒链接</dt>
+                        <dt>{copyText("提醒链接")}</dt>
                         <dd>
                           {data.connections.find((c) => c.id === selected.reminderConnectionId)
-                            ?.name ?? "暂未设置"}
+                            ?.name ?? copyText("暂未设置")}
                         </dd>
                       </div>
                       <div>
-                        <dt>时间</dt>
-                        <dd>北京时间 · 支持一次性、每天、每周提醒</dd>
+                        <dt>{copyText("时间")}</dt>
+                        <dd>{copyText("北京时间 · 支持一次性、每天、每周提醒")}</dd>
                       </div>
                     </>
                   ) : isRemoteAgent(selected) ? (
                     <>
                       <div>
-                        <dt>连接状态</dt>
+                        <dt>{copyText("连接状态")}</dt>
                         <dd>
-                          {grokUnavailable ? GROK_DISPATCH_UNAVAILABLE : connection?.description}
+                          {grokUnavailable
+                            ? copyText(GROK_DISPATCH_UNAVAILABLE)
+                            : copyText(connection?.description ?? "")}
                         </dd>
                       </div>
                       <div>
-                        <dt>主动推送</dt>
-                        <dd>{selected.allowProactive ? "允许定时任务与后台结果" : "已关闭"}</dd>
-                      </div>
-                      <div>
-                        <dt>文字上限</dt>
+                        <dt>{copyText("主动推送")}</dt>
                         <dd>
-                          输入 {selected.maxInputTokens} / 输出 {selected.maxOutputTokens} tokens
+                          {selected.allowProactive
+                            ? copyText("允许定时任务与后台结果")
+                            : copyText("已关闭")}
                         </dd>
                       </div>
                       <div>
-                        <dt>模型与工具</dt>
-                        <dd>在 {remoteAgentName(selected.pluginId)} 中管理，无需本站模型渠道</dd>
+                        <dt>{copyText("文字上限")}</dt>
+                        <dd>
+                          {copyText("输入 ")}
+                          {selected.maxInputTokens}
+                          {copyText(" / 输出 ")}
+                          {selected.maxOutputTokens} tokens
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{copyText("模型与工具")}</dt>
+                        <dd>
+                          {copyText("在 ")}
+                          {remoteAgentName(selected.pluginId)}
+                          {copyText(" 中管理，无需本站模型渠道")}
+                        </dd>
                       </div>
                     </>
                   ) : isCloudAgent(selected) ? (
                     <>
                       <div>
-                        <dt>服务状态</dt>
-                        <dd>{cloudIssue ?? "已配置；在微信提交任务验证实际运行"}</dd>
+                        <dt>{copyText("服务状态")}</dt>
+                        <dd>{cloudIssue ?? copyText("已配置；在微信提交任务验证实际运行")}</dd>
                       </div>
                       {data.cloudAgent.ready && (
                         <>
                           <div>
-                            <dt>账号任务额度</dt>
+                            <dt>{copyText("账号任务额度")}</dt>
                             <dd>
-                              今日 {data.cloudAgent.usedToday} / {data.cloudAgent.dailyLimit} 次 ·
-                              执行中 {data.cloudAgent.active} / {data.cloudAgent.maxActive} 个
+                              {copyText("今日 ")}
+                              {data.cloudAgent.usedToday} / {data.cloudAgent.dailyLimit}
+                              {copyText(" 次 · 执行中 ")}
+                              {data.cloudAgent.active} / {data.cloudAgent.maxActive}
+                              {copyText(" 个")}
                             </dd>
                           </div>
                           <div>
-                            <dt>执行时限</dt>
-                            <dd>{data.cloudAgent.deadlineMinutes} 分钟后请求停止，等待云端确认</dd>
+                            <dt>{copyText("执行时限")}</dt>
+                            <dd>
+                              {data.cloudAgent.deadlineMinutes}
+                              {copyText(" 分钟后请求停止，等待云端确认")}
+                            </dd>
                           </div>
                         </>
                       )}
                       <div>
-                        <dt>任务记录</dt>
+                        <dt>{copyText("任务记录")}</dt>
                         <dd>
-                          <Link to={`${base}/tasks?plugin=${selected.id}`}>查看云端任务</Link>
+                          <Link to={`${base}/tasks?plugin=${selected.id}`}>
+                            {copyText("查看云端任务")}
+                          </Link>
                           {" · "}
-                          <Link to="/docs/cloud-agent">使用指南</Link>
+                          <Link to="/docs/cloud-agent">{copyText("使用指南")}</Link>
                         </dd>
                       </div>
                       <div>
-                        <dt>使用费用</dt>
+                        <dt>{copyText("使用费用")}</dt>
                         <dd>
-                          输入和最终回复文字按 token 扣 credits，返回图片每张另计 5
-                          credits，非图片文件不另收费；模型 API
-                          费用另付服务商，包括内部多次调用。失败或确认取消不收成功账单，请求停止的费用以最终结果为准。
+                          {copyText(
+                            "输入和最终回复文字按 token 扣 credits，返回图片每张另计 5 credits，非图片文件不另收费；模型 API 费用另付服务商，包括内部多次调用。失败或确认取消不收成功账单，请求停止的费用以最终结果为准。",
+                          )}
                         </dd>
                       </div>
                       <div>
-                        <dt>支持范围</dt>
+                        <dt>{copyText("支持范围")}</dt>
                         <dd>
-                          文字、图片、可提取文字的 PDF、DOCX 和文本文件，以及带微信转写文本的语音。
-                          先发附件，再补充要求；图片需模型支持视觉，单张最大 2 MB。/wx stop
-                          请求停止当前会话任务。
+                          {copyText(
+                            "文字、图片、可提取文字的 PDF、DOCX 和文本文件，以及带微信转写文本的语音。 先发附件，再补充要求；图片需模型支持视觉，单张最大 2 MB。/wx stop 请求停止当前会话任务。",
+                          )}
                         </dd>
                       </div>
                     </>
                   ) : selected.pluginId === "wechatai/web-research" ? (
                     <>
                       <div>
-                        <dt>搜索服务</dt>
-                        <dd>{searchProviderLabels[selected.searchProvider]}</dd>
+                        <dt>{copyText("搜索服务")}</dt>
+                        <dd>{copyText(searchProviderLabels[selected.searchProvider])}</dd>
                       </div>
                       <div>
-                        <dt>搜索地址</dt>
+                        <dt>{copyText("搜索地址")}</dt>
                         <dd>{selected.searchEndpoint}</dd>
                       </div>
                       {selected.searchProvider === "deepseek" && (
                         <div>
-                          <dt>搜索模型</dt>
+                          <dt>{copyText("搜索模型")}</dt>
                           <dd>
                             <code>{selected.searchModel || DEEPSEEK_SEARCH_DEFAULT_MODEL}</code>
                           </dd>
                         </div>
                       )}
                       <div>
-                        <dt>搜索密钥</dt>
-                        <dd>{selected.hasKey ? "已加密保存" : "未配置"}</dd>
+                        <dt>{copyText("搜索密钥")}</dt>
+                        <dd>{selected.hasKey ? copyText("已加密保存") : copyText("未配置")}</dd>
                       </div>
                       <div>
-                        <dt>每次最多</dt>
+                        <dt>{copyText("每次最多")}</dt>
                         <dd>
-                          搜索 {selected.maxSearches} 次 · 阅读 {selected.maxReads} 页
+                          {copyText("搜索 ")}
+                          {selected.maxSearches}
+                          {copyText(" 次 · 阅读 ")}
+                          {selected.maxReads}
+                          {copyText(" 页")}
                         </dd>
                       </div>
                     </>
                   ) : selected.pluginId === "wechatai/roleplay" ? (
                     <>
                       <div>
-                        <dt>角色设定</dt>
+                        <dt>{copyText("角色设定")}</dt>
                         <dd className="role-config-description">{selected.description}</dd>
                       </div>
                       <div>
-                        <dt>世界书</dt>
+                        <dt>{copyText("世界书")}</dt>
                         <dd>
-                          {selected.lore.filter((e) => e.enabled).length} 条启用 · 最多{" "}
-                          {selected.loreTokenBudget.toLocaleString()} tokens
+                          {selected.lore.filter((e) => e.enabled).length}
+                          {copyText(" 条启用 · 最多")} {selected.loreTokenBudget.toLocaleString()}{" "}
+                          tokens
                         </dd>
                       </div>
                       <div>
-                        <dt>剧情记忆</dt>
-                        <dd>每个会话独立 · 自动摘要 · 可在会话记录中修正</dd>
+                        <dt>{copyText("剧情记忆")}</dt>
+                        <dd>{copyText("每个会话独立 · 自动摘要 · 可在会话记录中修正")}</dd>
                       </div>
                       <div>
-                        <dt>开场白</dt>
-                        <dd>{selected.firstMessage ? "已设置，新故事展示一次" : "未设置"}</dd>
+                        <dt>{copyText("开场白")}</dt>
+                        <dd>
+                          {selected.firstMessage
+                            ? copyText("已设置，新故事展示一次")
+                            : copyText("未设置")}
+                        </dd>
                       </div>
                     </>
                   ) : (
                     <>
                       <div>
-                        <dt>生图渠道地址</dt>
-                        <dd>{model?.baseUrl ?? "模型已删除"}</dd>
+                        <dt>{copyText("生图渠道地址")}</dt>
+                        <dd>{model?.baseUrl ?? copyText("模型已删除")}</dd>
                       </div>
                       <div>
                         <dt>API Key</dt>
-                        <dd>{selected.hasKey ? "使用渠道已保存的密钥" : "未配置"}</dd>
+                        <dd>
+                          {selected.hasKey ? copyText("使用渠道已保存的密钥") : copyText("未配置")}
+                        </dd>
                       </div>
                       <div>
-                        <dt>画面尺寸</dt>
-                        <dd>自动识别描述中的常见比例，未指定时使用上游默认尺寸</dd>
+                        <dt>{copyText("画面尺寸")}</dt>
+                        <dd>{copyText("自动识别描述中的常见比例，未指定时使用上游默认尺寸")}</dd>
                       </div>
                       <div>
-                        <dt>每次生成</dt>
-                        <dd>1 张 · 5 credits + 输入文字</dd>
+                        <dt>{copyText("每次生成")}</dt>
+                        <dd>{copyText("1 张 · 5 credits + 输入文字")}</dd>
                       </div>
                     </>
                   )}
                   {"waitingMessageEnabled" in selected && (
                     <div>
-                      <dt>等待提示</dt>
-                      <dd>{selected.waitingMessageEnabled ? selected.waitingMessage : "已关闭"}</dd>
+                      <dt>{copyText("等待提示")}</dt>
+                      <dd>
+                        {selected.waitingMessageEnabled
+                          ? selected.waitingMessage
+                          : copyText("已关闭")}
+                      </dd>
                     </div>
                   )}
                 </dl>
@@ -701,20 +766,25 @@ export function PluginConfiguration({
                   <div className="plugin-config-usage">
                     <code>
                       @{selected.shortcut}{" "}
-                      {kind === "wechatai/image-generation" ? "画面描述" : "问题"}
+                      {kind === "wechatai/image-generation"
+                        ? copyText("画面描述")
+                        : copyText("问题")}
                     </code>{" "}
-                    仅本次使用
+                    {copyText("仅本次使用")}
                     <br />
-                    <code>/use {selected.shortcut}</code> 设为默认，<code>/exit</code> 返回普通模型
+                    <code>/use {selected.shortcut}</code>
+                    {copyText(" 设为默认，")}
+                    <code>/exit</code>
+                    {copyText(" 返回普通模型")}
                   </div>
                 )}
               </>
             )}
             {!allowed && !cloud && (
               <p className="plugin-config-renew">
-                {pluginLimitIssue(data.planUntil).message}{" "}
+                {errorText(pluginLimitIssue(data.planUntil))}{" "}
                 <button className="text-link" onClick={() => onEdit(selected)}>
-                  查看 Plus 方案
+                  {copyText("查看 Plus 方案")}
                 </button>
               </p>
             )}
@@ -723,16 +793,20 @@ export function PluginConfiguration({
                 {cloudIssue}
                 {cloudAvailability?.code === "cloud_plus_required" && (
                   <button className="text-link" onClick={() => onEdit(selected)}>
-                    查看 Plus 方案
+                    {copyText("查看 Plus 方案")}
                   </button>
                 )}
               </p>
             )}
             {aliasConflict && (
               <p className="form-hint" role="status">
-                别名 @{selected.shortcut} 与其他模型或插件重复，大小写不能用于区分。
-                请修改其中一方的别名后再使用 @ 调用。模型别名可在
-                <Link to={`${base}/channels`}>渠道与模型</Link>中修改。
+                {copyText("别名 @")}
+                {selected.shortcut}{" "}
+                {copyText(
+                  " 与其他模型或插件重复，大小写不能用于区分。 请修改其中一方的别名后再使用 @ 调用。模型别名可在",
+                )}
+                <Link to={`${base}/channels`}>{copyText("渠道与模型")}</Link>
+                {copyText("中修改。")}
               </p>
             )}
             {(!allowed || aliasConflict) && selected.pluginId !== "wechatai/notification" && (
@@ -751,7 +825,7 @@ export function PluginConfiguration({
                   disabled={busy}
                   onClick={() => onManage(selected.id, { enabled: false })}
                 >
-                  停用插件
+                  {copyText("停用插件")}
                 </button>
               )}
               {kind !== "wechatai/notification" && (
@@ -761,7 +835,11 @@ export function PluginConfiguration({
                   onClick={() => onTest(selected)}
                 >
                   <FlaskConical size={15} />
-                  {cloud ? "检查服务状态" : connection ? "连接设置" : "测试配置"}
+                  {cloud
+                    ? copyText("检查服务状态")
+                    : connection
+                      ? copyText("连接设置")
+                      : copyText("测试配置")}
                 </button>
               )}
               <button
@@ -770,26 +848,30 @@ export function PluginConfiguration({
                 onClick={() => onDelete(selected)}
               >
                 <Trash2 size={15} />
-                删除配置
+                {copyText("删除配置")}
               </button>
               {canConfigure && (
                 <button className="text-link" disabled={busy} onClick={() => onAdd(kind)}>
                   <Plus size={15} />
-                  添加另一组配置
+                  {copyText("添加另一组配置")}
                 </button>
               )}
             </div>
           </>
         ) : (
           <div className="plugin-config-empty">
-            <p>{grokUnavailable ? "Grok Bot 派发服务暂未开放。" : "还没有配置此插件。"}</p>
+            <p>
+              {grokUnavailable
+                ? copyText("Grok Bot 派发服务暂未开放。")
+                : copyText("还没有配置此插件。")}
+            </p>
             {kind === "wechatai/cloud-agent" && cloudAvailability && (
-              <p>{cloudAvailability.message}</p>
+              <p>{errorText(cloudAvailability)}</p>
             )}
             {canConfigure && (
               <button className="button" onClick={() => onAdd(kind)}>
                 <Plus size={16} />
-                添加配置
+                {copyText("添加配置")}
               </button>
             )}
           </div>
@@ -807,7 +889,7 @@ export function PluginConfiguration({
               }
               onClick={() => onAction(selected.id, active ? "exit" : "activate")}
             >
-              {active ? "退出默认插件" : "设为默认插件"}
+              {active ? copyText("退出默认插件") : copyText("设为默认插件")}
             </button>
           )}
           <button
@@ -819,7 +901,7 @@ export function PluginConfiguration({
             }}
           >
             <Pencil size={16} />
-            {incomplete ? "继续连接" : "修改配置"}
+            {incomplete ? copyText("继续连接") : copyText("修改配置")}
           </button>
         </div>
       )}

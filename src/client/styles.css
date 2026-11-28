@@ -5418,3 +5418,23 @@ code {
   margin-left: 6px;
   text-decoration: underline;
 }
+
+/* Spanish labels need room to wrap in the existing workspace layout. */
+html[lang="es"] .workspace .topbar-actions {
+  flex-wrap: wrap;
+  max-width: 100%;
+  justify-content: flex-end;
+}
+html[lang="es"] .workspace .plan-card {
+  min-width: 0;
+}
+html[lang="es"] .workspace .plan-card .button {
+  white-space: normal;
+}
+
+html[lang="es"] .workspace .balance-breakdown > div {
+  gap: 16px;
+}
+html[lang="es"] .workspace .balance-breakdown > div > span {
+  min-width: 0;
+}

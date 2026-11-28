@@ -1,3 +1,4 @@
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { isCloudAgent, type CloudAgentPlugin } from "../../shared/cloud-agent";
 import { CloudAgentEditor } from "./cloud-agent-editor";
 import {
@@ -60,6 +61,8 @@ const initial: WebResearchInput = {
   maxReads: 3,
 };
 export function Plugins() {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { data, request, refresh, notify } = useApp();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editor, setEditor] = useState<WebResearchPlugin | "new" | null>(null);
@@ -216,13 +219,13 @@ export function Plugins() {
       }
       notify(
         operation === "delete"
-          ? "插件配置已删除，会话记录仍然保留"
+          ? copyText("插件配置已删除，会话记录仍然保留")
           : operation === "exit"
-            ? "已退出插件"
-            : "已进入默认插件模式，直接发送问题即可；/exit 退出",
+            ? copyText("已退出插件")
+            : copyText("已进入默认插件模式，直接发送问题即可；/exit 退出"),
       );
     } catch (e) {
-      notify((e as Error).message, true);
+      notify(errorText(e), true);
     } finally {
       setBusy("");
     }
@@ -240,10 +243,14 @@ export function Plugins() {
       setViewedId(saved.id);
       setEditor(null);
       notify(
-        "插件已保存。/use " + form.shortcut + " 设为默认；@" + form.shortcut + " 问题 仅本次使用",
+        copyText("插件已保存。/use ") +
+          form.shortcut +
+          copyText(" 设为默认；@") +
+          form.shortcut +
+          copyText(" 问题 仅本次使用"),
       );
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
       setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
@@ -254,9 +261,11 @@ export function Plugins() {
     try {
       await request(`/plugins/${id}`, json(patch, "PATCH"));
       await refresh();
-      notify(patch.enabled === false ? "插件已停用" : "别名已更新，套餐限制保持不变");
+      notify(
+        patch.enabled === false ? copyText("插件已停用") : copyText("别名已更新，套餐限制保持不变"),
+      );
     } catch (e) {
-      notify((e as Error).message, true);
+      notify(errorText(e), true);
     } finally {
       setBusy("");
     }
@@ -271,7 +280,7 @@ export function Plugins() {
       setReply(await request(`/plugins/${testing.id}/test`, json({ query })));
       await refresh();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
       setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
@@ -285,20 +294,27 @@ export function Plugins() {
   return (
     <>
       <PageHead
-        eyebrow="PLUGINS"
-        title="插件"
-        description={`给微信添一点新能力。Free 最多配置 1 个插件，Plus 会员配置数量不限。当前已配置 ${data.plugins?.length ?? 0}${data.plan === "free" ? ` / ${PLUGIN_LIMITS.free}` : ""} 个。`}
+        eyebrow={copyText("PLUGINS")}
+        title={copyText("插件")}
+        description={copyText(
+          "给微信添一点新能力。Free 最多配置 1 个插件，Plus 会员配置数量不限。当前已配置 {value0}{value1} 个。",
+          {
+            value0: data.plugins?.length ?? 0,
+            value1: data.plan === "free" ? ` / ${PLUGIN_LIMITS.free}` : "",
+          },
+        )}
         action={
           <Link className="text-link" to="/docs/ds-chat">
-            使用指南 <ArrowRight size={15} />
+            {copyText("使用指南 ")}
+            <ArrowRight size={15} />
           </Link>
         }
       />
       {upgradeId && !upgradePlugin && (
         <p className="plugin-config-renew" role="alert">
-          这个 OpenClaw 配置已删除，或不属于当前登录账号。
+          {copyText("这个 OpenClaw 配置已删除，或不属于当前登录账号。")}
           <button className="text-link" onClick={closeClawEditor}>
-            返回插件列表
+            {copyText("返回插件列表")}
           </button>
         </p>
       )}
@@ -311,26 +327,29 @@ export function Plugins() {
         }}
       />
       <p className="research-commands">
-        <code>@快捷名 内容</code> 单次调用 · <code>/use 快捷名</code> 直接切换 · <code>/exit</code>{" "}
-        返回普通模型
+        <code>{copyText("@快捷名 内容")}</code>
+        {copyText(" 单次调用 · ")}
+        <code>{copyText("/use 快捷名")}</code>
+        {copyText(" 直接切换 · ")}
+        <code>/exit</code> {copyText("返回普通模型")}
       </p>
       {data.currentSession?.pluginInstanceId &&
         !(data.plugins ?? []).some((p) => p.id === data.currentSession?.pluginInstanceId) && (
           <p className="plugin-config-renew">
-            当前默认插件已删除。
+            {copyText("当前默认插件已删除。")}
             <button
               className="text-link"
               disabled={Boolean(busy)}
               onClick={() => void action("exit", "exit")}
             >
-              返回普通模型
+              {copyText("返回普通模型")}
             </button>
           </p>
         )}
       <p className="research-billing">
-        消息提醒不扣 credits。其他插件输入与最终回复按 token 计费，生成图片另计 5 credits /
-        张；插件内部调用不重复计收。自备 API 的费用由服务商另行收取；小薇 使用你配置的模型，API
-        费用另付服务商；失败或确认取消不扣 credits；请求停止后仍可能完成，费用以最终结果为准。
+        {copyText(
+          "消息提醒不扣 credits。其他插件输入与最终回复按 token 计费，生成图片另计 5 credits / 张；插件内部调用不重复计收。自备 API 的费用由服务商另行收取；小薇 使用你配置的模型，API 费用另付服务商；失败或确认取消不扣 credits；请求停止后仍可能完成，费用以最终结果为准。",
+        )}
       </p>
       {viewing &&
         returnAction !== "create" &&
@@ -372,7 +391,7 @@ export function Plugins() {
                 setBusy(p.id);
                 void request<{ text: string; cost: number }>(`/plugins/${p.id}/test`, json({}))
                   .then((result) => notify(result.text))
-                  .catch((e: Error) => notify(e.message, true))
+                  .catch((e: Error) => notify(errorText(e), true))
                   .finally(() => setBusy(""));
                 return;
               }
@@ -474,8 +493,8 @@ export function Plugins() {
       )}
       {editor && (
         <Modal
-          title={editor === "new" ? "添加 DS Chat" : "编辑 DS Chat"}
-          description="一个名称，一组模型与搜索配置。"
+          title={editor === "new" ? copyText("添加 DS Chat") : copyText("编辑 DS Chat")}
+          description={copyText("一个名称，一组模型与搜索配置。")}
           onClose={() => {
             if (!busy) setEditor(null);
           }}
@@ -484,7 +503,7 @@ export function Plugins() {
             <div className="form-body">
               <div className="form-grid">
                 <label>
-                  插件名称
+                  {copyText("插件名称")}
                   <input
                     required
                     maxLength={40}
@@ -493,26 +512,28 @@ export function Plugins() {
                   />
                 </label>
                 <label>
-                  微信快捷名称
+                  {copyText("微信快捷名称")}
                   <input
                     required
                     maxLength={24}
                     pattern={pluginShortcutPatternForEdit(
                       editor && editor !== "new" ? editor.shortcut : undefined,
                     )}
-                    title={PLUGIN_SHORTCUT_HINT}
+                    title={copyText(PLUGIN_SHORTCUT_HINT)}
                     value={form.shortcut}
                     onChange={(e) => update("shortcut", e.target.value)}
                   />
                   <small>
                     {keepingLegacyShortcut
-                      ? LEGACY_NUMERIC_SHORTCUT_HINT
-                      : "别名不能是纯数字。例如「DS」：@DS 问题 单次使用，/use DS 设为默认"}
+                      ? copyText(LEGACY_NUMERIC_SHORTCUT_HINT)
+                      : copyText(
+                          "别名不能是纯数字。例如「DS」：@DS 问题 单次使用，/use DS 设为默认",
+                        )}
                   </small>
                 </label>
               </div>
               <label>
-                回答模型
+                {copyText("回答模型")}
                 <select
                   required
                   disabled={editor !== "new"}
@@ -521,7 +542,7 @@ export function Plugins() {
                 >
                   {!selectedModel && (
                     <option value={form.modelId} disabled>
-                      请选择文本模型
+                      {copyText("请选择文本模型")}
                     </option>
                   )}
                   {textModels.map((a) => (
@@ -533,13 +554,16 @@ export function Plugins() {
                 </select>
                 {selectedModel && (
                   <small className="research-selected-model">
-                    实际模型 ID：<code>{selectedModel.model}</code>
+                    {copyText("实际模型 ID：")}
+                    <code>{selectedModel.model}</code>
                   </small>
                 )}
-                <small>沿用该模型的输入、输出及单次 credits 上限。更换模型请新建配置。</small>
+                <small>
+                  {copyText("沿用该模型的输入、输出及单次 credits 上限。更换模型请新建配置。")}
+                </small>
               </label>
               <label>
-                搜索 API 类型
+                {copyText("搜索 API 类型")}
                 <select
                   value={form.searchProvider}
                   onChange={(e) => {
@@ -560,13 +584,13 @@ export function Plugins() {
                 >
                   {Object.entries(searchProviderLabels).map(([value, label]) => (
                     <option key={value} value={value}>
-                      {label}
+                      {copyText(label)}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                搜索 API 地址
+                {copyText("搜索 API 地址")}
                 <input
                   type="url"
                   required
@@ -575,25 +599,30 @@ export function Plugins() {
                   value={form.searchEndpoint}
                   onChange={(e) => update("searchEndpoint", e.target.value)}
                 />
-                <small>已知服务会预填官方地址，也可改为自己的完整 HTTPS 接口地址。</small>
+                <small>
+                  {copyText("已知服务会预填官方地址，也可改为自己的完整 HTTPS 接口地址。")}
+                </small>
               </label>
               {form.searchProvider === "deepseek" && (
                 <label>
-                  搜索模型 ID（选填）
+                  {copyText("搜索模型 ID（选填）")}
                   <input
                     maxLength={120}
                     value={form.searchModel}
-                    placeholder={`留空使用 ${DEEPSEEK_SEARCH_DEFAULT_MODEL}`}
+                    placeholder={copyText("留空使用 {value0}", {
+                      value0: DEEPSEEK_SEARCH_DEFAULT_MODEL,
+                    })}
                     onChange={(e) => update("searchModel", e.target.value)}
                   />
                   <small>
-                    留空自动使用 {DEEPSEEK_SEARCH_DEFAULT_MODEL} 搜索，与上方回答模型独立。
-                    自定义模型须支持原生 Web Search。
+                    {copyText("留空自动使用 ")}
+                    {DEEPSEEK_SEARCH_DEFAULT_MODEL}
+                    {copyText(" 搜索，与上方回答模型独立。 自定义模型须支持原生 Web Search。")}
                   </small>
                 </label>
               )}
               <label>
-                搜索 API Key
+                {copyText("搜索 API Key")}
                 <input
                   type="password"
                   autoComplete="new-password"
@@ -606,19 +635,19 @@ export function Plugins() {
                   onChange={(e) => update("apiKey", e.target.value)}
                   placeholder={
                     editor !== "new" && editor.hasKey && !destinationChanged
-                      ? "已加密保存，留空不更改"
+                      ? copyText("已加密保存，留空不更改")
                       : form.searchProvider === "searxng"
-                        ? "公开实例可留空；填写时作为 Bearer Token"
-                        : "填写你自己的搜索服务密钥"
+                        ? copyText("公开实例可留空；填写时作为 Bearer Token")
+                        : copyText("填写你自己的搜索服务密钥")
                   }
                 />
-                <small>更换地址或类型时须重新填写。密钥不会回传到浏览器。</small>
+                <small>{copyText("更换地址或类型时须重新填写。密钥不会回传到浏览器。")}</small>
               </label>
               <details className="advanced-fields">
-                <summary>调用次数与启用状态</summary>
+                <summary>{copyText("调用次数与启用状态")}</summary>
                 <div className="form-grid">
                   <label>
-                    最多搜索次数
+                    {copyText("最多搜索次数")}
                     <input
                       type="number"
                       min={1}
@@ -628,7 +657,7 @@ export function Plugins() {
                     />
                   </label>
                   <label>
-                    最多读取网页数
+                    {copyText("最多读取网页数")}
                     <input
                       type="number"
                       min={0}
@@ -639,13 +668,13 @@ export function Plugins() {
                   </label>
                 </div>
                 <label>
-                  状态
+                  {copyText("状态")}
                   <select
                     value={String(form.enabled)}
                     onChange={(e) => update("enabled", e.target.value === "true")}
                   >
-                    <option value="true">启用</option>
-                    <option value="false">停用</option>
+                    <option value="true">{copyText("启用")}</option>
+                    <option value="false">{copyText("停用")}</option>
                   </select>
                 </label>
               </details>
@@ -663,10 +692,10 @@ export function Plugins() {
                 disabled={Boolean(busy)}
                 onClick={() => setEditor(null)}
               >
-                取消
+                {copyText("取消")}
               </button>
               <button className="button" disabled={Boolean(busy) || !selectedModel}>
-                {busy ? "正在保存…" : "保存配置"}
+                {busy ? copyText("正在保存…") : copyText("保存配置")}
                 <Power size={16} />
               </button>
             </div>
@@ -676,15 +705,21 @@ export function Plugins() {
       {testing && (
         <Modal
           wide
-          title={`测试 · ${testing.name}`}
+          title={copyText("测试 · {value0}", { value0: testing.name })}
           description={
             testing.pluginId === "wechatai/personal-assistant"
-              ? "会实际调用你的模型并消耗 credits；仅演练操作，不保存笔记、账目或提醒，不发送提醒。"
+              ? copyText(
+                  "会实际调用你的模型并消耗 credits；仅演练操作，不保存笔记、账目或提醒，不发送提醒。",
+                )
               : testing.pluginId === "wechatai/image-generation"
-                ? "会实际生成一张图片，消耗 5 credits 加描述文字的输入费用；图片保留 30 天。"
+                ? copyText(
+                    "会实际生成一张图片，消耗 5 credits 加描述文字的输入费用；图片保留 30 天。",
+                  )
                 : testing.pluginId === "wechatai/roleplay"
-                  ? "会实际调用你的模型，按角色设定、输入和最终回复消耗 credits；测试不写入故事会话。"
-                  : "会实际调用你的模型和搜索服务，并按输入与最终回复消耗 credits。"
+                  ? copyText(
+                      "会实际调用你的模型，按角色设定、输入和最终回复消耗 credits；测试不写入故事会话。",
+                    )
+                  : copyText("会实际调用你的模型和搜索服务，并按输入与最终回复消耗 credits。")
           }
           onClose={() => {
             if (!busy) setTesting(null);
@@ -693,7 +728,9 @@ export function Plugins() {
           <form onSubmit={(e) => void test(e)}>
             <div className="form-body">
               <label>
-                {testing.pluginId === "wechatai/image-generation" ? "画面描述" : "测试问题"}
+                {testing.pluginId === "wechatai/image-generation"
+                  ? copyText("画面描述")
+                  : copyText("测试问题")}
                 <textarea
                   required
                   maxLength={2000}
@@ -702,10 +739,10 @@ export function Plugins() {
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder={
                     testing.pluginId === "wechatai/image-generation"
-                      ? "例如：一只橘猫坐在窗边读书，温暖阳光，水彩风格"
+                      ? copyText("例如：一只橘猫坐在窗边读书，温暖阳光，水彩风格")
                       : testing.pluginId === "wechatai/roleplay"
-                        ? "例如：你好，今天我们去哪里？"
-                        : "例如：查一下 DeepSeek Harness 的功能，并附上来源"
+                        ? copyText("例如：你好，今天我们去哪里？")
+                        : copyText("例如：查一下 DeepSeek Harness 的功能，并附上来源")
                   }
                 />
               </label>
@@ -718,7 +755,10 @@ export function Plugins() {
               {reply && (
                 <div className="research-test-result">
                   <MessageMarkdown content={reply.text} id="research-test" />
-                  <small>本次使用 {formatCredits(reply.cost)} credits</small>
+                  <small>
+                    {copyText("本次使用 ")}
+                    {formatCredits(reply.cost)} credits
+                  </small>
                 </div>
               )}
             </div>
@@ -726,9 +766,9 @@ export function Plugins() {
               <button className="button" disabled={Boolean(busy)}>
                 {busy
                   ? testing.pluginId === "wechatai/image-generation"
-                    ? "正在生成图片，请稍候…"
-                    : "正在搜索与整理，请稍候…"
-                  : "开始测试"}
+                    ? copyText("正在生成图片，请稍候…")
+                    : copyText("正在搜索与整理，请稍候…")
+                  : copyText("开始测试")}
                 <FlaskConical size={16} />
               </button>
             </div>
@@ -737,13 +777,17 @@ export function Plugins() {
       )}
       {deleting && (
         <Modal
-          title={`删除「${deleting.name}」？`}
+          title={copyText("删除「{value0}」？", { value0: deleting.name })}
           description={
             deleting.pluginId === "wechatai/personal-assistant"
-              ? "将永久删除这份助理的全部笔记、账目和提醒，并取消提醒。已有聊天记录保留。建议先导出需要保留的数据。"
+              ? copyText(
+                  "将永久删除这份助理的全部笔记、账目和提醒，并取消提醒。已有聊天记录保留。建议先导出需要保留的数据。",
+                )
               : deleting.pluginId === "wechatai/grok"
-                ? "删除后会撤销 MCP 凭据并关闭未完成的任务。已结算的回复会继续发往原微信，已有聊天记录保留。"
-                : "将删除插件配置，已有会话记录保留，但无法继续调用此插件。"
+                ? copyText(
+                    "删除后会撤销 MCP 凭据并关闭未完成的任务。已结算的回复会继续发往原微信，已有聊天记录保留。",
+                  )
+                : copyText("将删除插件配置，已有会话记录保留，但无法继续调用此插件。")
           }
           onClose={() => {
             if (!busy) setDeleting(null);
@@ -755,14 +799,14 @@ export function Plugins() {
               onClick={() => setDeleting(null)}
               disabled={Boolean(busy)}
             >
-              取消
+              {copyText("取消")}
             </button>
             <button
               className="button danger"
               onClick={() => void action(deleting.id, "delete")}
               disabled={Boolean(busy)}
             >
-              删除配置
+              {copyText("删除配置")}
             </button>
           </div>
         </Modal>

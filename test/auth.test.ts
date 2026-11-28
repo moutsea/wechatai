@@ -306,7 +306,7 @@ describe("Google and GitHub OAuth", () => {
     for (const locale of ["en", "ja", "ko", "es", "pt"]) {
       const target = `/${locale}/app?source=setup#help`;
       expect(authReturnPath(target)).toBe(target);
-      expect(authReturnPath(`/${locale}/app/channels`)).toBe("/app");
+      expect(authReturnPath(`/${locale}/app/channels`)).toBe(locale === "es" ? "/es/app/channels" : "/app");
     }
     for (const path of [
       null,

@@ -1,3 +1,6 @@
+import { useLocale } from "../locale";
+import { roleplayInstructions } from "../../shared/i18n/es/copy/roleplay";
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import {
   pluginShortcutForEdit,
   pluginShortcutPatternForEdit,
@@ -45,6 +48,9 @@ export function RoleplayEditor({
   onClose: () => void;
   onSaved: (id: string) => void;
 }) {
+  const { locale } = useLocale();
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { data, request, refresh, notify } = useApp();
   const editSchema = roleplayInputSchema.safeExtend({
     shortcut: pluginShortcutForEdit(plugin === "new" ? undefined : plugin.shortcut),
@@ -53,11 +59,13 @@ export function RoleplayEditor({
     plugin === "new"
       ? {
           ...editSchema.parse({
-            name: "新角色",
-            shortcut: "角色",
+            name: copyText("新角色"),
+            userName: copyText("你"),
+            shortcut: copyText("角色"),
             modelId: data?.assistants.find(isChatModel)?.id || "unselected",
-            description: "待填写",
+            description: copyText("待填写"),
           }),
+          ...(locale === "es" ? { instructions: roleplayInstructions } : {}),
           name: "",
           description: "",
           modelId: data?.assistants.find(isChatModel)?.id || "",
@@ -78,15 +86,18 @@ export function RoleplayEditor({
   const textModels = data.assistants.filter(isChatModel);
   const model = textModels.find((a) => a.id === form.modelId);
   const choosePreset = (preset: RoleplayPreset) => {
+    const selected = createRoleplayFromPreset(preset, {
+      modelId: form.modelId,
+      enabled: form.enabled,
+      occupiedShortcuts: [
+        ...data.assistants.map((a) => a.shortcut || ""),
+        ...(data.plugins ?? []).map((p) => p.shortcut),
+      ],
+    });
     setForm(
-      createRoleplayFromPreset(preset, {
-        modelId: form.modelId,
-        enabled: form.enabled,
-        occupiedShortcuts: [
-          ...data.assistants.map((a) => a.shortcut || ""),
-          ...(data.plugins ?? []).map((p) => p.shortcut),
-        ],
-      }),
+      locale === "es"
+        ? { ...selected, userName: copyText("你"), instructions: roleplayInstructions }
+        : selected,
     );
     setTab("role");
     setWarnings([]);
@@ -115,8 +126,8 @@ export function RoleplayEditor({
       });
       if (!parsed.success)
         throw new Error(
-          "请检查角色设定：" +
-            parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("；"),
+          copyText("请检查角色设定：") +
+            parsed.error.issues.map((i) => `${i.path.join(".")}: ${errorText(i)}`).join("；"),
         );
       const saved = await request<RoleplayPlugin>(
         plugin === "new" ? "/plugins" : `/plugins/${plugin.id}`,
@@ -129,12 +140,12 @@ export function RoleplayEditor({
       onSaved(saved.id);
       notify(
         isLegacyNumericShortcut(form.shortcut)
-          ? "角色已保存；使用 /use 前请修改纯数字别名"
-          : `角色已保存，发送 /use ${form.shortcut} 开始聊天`,
+          ? copyText("角色已保存；使用 /use 前请修改纯数字别名")
+          : copyText("角色已保存，发送 /use {value0} 开始聊天", { value0: form.shortcut }),
       );
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -143,10 +154,10 @@ export function RoleplayEditor({
     setImporting(true);
     setError("");
     try {
-      if (selected.size > 5 * 1024 * 1024) throw new Error("角色卡文件不能超过 5 MB");
+      if (selected.size > 5 * 1024 * 1024) throw new Error(copyText("角色卡文件不能超过 5 MB"));
       const result = readCharacterCard(new Uint8Array(await selected.arrayBuffer()), {
         modelId: form.modelId || "unselected",
-        shortcut: keepingLegacyShortcut ? "角色" : form.shortcut || "角色",
+        shortcut: keepingLegacyShortcut ? copyText("角色") : form.shortcut || copyText("角色"),
       });
       setForm({
         ...result.input,
@@ -158,7 +169,7 @@ export function RoleplayEditor({
       setTab("role");
       setChoosingPreset(false);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setImporting(false);
       if (file.current) file.current.value = "";
@@ -174,7 +185,7 @@ export function RoleplayEditor({
       })),
     });
     if (!parsed.success) {
-      setError("请先填写角色名称、设定和模型，再导出角色卡");
+      setError(copyText("请先填写角色名称、设定和模型，再导出角色卡"));
       return;
     }
     download(`${form.name}.json`, JSON.stringify(exportCharacterCard(parsed.data), null, 2));
@@ -208,12 +219,16 @@ export function RoleplayEditor({
   return (
     <Modal
       title={
-        choosingPreset ? "选择你的聊天伙伴" : plugin === "new" ? "创建角色" : `编辑 ${plugin.name}`
+        choosingPreset
+          ? copyText("选择你的聊天伙伴")
+          : plugin === "new"
+            ? copyText("创建角色")
+            : copyText("编辑 {value0}", { value0: plugin.name })
       }
       description={
         choosingPreset
-          ? "六种性格，六个故事开头。接下来，由你续写。"
-          : "一个角色，一段属于你的故事。"
+          ? copyText("六种性格，六个故事开头。接下来，由你续写。")
+          : copyText("一个角色，一段属于你的故事。")
       }
       wide={choosingPreset}
       onClose={() => {
@@ -256,7 +271,8 @@ export function RoleplayEditor({
                     setChoosingPreset(true);
                   }}
                 >
-                  <LayoutGrid size={15} /> 选择内置角色
+                  <LayoutGrid size={15} />
+                  {copyText(" 选择内置角色")}
                 </button>
               )}
               <button
@@ -266,7 +282,7 @@ export function RoleplayEditor({
                 onClick={() => file.current?.click()}
               >
                 <Upload size={15} />
-                {importing ? "正在读取…" : "导入角色卡"}
+                {importing ? copyText("正在读取…") : copyText("导入角色卡")}
               </button>
               <button
                 type="button"
@@ -275,26 +291,32 @@ export function RoleplayEditor({
                 onClick={exportCard}
               >
                 <Download size={14} />
-                导出 V2 JSON
+                {copyText("导出 V2 JSON")}
               </button>
-              <small>V2 JSON / PNG · 文件 ≤ 5 MB，角色文字 ≤ 64 KB</small>
+              <small>{copyText("V2 JSON / PNG · 文件 ≤ 5 MB，角色文字 ≤ 64 KB")}</small>
             </div>
             {warnings.length > 0 && (
               <details className="role-import-note" open>
-                <summary>已读入角色卡，请检查后保存</summary>
+                <summary>{copyText("已读入角色卡，请检查后保存")}</summary>
                 <ul>
                   {warnings.map((w) => (
-                    <li key={w}>{w}</li>
+                    <li key={w}>{copyText(w)}</li>
                   ))}
                 </ul>
               </details>
             )}
-            <div className="role-tabs" role="tablist" aria-label="角色设置">
+            <div className="role-tabs" role="tablist" aria-label={copyText("角色设置")}>
               {(
                 [
-                  ["role", "角色", Theater],
-                  ["story", "故事与对话", BookOpen],
-                  ["lore", `世界书${form.lore.length ? ` · ${form.lore.length}` : ""}`, BookOpen],
+                  ["role", copyText("角色"), Theater],
+                  ["story", copyText("故事与对话"), BookOpen],
+                  [
+                    "lore",
+                    copyText("世界书{value0}", {
+                      value0: form.lore.length ? ` · ${form.lore.length}` : "",
+                    }),
+                    BookOpen,
+                  ],
                 ] as const
               ).map(([value, label, Icon]) => (
                 <button
@@ -322,20 +344,20 @@ export function RoleplayEditor({
                   <div className="role-avatar-picker">
                     <img
                       src={roleAvatarSource(form.avatar) || pluginIconSource("wechatai/roleplay")}
-                      alt="角色头像预览"
+                      alt={copyText("角色头像预览")}
                       width={64}
                       height={64}
                     />
                     <label>
-                      角色头像
+                      {copyText("角色头像")}
                       <select
                         value={form.avatar}
                         onChange={(e) => update("avatar", e.target.value as RoleAvatarId)}
                       >
-                        <option value="">默认图标</option>
+                        <option value="">{copyText("默认图标")}</option>
                         {roleAvatarChoices.map((a) => (
                           <option key={a.id} value={a.id}>
-                            {a.name}
+                            {copyText(a.name)}
                           </option>
                         ))}
                       </select>
@@ -343,41 +365,47 @@ export function RoleplayEditor({
                   </div>
                   <div className="form-grid">
                     <label>
-                      角色名称
+                      {copyText("角色名称")}
                       <input
                         maxLength={40}
                         value={form.name}
-                        placeholder="例如：林间旅人"
+                        placeholder={copyText("例如：林间旅人")}
                         onChange={(e) => update("name", e.target.value)}
                       />
                     </label>
                     <label>
-                      微信快捷名
+                      {copyText("微信快捷名")}
                       <input
                         maxLength={24}
                         pattern={pluginShortcutPatternForEdit(
                           plugin === "new" ? undefined : plugin.shortcut,
                         )}
-                        title={PLUGIN_SHORTCUT_HINT}
+                        title={copyText(PLUGIN_SHORTCUT_HINT)}
                         value={form.shortcut}
                         onChange={(e) => update("shortcut", e.target.value)}
                       />
                       <small>
                         {keepingLegacyShortcut
-                          ? LEGACY_NUMERIC_SHORTCUT_HINT
-                          : `别名不能是纯数字。发送 /use ${form.shortcut || "快捷名"} 进入角色；@${form.shortcut || "快捷名"} 单次对话`}
+                          ? copyText(LEGACY_NUMERIC_SHORTCUT_HINT)
+                          : copyText(
+                              "别名不能是纯数字。发送 /use {value0} 进入角色；@{value1} 单次对话",
+                              {
+                                value0: form.shortcut || copyText("快捷名"),
+                                value1: form.shortcut || copyText("快捷名"),
+                              },
+                            )}
                       </small>
                     </label>
                   </div>
                   <label>
-                    对话模型
+                    {copyText("对话模型")}
                     <select
                       value={form.modelId}
                       onChange={(e) => update("modelId", e.target.value)}
                     >
                       {!model && (
                         <option value={form.modelId} disabled>
-                          请选择文本模型
+                          {copyText("请选择文本模型")}
                         </option>
                       )}
                       {textModels.map((a) => (
@@ -387,32 +415,35 @@ export function RoleplayEditor({
                       ))}
                     </select>
                     <small>
-                      实际模型 ID：{model?.model || "未选择"}
-                      。角色设定替代该模型的系统提示词，沿用它的输入、输出和 credits 上限。
+                      {copyText("实际模型 ID：")}
+                      {model?.model || copyText("未选择")}
+                      {copyText(
+                        "。角色设定替代该模型的系统提示词，沿用它的输入、输出和 credits 上限。",
+                      )}
                     </small>
                   </label>
                   {field(
                     "description",
-                    "角色设定",
-                    "描述角色的身份、背景、说话方式，以及你希望 TA 如何与你相处。",
+                    copyText("角色设定"),
+                    copyText("描述角色的身份、背景、说话方式，以及你希望 TA 如何与你相处。"),
                     16000,
                     6,
                   )}
                   {field(
                     "personality",
-                    "性格补充（选填）",
-                    "例如：温和、好奇，偶尔有一点冷幽默。",
+                    copyText("性格补充（选填）"),
+                    copyText("例如：温和、好奇，偶尔有一点冷幽默。"),
                     6000,
                     3,
                   )}
                   <label>
-                    状态
+                    {copyText("状态")}
                     <select
                       value={String(form.enabled)}
                       onChange={(e) => update("enabled", e.target.value === "true")}
                     >
-                      <option value="true">启用</option>
-                      <option value="false">停用</option>
+                      <option value="true">{copyText("启用")}</option>
+                      <option value="false">{copyText("停用")}</option>
                     </select>
                   </label>
                 </>
@@ -420,7 +451,7 @@ export function RoleplayEditor({
               {tab === "story" && (
                 <>
                   <label>
-                    你在故事中的名字
+                    {copyText("你在故事中的名字")}
                     <input
                       maxLength={80}
                       value={form.userName}
@@ -429,44 +460,55 @@ export function RoleplayEditor({
                   </label>
                   {field(
                     "userPersona",
-                    "你的身份与关系（选填）",
-                    "例如：你是一位新来的旅行者，与角色初次相识。",
+                    copyText("你的身份与关系（选填）"),
+                    copyText("例如：你是一位新来的旅行者，与角色初次相识。"),
                     6000,
                   )}
                   {field(
                     "scenario",
-                    "故事场景（选填）",
-                    "这段故事从哪里开始？有什么需要记住的背景？",
+                    copyText("故事场景（选填）"),
+                    copyText("这段故事从哪里开始？有什么需要记住的背景？"),
                     8000,
                   )}
                   {field(
                     "firstMessage",
-                    "开场白（选填）",
-                    "角色的第一句话。新建故事时展示，返回已有会话不会重复。",
+                    copyText("开场白（选填）"),
+                    copyText("角色的第一句话。新建故事时展示，返回已有会话不会重复。"),
                     6000,
                   )}
                   <small>
-                    开场白本身不扣
-                    credits；作为后续请求的上下文时计入输入。网页建立会话会保存在记录中，微信通过
-                    /use 或 /new 新建故事时直接显示。
+                    {copyText(
+                      "开场白本身不扣 credits；作为后续请求的上下文时计入输入。网页建立会话会保存在记录中，微信通过 /use 或 /new 新建故事时直接显示。",
+                    )}
                   </small>
                   {field(
                     "examples",
-                    "对话示例（选填）",
-                    "{{user}}：今晚要去哪里？\n{{char}}：沿着河边走吧，灯刚刚亮起来。",
+                    copyText("对话示例（选填）"),
+                    copyText("{{user}}：今晚要去哪里？\n{{char}}：沿着河边走吧，灯刚刚亮起来。"),
                     16000,
                   )}
                   <details className="role-advanced">
-                    <summary>更多角色指令</summary>
-                    {field("instructions", "角色指令", "额外的叙事方式、语气或对话规则。", 8000)}
+                    <summary>{copyText("更多角色指令")}</summary>
+                    {field(
+                      "instructions",
+                      copyText("角色指令"),
+                      copyText("额外的叙事方式、语气或对话规则。"),
+                      8000,
+                    )}
                     {field(
                       "postHistoryInstructions",
-                      "回复要求",
-                      "例如：每次回复简短，不替用户说话。V2 的 post_history_instructions 在此作为系统提示的末尾要求。",
+                      copyText("回复要求"),
+                      copyText(
+                        "例如：每次回复简短，不替用户说话。V2 的 post_history_instructions 在此作为系统提示的末尾要求。",
+                      ),
                       4000,
                     )}
                     <small>
-                      支持 {"{{char}}"} 和 {"{{user}}"} 替换角色与用户名字。其他宏只作为文字。
+                      {copyText("支持 ")}
+                      {"{{char}}"}
+                      {copyText(" 和 ")}
+                      {"{{user}}"}
+                      {copyText(" 替换角色与用户名字。其他宏只作为文字。")}
                     </small>
                   </details>
                 </>
@@ -476,12 +518,13 @@ export function RoleplayEditor({
                   <div className="role-lore-intro">
                     <BookOpen size={22} />
                     <p>
-                      让设定在需要时出现。匹配当前消息与最近 3
-                      条对话的关键词，优先带入高优先级条目。
+                      {copyText(
+                        "让设定在需要时出现。匹配当前消息与最近 3 条对话的关键词，优先带入高优先级条目。",
+                      )}
                     </p>
                   </div>
                   <label>
-                    世界书输入预算（tokens）
+                    {copyText("世界书输入预算（tokens）")}
                     <input
                       type="number"
                       min={0}
@@ -491,31 +534,34 @@ export function RoleplayEditor({
                       onChange={(e) => update("loreTokenBudget", Number(e.target.value))}
                     />
                     <small>
-                      默认 1,000，最多 4,000；0
-                      表示不带入。超出世界书预算或当前模型输入空间的条目会跳过，已带入的文字计入
-                      credits。
+                      {copyText(
+                        "默认 1,000，最多 4,000；0 表示不带入。超出世界书预算或当前模型输入空间的条目会跳过，已带入的文字计入 credits。",
+                      )}
                     </small>
                   </label>
                   {form.lore.length === 0 && (
                     <div className="role-lore-empty">
-                      还没有世界书条目。角色本身的设定会一直保留，无需在这里重复。
+                      {copyText("还没有世界书条目。角色本身的设定会一直保留，无需在这里重复。")}
                     </div>
                   )}
                   {form.lore.map((entry, i) => (
                     <fieldset key={i} className="role-lore-entry">
-                      <legend>条目 {i + 1}</legend>
+                      <legend>
+                        {copyText("条目 ")}
+                        {i + 1}
+                      </legend>
                       <div className="role-lore-heading">
                         <input
-                          aria-label={`条目 ${i + 1} 名称`}
+                          aria-label={copyText("条目 {value0} 名称", { value0: i + 1 })}
                           maxLength={100}
-                          placeholder="名称，如：月光酒馆"
+                          placeholder={copyText("名称，如：月光酒馆")}
                           value={entry.name}
                           onChange={(e) => updateLore(i, { name: e.target.value })}
                         />
                         <button
                           type="button"
                           className="icon-button danger-text"
-                          aria-label={`删除条目 ${i + 1}`}
+                          aria-label={copyText("删除条目 {value0}", { value0: i + 1 })}
                           onClick={() =>
                             update(
                               "lore",
@@ -527,16 +573,16 @@ export function RoleplayEditor({
                         </button>
                       </div>
                       <label>
-                        触发关键词
+                        {copyText("触发关键词")}
                         <input
                           value={entry.keys.join(",")}
                           maxLength={3030}
-                          placeholder="酒馆, 月光酒馆（用逗号分隔）"
+                          placeholder={copyText("酒馆, 月光酒馆（用逗号分隔）")}
                           onChange={(e) => updateLore(i, { keys: e.target.value.split(/[,，]/) })}
                         />
                       </label>
                       <label>
-                        补充关键词（选填，同时命中其中一个）
+                        {copyText("补充关键词（选填，同时命中其中一个）")}
                         <input
                           value={entry.secondaryKeys.join(",")}
                           maxLength={3030}
@@ -546,7 +592,7 @@ export function RoleplayEditor({
                         />
                       </label>
                       <label>
-                        设定内容
+                        {copyText("设定内容")}
                         <textarea
                           rows={3}
                           maxLength={6000}
@@ -556,7 +602,7 @@ export function RoleplayEditor({
                       </label>
                       <div className="form-grid">
                         <label>
-                          优先级
+                          {copyText("优先级")}
                           <input
                             type="number"
                             min={-10000}
@@ -566,15 +612,15 @@ export function RoleplayEditor({
                           />
                         </label>
                         <label>
-                          触发方式
+                          {copyText("触发方式")}
                           <select
                             value={entry.constant ? "always" : "keywords"}
                             onChange={(e) =>
                               updateLore(i, { constant: e.target.value === "always" })
                             }
                           >
-                            <option value="keywords">关键词触发</option>
-                            <option value="always">始终带入（仍受预算限制）</option>
+                            <option value="keywords">{copyText("关键词触发")}</option>
+                            <option value="always">{copyText("始终带入（仍受预算限制）")}</option>
                           </select>
                         </label>
                       </div>
@@ -585,7 +631,7 @@ export function RoleplayEditor({
                             checked={entry.enabled}
                             onChange={(e) => updateLore(i, { enabled: e.target.checked })}
                           />
-                          启用
+                          {copyText("启用")}
                         </label>
                         <label>
                           <input
@@ -593,7 +639,7 @@ export function RoleplayEditor({
                             checked={entry.caseSensitive}
                             onChange={(e) => updateLore(i, { caseSensitive: e.target.checked })}
                           />
-                          区分英文大小写
+                          {copyText("区分英文大小写")}
                         </label>
                       </div>
                     </fieldset>
@@ -619,24 +665,26 @@ export function RoleplayEditor({
                     }
                   >
                     <Plus size={15} />
-                    添加世界书条目
+                    {copyText("添加世界书条目")}
                   </button>
                 </>
               )}
             </div>
             <p className="role-footnote">
-              每个角色拥有独立会话，/new
-              开始新故事。长对话自动整理剧情摘要，可在「会话记录」中查看和修正。设定、命中的世界书、摘要和历史计入输入；内部整理不重复收
-              credits。
+              {copyText(
+                "每个角色拥有独立会话，/new 开始新故事。长对话自动整理剧情摘要，可在「会话记录」中查看和修正。设定、命中的世界书、摘要和历史计入输入；内部整理不重复收 credits。",
+              )}
             </p>
             {form.sourceCard && (
               <button
                 type="button"
                 className="text-link"
-                onClick={() => download(`${form.name || "角色"}-original.json`, form.sourceCard)}
+                onClick={() =>
+                  download(`${form.name || copyText("角色")}-original.json`, form.sourceCard)
+                }
               >
                 <Download size={14} />
-                下载原始卡片 JSON（含保留的扩展）
+                {copyText("下载原始卡片 JSON（含保留的扩展）")}
               </button>
             )}
             {error && (
@@ -652,10 +700,10 @@ export function RoleplayEditor({
               disabled={busy || importing}
               onClick={onClose}
             >
-              取消
+              {copyText("取消")}
             </button>
             <button className="button" disabled={busy || importing || !model}>
-              {busy ? "正在保存…" : "保存角色"}
+              {busy ? copyText("正在保存…") : copyText("保存角色")}
               <Theater size={16} />
             </button>
           </div>

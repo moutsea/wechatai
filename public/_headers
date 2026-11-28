@@ -34,3 +34,6 @@ https://:version.:subdomain.workers.dev/*
 /downloads/*
   Cache-Control: no-cache
   X-Content-Type-Options: nosniff
+
+/es/app/*
+  X-Robots-Tag: noindex

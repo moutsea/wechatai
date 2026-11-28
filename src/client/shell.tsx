@@ -61,10 +61,12 @@ export function Shell({
   const [busy, setBusy] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const channelAlias = locale === "es" && location.pathname === `${base}/assistants`;
+  const activePath = channelAlias ? `${base}/channels` : location.pathname;
   const page =
     navigation.find((i) =>
       i.path
-        ? location.pathname === base + i.path || location.pathname.startsWith(`${base}${i.path}/`)
+        ? activePath === base + i.path || activePath.startsWith(`${base}${i.path}/`)
         : location.pathname === overview,
     ) || items[0];
   const clear = async () => {
@@ -106,7 +108,7 @@ export function Shell({
               to={item.path ? base + item.path : overview}
               end={!item.path}
               onClick={() => setMobile(false)}
-              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+              className={({ isActive }) => `nav-item ${isActive || (channelAlias && item.path === "/channels") ? "active" : ""}`}
             >
               <item.icon size={19} />
               <span>{copy[item.label]}</span>

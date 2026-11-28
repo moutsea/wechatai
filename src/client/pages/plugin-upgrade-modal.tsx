@@ -1,3 +1,5 @@
+import { rememberBillingReturn } from "../billing-return";
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
@@ -20,6 +22,8 @@ export function PluginUpgradeModal({
   target: PluginUpgradeTarget;
   onClose: () => void;
 }) {
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { data, request, base, user } = useApp();
   const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
@@ -44,7 +48,7 @@ export function PluginUpgradeModal({
         setSubscription(nextSubscription);
       })
       .catch((e: Error) => {
-        if (!controller.signal.aborted) setError(e.message);
+        if (!controller.signal.aborted) setError(errorText(e));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -72,22 +76,26 @@ export function PluginUpgradeModal({
       );
       const url = new URL(result.url);
       if (url.protocol !== "https:" || url.hostname !== "checkout.stripe.com")
-        throw new Error("支付链接无效，请重试。");
+        throw new Error(copyText("支付链接无效，请重试。"));
       rememberPluginUpgrade(user.email, target);
+      rememberBillingReturn(user.email, `${base}/billing${window.location.search}${window.location.hash}`);
       window.location.assign(result.url);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy("");
     }
   }
   return (
     <Modal
-      title={cloud ? "开通 Plus，解锁小薇" : "开通 Plus，配置更多插件"}
+      title={cloud ? copyText("开通 Plus，解锁小薇") : copyText("开通 Plus，配置更多插件")}
       description={
         cloud
-          ? "小薇是 Plus 专属云端助手，在微信交代任务、处理文件和生成文档。"
-          : `Free 最多配置 ${PLUGIN_LIMITS.free} 个插件，你已使用当前名额。Plus 可配置不限数量的插件。`
+          ? copyText("小薇是 Plus 专属云端助手，在微信交代任务、处理文件和生成文档。")
+          : copyText(
+              "Free 最多配置 {value0} 个插件，你已使用当前名额。Plus 可配置不限数量的插件。",
+              { value0: PLUGIN_LIMITS.free },
+            )
       }
       onClose={() => {
         if (!busy) onClose();
@@ -96,16 +104,16 @@ export function PluginUpgradeModal({
     >
       <div className="plugin-upgrade-body">
         <p className="plugin-upgrade-note">
-          Plus 不包含模型 API 费用，需另付服务商；使用小薇需先配置自己的模型 API Key。
+          {copyText("Plus 不包含模型 API 费用，需另付服务商；使用小薇需先配置自己的模型 API Key。")}
         </p>
         <ul className="plugin-upgrade-features">
           {[
-            `每天赠送 ${data.wallet.dailyGrants.plus} credits`,
-            `最多 ${WECHAT_LINK_LIMITS.plus} 个微信连接`,
-            "插件配置数量不限",
-            "小薇 AI 云端助手",
-            "图片与文件输入",
-            "网页查看聊天记录",
+            copyText("每天赠送 {value0} credits", { value0: data.wallet.dailyGrants.plus }),
+            copyText("最多 {value0} 个微信连接", { value0: WECHAT_LINK_LIMITS.plus }),
+            copyText("插件配置数量不限"),
+            copyText("小薇 AI 云端助手"),
+            copyText("图片与文件输入"),
+            copyText("网页查看聊天记录"),
           ].map((feature) => (
             <li key={feature}>
               <Check size={16} aria-hidden="true" /> {feature}
@@ -114,7 +122,7 @@ export function PluginUpgradeModal({
         </ul>
         {catalog?.mode === "test" && (
           <p className="form-hint" role="status">
-            测试模式 · 支付仅用于测试，不会产生真实扣款。
+            {copyText("测试模式 · 支付仅用于测试，不会产生真实扣款。")}
           </p>
         )}
         <div className="plugin-upgrade-plans">
@@ -125,22 +133,25 @@ export function PluginUpgradeModal({
               <article
                 key={preset.id}
                 className={`plugin-upgrade-plan${annual ? " annual" : ""}`}
-                aria-label={preset.name}
+                aria-label={copyText(preset.name)}
               >
-                <span className="plugin-upgrade-badge">{annual ? "年付更划算" : "灵活选择"}</span>
-                <h3>{preset.name}</h3>
+                <span className="plugin-upgrade-badge">
+                  {annual ? copyText("年付更划算") : copyText("灵活选择")}
+                </span>
+                <h3>{copyText(preset.name)}</h3>
                 <p className="plugin-upgrade-price">
                   <strong>¥{offer?.price ?? preset.amount / 100}</strong>
-                  <span>/ {annual ? "年" : "月"}</span>
+                  <span>/ {annual ? copyText("年") : copyText("月")}</span>
                 </p>
-                <p>单次购买，到期手动续费</p>
+                <p>{copyText("单次购买，到期手动续费")}</p>
                 {recurring ? (
                   <Link
                     className="button secondary"
                     to={`${base}/billing`}
                     onClick={() => rememberPluginUpgrade(user.email, target)}
                   >
-                    管理已有订阅 <ArrowRight size={15} aria-hidden="true" />
+                    {copyText("管理已有订阅 ")}
+                    <ArrowRight size={15} aria-hidden="true" />
                   </Link>
                 ) : (
                   <button
@@ -150,18 +161,19 @@ export function PluginUpgradeModal({
                   >
                     {busy === preset.id ? (
                       <>
-                        <Loader2 size={16} className="spin" aria-hidden="true" /> 正在跳转…
+                        <Loader2 size={16} className="spin" aria-hidden="true" />
+                        {copyText(" 正在跳转…")}
                       </>
                     ) : loading ? (
-                      "正在加载…"
+                      copyText("正在加载…")
                     ) : offer?.enabled ? (
                       annual ? (
-                        "开通年付 Plus"
+                        copyText("开通年付 Plus")
                       ) : (
-                        "开通月付 Plus"
+                        copyText("开通月付 Plus")
                       )
                     ) : (
-                      "暂未开放购买"
+                      copyText("暂未开放购买")
                     )}
                   </button>
                 )}
@@ -174,23 +186,23 @@ export function PluginUpgradeModal({
             {error}{" "}
             {!catalog && (
               <button className="text-link" onClick={() => setRetry((value) => value + 1)}>
-                重新加载
+                {copyText("重新加载")}
               </button>
             )}
           </p>
         )}
         <p className="plugin-upgrade-note">
-          月付与年付权益相同，不自动续费。小薇执行次数与可用状态以插件页为准。
+          {copyText("月付与年付权益相同，不自动续费。小薇执行次数与可用状态以插件页为准。")}
         </p>
         {!cloud && (
           <p className="plugin-upgrade-note">
-            也可以删除不用的插件配置，释放 Free 名额；仅停用不会释放名额。
+            {copyText("也可以删除不用的插件配置，释放 Free 名额；仅停用不会释放名额。")}
           </p>
         )}
       </div>
       <div className="modal-actions">
         <button className="button secondary" disabled={Boolean(busy)} onClick={onClose}>
-          暂时不用
+          {copyText("暂时不用")}
         </button>
         <Link
           className="text-link"
@@ -201,7 +213,8 @@ export function PluginUpgradeModal({
             else rememberPluginUpgrade(user.email, target);
           }}
         >
-          查看全部会员权益 <ArrowRight size={15} aria-hidden="true" />
+          {copyText("查看全部会员权益 ")}
+          <ArrowRight size={15} aria-hidden="true" />
         </Link>
       </div>
     </Modal>

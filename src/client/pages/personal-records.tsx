@@ -1,3 +1,5 @@
+import { useLocale } from "../locale";
+import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
 import { pluginAvailable } from "../../shared/plugin-access";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -59,6 +61,7 @@ export function PersonalRecords({
   plugin: PersonalAssistantPlugin;
   onClose: () => void;
 }) {
+  const errorText = useWorkspaceError();
   const { data, request, notify } = useApp();
   const [connectionId, setConnectionId] = useState(
     plugin.recordScope === "connection" && data?.connections.length
@@ -73,7 +76,7 @@ export function PersonalRecords({
         if (!cancelled) setSavedScopes(scopes);
       })
       .catch((error) => {
-        if (!cancelled) notify(error.message, true);
+        if (!cancelled) notify(errorText(error), true);
       });
     return () => {
       cancelled = true;
@@ -104,6 +107,9 @@ function ScopedPersonalRecords({
   onConnectionChange: (id: string) => void;
   savedScopes: string[];
 }) {
+  const { locale } = useLocale();
+  const errorText = useWorkspaceError();
+  const copyText = useWorkspaceText();
   const { data, request, notify } = useApp();
   const [kind, setKind] = useState<PersonalRecordInput["kind"]>("note"),
     [query, setQuery] = useState(""),
@@ -158,7 +164,7 @@ function ScopedPersonalRecords({
         if (id === sequence.current) setPage(value);
       })
       .catch((e) => {
-        if (id === sequence.current) setError(e.message);
+        if (id === sequence.current) setError(errorText(e));
       })
       .finally(() => {
         if (id === sequence.current) setLoading(false);
@@ -180,7 +186,8 @@ function ScopedPersonalRecords({
     setError("");
     try {
       const parsed = personalRecordInputSchema.safeParse(form);
-      if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "请检查填写内容");
+      if (!parsed.success)
+        throw new Error(locale === "es" ? copyText("请检查填写内容") : parsed.error.issues[0]?.message ?? copyText("请检查填写内容"));
       const record = parsed.data;
       await request(
         `/plugins/${plugin.id}/records`,
@@ -193,9 +200,9 @@ function ScopedPersonalRecords({
       );
       setEditing(null);
       setRefresh((n) => n + 1);
-      notify("记录已保存");
+      notify(copyText("记录已保存"));
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -214,7 +221,7 @@ function ScopedPersonalRecords({
       );
       setRefresh((n) => n + 1);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -230,9 +237,9 @@ function ScopedPersonalRecords({
       setDeleting(null);
       setOffset(0);
       setRefresh((n) => n + 1);
-      notify("记录已删除");
+      notify(copyText("记录已删除"));
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -241,7 +248,8 @@ function ScopedPersonalRecords({
     setBusy(true);
     setError("");
     try {
-      if (page.total > 1000) throw new Error("一次最多导出 1,000 条，请按日期或关键词缩小范围");
+      if (page.total > 1000)
+        throw new Error(copyText("一次最多导出 1,000 条，请按日期或关键词缩小范围"));
       const records: PersonalRecord[] = [];
       for (let at = 0; at < page.total; at += 50) {
         const result = await request<RecordPage>(
@@ -260,35 +268,39 @@ function ScopedPersonalRecords({
       }
       const rows = [
         [
-          "类型",
-          "标题",
-          "内容",
-          "日期",
-          "分类",
-          "收支",
-          "币种",
-          "金额",
-          "完成",
-          "提醒状态",
-          "提醒时间（北京时间）",
-          "重复",
+          copyText("类型"),
+          copyText("标题"),
+          copyText("内容"),
+          copyText("日期"),
+          copyText("分类"),
+          copyText("收支"),
+          copyText("币种"),
+          copyText("金额"),
+          copyText("完成"),
+          copyText("提醒状态"),
+          copyText("提醒时间（北京时间）"),
+          copyText("重复"),
         ],
         ...records.map((r) => [
-          r.reminderType === "daily_tasks" ? "每日待办提醒" : labels[r.kind],
+          r.reminderType === "daily_tasks" ? copyText("每日待办提醒") : copyText(labels[r.kind]),
           r.title,
           r.content,
           r.date,
           r.category,
-          r.kind === "entry" ? (r.direction === "income" ? "收入" : "支出") : "",
+          r.kind === "entry"
+            ? r.direction === "income"
+              ? copyText("收入")
+              : copyText("支出")
+            : "",
           r.kind === "entry" ? r.currency : "",
           r.amount ?? "",
-          r.kind === "task" ? (r.completed ? "已完成" : "未完成") : "",
+          r.kind === "task" ? (r.completed ? copyText("已完成") : copyText("未完成")) : "",
           r.kind === "reminder"
             ? !r.reminderEnabled
-              ? "已取消"
-              : (statuses[r.reminderState ?? ""] ?? "等待设置")
+              ? copyText("已取消")
+              : copyText(statuses[r.reminderState ?? ""] ?? "等待设置")
             : "",
-          r.remindAt ? beijingTime(Date.parse(r.remindAt)) : "",
+          r.remindAt ? beijingTime(Date.parse(r.remindAt), locale === "es" ? "es" : "zh-CN") : "",
           r.repeat,
         ]),
       ];
@@ -299,11 +311,14 @@ function ScopedPersonalRecords({
       );
       const a = document.createElement("a");
       a.href = url;
-      a.download = `个人助理-${labels[kind]}-${beijingDate()}.csv`;
+      a.download = copyText("个人助理-{value0}-{value1}.csv", {
+        value0: copyText(labels[kind]),
+        value1: beijingDate(),
+      });
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      setError((e as Error).message);
+      setError(errorText(e));
     } finally {
       setBusy(false);
     }
@@ -311,11 +326,11 @@ function ScopedPersonalRecords({
   return (
     <Modal
       wide
-      title={`${plugin.name} · 我的记录`}
+      title={copyText("{value0} · 我的记录", { value0: plugin.name })}
       description={
         plugin.recordScope === "connection"
-          ? "微信按链接使用各自的记录。时间按北京时间，账目按币种分别统计。"
-          : "微信使用共享记录。时间按北京时间，账目按币种分别统计。"
+          ? copyText("微信按链接使用各自的记录。时间按北京时间，账目按币种分别统计。")
+          : copyText("微信使用共享记录。时间按北京时间，账目按币种分别统计。")
       }
       onClose={() => {
         if (!busy) onClose();
@@ -323,36 +338,39 @@ function ScopedPersonalRecords({
     >
       <div className="personal-workspace" ref={workspace}>
         <label className="personal-scope-selector">
-          记录范围
+          {copyText("记录范围")}
           <select
-            aria-label="记录范围"
+            aria-label={copyText("记录范围")}
             value={connectionId}
             disabled={busy}
             onChange={(e) => onConnectionChange(e.target.value)}
           >
             <option value="">
-              共享记录{plugin.recordScope === "connection" ? "（当前微信不使用）" : ""}
+              {copyText("共享记录")}
+              {plugin.recordScope === "connection" ? copyText("（当前微信不使用）") : ""}
             </option>
             {data?.connections.map((link) => (
               <option key={link.id} value={link.id}>
-                {link.name} · 独立记录
+                {link.name}
+                {copyText(" · 独立记录")}
               </option>
             ))}
             {savedScopes
               .filter((id) => id && !data?.connections.some((link) => link.id === id))
               .map((id) => (
                 <option key={id} value={id}>
-                  已删除的微信链接 · {id.slice(0, 8)}
+                  {copyText("已删除的微信链接 · ")}
+                  {id.slice(0, 8)}
                 </option>
               ))}
           </select>
         </label>
         {(plugin.recordScope === "connection") !== !!connectionId && (
           <p className="personal-section-hint">
-            此范围的记录已保留，微信当前不会读取。已有提醒仍会按原接收链接发送。
+            {copyText("此范围的记录已保留，微信当前不会读取。已有提醒仍会按原接收链接发送。")}
           </p>
         )}
-        <nav className="personal-tabs" aria-label="记录类型">
+        <nav className="personal-tabs" aria-label={copyText("记录类型")}>
           {(
             [
               ["note", FileText],
@@ -372,16 +390,20 @@ function ScopedPersonalRecords({
               disabled={busy}
             >
               <Icon size={17} />
-              {value === "note" ? "笔记" : value === "entry" ? "账本" : "提醒"}
+              {value === "note"
+                ? copyText("笔记")
+                : value === "entry"
+                  ? copyText("账本")
+                  : copyText("提醒")}
             </button>
           ))}
         </nav>
         {(kind === "note" || kind === "task") && (
-          <div className="personal-note-types" role="group" aria-label="笔记类型">
+          <div className="personal-note-types" role="group" aria-label={copyText("笔记类型")}>
             {(
               [
-                ["note", "普通笔记"],
-                ["task", "待办清单"],
+                ["note", copyText("普通笔记")],
+                ["task", copyText("待办清单")],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -403,12 +425,14 @@ function ScopedPersonalRecords({
         )}
         <p className="personal-section-hint">
           {kind === "task"
-            ? "按计划日期安排待办，完成后勾选。开启每日提醒，就能在微信收到当天未完成的清单。"
+            ? copyText(
+                "按计划日期安排待办，完成后勾选。开启每日提醒，就能在微信收到当天未完成的清单。",
+              )
             : kind === "reminder"
-              ? "到点通过微信通知你，提醒不会加入待办清单。"
+              ? copyText("到点通过微信通知你，提醒不会加入待办清单。")
               : kind === "note"
-                ? "随手记下想法和信息，也可以切换到待办清单。"
-                : "按币种分别统计收入和支出。"}
+                ? copyText("随手记下想法和信息，也可以切换到待办清单。")
+                : copyText("按币种分别统计收入和支出。")}
         </p>
         {kind === "task" && !editing && (
           <>
@@ -421,7 +445,7 @@ function ScopedPersonalRecords({
               refreshKey={refresh}
               onSaved={() => setRefresh((n) => n + 1)}
             />
-            <div className="personal-task-filter" role="group" aria-label="待办范围">
+            <div className="personal-task-filter" role="group" aria-label={copyText("待办范围")}>
               <button
                 aria-pressed={todayOnly}
                 disabled={busy}
@@ -431,7 +455,7 @@ function ScopedPersonalRecords({
                   setDeleting(null);
                 }}
               >
-                今日待办
+                {copyText("今日待办")}
               </button>
               <button
                 aria-pressed={!todayOnly}
@@ -442,20 +466,25 @@ function ScopedPersonalRecords({
                   setDeleting(null);
                 }}
               >
-                全部待办
+                {copyText("全部待办")}
               </button>
-              {todayOnly && <span>{today} · 北京时间</span>}
+              {todayOnly && (
+                <span>
+                  {today}
+                  {copyText(" · 北京时间")}
+                </span>
+              )}
             </div>
           </>
         )}
         {editing ? (
           <form className="personal-record-form" onSubmit={save}>
             <h3>
-              {editing === "new" ? "新增" : "编辑"}
-              {labels[form.kind]}
+              {editing === "new" ? copyText("新增") : copyText("编辑")}
+              {copyText(labels[form.kind])}
             </h3>
             <label>
-              标题
+              {copyText("标题")}
               <input
                 required
                 maxLength={160}
@@ -463,18 +492,18 @@ function ScopedPersonalRecords({
                 onChange={(e) => update("title", e.target.value)}
                 placeholder={
                   kind === "entry"
-                    ? "例如：午饭"
+                    ? copyText("例如：午饭")
                     : kind === "task"
-                      ? "例如：寄快递"
+                      ? copyText("例如：寄快递")
                       : kind === "reminder"
-                        ? "例如：喝水"
-                        : "给这条笔记起个名字"
+                        ? copyText("例如：喝水")
+                        : copyText("给这条笔记起个名字")
                 }
               />
             </label>
             <div className="form-grid">
               <label>
-                {kind === "task" ? "计划日期" : "日期"}
+                {kind === "task" ? copyText("计划日期") : copyText("日期")}
                 <input
                   type="date"
                   required
@@ -483,29 +512,29 @@ function ScopedPersonalRecords({
                 />
               </label>
               <label>
-                分类
+                {copyText("分类")}
                 <input
                   maxLength={40}
                   value={form.category}
                   onChange={(e) => update("category", e.target.value)}
-                  placeholder="可选"
+                  placeholder={copyText("可选")}
                 />
               </label>
             </div>
             {kind === "entry" && (
               <div className="personal-money-fields">
                 <label>
-                  收支
+                  {copyText("收支")}
                   <select
                     value={form.direction}
                     onChange={(e) => update("direction", e.target.value as "income" | "expense")}
                   >
-                    <option value="expense">支出</option>
-                    <option value="income">收入</option>
+                    <option value="expense">{copyText("支出")}</option>
+                    <option value="income">{copyText("收入")}</option>
                   </select>
                 </label>
                 <label>
-                  币种
+                  {copyText("币种")}
                   <select
                     value={form.currency}
                     onChange={(e) =>
@@ -518,7 +547,7 @@ function ScopedPersonalRecords({
                   </select>
                 </label>
                 <label>
-                  金额
+                  {copyText("金额")}
                   <input
                     required
                     inputMode="decimal"
@@ -530,7 +559,7 @@ function ScopedPersonalRecords({
               </div>
             )}
             <label>
-              {kind === "note" ? "笔记内容" : "备注"}
+              {kind === "note" ? copyText("笔记内容") : copyText("备注")}
               <textarea
                 rows={kind === "note" ? 6 : 3}
                 maxLength={6000}
@@ -545,19 +574,19 @@ function ScopedPersonalRecords({
                   checked={form.completed}
                   onChange={(e) => update("completed", e.target.checked)}
                 />
-                已完成
+                {copyText("已完成")}
               </label>
             )}
             {kind === "reminder" && (
               <>
                 <p className="form-note">
-                  提醒依赖有效微信连接及最近互动后的 24 小时回复窗口。请定期向 ClawBot
-                  发消息；单次提醒超过预定时间 24
-                  小时停止补发，每日待办跨天不补发，重复提醒跳过错过的时间。
+                  {copyText(
+                    "提醒依赖有效微信连接及最近互动后的 24 小时回复窗口。请定期向 ClawBot 发消息；单次提醒超过预定时间 24 小时停止补发，每日待办跨天不补发，重复提醒跳过错过的时间。",
+                  )}
                 </p>
                 <div className="form-grid">
                   <label>
-                    提醒时间（北京时间）
+                    {copyText("提醒时间（北京时间）")}
                     <input
                       type="datetime-local"
                       required
@@ -570,7 +599,7 @@ function ScopedPersonalRecords({
                     />
                   </label>
                   <label>
-                    重复
+                    {copyText("重复")}
                     <select
                       disabled={!form.remindAt || form.reminderType === "daily_tasks"}
                       value={form.repeat}
@@ -578,9 +607,9 @@ function ScopedPersonalRecords({
                         update("repeat", e.target.value as PersonalRecordInput["repeat"])
                       }
                     >
-                      <option value="none">一次性</option>
-                      <option value="daily">每天</option>
-                      <option value="weekly">每周</option>
+                      <option value="none">{copyText("一次性")}</option>
+                      <option value="daily">{copyText("每天")}</option>
+                      <option value="weekly">{copyText("每周")}</option>
                     </select>
                   </label>
                 </div>
@@ -590,11 +619,13 @@ function ScopedPersonalRecords({
                     checked={form.reminderEnabled}
                     onChange={(e) => update("reminderEnabled", e.target.checked)}
                   />
-                  启用提醒（取消勾选后保留记录，停止发送）
+                  {copyText("启用提醒（取消勾选后保留记录，停止发送）")}
                 </label>
                 {form.reminderType === "daily_tasks" && (
                   <p className="form-hint">
-                    这是每日今日待办汇总，到点读取当天最新的未完成待办；标题和备注不会作为提醒正文发送。
+                    {copyText(
+                      "这是每日今日待办汇总，到点读取当天最新的未完成待办；标题和备注不会作为提醒正文发送。",
+                    )}
                   </p>
                 )}
               </>
@@ -611,10 +642,10 @@ function ScopedPersonalRecords({
                 disabled={busy}
                 onClick={() => setEditing(null)}
               >
-                返回列表
+                {copyText("返回列表")}
               </button>
               <button className="button" disabled={busy || !writable}>
-                {busy ? "正在保存…" : "保存记录"}
+                {busy ? copyText("正在保存…") : copyText("保存记录")}
               </button>
             </div>
           </form>
@@ -630,13 +661,13 @@ function ScopedPersonalRecords({
               >
                 <Search size={16} />
                 <input
-                  aria-label="搜索记录"
-                  placeholder="搜索标题、内容或分类"
+                  aria-label={copyText("搜索记录")}
+                  placeholder={copyText("搜索标题、内容或分类")}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
                 <button type="submit" className="text-link">
-                  搜索
+                  {copyText("搜索")}
                 </button>
               </form>
               {kind === "reminder" && (
@@ -645,7 +676,7 @@ function ScopedPersonalRecords({
                   disabled={busy || loading}
                   onClick={() => setRefresh((n) => n + 1)}
                 >
-                  刷新状态
+                  {copyText("刷新状态")}
                 </button>
               )}
               <button
@@ -654,7 +685,7 @@ function ScopedPersonalRecords({
                 disabled={busy || loading || !page.total}
               >
                 <Download size={15} />
-                导出
+                {copyText("导出")}
               </button>
               <button
                 className="button small"
@@ -662,17 +693,22 @@ function ScopedPersonalRecords({
                 onClick={() => open("new")}
               >
                 <Plus size={15} />
-                新增{labels[kind]}
+                {copyText("新增")}
+                {copyText(labels[kind])}
               </button>
             </div>
             {kind === "task" && todayOnly ? (
-              <p className="personal-section-hint">共 {page.total} 项今日待办（含已完成）</p>
+              <p className="personal-section-hint">
+                {copyText("共 ")}
+                {page.total}
+                {copyText(" 项今日待办（含已完成）")}
+              </p>
             ) : (
               <div className="personal-dates">
                 <label>
-                  开始
+                  {copyText("开始")}
                   <input
-                    aria-label="开始日期"
+                    aria-label={copyText("开始日期")}
                     type="date"
                     value={queryFrom}
                     disabled={kind === "task" && todayOnly}
@@ -684,9 +720,9 @@ function ScopedPersonalRecords({
                 </label>
                 <span>—</span>
                 <label>
-                  结束
+                  {copyText("结束")}
                   <input
-                    aria-label="结束日期"
+                    aria-label={copyText("结束日期")}
                     type="date"
                     value={queryTo}
                     disabled={kind === "task" && todayOnly}
@@ -696,7 +732,10 @@ function ScopedPersonalRecords({
                     }}
                   />
                 </label>
-                <span>{page.total} 条记录</span>
+                <span>
+                  {page.total}
+                  {copyText(" 条记录")}
+                </span>
               </div>
             )}
             {kind === "entry" &&
@@ -704,16 +743,19 @@ function ScopedPersonalRecords({
                 <div className="personal-totals" key={t.currency}>
                   <span>
                     {t.currency}
-                    <small>当前筛选范围</small>
+                    <small>{copyText("当前筛选范围")}</small>
                   </span>
                   <span>
-                    收入<strong className="income">{t.income}</strong>
+                    {copyText("收入")}
+                    <strong className="income">{t.income}</strong>
                   </span>
                   <span>
-                    支出<strong>{t.expense}</strong>
+                    {copyText("支出")}
+                    <strong>{t.expense}</strong>
                   </span>
                   <span>
-                    结余<strong>{t.net}</strong>
+                    {copyText("结余")}
+                    <strong>{t.net}</strong>
                   </span>
                 </div>
               ))}
@@ -725,38 +767,44 @@ function ScopedPersonalRecords({
             {deleting && (
               <div className="personal-delete">
                 <span>
-                  删除「{deleting.title}」？
-                  {deleting.kind === "reminder" ? "此提醒将停止发送。" : "此操作无法撤销。"}
+                  {copyText("删除「")}
+                  {deleting.title}」？
+                  {deleting.kind === "reminder"
+                    ? copyText("此提醒将停止发送。")
+                    : copyText("此操作无法撤销。")}
                 </span>
                 <button className="text-link" disabled={busy} onClick={() => setDeleting(null)}>
-                  取消
+                  {copyText("取消")}
                 </button>
                 <button
                   className="button danger small"
                   disabled={busy}
                   onClick={() => void remove()}
                 >
-                  确认删除
+                  {copyText("确认删除")}
                 </button>
               </div>
             )}
             {loading ? (
-              <p className="personal-empty">正在读取记录…</p>
+              <p className="personal-empty">{copyText("正在读取记录…")}</p>
             ) : !page.records.length ? (
               <div className="personal-empty">
                 <FileText size={30} />
-                <h3>还没有{labels[kind]}</h3>
+                <h3>
+                  {copyText("还没有")}
+                  {copyText(labels[kind])}
+                </h3>
                 <p>
-                  在微信发送{" "}
+                  {copyText("在微信发送")}{" "}
                   <code>
                     @{plugin.shortcut}{" "}
                     {kind === "note"
-                      ? "记一下，下周想读一本新书"
+                      ? copyText("记一下，下周想读一本新书")
                       : kind === "entry"
-                        ? "今天咖啡花了 22 元"
+                        ? copyText("今天咖啡花了 22 元")
                         : kind === "task"
-                          ? "添加待办：整理这周的会议记录"
-                          : "明天下午三点提醒我寄快递"}
+                          ? copyText("添加待办：整理这周的会议记录")
+                          : copyText("明天下午三点提醒我寄快递")}
                   </code>
                 </p>
               </div>
@@ -768,7 +816,7 @@ function ScopedPersonalRecords({
                       {kind === "task" && (
                         <button
                           className={`personal-check ${r.completed ? "checked" : ""}`}
-                          aria-label={r.completed ? "标为未完成" : "完成待办"}
+                          aria-label={r.completed ? copyText("标为未完成") : copyText("完成待办")}
                           disabled={!writable || busy}
                           onClick={() => void complete(r)}
                         >
@@ -785,7 +833,7 @@ function ScopedPersonalRecords({
                       <div className="personal-record-actions">
                         <button
                           className="icon-button"
-                          aria-label={`编辑${r.title}`}
+                          aria-label={copyText("编辑{value0}", { value0: r.title })}
                           disabled={!writable || busy}
                           onClick={() => open(r)}
                         >
@@ -793,7 +841,7 @@ function ScopedPersonalRecords({
                         </button>
                         <button
                           className="icon-button"
-                          aria-label={`删除${r.title}`}
+                          aria-label={copyText("删除{value0}", { value0: r.title })}
                           disabled={busy}
                           onClick={() => setDeleting(r)}
                         >
@@ -804,8 +852,12 @@ function ScopedPersonalRecords({
                     <div className="personal-record-meta">
                       <span>{r.date}</span>
                       {r.category && <span>{r.category}</span>}
-                      {r.kind === "task" && <span>{r.completed ? "已完成" : "待完成"}</span>}
-                      {r.reminderType === "daily_tasks" && <span>每日今日待办汇总</span>}
+                      {r.kind === "task" && (
+                        <span>{r.completed ? copyText("已完成") : copyText("待完成")}</span>
+                      )}
+                      {r.reminderType === "daily_tasks" && (
+                        <span>{copyText("每日今日待办汇总")}</span>
+                      )}
                     </div>
                     {r.content && (
                       <div className="personal-record-content">
@@ -816,16 +868,16 @@ function ScopedPersonalRecords({
                       <div className="personal-reminder">
                         <Bell size={13} />
                         <span>
-                          {beijingTime(r.nextReminderAt ?? Date.parse(r.remindAt))}
+                          {beijingTime(r.nextReminderAt ?? Date.parse(r.remindAt), locale === "es" ? "es" : "zh-CN")}
                           {r.repeat === "daily"
-                            ? " · 每天"
+                            ? copyText(" · 每天")
                             : r.repeat === "weekly"
-                              ? " · 每周"
+                              ? copyText(" · 每周")
                               : ""}{" "}
                           ·{" "}
                           {!r.reminderEnabled
-                            ? "已取消"
-                            : (statuses[r.reminderState ?? ""] ?? "等待设置")}
+                            ? copyText("已取消")
+                            : copyText(statuses[r.reminderState ?? ""] ?? "等待设置")}
                         </span>
                       </div>
                     )}
@@ -840,7 +892,7 @@ function ScopedPersonalRecords({
                 disabled={loading || offset === 0 || busy}
                 onClick={() => setOffset((n) => Math.max(0, n - 20))}
               >
-                上一页
+                {copyText("上一页")}
               </button>
               <span>
                 {Math.floor(offset / 20) + 1} / {Math.max(1, Math.ceil(page.total / 20))}
@@ -850,12 +902,14 @@ function ScopedPersonalRecords({
                 disabled={loading || offset + 20 >= page.total || busy}
                 onClick={() => setOffset((n) => n + 20)}
               >
-                下一页
+                {copyText("下一页")}
               </button>
             </div>
             {!writable && (
               <p className="form-hint">
-                记录仍可查看、导出或删除；启用助理且配置未超出套餐上限时，可继续新增、编辑和使用提醒。
+                {copyText(
+                  "记录仍可查看、导出或删除；启用助理且配置未超出套餐上限时，可继续新增、编辑和使用提醒。",
+                )}
               </p>
             )}
           </>
