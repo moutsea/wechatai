@@ -30,6 +30,7 @@ type Order = {
   subscription_id: string | null;
   checkout_mode: "payment" | "subscription" | null;
   membership_months: number;
+  return_path: string;
   status: string;
   created_at: number;
   paid_at: number | null;
@@ -139,7 +140,60 @@ async function ownedCustomer(env: Env, user: { id: string; email: string }) {
     .run();
   return customer.id;
 }
-export async function checkout(env: Env, user: { id: string; email: string }, offerId: string) {
+function billingReturnPath(value: unknown) {
+  return value === "/ko/app/billing" ? value : "/app/billing";
+}
+async function createCheckoutSession(env: Env, stripe: Stripe, order: Order) {
+  const offer = offerFor(order.offer_id);
+  const metadata = {
+    service: BILLING_SERVICE,
+    app: BILLING_SERVICE,
+    environment: order.mode,
+    orderId: order.id,
+    userId: order.user_id,
+    kind: offer.kind,
+    offerId: offer.id,
+  };
+  const session = await stripe.checkout.sessions.create(
+    {
+      mode: "payment",
+      customer: order.customer_id,
+      client_reference_id: order.id,
+      line_items: [{ price: order.price_id, quantity: 1 }],
+      payment_method_types: ["card", "alipay", "wechat_pay"],
+      payment_method_options: { wechat_pay: { client: "web" } },
+      branding_settings: { display_name: "微伴 Wechatai", button_color: "#59f294" },
+      custom_text: {
+        submit: {
+          message:
+            offer.kind === "credits"
+              ? `到账 ${offer.credits.toLocaleString("en-US")} credits，不随每日刷新清零。模型 API 费用另付。`
+              : `${offer.interval === "year" ? "一年" : "一个月"} Plus，每日 1,000 credits。单次付费，不自动续费；提前购买顺延有效期。模型 API 费用另付。`,
+        },
+      },
+      locale: "zh",
+      allow_promotion_codes: false,
+      success_url: `${env.APP_URL}${order.return_path}?checkout=success&session_id={CHECKOUT_SESSION_ID}&offer=${offer.id}`,
+      cancel_url: `${env.APP_URL}${order.return_path}?checkout=cancelled&offer=${offer.id}`,
+      metadata,
+      payment_intent_data: { metadata },
+    },
+    { idempotencyKey: `wechatai:checkout:${order.mode}:${order.id}` },
+  );
+  await env.DB.prepare(
+    "UPDATE billing_order SET session_id = ?, status = CASE WHEN status = 'created' THEN 'open' ELSE status END WHERE id = ?",
+  )
+    .bind(session.id, order.id)
+    .run();
+  return session;
+}
+export async function checkout(
+  env: Env,
+  user: { id: string; email: string },
+  offerId: string,
+  returnIntent?: unknown,
+) {
+  const returnPath = billingReturnPath(returnIntent);
   const offer = offerFor(offerId);
   const price = await verifiedPrice(env, offer);
   const stripe = stripeClient(env);
@@ -183,6 +237,17 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
       .run();
     order = null;
   }
+  // A lost Stripe response can leave a payable session without its ID in D1.
+  // Recover it with the original parameters before changing the return language.
+  if (
+    order &&
+    !order.session_id &&
+    order.offer_id === offer.id &&
+    order.return_path !== returnPath
+  ) {
+    const recovered = await createCheckoutSession(env, stripe, order);
+    order.session_id = recovered.id;
+  }
   if (order?.session_id) {
     const previous = await stripe.checkout.sessions.retrieve(order.session_id);
     if (previous.status === "complete") {
@@ -196,6 +261,7 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
       order.price_id === price.id &&
       order.amount === offer.amount &&
       order.checkout_mode === "payment" &&
+      order.return_path === returnPath &&
       previous.mode === "payment" &&
       ["card", "alipay", "wechat_pay"].every((method) =>
         previous.payment_method_types.includes(method),
@@ -218,7 +284,7 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
   if (!order) {
     const id = crypto.randomUUID();
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO billing_order (id, user_id, mode, offer_id, kind, price_id, amount, currency, credits, customer_id, pending_key, created_at, checkout_mode, membership_months) VALUES (?, ?, ?, ?, ?, ?, ?, 'cny', ?, ?, ?, ?, 'payment', ?)",
+      "INSERT OR IGNORE INTO billing_order (id, user_id, mode, offer_id, kind, price_id, amount, currency, credits, customer_id, pending_key, created_at, checkout_mode, membership_months, return_path) VALUES (?, ?, ?, ?, ?, ?, ?, 'cny', ?, ?, ?, ?, 'payment', ?, ?)",
     )
       .bind(
         id,
@@ -233,6 +299,7 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
         pendingKey,
         Date.now(),
         offer.kind === "plus" ? (offer.interval === "year" ? 12 : 1) : 0,
+        returnPath,
       )
       .run();
     order = await env.DB.prepare("SELECT * FROM billing_order WHERE pending_key = ?")
@@ -241,46 +308,11 @@ export async function checkout(env: Env, user: { id: string; email: string }, of
   }
   if (!order || order.offer_id !== offer.id)
     throw new AppError("checkout_in_progress", "已有订单正在创建，请稍后重试", 409);
-  const metadata = {
-    service: BILLING_SERVICE,
-    app: BILLING_SERVICE,
-    environment: mode,
-    orderId: order.id,
-    userId: user.id,
-    kind: offer.kind,
-    offerId: offer.id,
-  };
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: "payment",
-      customer,
-      client_reference_id: order.id,
-      line_items: [{ price: order.price_id, quantity: 1 }],
-      payment_method_types: ["card", "alipay", "wechat_pay"],
-      payment_method_options: { wechat_pay: { client: "web" } },
-      branding_settings: { display_name: "微伴 Wechatai", button_color: "#59f294" },
-      custom_text: {
-        submit: {
-          message:
-            offer.kind === "credits"
-              ? `到账 ${offer.credits.toLocaleString("en-US")} credits，不随每日刷新清零。模型 API 费用另付。`
-              : `${offer.interval === "year" ? "一年" : "一个月"} Plus，每日 1,000 credits。单次付费，不自动续费；提前购买顺延有效期。模型 API 费用另付。`,
-        },
-      },
-      locale: "zh",
-      allow_promotion_codes: false,
-      success_url: `${env.APP_URL}/app/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}&offer=${offer.id}`,
-      cancel_url: `${env.APP_URL}/app/billing?checkout=cancelled&offer=${offer.id}`,
-      metadata,
-      payment_intent_data: { metadata },
-    },
-    { idempotencyKey: `wechatai:checkout:${mode}:${order.id}` },
-  );
-  await env.DB.prepare(
-    "UPDATE billing_order SET session_id = ?, status = CASE WHEN status = 'created' THEN 'open' ELSE status END WHERE id = ?",
-  )
-    .bind(session.id, order.id)
-    .run();
+  // A concurrent request may have reserved the order for a different return path.
+  // Let the next attempt recover that session before replacing it.
+  if (order.return_path !== returnPath)
+    throw new AppError("checkout_in_progress", "订单正在创建，请稍后重试", 409);
+  const session = await createCheckoutSession(env, stripe, order);
   if (!session.url) throw new AppError("checkout_failed", "未能创建支付页面", 502);
   return { url: session.url };
 }
@@ -527,7 +559,11 @@ export async function subscriptionInfo(env: Env, userId: string): Promise<Subscr
       }
     : null;
 }
-export async function portal(env: Env, user: { id: string; email: string }) {
+export async function portal(
+  env: Env,
+  user: { id: string; email: string },
+  returnIntent?: unknown,
+) {
   const existing = await env.DB.prepare(
     "SELECT customer_id FROM billing_customer WHERE user_id = ? AND mode = ?",
   )
@@ -544,7 +580,7 @@ export async function portal(env: Env, user: { id: string; email: string }) {
       await stripe.billingPortal.sessions.create({
         customer,
         configuration,
-        return_url: `${env.APP_URL}/app/billing`,
+        return_url: `${env.APP_URL}${billingReturnPath(returnIntent)}`,
       })
     ).url,
   };

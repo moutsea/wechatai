@@ -76,7 +76,7 @@ export function PluginUpgradeModal({
     try {
       const result = await request<{ url: string }>(
         "/billing/checkout",
-        json({ offerId: offer.id }),
+        json({ offerId: offer.id, ...(locale === "ko" ? { returnPath: `${base}/billing` } : {}) }),
       );
       const url = new URL(result.url);
       if (url.protocol !== "https:" || url.hostname !== "checkout.stripe.com")

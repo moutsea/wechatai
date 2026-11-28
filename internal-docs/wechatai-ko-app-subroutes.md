@@ -59,7 +59,7 @@ PR 负责人为本卡开发承接人 Codex，工作流 profile 为 `92d67037-1df
 ## 不做范围
 
 - 本卡语言范围为韩语工作台。中文默认行为、英语默认行为和日语、英语前驱交付结果作为回归边界。
-- 计费计算、额度数字、套餐与货币、支付回调业务、身份认证协议、管理员权限规则、schema、迁移和生产配置均在本卡范围外。
+- 计费计算、额度数字、套餐与货币、支付回调业务、身份认证协议、管理员权限规则、生产配置均在本卡范围外。schema 与迁移仅允许用户于 2026-11-28 授权的 AC2 最小订单返回路径字段。
 - 新功能、路由新语义、通用 i18n 框架、队列、重试系统、依赖升级和部署改造均在范围外。
 - 公开教程的整篇韩语翻译属于范围外。用户已确认本卡保留尚无韩语译文教程的现有可达入口。
 - 自动翻译用户数据、通知正文和聊天记录在范围外。
@@ -261,3 +261,32 @@ pnpm test:openclaw 退出 0，27 tests、27 pass、0 fail。暂存后 pnpm check
 ### AC2 支付返回实现范围待确认
 
 已核对创建订单、Stripe 会话复用与恢复、成功/取消返回、portal 和插件继续配置链路。当前订单未保存返回语言，checkout 使用订单 ID 生成幂等键。为使本地化返回参数在失败重试时保持稳定，拟将经过允许列表校验的返回路径随订单持久化。该方案需给 billing_order 增加一个兼容旧订单的字段，涉及需求原定范围外的 schema 迁移，待用户确认后实施。整卡全量复验、推送 PR #56 与复审交接在此项完成后执行。
+
+
+### AC2 最小迁移已获授权并完成定向修复
+
+用户于 2026-11-28 选择 q1_opt1，允许最小订单字段迁移。新增 `0022_billing_return_path.sql`，旧订单默认 `/app/billing`。韩语工作台两处购买入口与订阅门户传递 `returnPath`，服务端只接受两个工作台 billing 路径，其他输入沿用 `/app/billing`。返回路径写入订单，Stripe 同一幂等键沿用原参数。切换语种复用既有会话关闭流程，响应丢失时先恢复旧会话再处理。
+
+修前支付回归 3 failed/7 passed，客户端 3 failed/21 passed，HTTP 入口 2 failed/3 passed。修后支付与 API 80 passed、客户端 24 passed，包含迁移前订单默认值、安全输入、成功/取消/门户返回、同语种复用及丢失响应后的恢复。测试夹具曾因重复会话 ID、同步 Promise 替身和失败报告展开 Workers 绑定导致额外错误，修正夹具后重新取得上述红绿证据。证据位于 `/tmp/f78c690a-rework/p1-*-before.log` 和 `p1-*-after.log`。完整回归及浏览器结果待追加。
+
+
+## 2026-11-28 后续修复分支与完整回归
+
+主会话卡面已记录用户授权，允许在原 PR #56 合并后交付一个后续修复 PR。当前分支为 `feature/f78c690a-ko-billing-return`，基线为 `669bcf08abf2d344c3328e7e774f8fd16ee6b469`。原文案修复提交 `cc7ab303` 已迁入本分支为 `6875580`，支付返回修复另行提交。此节替代前文关于继续使用 #56、交付入口待确认及完整回归待执行的状态描述。
+
+本次变更包含数据库迁移 0022 与支付返回路径，属于核心变更，合并需用户逐次授权。代码复用已有订单和会话机制，订单持久化允许列表中的返回路径。成功、取消、订阅门户及 Xiaowei 继续配置保持韩语，Stripe 创建重试使用订单原始返回参数。旧订单通过迁移获得 `/app/billing` 默认值。
+
+Node 22.23.5 下串行完成以下验证。
+
+- `pnpm check` 退出 0，包含 lint、typecheck、完整服务端 Vitest 115 文件 / 2535 项、完整客户端 Vitest 42 文件 / 485 项、build、预渲染及 SEO 检查。
+- `pnpm test:browser test/browser/ko-workspace.spec.ts` 为 16 passed，覆盖 1280px 和 390px 的全部韩语入口、导航、权限、管理页、表单文案、数值、支付成功/取消后的插件继续配置和订阅门户返回。
+- `pnpm test:openclaw` 为 27 passed。
+- 使用独立 `/tmp/f78c690a-d1-f9x8n577` 的本地 D1，先通过 Wrangler 应用 0001–0021，再写入旧订单，随后通过迁移命令应用 0022。旧订单的默认路径为 `/app/billing`，金额 990、币种 cny 和会员月数 1 均保留。韩语路径写入成功，外站、携带 query 和末尾斜杠的路径触发 CHECK 拒绝，NULL 触发 NOT NULL 拒绝。新订单省略字段时默认 `/app/billing`，迁移记录恰为一条，重复 apply 无待执行迁移。所有命令均指定 `--local` 与独立 `--persist-to`。
+- 最终构建经本地 Wrangler 实测 27 条中韩静态、动态及兜底路由 HTTP 200，语言、title、noindex 和 query 正确。`/api/docs` 返回 401。322 个部署资产及运行时文件中需求标题、完整卡号和需求路径命中为零，公开 sitemap/llms 索引无私有韩语路径。
+
+复验未出现测试失败。构建保留既有依赖 sourcemap、Wrangler observability 字段和大包提示。完整日志位于 `/tmp/f78c690a-rework-resume/`，含 `check.log`、`ko-workspace.log`、`openclaw.log`、`d1-results.json`、`d1-*.log`、`http-check.log` 和 `http-results.json`。迁移自动化脚本为同目录 `check-d1-migration.py`。
+
+本轮开发验证与最终 HEAD 的独立评审分别记录。原 `ee219086` 的 FAIL 及旧 CI 结果只对应历史提交，后续 PR 的放行仍需同一最终 HEAD 的独立整卡 PASS。PR 保持 OPEN 并等待人工合并。
+
+
+本轮截图为 `internal-docs/evidence/ko-workspace/billing-upgrade-1280.png` 与 `billing-upgrade-390.png`，展示 Free 升级弹窗的韩语月付/年付标题及购买按钮。使用本地 fixture 和测试套餐，两个尺寸均无水平溢出。Kimi placeholder 实测为 `Kimi (Moonshot AI)의 API 키 입력`，无中文残留，截图及文本记录见 `/tmp/f78c690a-rework-resume/provider-*.png` 和 `screenshots.json`。

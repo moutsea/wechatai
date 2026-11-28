@@ -71,6 +71,14 @@ customer.subscription.deleted
 
 新 Checkout 使用单次付款模式，配置银行卡、支付宝和微信支付。实际可用性还取决于 Stripe 账户所在地区、币种和账户启用情况。退款、争议及历史订阅的特殊账单仍需人工审核，系统不会自动扣回已消耗额度。
 
+## 工作台支付返回
+
+`POST /api/billing/checkout` 接受 `offerId` 和可选 `returnPath`，`POST /api/billing/portal` 接受可选 `returnPath`。服务端只允许 `/app/billing` 与 `/ko/app/billing`，省略或其他值均回到 `/app/billing`，门户仍接受空请求体。返回地址的站点由 `APP_URL` 决定。
+
+韩语工作台在创建支付和打开订阅门户时传递 `/ko/app/billing`，成功、取消及门户返回后继续使用韩语。订单保存返回路径，Stripe 创建重试沿用该订单的原始参数与幂等键。切换返回语言时先恢复并确认已有会话，关闭仍开放的旧会话后创建新订单。
+
+此变更涉及支付和数据库迁移，合并与发布需取得用户逐次授权。获准发布后，先按部署说明执行 `pnpm db:migrate:remote`，确认 `0022_billing_return_path.sql` 已应用，再发布 Worker。迁移为 `billing_order` 增加 `return_path`，旧订单默认 `/app/billing`。回滚应用代码时可保留此兼容字段。
+
 ## 配置脚本
 
 `scripts/setup-stripe.mjs` 从被忽略的 `.stripe.local` 读取 `{ "test": "…", "live": "…" }`。默认只设置测试产品，正式产品需明确选择环境：

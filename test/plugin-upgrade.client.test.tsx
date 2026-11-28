@@ -92,6 +92,10 @@ afterEach(async () => {
 });
 
 async function mount(path = "/app/plugins") {
+  vi.mocked(useApp).mockReturnValue({
+    ...useApp(),
+    base: path.startsWith("/ko/") ? "/ko/app" : "/app",
+  });
   await act(async () =>
     root.render(
       <MemoryRouter key={path} initialEntries={[path]}>
@@ -100,6 +104,7 @@ async function mount(path = "/app/plugins") {
             <Route path="/app/plugins" element={<Plugins />} />
             <Route path="/app/billing" element={<Billing />} />
             <Route path="/ko/app/plugins" element={<Plugins />} />
+            <Route path="/ko/app/billing" element={<Billing />} />
           </Routes>
         </LocaleProvider>
       </MemoryRouter>,
@@ -426,4 +431,58 @@ it("uses Korean fixed plan titles and accessible names in the Free upgrade modal
     plans.map((plan) => plan.querySelector(".plugin-upgrade-price strong")?.textContent),
   ).toEqual(["¥9.9", "¥88"]);
   expect(dialog().textContent).not.toMatch(/\p{Script=Han}/u);
+});
+
+it.each(["cancelled", "success"])(
+  "keeps Korean plugin checkout and %s continuation in the workspace",
+  async (result) => {
+    await mount("/ko/app/plugins?plugin=wechatai%2Fcloud-agent&action=create");
+    await click("월간 Plus 가입");
+    expect(JSON.parse(checkoutCalls()[0][1].body)).toEqual({
+      offerId: "plus_monthly",
+      returnPath: "/ko/app/billing",
+    });
+    if (result === "success") data.plan = "plus";
+    await mount(`/ko/app/billing?checkout=${result}&session_id=cs_upgrade&offer=plus_monthly`);
+    const back = container.querySelector<HTMLAnchorElement>('a[href*="plugins?plugin="]')!;
+    expect(back.getAttribute("href")).toBe(
+      "/ko/app/plugins?plugin=wechatai%2Fcloud-agent&action=create",
+    );
+    expect(back.textContent).toContain(
+      result === "success" ? "이전 플러그인 설정 계속하기" : "플러그인 설정으로 돌아가기",
+    );
+    if (result === "cancelled") {
+      await click("Plus 업그레이드");
+      expect(JSON.parse(checkoutCalls()[1][1].body)).toEqual({
+        offerId: "plus_monthly",
+        returnPath: "/ko/app/billing",
+      });
+    }
+    await act(async () => back.click());
+    expect(dialog().textContent).toContain("Xiaowei");
+    expect(Boolean(dialog().querySelector("form"))).toBe(result === "success");
+  },
+);
+
+it("passes Korean return intent when opening subscription management", async () => {
+  const previous = request.getMockImplementation()!;
+  request.mockImplementation(async (path, options) => {
+    if (path === "/billing/subscription")
+      return {
+        id: "sub_old",
+        status: "active",
+        cancelAtPeriodEnd: false,
+        offerId: "plus_monthly",
+        periodEnd: 1,
+      };
+    if (path === "/billing/portal") return { url: "https://billing.stripe.com/test-portal" };
+    return previous(path, options);
+  });
+  await mount("/ko/app/billing");
+  await click("구독 관리");
+  expect(request).toHaveBeenCalledWith(
+    "/billing/portal",
+    expect.objectContaining({ body: JSON.stringify({ returnPath: "/ko/app/billing" }) }),
+  );
+  expect(window.location.assign).toHaveBeenCalledWith("https://billing.stripe.com/test-portal");
 });

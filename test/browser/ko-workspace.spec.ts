@@ -4,6 +4,7 @@ import { extname } from "node:path";
 import { createFakeApi } from "../support/fake-api";
 import { summarizeFunnel } from "../../src/shared/funnel-report";
 import type { AdminOverview } from "../../src/shared/admin";
+import { BILLING_OFFERS } from "../../src/shared/billing";
 import type { Snapshot } from "../../src/shared/types";
 import type { CloudAgentTask } from "../../src/shared/cloud-agent";
 
@@ -452,3 +453,108 @@ test("plugin and channel editors keep Korean product text", async ({ page }) => 
     expect(values).not.toMatch(han);
   }
 });
+
+for (const width of [1280, 390]) {
+  for (const result of ["success", "cancelled"] as const) {
+    test(`Korean Free checkout returns ${result} and resumes Xiaowei at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const snapshot = await fixture(page);
+      snapshot.plan = "free";
+      snapshot.cloudAgent = { ...snapshot.cloudAgent, ready: true };
+      await page.route("**/api/billing/catalog", (route) =>
+        route.fulfill({
+          json: {
+            mode: "test",
+            offers: BILLING_OFFERS.map((offer) => ({
+              ...offer,
+              currency: "cny",
+              price: offer.amount / 100,
+              enabled: true,
+            })),
+          },
+        }),
+      );
+      await page.route("**/api/billing/checkout", (route) => {
+        expect(route.request().postDataJSON()).toEqual({
+          offerId: "plus_monthly",
+          returnPath: "/ko/app/billing",
+        });
+        return route.fulfill({ json: { url: "https://checkout.stripe.com/localized-test" } });
+      });
+      await page.route("https://checkout.stripe.com/**", (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body: `<a href="${origin}/ko/app/billing?checkout=${result}&session_id=cs_test&offer=plus_monthly">Return to workspace</a>`,
+        }),
+      );
+      await page.route("**/api/billing/checkout-status?*", (route) => {
+        snapshot.plan = "plus";
+        return route.fulfill({ json: { status: "paid", kind: "plus", credits: 0 } });
+      });
+      await page.goto(origin + "/ko/app/plugins?plugin=wechatai%2Fcloud-agent&action=create");
+      await expect(page.locator(".plugin-upgrade-plan h3")).toHaveText([
+        "Plus 월간 결제",
+        "Plus 연간 결제",
+      ]);
+      await koreanUi(page);
+      await page.getByRole("button", { name: "월간 Plus 가입", exact: true }).click();
+      await page.waitForURL("https://checkout.stripe.com/**");
+      await page.getByRole("link", { name: "Return to workspace" }).click();
+      await page.waitForURL("**/ko/app/billing?*");
+      await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
+      const back = page.getByRole("link", {
+        name: result === "success" ? "이전 플러그인 설정 계속하기" : "플러그인 설정으로 돌아가기",
+      });
+      await expect(back).toHaveAttribute(
+        "href",
+        "/ko/app/plugins?plugin=wechatai%2Fcloud-agent&action=create",
+      );
+      await koreanUi(page);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+        false,
+      );
+      await back.click();
+      await page.waitForURL("**/ko/app/plugins?*");
+      await expect(page.locator("dialog")).toBeVisible();
+      await expect(page.locator("dialog form")).toHaveCount(result === "success" ? 1 : 0);
+    });
+  }
+
+  test(`Korean subscription portal returns to billing at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page);
+    await page.route("**/api/billing/subscription", (route) =>
+      route.fulfill({
+        json: {
+          id: "sub_test",
+          status: "active",
+          cancelAtPeriodEnd: false,
+          offerId: "plus_monthly",
+          periodEnd: Date.now() + 86400000,
+        },
+      }),
+    );
+    await page.route("**/api/billing/portal", (route) => {
+      expect(route.request().postDataJSON()).toEqual({ returnPath: "/ko/app/billing" });
+      return route.fulfill({ json: { url: "https://billing.stripe.com/localized-test" } });
+    });
+    await page.route("https://billing.stripe.com/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<a href="${origin}/ko/app/billing">Return to workspace</a>`,
+      }),
+    );
+    await page.goto(origin + "/ko/app/billing");
+    await page.getByRole("button", { name: "구독 관리", exact: true }).click();
+    await page.waitForURL("https://billing.stripe.com/**");
+    await page.getByRole("link", { name: "Return to workspace" }).click();
+    await page.waitForURL("**/ko/app/billing");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ko-KR");
+    await expect(
+      page.getByRole("heading", { name: "멤버십 및 크레딧", exact: true }),
+    ).toBeVisible();
+    await koreanUi(page);
+  });
+}

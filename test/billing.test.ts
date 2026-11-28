@@ -3,6 +3,7 @@ import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import billingMigration from "../migrations/0002_billing.sql?raw";
+import returnPathMigration from "../migrations/0022_billing_return_path.sql?raw";
 import prepaidMigration from "../migrations/0004_prepaid_membership.sql?raw";
 import notificationMigration from "../migrations/0006_billing_notifications.sql?raw";
 import funnelMigration from "../migrations/0016_funnel_events.sql?raw";
@@ -25,6 +26,7 @@ const testEnv = {
   STRIPE_PORTAL_CONFIG_ID: "bpc_test",
   ...Object.fromEntries(BILLING_OFFERS.map((o) => [o.priceEnv, `price_${o.id}`])),
 };
+let legacyReturnOrderId: string;
 beforeAll(async () => {
   await env.DB.exec(accountRoutes.replace(/^--.*$/gm, "").replace(/\n/g, " "));
   await env.DB.exec(authMigration);
@@ -35,6 +37,8 @@ beforeAll(async () => {
       .filter((s) => s.trim())
       .map((s) => env.DB.prepare(s)),
   );
+  legacyReturnOrderId = (await seed()).id;
+  await env.DB.exec(returnPathMigration.replace(/^--.*$/gm, "").replace(/\n/g, " "));
 });
 beforeEach(async () => {
   await env.DB.prepare("DELETE FROM funnel_events").run();
@@ -887,6 +891,187 @@ describe("isolated Stripe fulfillment", () => {
           .first();
         expect(old).toMatchObject({ status: "expired", pending_key: null });
       }
+    },
+  );
+});
+
+describe("localized billing returns", () => {
+  it("keeps existing orders on their original return path after migration", async () => {
+    const order = await env.DB.prepare("SELECT return_path FROM billing_order WHERE id = ?")
+      .bind(legacyReturnOrderId)
+      .first();
+    expect(order).toEqual({ return_path: "/app/billing" });
+  });
+
+  it.each(["/app/billing", "/ko/app/billing"])(
+    "allows the persisted billing return path %s",
+    async (returnPath) => {
+      const order = await seed();
+      await env.DB.prepare("UPDATE billing_order SET return_path = ? WHERE id = ?")
+        .bind(returnPath, order.id)
+        .run();
+      expect(
+        await env.DB.prepare("SELECT return_path, amount, credits FROM billing_order WHERE id = ?")
+          .bind(order.id)
+          .first(),
+      ).toEqual({
+        return_path: returnPath,
+        amount: order.offer.amount,
+        credits: order.offer.credits,
+      });
+    },
+  );
+
+  it.each(["https://evil.example/billing", "/ko/app/billing?next=evil", null])(
+    "rejects invalid persisted return paths %j",
+    async (returnPath) => {
+      const order = await seed();
+      await expect(
+        env.DB.prepare("UPDATE billing_order SET return_path = ? WHERE id = ?")
+          .bind(returnPath, order.id)
+          .run(),
+      ).rejects.toThrow(/constraint failed/i);
+      expect(
+        await env.DB.prepare("SELECT return_path FROM billing_order WHERE id = ?")
+          .bind(order.id)
+          .first(),
+      ).toEqual({ return_path: "/app/billing" });
+    },
+  );
+
+  async function setup() {
+    const order = await seed("plus_monthly");
+    const requests: { key: string; body: string }[] = [];
+    const sessions = new Map<
+      string,
+      { id: string; status: string; mode: string; payment_method_types: string[]; url: string }
+    >();
+    const expired: string[] = [];
+    let loseResponse = false;
+    let portalBody: URLSearchParams | undefined;
+    vi.mocked(fetch).mockImplementation(async (url, init) => {
+      const path = new URL(String(url)).pathname;
+      if (path.includes("/prices/"))
+        return Response.json({
+          id: `price_${order.offer.id}`,
+          active: true,
+          livemode: false,
+          currency: "cny",
+          unit_amount: order.offer.amount,
+          type: "one_time",
+          metadata: { service: "wechatai", environment: "test", offerId: order.offer.id },
+          product: {
+            id: "prod_plus",
+            active: true,
+            metadata: { service: "wechatai", environment: "test" },
+          },
+        });
+      if (path.includes("/customers/"))
+        return Response.json({
+          id: order.customer,
+          metadata: { service: "wechatai", environment: "test", userId: order.userId },
+        });
+      if (path === "/v1/subscriptions") return Response.json({ data: [] });
+      if (path === "/v1/checkout/sessions") {
+        const key = new Headers(init?.headers).get("idempotency-key")!;
+        const body = String(init?.body);
+        const original = requests.find((request) => request.key === key);
+        if (original) expect(body).toBe(original.body);
+        requests.push({ key, body });
+        if (!sessions.has(key))
+          sessions.set(key, {
+            id: `cs_${order.id}_${sessions.size}`,
+            status: "open",
+            mode: "payment",
+            payment_method_types: ["card", "alipay", "wechat_pay"],
+            url: `https://checkout.stripe.com/localized_${sessions.size}`,
+          });
+        if (loseResponse) throw new TypeError("Checkout response lost");
+        return Response.json(sessions.get(key));
+      }
+      if (path.startsWith("/v1/checkout/sessions/")) {
+        const session = [...sessions.values()].find((item) => item.id === path.split("/")[4]);
+        if (!session) throw new Error(`Unknown session ${path}`);
+        if (path.endsWith("/expire")) {
+          session.status = "expired";
+          expired.push(session.id);
+        }
+        return Response.json(session);
+      }
+      if (path.includes("/billing_portal/configurations/"))
+        return Response.json({
+          active: true,
+          metadata: { service: "wechatai", environment: "test" },
+        });
+      if (path === "/v1/billing_portal/sessions") {
+        portalBody = new URLSearchParams(String(init?.body));
+        return Response.json({ url: "https://billing.stripe.com/localized" });
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    return {
+      order,
+      requests,
+      sessions,
+      expired,
+      user: { id: order.userId, email: "tester@example.test" },
+      loseResponse: (value: boolean) => {
+        loseResponse = value;
+      },
+      portalBody: () => portalBody!,
+    };
+  }
+
+  it.each([
+    [undefined, "/app/billing"],
+    ["/ko/app/billing", "/ko/app/billing"],
+    ["https://evil.example/ko/app/billing", "/app/billing"],
+    ["//evil.example/ko/app/billing", "/app/billing"],
+    ["/ko/app/billing/../../../evil", "/app/billing"],
+    ["/ko/app/billing?next=https://evil.example", "/app/billing"],
+    [{ returnPath: "/ko/app/billing" }, "/app/billing"],
+  ])("validates checkout and portal return intent %j", async (intent, expectedPath) => {
+    const fixture = await setup();
+    await checkout(testEnv, fixture.user, "plus_monthly", intent);
+    const body = new URLSearchParams(fixture.requests[0].body);
+    expect(body.get("success_url")).toBe(
+      `${env.APP_URL}${expectedPath}?checkout=success&session_id={CHECKOUT_SESSION_ID}&offer=plus_monthly`,
+    );
+    expect(body.get("cancel_url")).toBe(
+      `${env.APP_URL}${expectedPath}?checkout=cancelled&offer=plus_monthly`,
+    );
+    await portal(testEnv, fixture.user, intent);
+    expect(fixture.portalBody().get("return_url")).toBe(`${env.APP_URL}${expectedPath}`);
+  });
+
+  it("reuses Korean sessions and replaces an open session when the return language changes", async () => {
+    const fixture = await setup();
+    const chinese = await checkout(testEnv, fixture.user, "plus_monthly");
+    const korean = await checkout(testEnv, fixture.user, "plus_monthly", "/ko/app/billing");
+    expect(korean.url).not.toBe(chinese.url);
+    expect(fixture.expired).toEqual([`cs_${fixture.order.id}_0`]);
+    expect(await checkout(testEnv, fixture.user, "plus_monthly", "/ko/app/billing")).toEqual(
+      korean,
+    );
+    expect(fixture.requests).toHaveLength(2);
+    expect(new URLSearchParams(fixture.requests[1].body).get("cancel_url")).toContain(
+      "/ko/app/billing?",
+    );
+  });
+
+  it.each(["/app/billing", "/ko/app/billing"])(
+    "recovers a lost creation response with frozen parameters before returning to %s",
+    async (returnPath) => {
+      const fixture = await setup();
+      fixture.loseResponse(true);
+      await expect(checkout(testEnv, fixture.user, "plus_monthly")).rejects.toThrow();
+      fixture.loseResponse(false);
+      await checkout(testEnv, fixture.user, "plus_monthly", returnPath);
+      const changed = returnPath === "/ko/app/billing";
+      expect(fixture.sessions.size).toBe(changed ? 2 : 1);
+      expect(fixture.expired).toEqual(changed ? [`cs_${fixture.order.id}_0`] : []);
+      const body = new URLSearchParams(fixture.requests.at(-1)!.body);
+      expect(body.get("cancel_url")).toContain(`${returnPath}?`);
     },
   );
 });

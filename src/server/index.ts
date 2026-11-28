@@ -1120,9 +1120,9 @@ app.post(
 app.post("/api/wechat/disconnect", invoke("wechat.disconnect"));
 app.get("/api/billing/catalog", async (c) => c.json(await catalog(c.env)));
 app.post("/api/billing/checkout", async (c) => {
-  const data = await c.req.json<{ offerId: string }>();
+  const data = await c.req.json<{ offerId: string; returnPath?: unknown }>();
   if (typeof data.offerId !== "string") throw new AppError("invalid_plan", "无效的购买方案");
-  return c.json(await checkout(c.env, c.var.user, data.offerId));
+  return c.json(await checkout(c.env, c.var.user, data.offerId, data.returnPath));
 });
 app.get("/api/billing/checkout-status", async (c) => {
   const status = await checkoutStatus(c.env, c.var.user.id, c.req.query("session_id") || "", {
@@ -1135,7 +1135,10 @@ app.get("/api/billing/checkout-status", async (c) => {
 app.get("/api/billing/subscription", async (c) =>
   c.json(await subscriptionInfo(c.env, c.var.user.id)),
 );
-app.post("/api/billing/portal", async (c) => c.json(await portal(c.env, c.var.user)));
+app.post("/api/billing/portal", async (c) => {
+  const data = await c.req.json<{ returnPath?: unknown }>().catch(() => null);
+  return c.json(await portal(c.env, c.var.user, data?.returnPath));
+});
 app.notFound((c) => c.json({ error: "not_found", message: "没有找到这个接口" }, 404));
 app.onError((error, c) => {
   if (error instanceof AppError)

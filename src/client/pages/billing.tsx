@@ -148,7 +148,10 @@ export function Billing() {
     try {
       const r = await request<{ url: string }>(
         kind === "portal" ? "/billing/portal" : "/billing/checkout",
-        json(kind === "portal" ? {} : { offerId: kind }),
+        json({
+          ...(kind === "portal" ? {} : { offerId: kind }),
+          ...(locale === "ko" ? { returnPath: `${base}/billing` } : {}),
+        }),
       );
       const url = new URL(r.url);
       if (
