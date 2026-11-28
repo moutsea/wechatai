@@ -62,6 +62,8 @@
 - `pnpm cf:production secret put METRICS_API_TOKEN` 在当前线上版本为最新版本时会创建并立即部署新版本，须同时取得写入生产 Secret 和部署的授权。
 - 仅获写入授权时，使用 `pnpm cf:production versions secret put METRICS_API_TOKEN` 创建新版本但不部署；新值只在该版本经单独授权部署并开始接收流量后生效。未获部署授权并完成对应版本验证前，不得声称该接口已上线或 token 已能读取运营数。
 
+`GET /api/metrics/activation` 返回按上海注册日分组的激活队列，使用固定 7 天窗口，并显式报告快照或观察窗不完整的日桶。请求参数与口径见[激活队列接口](metrics-activation.md)。
+
 ## 公共运行参数
 
 Wrangler 的 `vars` 管理非敏感参数：

@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { secret } from "./config";
+import { getActivationMetrics, parseActivationRange } from "./metrics-activation";
 import { analyticsDays } from "./analytics";
 import { readMetricsTraffic } from "./metrics-traffic";
 import { metricsOverview } from "./metrics-overview";
@@ -13,6 +14,7 @@ const TOKEN_MIN_LENGTH = 32;
 const IP_LIMIT_KEY = "metrics:ip:";
 const TOKEN_LIMIT_KEY = "metrics:token:shared";
 const HEALTH_PATH = "/api/metrics/health";
+const ACTIVATION_PATH = "/api/metrics/activation";
 const REVENUE_PATH = "/api/metrics/revenue";
 const RETENTION_PATH = "/api/metrics/retention";
 const TRAFFIC_PATH = "/api/metrics/traffic";
@@ -79,6 +81,7 @@ async function consumeLimit(env: Env, key: string): Promise<LimitResult> {
 function routeTemplate(path: string) {
   if (
     path === HEALTH_PATH ||
+    path === ACTIVATION_PATH ||
     path === REVENUE_PATH ||
     path === RETENTION_PATH ||
     path === TRAFFIC_PATH ||
@@ -118,6 +121,7 @@ function respond(
  * request body, queries a browser session, or reaches account Durable Objects.
  */
 export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Response> {
+  const observedUntil = Date.now();
   c.header("Cache-Control", "no-store");
   c.header("X-Robots-Tag", "noindex, nofollow");
   try {
@@ -147,6 +151,7 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
 
     if (
       c.req.path !== HEALTH_PATH &&
+      c.req.path !== ACTIVATION_PATH &&
       c.req.path !== REVENUE_PATH &&
       c.req.path !== RETENTION_PATH &&
       c.req.path !== TRAFFIC_PATH &&
@@ -156,6 +161,12 @@ export async function metricsRequest(c: Context<{ Bindings: Env }>): Promise<Res
     if (c.req.method !== "GET") {
       c.header("Allow", "GET");
       return respond(c, 405, { error: "method_not_allowed" }, "method_not_allowed");
+    }
+
+    if (c.req.path === ACTIVATION_PATH) {
+      const range = parseActivationRange(new URL(c.req.url).searchParams);
+      if (!range) return respond(c, 400, { error: "invalid_query" }, "invalid_query");
+      return respond(c, 200, await getActivationMetrics(c.env, range, observedUntil), "ok");
     }
 
     if (c.req.path === TRAFFIC_PATH) {

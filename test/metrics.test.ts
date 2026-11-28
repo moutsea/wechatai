@@ -302,6 +302,7 @@ describe("metrics routing boundary", () => {
       "/api/metrics/",
       "/api/metrics/overview/extra",
       "/api/metrics/health/extra",
+      "/api/metrics/activation/extra",
       "/api/metrics/revenue/extra",
       "/api/metrics/revenue/",
       "/api/metrics/traffic/extra",
@@ -349,6 +350,7 @@ describe("metrics browser session isolation", () => {
     "/api/metrics/retention",
     "/api/metrics/traffic",
     "/api/metrics/overview",
+    "/api/metrics/activation?from_ms=0&to_ms=1",
   ])("rejects ordinary, admin and Plus cookies without a bearer (%s)", async (path) => {
     const ordinary = await signUp();
     const admin = await signUp();
