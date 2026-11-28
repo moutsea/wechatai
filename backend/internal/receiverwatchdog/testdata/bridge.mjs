@@ -15,7 +15,7 @@ const root = process.argv[2];
 const packed = await build({
   entryPoints: [fileURLToPath(new URL("./edge.mjs", import.meta.url))],
   bundle: true,
-  loader: { ".md": "text" },
+  loader: { ".md": "text", ".sql": "text" },
   write: false,
   platform: "node",
   format: "esm",

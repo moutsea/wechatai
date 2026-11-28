@@ -17,7 +17,7 @@ const packed = await build({
   platform: "node",
   format: "esm",
   target: "es2022",
-  loader: { ".md": "text" },
+  loader: { ".md": "text", ".sql": "text" },
   external: ["cloudflare:*", "node:*"],
 });
 const mf = new Miniflare({
