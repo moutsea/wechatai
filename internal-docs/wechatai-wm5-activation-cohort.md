@@ -66,3 +66,14 @@
 - 构建产物扫描共 309 文件，内部需求文档文件名与标题均无匹配。本地构建预览首次因清理后的构建缺少开发鉴权配置导致 `/api/docs` 500；补充显式 test-only 预览配置后，`/api/health` 200、`/api/docs` 401、无 Bearer 的 activation 401、带测试 Bearer 的采集前范围 200 且 `before_collection_start`。四项响应均无本文标记，结果存于 `/tmp/wechatai-wm5-preview-checks.json`。预览已关闭，临时构建凭据文件已删除。
 - 2026-11-25 最终读回 PR #49 与 #50 均为 OPEN，head 分别为 `1b73fcf8ff2638f1db7421e485a760244ad943ef` 和 `71f618f560ac40c1c4846616cc58c444d0209123`，mergeCommit 均为空。最新 fetch 的 main 仍为 `f84b9060`。一次性交接要求以这两个先行 PR 合入后的 main 接线，当前本地接入验证基于 WM1，最终共享基线条件待满足。后续同步落地后的 main、保留 revenue/overview 入口并重验受影响路径，再发送开发完成信号并进入独立评审。
 - 独立评审可按聚合与 SQL、路由与鉴权、文档三个提交单元串行核对，最终覆盖同一最终 HEAD 的完整 diff。当前证据为开发验证，独立评审与唯一 draft PR 交付按既定工作流继续。
+
+## 续办同步（2026-11-28）
+
+- 已重新读取任务描述、本文与 WM1 独立 PASS 记录。GitHub 读回 PR #48、#49、#50 均为 MERGED。三者合并提交分别为 `f84b9060a79d421c659cb68737a6b551a33c568b`、`086931a2fcc709d302ccdd7a46511ce7865f2e53`、`0cf9381486a001a347a95d10e4c1890faadec302`，均属于本轮刷新后的 main 历史。先前共享基线阻塞已解除。
+- 本轮基线为 `669bcf08abf2d344c3328e7e774f8fd16ee6b469`，继续使用分支 `feature/wechatai-api-zq5`。同步提交 `6851ad7b2bf0acf834131ee1053a6763532e2ab7` 保留 health、revenue、overview、traffic、retention，并补入 activation 的路径识别、固定审计路径和分派。请求开始时采集观察截止。
+- 冲突涉及 `src/server/index.ts`、`src/server/metrics.ts`、`test/metrics.test.ts`。入口注释采用当前 main 版本，普通、管理员与 Plus Cookie 隔离验收将 activation 纳入现有参数化测试。激活查询、参考 SQL、专属测试及接口文档与此前 `ee6ad0d` 的验证版本一致。
+- 本轮由当前会话串行执行。启动完整检查时主机 load 为 1.26/1.21/1.46，MemAvailable 为 24719268 KiB，无其他测试或构建重活。使用 Node 22.19.0、pnpm 10.15.0。定向测试覆盖 8 文件，202 项全部通过，日志 `/tmp/wechatai-wm5-20261128-focused-retry.log`。
+- 首次定向启动受沙箱本地端口与 Wrangler 日志目录权限限制，按权限流程重跑后通过。首次 `pnpm check` 的 lint、typecheck 通过，Workers 测试为 2554 项通过、2 项超过默认 5000ms 时限。超时位于 `personal-chat-isolation.test.ts` 和 `personal-reminder-live-status.test.ts`，原始输出保留在 `/tmp/wechatai-wm5-20261128-check.log`。复跑前检测到主机上另一项 Vitest 任务，先等待资源空闲再继续。
+- 资源空闲后，单 worker 单独复跑两份超时测试，2 文件、11 项全部通过，日志 `/tmp/wechatai-wm5-20261128-timeout-recheck.log`。随后顺序执行 `pnpm exec vitest run --maxWorkers=1`、`pnpm test:client`、`pnpm build`，整条验证命令退出 0。Workers 为 115 文件、2556 项全部通过，客户端为 42 文件、481 项全部通过，构建预渲染 123 个公开页面且 SEO 检查通过。日志分别为 `/tmp/wechatai-wm5-20261128-workers-serial.log`、`/tmp/wechatai-wm5-20261128-client.log`、`/tmp/wechatai-wm5-20261128-build.log`。全量复跑启动时 load 为 1.94/2.71/2.22，MemAvailable 为 24688708 KiB，无其他重活。
+- 扫描 323 个构建产物，本文文件名与标题均零匹配。本地构建预览使用显式 test-only 配置，`/api/health` 返回 200，`/api/docs` 返回 401，activation 无 Bearer 返回 401，测试 Bearer 查询采集前范围返回 200 与 `before_collection_start`。四项响应均无内部文档标记。证据为 `/tmp/wechatai-wm5-20261128-preview-checks.json`，预览进程与临时配置已清理。
+- 当前验证覆盖同步提交 `6851ad7` 的运行代码。本轮追加记录随文档提交交付，进入独立评审时须按基线 `669bcf0` 到最终 HEAD 的完整差异审阅，并逐个核对原有三个提交、同步提交及本轮记录提交。独立评审通过后由既定提 PR 步骤交付本卡唯一 draft PR，部署与生产验收由对应后续步骤按授权执行。
