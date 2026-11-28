@@ -371,3 +371,32 @@ AC1–AC9 的本地实现与验证完成。AC10 的独立评审及 OPEN PR 由�
 运行使用 Node v22.23.5。浏览器启动和 workerd 本地监听受到沙箱权限限制，连接器测试初次在沙箱子进程退出，获准在沙箱外复跑后各套均完成。重活串行，执行期间观察到另一项 `next build` 时暂停浏览器测试，待其结束后继续。
 
 返工后的独立复审覆盖整卡基线至最终 HEAD 的完整需求和差异，提交身份及完整验证记录同步写入任务计划。
+
+
+## 2026-11-28 二次返工记录
+
+本轮处理完整独立复审指出的唯一 P2 / AC3 已保存远程插件状态漏译，返工起点为 `89afc67c8ce164d4ad143d892c313ab0d048cb5a`。评审报告为 `/tmp/beb5e395-rereview/report.md`。
+
+### 状态链路与最小修复
+
+`personal-account.ts` 的 `publicPlugin` 和 `grokSetupStatus` 输出凭据是否存在、最近活动和 Webhook 配置状态。客户端 `remoteAgentConnection` 依这些字段产生固定产品状态标签。插件列表与多配置选择器已有取词，单配置弹窗的状态徽标和 Grok 编辑器标题漏接取词。
+
+在 `plugin-library.tsx` 的状态徽标，以及 `grok-editor.tsx` 的状态标题，将该固定产品标签传入已有 `copyText`。功能修改为两行，复用现有西班牙语词典。
+
+### 修复前回归
+
+在 `test/browser/es-workspace.spec.ts` 现有 fixture 中补入已保存远程插件数据。四条用例从可见卡片进入 OpenClaw、Hermes、Muse、Grok 配置弹窗，第五条在 390px 视口进入 Grok 编辑器。回归断言固定状态译文与用户配置名称原文，并对照默认中文页的四类状态。
+
+修前执行 `pnpm test:browser es-workspace.spec.ts --grep 'saved .*Spanish connection status'`，输出 `5 failed`。预期为 `Conectada`、`Configurado` 和 `Grok Bot Configurado`，实际为“已连接”“已配置”和“Grok Bot 已配置”。日志为 `/tmp/beb5e395-rework2-before.log`。
+
+### 修复后验证
+
+同一五条浏览器回归在新构建上输出 `5 passed (10.0s)`，日志为 `/tmp/beb5e395-rework2-after.log`。状态分别显示 `Conectada`、`Configurado` 和 `Grok Bot Configurado`，四类插件的默认中文页面与用户配置名原文断言均通过。
+
+`pnpm check` 退出 0，服务端 114 文件 / 2511 项、客户端 42 文件 / 487 项，以及 lint、typecheck、build、SEO 均通过。日志为 `/tmp/beb5e395-rework2-check.log`。
+
+已目视检查并交付 `internal-docs/es-app-subroutes/remote-status-desktop.png` 和 `internal-docs/es-app-subroutes/grok-status-mobile.png`，显示真实配置弹窗及窄屏编辑器的修后状态。
+
+全量 `pnpm test:browser` 输出 `346 passed`，日志为 `/tmp/beb5e395-rework2-browser.log`。`pnpm test:openclaw` 输出 27 tests / pass 27 / fail 0，日志为 `/tmp/beb5e395-rework2-openclaw.log`。
+
+本轮使用 Node v22.23.5，重活串行。两次检测到其他会话的全量测试后等待其退出，再开始浏览器检查。最终完整 BASE_SHA / HEAD_SHA、暂存索引公开检查和提交信息记录在任务计划，后续复审覆盖全部需求。

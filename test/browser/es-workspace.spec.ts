@@ -4,6 +4,7 @@ import { readFile, mkdir } from "node:fs/promises";
 import { extname } from "node:path";
 import type { Snapshot } from "../../src/shared/types";
 import type { AdminAnalytics } from "../../src/shared/analytics";
+import type { RemoteAgentKind } from "../../src/shared/remote-agent";
 import { createFakeApi } from "../support/fake-api";
 import { emptyFunnelSummary } from "../../src/shared/funnel-report";
 
@@ -35,6 +36,7 @@ async function fixture(
     ledger?: boolean;
     connectionError?: boolean;
     analytics?: AdminAnalytics;
+    remotePlugin?: RemoteAgentKind;
   } = {},
 ) {
   const fake = createFakeApi();
@@ -59,7 +61,29 @@ async function fixture(
     ...(options.connectionError ? { error: "连接测试失败，请重试" } : {}),
   };
   snapshot.currentSession = null;
-  snapshot.plugins = [];
+  snapshot.plugins = options.remotePlugin
+    ? [
+        {
+          id: "saved-remote",
+          pluginId: `wechatai/${options.remotePlugin}`,
+          version: "1.0.0",
+          name: "用户自定义配置",
+          shortcut: "saved-bot",
+          agentId: "main",
+          enabled: true,
+          hasKey: true,
+          lastSeen: Date.now(),
+          webhookReady: true,
+          setupPending: false,
+          allowProactive: false,
+          maxInputTokens: 128000,
+          maxOutputTokens: 4000,
+          waitingMessageEnabled: false,
+          waitingMessage: "Working...",
+          createdAt: Date.now(),
+        },
+      ]
+    : [];
   snapshot.ledger = options.ledger
     ? [
         {
@@ -548,6 +572,62 @@ test("all plugin configuration dialogs and character settings use Spanish", asyn
     await dialog.getByRole("button", { name: "Cerrar", exact: true }).click();
     await expect(dialog).toHaveCount(0);
   }
+});
+
+for (const [kind, title, status] of [
+  ["openclaw", "OpenClaw", "Conectada"],
+  ["hermes", "Hermes", "Conectada"],
+  ["muse", "Muse", "Conectada"],
+  ["grok", "Grok Bot", "Configurado"],
+] as const)
+  test(`saved ${kind} configuration uses Spanish connection status`, async ({ page }) => {
+    await fixture(page, { remotePlugin: kind });
+    await page.goto(`${origin}/es/app/plugins`);
+    await page
+      .locator(`.plugin-entry[aria-label="${title}"]`)
+      .getByRole("button")
+      .click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator(".plugin-config-selector .plugin-status")).toHaveText(status);
+    await expect(dialog.getByRole("heading", { name: "用户自定义配置", exact: true })).toBeVisible();
+    if (kind === "openclaw") {
+      await mkdir("test-results/es-workspace", { recursive: true });
+      await page.screenshot({
+        path: "test-results/es-workspace/remote-status-desktop.png",
+        fullPage: true,
+        animations: "disabled",
+      });
+    }
+    await page.goto(`${origin}/app/plugins`);
+    await page
+      .locator(`.plugin-entry[aria-label="${title}"]`)
+      .getByRole("button")
+      .click();
+    await expect(
+      page.getByRole("dialog").locator(".plugin-config-selector .plugin-status"),
+    ).toHaveText(kind === "grok" ? "已配置" : "已连接");
+  });
+
+test("saved Grok editor uses Spanish connection status on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await fixture(page, { remotePlugin: "grok" });
+  await page.goto(`${origin}/es/app/plugins`);
+  await page
+    .locator('.plugin-entry[aria-label="Grok Bot"]')
+    .getByRole("button")
+    .click();
+  await page.getByRole("button", { name: "Editar configuración", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Conectar Grok Bot", exact: true });
+  await expect(dialog.locator(".claw-connection strong")).toHaveText("Grok Bot Configurado");
+  await expect(dialog.getByLabel("Nombre de configuración", { exact: true })).toHaveValue(
+    "用户自定义配置",
+  );
+  await mkdir("test-results/es-workspace", { recursive: true });
+  await page.screenshot({
+    path: "test-results/es-workspace/grok-status-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
 });
 
 test("ledger figures and currency match the default workspace", async ({ page }) => {

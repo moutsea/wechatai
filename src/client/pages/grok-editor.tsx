@@ -255,7 +255,7 @@ export function GrokEditor({
                 : setup
                   ? copyText("等待 Grok Bot 完成配置")
                   : saved
-                    ? `Grok Bot ${connection.label}`
+                    ? `Grok Bot ${copyText(connection.label)}`
                     : copyText("一段指令，自动配置")}
             </strong>
             <p>

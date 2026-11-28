@@ -497,7 +497,7 @@ export function PluginConfiguration({
                     ? copyText("已停用")
                     : cloudIssue || grokUnavailable
                       ? copyText("服务不可用")
-                      : (connection?.label ?? copyText("已启用"))}
+                      : copyText(connection?.label ?? "已启用")}
               </span>
             </div>
             {selected.pluginId === "wechatai/personal-assistant" && (
