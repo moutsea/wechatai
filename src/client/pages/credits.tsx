@@ -2,6 +2,7 @@ import { ledgerNote, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/credits-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/credits-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { Link } from "react-router-dom";
 import { ArrowUpRight, CreditCard } from "lucide-react";
@@ -16,7 +17,8 @@ import {
 
 export function Credits() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, base } = useApp();
   if (!data) return null;
@@ -82,7 +84,7 @@ export function Credits() {
                 )[l.kind] || l.kind}
               </span>
               <time dateTime={new Date(l.createdAt).toISOString()}>
-                {new Date(l.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : "zh-CN", {
+                {new Date(l.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN", {
                   month: "2-digit",
                   day: "2-digit",
                   hour: "2-digit",

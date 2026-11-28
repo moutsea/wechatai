@@ -5422,3 +5422,16 @@ code {
   margin-left: 6px;
   text-decoration: underline;
 }
+
+/* Portuguese labels need room to wrap in the existing workspace layout. */
+html[lang="pt-BR"] .workspace .topbar-actions {
+  flex-wrap: wrap;
+  max-width: 100%;
+  justify-content: flex-end;
+}
+html[lang="pt-BR"] .workspace .plan-card {
+  min-width: 0;
+}
+html[lang="pt-BR"] .workspace .plan-card .button {
+  white-space: normal;
+}

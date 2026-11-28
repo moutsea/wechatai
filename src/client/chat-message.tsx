@@ -1,6 +1,7 @@
 import { useLocale } from "./locale";
 import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/chat-message-page";
 import { copy as koCopy } from "../shared/i18n/ko/copy/chat-message-page";
+import { workspaceCopy as ptCopy } from "../shared/i18n/pt/copy/workspace";
 import { ChevronDown, MessageCircle, RotateCcw } from "lucide-react";
 import { formatCredits, type ChatMessage } from "../shared/types";
 import { ChatMarkdown, CopyMessage } from "./chat-markdown";
@@ -27,7 +28,8 @@ export function ChatMessageBubble({
   avatar?: string;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   if (message.role === "system")
     return (
@@ -56,9 +58,9 @@ export function ChatMessageBubble({
           </span>
           <time
             dateTime={new Date(message.createdAt).toISOString()}
-            title={new Date(message.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : "zh-CN")}
+            title={new Date(message.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN")}
           >
-            {new Date(message.createdAt).toLocaleTimeString(locale === "ko" ? "ko-KR" : "zh-CN", {
+            {new Date(message.createdAt).toLocaleTimeString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN", {
               hour: "2-digit",
               minute: "2-digit",
             })}

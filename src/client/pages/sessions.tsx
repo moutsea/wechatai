@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/sessions-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/sessions-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { isChatModel } from "../../shared/model-compatibility";
 import { readyCloudAgents } from "../../shared/wechat-readiness";
@@ -35,7 +36,8 @@ import { ChatMessageBubble, ModelAvatar } from "../chat-message";
 import { pluginIconSource, roleAvatarSource } from "../../shared/plugin-visuals";
 export function Sessions() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, base, request, refresh, notify } = useApp();
   const [params, setParams] = useSearchParams();
@@ -606,7 +608,7 @@ export function Sessions() {
                             <div className="message-day">
                               <time dateTime={new Date(m.createdAt).toISOString()}>
                                 {new Date(m.createdAt).toLocaleDateString(
-                                  locale === "ko" ? "ko-KR" : "zh-CN",
+                                  locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN",
                                   {
                                     year: "numeric",
                                     month: "long",

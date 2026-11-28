@@ -2,8 +2,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { AuthProvider, useAuth } from "../src/client/auth";
 import { LocaleProvider } from "../src/client/locale";
+import { AuthProvider, useAuth } from "../src/client/auth";
 import { AppProvider, useApp } from "../src/client/context";
 import { AuthPage } from "../src/client/pages/auth-page";
 import { ForgotPasswordPage } from "../src/client/pages/auth-recovery";
@@ -145,6 +145,14 @@ async function render(path = returnTo) {
             <Routes>
               <Route
                 path="/app/*"
+                element={
+                  <AppProvider request={request}>
+                    <WorkspaceProbe />
+                  </AppProvider>
+                }
+              />
+              <Route
+                path="/pt/app/*"
                 element={
                   <AppProvider request={request}>
                     <WorkspaceProbe />
@@ -373,8 +381,8 @@ it("does not navigate back after leaving a pending sign-in confirmation", async 
   );
 });
 
-it("returns an expired Korean workspace session to the same URL after sign-in", async () => {
-  const target = "/ko/app/channels?channel=abc#settings";
+it.each(["pt", "ko"])("restores a %s child including query and fragment after session expiry", async (locale) => {
+  const target = `/${locale}/app/channels?channel=abc#settings`;
   window.history.replaceState({}, "", target);
   await render(target);
   await expire();

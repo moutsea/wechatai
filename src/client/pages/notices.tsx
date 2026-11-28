@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/notices-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/notices-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { useEffect, useState } from "react";
 import { CheckCheck, ChevronLeft, ChevronRight, Bell } from "lucide-react";
 import { useApp } from "../context";
@@ -12,7 +13,8 @@ import { ConnectorUpdateCard } from "../connector-update-notice";
 
 export function Notices() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request, base } = useApp();
   const { open, busy, readAll, version, readConnectorUpdate } = useNotices();

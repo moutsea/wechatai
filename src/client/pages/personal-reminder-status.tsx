@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/personal-reminder-status-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/personal-reminder-status-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { AlertTriangle } from "lucide-react";
 import {
@@ -11,7 +12,8 @@ import {
 } from "../../shared/personal-assistant";
 
 export function reminderStatusesFor(locale = "zh-CN"): Record<string, string> {
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
   return {
     scheduled: pageCopy["等待提醒"],
     sent: pageCopy["已提醒"],
@@ -63,7 +65,8 @@ function nextStep(
 
 export function ReminderFailureNotice({ record }: { record: PersonalRecord }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const failure = record.reminderLastFailure;
   const state = record.reminderState ?? "";

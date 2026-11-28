@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/role-summary-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/role-summary-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { useEffect, useState } from "react";
 import { useApp } from "../context";
 import { Modal } from "../ui";
@@ -17,7 +18,8 @@ type Summary = {
 };
 export function RoleSummary({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request, notify } = useApp();
   const [summary, setSummary] = useState<Summary | null>(null);

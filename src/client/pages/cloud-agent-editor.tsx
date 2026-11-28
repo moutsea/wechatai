@@ -2,6 +2,7 @@ import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/cloud-agent-editor-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/cloud-agent-editor-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import {
   pluginShortcutForEdit,
@@ -44,7 +45,8 @@ export function CloudAgentEditor({
   onSaved?: (id: string) => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, base, request, refresh, notify } = useApp();
   const editSchema = cloudAgentInputSchema.safeExtend({

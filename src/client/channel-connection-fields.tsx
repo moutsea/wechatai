@@ -2,6 +2,7 @@ import { workspaceLabel } from "./workspace-copy";
 import { useLocale } from "./locale";
 import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/channel-connection-fields-page";
 import { copy as koCopy } from "../shared/i18n/ko/copy/channel-connection-fields-page";
+import { workspaceCopy as ptCopy } from "../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../shared/i18n/dashboard";
 import { ConnectionPrivacy } from "./connection-privacy";
 import type { ReactNode } from "react";
@@ -34,7 +35,8 @@ export function ChannelConnectionFields({
   importStatus?: ReactNode;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const provider = channelProvider(providerId);
   const needsKey = channelNeedsApiKey(previous, form);

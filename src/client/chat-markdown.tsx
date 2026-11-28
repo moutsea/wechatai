@@ -1,6 +1,7 @@
 import { useLocale } from "./locale";
 import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/chat-markdown-page";
 import { copy as koCopy } from "../shared/i18n/ko/copy/chat-markdown-page";
+import { workspaceCopy as ptCopy } from "../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../shared/i18n/dashboard";
 import { Children, isValidElement, memo, useEffect, useState, type ReactNode } from "react";
 import Markdown, { defaultUrlTransform } from "react-markdown";
@@ -10,7 +11,8 @@ import { Check, Copy, Image as ImageIcon } from "lucide-react";
 
 export function CopyMessage({ text, label }: { text: string; label?: string }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   label ??= pageCopy["复制回答"];
   const [status, setStatus] = useState<"idle" | "copied" | "failed">("idle");
@@ -57,7 +59,8 @@ function textContent(node: ReactNode): string {
 
 function CodeBlock({ children }: { children?: ReactNode }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const child = Children.toArray(children)[0];
   const className = isValidElement<{ className?: string }>(child) ? child.props.className : "";
@@ -78,7 +81,8 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 // Never fetch model-provided remote images until the reader explicitly opens them.
 function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -121,7 +125,8 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   id: string;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   return (
     <div className="chat-markdown">

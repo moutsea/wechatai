@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/admin-server-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/admin-server-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState, type ReactNode } from "react";
 import {
@@ -74,7 +75,8 @@ function Status({
   draining?: boolean;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const tone = stale ? "unknown" : !reachable || !ok ? "bad" : draining ? "warn" : "good";
   return (
@@ -95,7 +97,8 @@ function Status({
 
 export function AdminServer() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [data, setData] = useState<AdminServerStatus | null>(null);
   const [error, setError] = useState("");

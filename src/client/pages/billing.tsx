@@ -2,9 +2,10 @@ import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/billing-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/billing-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -30,6 +31,7 @@ import {
 } from "../../shared/billing";
 import { approxYuan, OWN_API_COST_NOTE, CLOUD_AGENT_COST_NOTE } from "../../shared/pricing-copy";
 import { clearPluginUpgrade, pluginUpgradeReturnPath } from "../plugin-upgrade";
+import { billingReturnPath, clearBillingReturn, rememberBillingReturn } from "../billing-return";
 
 /** 年付省多少、折合月价多少，都从 BILLING_OFFERS 推导：写死的「省 ¥49」早就和 990/8800 不符了。 */
 const plusMonthlyAmount = BILLING_OFFERS.find((offer) => offer.id === "plus_monthly")?.amount ?? 0;
@@ -38,8 +40,30 @@ const plusYearlySaving = (plusMonthlyAmount * 12 - plusYearlyAmount) / 100;
 const plusYearlyPerMonth = approxYuan(plusYearlyAmount / 12);
 
 export function Billing() {
+  const { user } = useApp();
+  // The session can arrive after dashboard data, so arrival state belongs to the account.
+  return <AccountBilling key={user.email} email={user.email} />;
+}
+
+function AccountBilling({ email }: { email: string }) {
+  const location = useLocation();
+  // Read once per account, before payment polling or localized content mounts.
+  const [returnPath, setReturnPath] = useState(() => billingReturnPath(email));
+  useEffect(() => {
+    if (!returnPath || returnPath === location.pathname) {
+      clearBillingReturn(email);
+      setReturnPath(null);
+    }
+  }, [returnPath, location.pathname, email]);
+  if (returnPath && returnPath !== location.pathname)
+    return <Navigate to={`${returnPath}${location.search}${location.hash}`} replace />;
+  return <BillingContent />;
+}
+
+function BillingContent() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, request, refresh, notify, base, user } = useApp();
   const [params, setParams] = useSearchParams();
@@ -156,6 +180,7 @@ export function Billing() {
         !["checkout.stripe.com", "billing.stripe.com"].includes(url.hostname)
       )
         throw new Error(pageCopy["支付链接无效"]);
+      rememberBillingReturn(user.email, base);
       window.location.assign(r.url);
     } catch (e) {
       notify(workspaceError(e as Error, locale), true);
@@ -245,13 +270,13 @@ export function Billing() {
                 ? pageCopy["续费未完成，请管理订阅更新支付方式"]
                 : pageCopy["自动续费中"]}{" "}
           {pageCopy["· 当前周期至 "]}
-          {new Date(subscription.periodEnd).toLocaleDateString(locale === "ko" ? "ko-KR" : "zh-CN")}
+          {new Date(subscription.periodEnd).toLocaleDateString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN")}
         </p>
       )}
       {data.plan === "plus" && (
         <p className="billing-subscription-note">
           {pageCopy["Plus 有效期至"]}{" "}
-          {new Date(data.planUntil).toLocaleString(locale === "ko" ? "ko-KR" : "zh-CN", {
+          {new Date(data.planUntil).toLocaleString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN", {
             timeZone: "Asia/Shanghai",
             hour12: false,
           })}

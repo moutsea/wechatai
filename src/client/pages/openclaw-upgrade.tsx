@@ -2,6 +2,7 @@ import { workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/openclaw-upgrade-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/openclaw-upgrade-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import type { OpenClawStatus } from "../../shared/openclaw";
@@ -15,7 +16,8 @@ export function OpenClawUpgrade({
   initiallyExpanded?: boolean;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [copiedAt, setCopiedAt] = useState(0);
   const [error, setError] = useState("");

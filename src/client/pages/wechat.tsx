@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/wechat-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/wechat-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { ConnectionPrivacy } from "../connection-privacy";
 import { useState, type FormEvent } from "react";
@@ -44,7 +45,8 @@ function VerifyCodeForm({
   onSubmit: (code: string) => Promise<void>;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(false);
@@ -93,7 +95,8 @@ function VerifyCodeForm({
 // WeChat delivers bot pushes only for 24 hours after the user's latest message.
 function PushWindowNote({ push }: { push: NonNullable<Connection["pushWindow"]> }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const closed = push.until <= Date.now();
   if (push.blockedAt || closed)
@@ -112,7 +115,7 @@ function PushWindowNote({ push }: { push: NonNullable<Connection["pushWindow"]> 
         {pageCopy[" 即可恢复，不消耗 credits；24 小时内未送达的提醒和通知会继续补发。"]}
       </div>
     );
-  const until = new Date(push.until).toLocaleString(locale === "ko" ? "ko-KR" : "zh-CN", {
+  const until = new Date(push.until).toLocaleString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN", {
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
@@ -133,7 +136,8 @@ function PushWindowNote({ push }: { push: NonNullable<Connection["pushWindow"]> 
 }
 export function Wechat() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, base, request, refresh, notify } = useApp();
   const [busy, setBusy] = useState(false);
@@ -442,7 +446,11 @@ export function Wechat() {
               <small>{pageCopy["个人连接 · 独立会话"]}</small>
             </div>
           )}
-          {connection.error && <div className="form-error">{connection.error}</div>}
+          {connection.error && (
+            <div className="form-error">
+              {locale === "pt" ? workspaceError(connection.error, locale) : connection.error}
+            </div>
+          )}
           {connected && connection.pushWindow && <PushWindowNote push={connection.pushWindow} />}
           {connected && (
             <div className="simple-note">
@@ -547,7 +555,9 @@ export function Wechat() {
         </section>
         <aside>
           <div className="panel connection-guide">
-            <span className="eyebrow">READY IN A MOMENT</span>
+            <span className="eyebrow">
+              {locale === "pt" ? ptCopy["READY IN A MOMENT"] : "READY IN A MOMENT"}
+            </span>
             <h2>{pageCopy["接下来，很简单。"]}</h2>
             {[
               remoteMode

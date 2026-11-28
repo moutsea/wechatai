@@ -1,6 +1,7 @@
 import { useLocale } from "./locale";
 import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/model-endpoint-preview-page";
 import { copy as koCopy } from "../shared/i18n/ko/copy/model-endpoint-preview-page";
+import { workspaceCopy as ptCopy } from "../shared/i18n/pt/copy/workspace";
 import { modelEndpoint } from "../shared/model-endpoint";
 import type { Protocol } from "../shared/types";
 
@@ -12,7 +13,8 @@ export function ModelEndpointPreview({
   protocol: Protocol;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   let endpoint = "";
   try {

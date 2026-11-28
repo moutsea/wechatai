@@ -2,6 +2,7 @@ import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/channels-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/channels-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -80,14 +81,15 @@ const newModel: ModelInput = {
 
 export function Channels() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, base, request, refresh, notify } = useApp();
   const initialModel =
-    locale === "ko"
+    locale === "ko" || locale === "pt"
       ? {
           ...newModel,
-          systemPrompt: koCopy["你是一个友好、可靠的助手。请用清晰简洁的中文回答。"],
+          systemPrompt: pageCopy["你是一个友好、可靠的助手。请用清晰简洁的中文回答。"],
         }
       : newModel;
   const [params, setParams] = useSearchParams();
@@ -852,7 +854,7 @@ export function Channels() {
                 </div>
                 <small>
                   {pageCopy["有效输入上限 "]}
-                  {effectiveInput.toLocaleString(locale === "ko" ? "ko-KR" : "zh-CN")}{" "}
+                  {effectiveInput.toLocaleString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN")}{" "}
                   {
                     pageCopy[
                       "tokens，已为回复和安全余量预留空间。 按输入、输出上限估算，一次回答约"

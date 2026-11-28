@@ -810,9 +810,10 @@ export function getPageSeo(pathname: string, locale: Locale = DEFAULT_LOCALE): P
   if (
     activeLocale !== DEFAULT_LOCALE &&
     (workspacePath === DASHBOARD_PATH ||
-      (activeLocale === "ko" && workspacePath.startsWith(`${DASHBOARD_PATH}/`)))
+      ((activeLocale === "ko" || activeLocale === "pt") && workspacePath.startsWith(`${DASHBOARD_PATH}/`)))
   ) {
-    const translation = registeredTranslation(activeLocale, workspacePath);
+    const translation = registeredTranslation(activeLocale, workspacePath)
+      ?? (activeLocale === "pt" ? registeredTranslation(activeLocale, DASHBOARD_PATH) : undefined);
     if (!translation) return notFoundPageSeo();
     const { htmlLang } = LOCALE_DEFINITIONS[activeLocale];
     return {

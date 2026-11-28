@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useId, useRef, type ReactNode } from "react";
 import { X, ArrowUpRight, Sprout, Feather, Code2, Sparkles } from "lucide-react";
 import { useLocale } from "./locale";
+import { workspaceLabel } from "./workspace-copy";
 import { dashboardCopy } from "../shared/i18n/dashboard";
 import { Link } from "react-router-dom";
 export function Brand({ light = false, name }: { light?: boolean; name?: string }) {
@@ -60,7 +61,8 @@ export function Modal({
   headerAction?: ReactNode;
 }) {
   const { locale } = useLocale();
-  const closeText = closeLabel ?? (locale === "ko" ? dashboardCopy.ko.shell.close : "关闭");
+  const closeText =
+    closeLabel ?? (locale === "ko" || locale === "pt" ? dashboardCopy[locale].shell.close : "关闭");
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -160,10 +162,11 @@ export function PageHead({
   description: string;
   action?: ReactNode;
 }) {
+  const { locale } = useLocale();
   return (
     <div className="page-head">
       <div>
-        <div className="eyebrow">{eyebrow}</div>
+        <div className="eyebrow">{workspaceLabel(locale, eyebrow)}</div>
         <h1>{title}</h1>
         <p>{description}</p>
       </div>

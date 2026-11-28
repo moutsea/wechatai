@@ -2,6 +2,7 @@ import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/plugin-library-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/plugin-library-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import {
   cloudAgentAvailabilityIssue,
@@ -45,7 +46,8 @@ function PluginAlias({
   paused: boolean;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [shortcut, setShortcut] = useState(plugin.shortcut);
   return (
@@ -168,7 +170,8 @@ export function PluginLibrary({
   onResume: (plugin: UserPlugin) => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const library = getLibrary(pageCopy);
   const { data, base } = useApp();
@@ -418,7 +421,8 @@ export function PluginConfiguration({
   onManage: PluginMaintenance;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const library = getLibrary(pageCopy);
   const { data, base } = useApp();

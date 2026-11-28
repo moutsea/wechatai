@@ -11,6 +11,6 @@ export const dashboardCopy = { "zh-CN": zh, en, es, ja, ko, pt } satisfies Recor
   typeof zh
 >;
 
-export function formatCopy(template: string, values: Record<string, string | number>) {
+export function formatCopy(template: string, values: Record<string, string | number> = {}) {
   return template.replace(/\{(\w+)\}/g, (token, key: string) => String(values[key] ?? token));
 }

@@ -156,7 +156,7 @@ export function registeredTranslation(
 ): RegisteredTranslation | undefined {
   const normalized = normalizePath(path);
   const pagePath =
-    locale === "ko" && /^\/app\/tasks\/[^/]+$/.test(normalized) ? "/app/tasks" : normalized;
+    (locale === "ko" || locale === "pt") && /^\/app\/tasks\/[^/]+$/.test(normalized) ? "/app/tasks" : normalized;
   const page = registry.get(locale)?.get(pagePath);
   return page ? { ...page, locale } : undefined;
 }

@@ -22,7 +22,9 @@ for (const section of [
   "channels", "assistants", "plugins", "tasks", "wechat", "sessions",
   "billing", "credits", "invite", "notices", "admin",
 ]) {
-  dashboardLocales.set(`/ko/app/${section}`, LOCALE_DEFINITIONS.ko.htmlLang);
+  for (const locale of ["ko", "pt"]) {
+    dashboardLocales.set(`/${locale}/app/${section}`, LOCALE_DEFINITIONS[locale].htmlLang);
+  }
 }
 const htmlFile = (path) => (path === "/" ? "index.html" : `${path.slice(1)}.html`);
 const museIndexLinks = [
@@ -415,7 +417,7 @@ assert(dynamicStart >= 0, "_redirects keeps the splat rewrite");
 assert(ruleLines.length - dynamicStart <= 100, "_redirects stays within 100 dynamic rules");
 const staticRuleIndex = new Map(ruleLines.map((rule, index) => [rule, index]));
 for (const path of dashboardLocales.keys()) {
-  if (!path.startsWith("/ko/app/")) continue;
+  if (!/^\/(ko|pt)\/app\//.test(path)) continue;
   assert(
     staticRuleIndex.get(`${path} ${path} 200`) < dynamicStart,
     `${path}: private shell precedes the workspace fallback`,
@@ -423,6 +425,8 @@ for (const path of dashboardLocales.keys()) {
 }
 assert(redirectRules.includes("/ko/app/tasks/* /ko/app/tasks 200"), "Korean task detail rewrite");
 assert(redirectRules.includes("/ko/app/* /ko/app 200"), "Korean unknown route fallback");
+assert(redirectRules.includes("/pt/app/tasks/* /pt/app/tasks 200"), "Portuguese task detail rewrite");
+assert(redirectRules.includes("/pt/app/* /pt/app 200"), "Portuguese unknown route fallback");
 for (const path of ["/guide", "/guide/", "/guide.html"]) {
   assert(
     redirectRules.includes(`${path} /docs/getting-started 301`),
@@ -818,6 +822,8 @@ if (process.argv[2]) {
     ...dashboardLocales.keys(),
     "/ko/app/tasks/deployment-smoke",
     "/ko/app/tasks/deployment-smoke?plugin=smoke&cursor=smoke",
+    "/pt/app/tasks/deployment-smoke",
+    "/pt/app/tasks/deployment-smoke?plugin=smoke&cursor=smoke",
   ]) {
     const response = await fetch(new URL(path, origin), { redirect: "manual" });
     assert.equal(response.status, 200, `${path}: status`);
@@ -826,7 +832,9 @@ if (process.argv[2]) {
     const htmlLang = dashboardLocales.get(path) ?? (
       path.startsWith("/ko/app/tasks/")
         ? LOCALE_DEFINITIONS.ko.htmlLang
-        : expectedLocale?.htmlLang ?? defaultLocale.htmlLang
+        : path.startsWith("/pt/app/tasks/")
+          ? LOCALE_DEFINITIONS.pt.htmlLang
+          : expectedLocale?.htmlLang ?? defaultLocale.htmlLang
     );
     assert(html.includes(`<html lang="${htmlLang}">`), `${path}: HTML lang`);
     if (expectedLocale) {

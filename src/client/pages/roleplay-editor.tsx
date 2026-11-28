@@ -2,10 +2,12 @@ import {
   defaultUserName,
   presetInstructions as koPresetInstructions,
 } from "../../shared/i18n/ko/copy/roleplay-characters";
+import { roleplayInstructions as ptInstructions } from "../../shared/i18n/pt/copy/roleplay";
 import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/roleplay-editor-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/roleplay-editor-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import {
   pluginShortcutForEdit,
@@ -55,7 +57,8 @@ export function RoleplayEditor({
   onSaved: (id: string) => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, request, refresh, notify } = useApp();
   const editSchema = roleplayInputSchema.safeExtend({
@@ -66,7 +69,11 @@ export function RoleplayEditor({
       ? {
           ...editSchema.parse({
             name: pageCopy["新角色"],
-            ...(locale === "ko" ? { userName: defaultUserName } : {}),
+            ...(locale === "ko"
+              ? { userName: defaultUserName }
+              : locale === "pt"
+                ? { userName: ptCopy["你"] }
+                : {}),
             shortcut: pageCopy["角色"],
             modelId: data?.assistants.find(isChatModel)?.id || "unselected",
             description: pageCopy["待填写"],
@@ -93,7 +100,8 @@ export function RoleplayEditor({
   const choosePreset = (preset: RoleplayPreset) => {
     setForm(
       createRoleplayFromPreset(preset, {
-        instructions: locale === "ko" ? koPresetInstructions : undefined,
+        instructions:
+          locale === "ko" ? koPresetInstructions : locale === "pt" ? ptInstructions : undefined,
         modelId: form.modelId,
         enabled: form.enabled,
         occupiedShortcuts: [
@@ -362,7 +370,7 @@ export function RoleplayEditor({
                         <option value="">{pageCopy["默认图标"]}</option>
                         {roleAvatarChoices.map((a) => (
                           <option key={a.id} value={a.id}>
-                            {a.name}
+                            {locale === "pt" ? workspaceLabel(locale, a.name) : a.name}
                           </option>
                         ))}
                       </select>

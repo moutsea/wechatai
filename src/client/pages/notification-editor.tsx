@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/notification-editor-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/notification-editor-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { pluginAvailable } from "../../shared/plugin-access";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
@@ -27,7 +28,8 @@ export function NotificationEditor({
   onSaved: (id: string) => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, request, refresh, notify, base } = useApp();
   const [form, setForm] = useState<NotificationInput>(
@@ -158,7 +160,8 @@ export function NotificationEditor({
 
 export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const stateLabels = {
     pending: pageCopy["等待发送"],
@@ -392,7 +395,7 @@ export function NotificationAccess({ plugin }: { plugin: NotificationPlugin }) {
               <span>{stateLabels[d.state]}</span>
             </div>
             <small>
-              {new Date(d.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : "zh-CN")}
+              {new Date(d.createdAt).toLocaleString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN")}
               {pageCopy[" · 尝试 "]}
               {d.attempts}
               {pageCopy[" 次"]}

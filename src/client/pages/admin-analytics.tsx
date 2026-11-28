@@ -2,6 +2,7 @@ import { workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/admin-analytics-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/admin-analytics-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -19,7 +20,8 @@ const sourceName = (label: string) =>
 
 function TrafficTrend({ traffic }: { traffic: TrafficSummary }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [metric, setMetric] = useState<"pv" | "uv">("pv");
   const [selected, setSelected] = useState<string | null>(null);
@@ -123,7 +125,8 @@ function TrafficTrend({ traffic }: { traffic: TrafficSummary }) {
 
 function FunnelPanel({ funnel }: { funnel: FunnelSummary }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const max = Math.max(1, ...funnel.steps.map((step) => step.visitorDays));
   const hasData = [...funnel.steps, ...funnel.side].some((step) => step.events > 0);
@@ -190,7 +193,8 @@ function FunnelPanel({ funnel }: { funnel: FunnelSummary }) {
 
 export function AnalyticsReport({ data }: { data: AnalyticsData }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { traffic, conversions, funnel } = data;
   const depth = new Map(traffic.sourceDepth.map((source) => [source.label, source]));
@@ -438,7 +442,8 @@ export type AnalyticsState =
 
 export function AnalyticsResult({ state, retry }: { state: AnalyticsState; retry: () => void }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   if (state.status === "loading")
     return (
@@ -461,7 +466,8 @@ export function AnalyticsResult({ state, retry }: { state: AnalyticsState; retry
 
 function AnalyticsPeriod({ days }: { days: number }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [state, setState] = useState<AnalyticsState>({ status: "loading" });
   const [refresh, setRefresh] = useState(0);
@@ -517,7 +523,8 @@ function AnalyticsPeriod({ days }: { days: number }) {
 
 export function AdminAnalytics() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [params, setParams] = useSearchParams();
   const requested = Number(params.get("analyticsDays"));

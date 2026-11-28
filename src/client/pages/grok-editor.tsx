@@ -7,6 +7,7 @@ import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/grok-editor-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/grok-editor-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Bot, Check, Copy, LoaderCircle } from "lucide-react";
@@ -56,11 +57,14 @@ export function GrokEditor({
   onSaved: (id: string) => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, request, refresh, notify } = useApp();
   const [saved, setSaved] = useState(plugin === "new" ? null : plugin);
   const [name, setName] = useState(saved?.name ?? "Grok Bot");
+  const translate = (text: string, values: Record<string, string | number> = {}) =>
+    formatCopy(workspaceLabel(locale, text), values);
   const [shortcut, setShortcut] = useState(saved?.shortcut ?? "grok");
   const [enabled, setEnabled] = useState(saved?.enabled ?? true);
   const [waiting, setWaiting] = useState<WaitingMessageSettings>(() =>
@@ -199,7 +203,7 @@ export function GrokEditor({
           endpoint: value.endpoint,
           token: value.token,
           shortcut: p.shortcut,
-        }),
+        }, translate),
       });
       setSaved({ ...p, hasKey: true, setupPending: true, setupUntil: value.setupUntil });
       setCopied("");
@@ -217,7 +221,7 @@ export function GrokEditor({
       );
       setSetup({
         kind: "reopen",
-        prompt: (locale === "ko" ? reopenPrompt : grokReopenPrompt)({ shortcut: saved.shortcut }),
+        prompt: (locale === "ko" ? reopenPrompt : grokReopenPrompt)({ shortcut: saved.shortcut }, translate),
         until: setupUntil,
       });
       setSaved({ ...saved, setupPending: true, setupUntil });
@@ -487,7 +491,7 @@ export function GrokEditor({
             {pageCopy["Routine 指令"]}
             <textarea
               readOnly
-              value={locale === "ko" ? routineInstructions : grokRoutineInstructions}
+              value={locale === "ko" ? routineInstructions : workspaceLabel(locale, grokRoutineInstructions)}
               rows={4}
             />
           </label>

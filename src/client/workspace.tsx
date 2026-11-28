@@ -27,7 +27,7 @@ const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: mo
 export function Workspace() {
   const { locale } = useLocale();
   const loading = dashboardCopy[locale].shell.loading;
-  const base = locale === "ko" ? localizedPath(locale, "/app") : "/app";
+  const base = locale === "ko" || locale === "pt" ? localizedPath(locale, "/app") : "/app";
   const [historyRevision, setHistoryRevision] = useState(0);
   return (
     <AppProvider>
@@ -42,7 +42,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      {locale === "ko" ? loading : "正在加载插件…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载插件…"}
                     </div>
                   }
                 >
@@ -56,7 +56,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      {locale === "ko" ? loading : "正在加载云端任务…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载云端任务…"}
                     </div>
                   }
                 >
@@ -72,7 +72,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      {locale === "ko" ? loading : "正在加载会话记录…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载会话记录…"}
                     </div>
                   }
                 >
@@ -90,7 +90,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state">
-                      {locale === "ko" ? loading : "正在加载管理后台…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载管理后台…"}
                     </div>
                   }
                 >

@@ -279,7 +279,9 @@ describe("Google and GitHub OAuth", () => {
     ["/pt/pricing?interval=month#plan-month", 987606],
     ["/pt/pricing?interval=year#plan-year", 987607],
     ["/es/app?source=setup#help", 987608],
-    ["/ko/app/billing?offer=plus_yearly#plans", 987609],
+    ["/pt/app/channels?channel=abc#settings", 987609],
+    ["/pt/app/tasks/task-1?source=list#result", 987610],
+    ["/ko/app/billing?offer=plus_yearly#plans", 987611],
   ])("returns new and existing OAuth users to %s after authorization", async (path, id) => {
     const returnTo = authReturnPath(path);
     const callback = path.includes("#") ? new URL(returnTo, env.APP_URL).href : returnTo;
@@ -308,7 +310,7 @@ describe("Google and GitHub OAuth", () => {
       const target = `/${locale}/app?source=setup#help`;
       expect(authReturnPath(target)).toBe(target);
       expect(authReturnPath(`/${locale}/app/channels`)).toBe(
-        locale === "ko" ? "/ko/app/channels" : "/app",
+        (locale === "pt" || locale === "ko") ? `/${locale}/app/channels` : "/app",
       );
     }
     for (const path of [

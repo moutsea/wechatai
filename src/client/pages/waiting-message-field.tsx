@@ -1,6 +1,7 @@
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/waiting-message-field-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/waiting-message-field-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import {
   MAX_WAITING_MESSAGE_LENGTH,
   type WaitingMessageSettings,
@@ -16,7 +17,8 @@ export function WaitingMessageField({
   onChange: (value: WaitingMessageSettings) => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   return (
     <div className="waiting-message-field">

@@ -1,7 +1,9 @@
+import { roleplayPresets as ptPresets } from "../../shared/i18n/pt/copy/roleplay";
 import { characters } from "../../shared/i18n/ko/copy/roleplay-characters";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/roleplay-presets-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/roleplay-presets-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useState } from "react";
 import { ArrowRight, Check, PenLine, Upload } from "lucide-react";
@@ -25,12 +27,13 @@ export function RoleplayPresetPicker({
   error: string;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const presets =
     locale === "ko"
       ? roleplayPresets.map((preset) => ({ ...preset, ...characters[preset.id] }))
-      : roleplayPresets;
+      : locale === "pt" ? ptPresets : roleplayPresets;
   const [selectedId, setSelectedId] = useState(presets[0]!.id);
   const selected = presets.find((preset) => preset.id === selectedId)!;
   return (

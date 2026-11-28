@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/personal-daily-reminder-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/personal-daily-reminder-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState, type FormEvent } from "react";
 import { Bell } from "lucide-react";
@@ -35,7 +36,8 @@ export function DailyTasksReminder({
   onSaved: () => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request, notify } = useApp();
   const [record, setRecord] = useState<PersonalRecord | null>(null);

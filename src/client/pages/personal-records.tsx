@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/personal-records-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/personal-records-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { pluginAvailable } from "../../shared/plugin-access";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -112,7 +113,8 @@ function ScopedPersonalRecords({
   savedScopes: string[];
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const labels = {
     note: pageCopy["普通笔记"],

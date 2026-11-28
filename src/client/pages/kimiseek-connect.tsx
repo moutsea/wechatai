@@ -1,3 +1,4 @@
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { balanceCopy as koBalanceCopy } from "../../shared/i18n/ko/copy/workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, LoaderCircle, RefreshCw } from "lucide-react";
@@ -175,7 +176,14 @@ export function KimiseekBalance({
   const balanceCopy =
     locale === "ko"
       ? koBalanceCopy
-      : {
+      : locale === "pt" ? {
+          unavailable: ptCopy["余额暂不可用"],
+          title: ptCopy["KimiSeek 余额"],
+          loading: ptCopy["读取中…"],
+          refresh: ptCopy["刷新 KimiSeek 余额"],
+          updated: ptCopy["最近更新 {time}"],
+          recharge: ptCopy["充值"],
+        } : {
           unavailable: "余额暂不可用",
           title: "KimiSeek 余额",
           loading: "读取中…",
@@ -231,10 +239,10 @@ export function KimiseekBalance({
           balance
             ? formatCopy(balanceCopy.updated, {
                 time: new Date(balance.checkedAt).toLocaleTimeString(
-                  locale === "ko" ? "ko-KR" : undefined,
+                  locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : undefined,
                 ),
               })
-            : locale === "ko"
+            : (locale === "ko" || locale === "pt")
               ? balanceCopy.refresh
               : "刷新余额"
         }

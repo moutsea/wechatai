@@ -2,6 +2,7 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/admin-notices-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/admin-notices-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronLeft, ChevronRight, Eye, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
@@ -28,7 +29,8 @@ function NoticeEditor({
   onSaved: () => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request, notify } = useApp();
   const [initial] = useState<NoticeInput>(() =>
@@ -241,7 +243,8 @@ function NoticeEditor({
 
 export function AdminNotices() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request, notify } = useApp();
   const { refresh: refreshNotices } = useNotices();

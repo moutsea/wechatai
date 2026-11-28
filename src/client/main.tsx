@@ -3,7 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { BrowserRouter, matchRoutes, useLocation, useRoutes, type RouteObject } from "react-router-dom";
 import "../shared/i18n/load";
 import { DASHBOARD_PATH, hasRegisteredTranslation, splitLocalePath } from "../shared/i18n";
-import { LocaleProvider } from "./locale";
+import { workspaceLabel } from "./workspace-copy";
+import { LocaleProvider, useLocale } from "./locale";
 import { AuthProvider } from "./auth";
 import { Landing } from "./public-pages";
 import { PageMetadata } from "./seo";
@@ -111,7 +112,7 @@ function appRouteTarget(pathname: string) {
   const split = splitLocalePath(pathname);
   if (!split) return { routes, pathname };
   if (
-    split.locale === "ko" &&
+    (split.locale === "ko" || split.locale === "pt") &&
     (split.path === DASHBOARD_PATH || split.path.startsWith(`${DASHBOARD_PATH}/`))
   )
     return { routes: localizedWorkspaceRoutes, pathname };
@@ -168,6 +169,14 @@ function ScrollReset({ initialDocument }: { initialDocument?: DocumentState }) {
   }, [pathname, hash, key, initialDocument]);
   return null;
 }
+function PageLoading() {
+  const { locale } = useLocale();
+  return (
+    <div className="full-state" role="status">
+      {workspaceLabel(locale, "正在加载页面…")}
+    </div>
+  );
+}
 function mountApp(initialDocument?: DocumentState, stopInitialTracking?: () => void) {
   // Preserve the existing root when Vite refreshes this module during development.
   const root: Root = import.meta.hot?.data.root ?? createRoot(document.getElementById("root")!);
@@ -181,13 +190,7 @@ function mountApp(initialDocument?: DocumentState, stopInitialTracking?: () => v
             <PageViewTracker onReady={stopInitialTracking} />
             <DocumentInputProvider initialDocument={initialDocument}>
               <RouteLoadErrorBoundary>
-                <Suspense
-                  fallback={
-                    <div className="full-state" role="status">
-                      正在加载页面…
-                    </div>
-                  }
-                >
+                <Suspense fallback={<PageLoading />}>
                   <ScrollReset initialDocument={initialDocument} />
                   <AppRoutes />
                 </Suspense>

@@ -3,6 +3,7 @@ import { localizedHref } from "../locale";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/admin-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/admin-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { AdminNotices } from "./admin-notices";
 import { AdminServer } from "./admin-server";
@@ -55,7 +56,7 @@ import "./admin.css";
 const number = (n: number) =>
   new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(n);
 const compact = (n: number, locale = "zh-CN") =>
-  new Intl.NumberFormat(locale === "ko" ? "ko-KR" : "zh-CN", {
+  new Intl.NumberFormat(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN", {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(n);
@@ -74,7 +75,8 @@ const date = (n: number | null, time = true) =>
 
 function Trends({ daily }: { daily: AdminDay[] }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const metrics = [
     { key: "requests", name: pageCopy["成功调用"], format: number },
@@ -177,7 +179,8 @@ function Trends({ daily }: { daily: AdminDay[] }) {
 
 function Overview({ data }: { data: AdminOverview }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const s = data.summary;
   const today = data.daily.at(-1)!;
@@ -400,7 +403,8 @@ function GiftMembership({
   onGranted: () => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data } = useAuth();
   const storageKey = `wechatai:plus-gift:${data?.user.id}:${user.id}`;
@@ -594,7 +598,8 @@ function GiftMembership({
 
 export function Admin() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const [params, setParams] = useSearchParams();
   const tab =
@@ -763,7 +768,9 @@ export function Admin() {
     <div className="admin-page page-enter">
       <header className="admin-heading">
         <div>
-          <div className="eyebrow">OPERATIONS</div>
+          <div className="eyebrow">
+            {locale === "pt" ? ptCopy["OPERATIONS"] : "OPERATIONS"}
+          </div>
           <h1>
             {pageCopy["管理后台"]}{" "}
             <span>
@@ -1004,7 +1011,7 @@ export function Admin() {
                             <span>
                               {locale === "ko"
                                 ? `${workspaceError({ code: u.lastFailureCode ?? "request_failed" }, locale)}${u.lastFailureStatus ? ` (HTTP ${u.lastFailureStatus})` : ""}`
-                                : callFailureReason(u.lastFailureCode, u.lastFailureStatus)}
+                                : callFailureReason(u.lastFailureCode, u.lastFailureStatus, (text) => workspaceLabel(locale, text))}
                             </span>
                             <small>{date(u.lastFailureAt)}</small>
                           </>

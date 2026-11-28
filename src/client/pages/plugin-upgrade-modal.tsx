@@ -2,6 +2,8 @@ import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/plugin-upgrade-modal-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/plugin-upgrade-modal-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { pricingCopyPt } from "../../shared/i18n/pt/copy/pricing";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -15,6 +17,7 @@ import { json } from "../api";
 import { trackFunnel } from "../analytics-client";
 import { rememberPluginUpgrade, type PluginUpgradeTarget } from "../plugin-upgrade";
 import { Modal } from "../ui";
+import { rememberBillingReturn } from "../billing-return";
 
 const plusOffers = BILLING_OFFERS.filter((offer) => offer.kind === "plus");
 
@@ -26,7 +29,8 @@ export function PluginUpgradeModal({
   onClose: () => void;
 }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { data, request, base, user } = useApp();
   const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
@@ -82,6 +86,7 @@ export function PluginUpgradeModal({
       if (url.protocol !== "https:" || url.hostname !== "checkout.stripe.com")
         throw new Error(pageCopy["支付链接无效，请重试。"]);
       rememberPluginUpgrade(user.email, target);
+      rememberBillingReturn(user.email, base);
       window.location.assign(result.url);
     } catch (e) {
       setError(workspaceError(e as Error, locale));
@@ -136,16 +141,18 @@ export function PluginUpgradeModal({
           {plusOffers.map((preset) => {
             const offer = catalog?.offers.find((item) => item.id === preset.id);
             const annual = preset.interval === "year";
+            const name =
+              locale === "pt" ? pricingCopyPt.plans.offerName(preset.interval) : preset.name;
             return (
               <article
                 key={preset.id}
                 className={`plugin-upgrade-plan${annual ? " annual" : ""}`}
-                aria-label={preset.name}
+                aria-label={name}
               >
                 <span className="plugin-upgrade-badge">
                   {annual ? pageCopy["年付更划算"] : pageCopy["灵活选择"]}
                 </span>
-                <h3>{preset.name}</h3>
+                <h3>{name}</h3>
                 <p className="plugin-upgrade-price">
                   <strong>¥{offer?.price ?? preset.amount / 100}</strong>
                   <span>/ {annual ? pageCopy["年"] : pageCopy["月"]}</span>

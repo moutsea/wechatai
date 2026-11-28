@@ -162,7 +162,7 @@ export function AppProvider({
         request,
         refresh,
         isAdmin,
-        base: locale === "ko" ? localizedPath(locale, "/app") : "/app",
+        base: locale === "ko" || locale === "pt" ? localizedPath(locale, "/app") : "/app",
         user,
         notify,
       }}

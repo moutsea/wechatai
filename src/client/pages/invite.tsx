@@ -2,6 +2,7 @@ import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/invite-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/invite-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -23,7 +24,8 @@ import "./invite.css";
 
 export function Invite() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request, notify, base, data } = useApp();
   const [summary, setSummary] = useState<ReferralSummary | null>(null);
@@ -214,7 +216,7 @@ export function Invite() {
             <div className="invite-record" key={row.id}>
               <strong>{row.name}</strong>
               <time dateTime={new Date(row.createdAt).toISOString()}>
-                {new Date(row.createdAt).toLocaleDateString(locale === "ko" ? "ko-KR" : "zh-CN")}
+                {new Date(row.createdAt).toLocaleDateString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN")}
               </time>
               <span className={`tag ${row.status === "rewarded" ? "invite-rewarded" : ""}`}>
                 {row.status === "rewarded"

@@ -1,11 +1,13 @@
 import { useLocale } from "./locale";
 import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/connection-privacy-page";
 import { copy as koCopy } from "../shared/i18n/ko/copy/connection-privacy-page";
+import { workspaceCopy as ptCopy } from "../shared/i18n/pt/copy/workspace";
 import { Link } from "react-router-dom";
 import { KeyRound } from "lucide-react";
 export function ConnectionPrivacy({ wechat = false }: { wechat?: boolean }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   return (
     <p className="form-note connection-privacy">

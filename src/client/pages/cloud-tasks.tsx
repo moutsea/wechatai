@@ -2,6 +2,7 @@ import { workspaceError, workspaceLabel } from "../workspace-copy";
 import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/cloud-tasks-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/cloud-tasks-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -71,7 +72,8 @@ async function taskRequest<T>(
 
 function TaskResult({ id, content }: { id: string; content: string }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   return (
     <>
@@ -85,7 +87,8 @@ function TaskResult({ id, content }: { id: string; content: string }) {
 
 function TaskStatus({ task }: { task: CloudAgentTask }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const labels: Record<CloudAgentTaskStatus, string> = {
     submitting: pageCopy["提交中"],
@@ -126,7 +129,8 @@ function storageSize(bytes: number, pageCopy: typeof sourceCopy = sourceCopy) {
 
 function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request } = useApp();
   const [usage, setUsage] = useState<CloudAgentStorageUsage | null>(null);
@@ -182,7 +186,7 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
         <p className="cloud-storage-capacity">
           <strong>
             {((usage?.maxTotalBytes ?? CLOUD_AGENT_STORAGE_BYTES) / (1024 * 1024)).toLocaleString(
-              locale === "ko" ? "ko-KR" : "zh-CN",
+              locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN",
             )}
           </strong>
           <span>{pageCopy["MiB 总容量"]}</span>
@@ -250,7 +254,8 @@ function CloudStorage({ tasks }: { tasks: CloudAgentTask[] }) {
 
 export function CloudTasks() {
   const { locale } = useLocale();
-  const pageCopy = locale === "ko" ? koCopy : sourceCopy;
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
 
   const { request, notify, data, base } = useApp();
   const [params, setParams] = useSearchParams();
@@ -561,7 +566,7 @@ export function CloudTasks() {
                       <time
                         dateTime={new Date(task.createdAt).toISOString()}
                         title={new Date(task.createdAt).toLocaleString(
-                          locale === "ko" ? "ko-KR" : "zh-CN",
+                          locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN",
                         )}
                       >
                         <Clock3 size={13} />

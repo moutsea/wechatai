@@ -36,7 +36,7 @@ it("preserves dynamic task and public link suffixes using registered destination
   const task = "/app/tasks/task-123?source=history#result";
   expect(localizedHref("ko", task)).toBe(`/ko${task}`);
   expect(getPageSeo(`/ko${task}`)).toMatchObject({ htmlLang: "ko-KR", indexable: false });
-  expect(alternateLocales(task)).toEqual(["zh-CN", "ko"]);
+  expect(alternateLocales(task)).toEqual(["zh-CN", "ko", "pt"]);
   expect(localizedHref("ko", "/pricing?interval=year#plan-year")).toBe(
     "/ko/pricing?interval=year#plan-year",
   );
@@ -47,7 +47,7 @@ it("preserves dynamic task and public link suffixes using registered destination
   expect(hasRegisteredTranslation("ko", "/app/tasks/id/nested")).toBe(false);
   for (const locale of ["en", "ja", "es", "pt"] as const) {
     expect(hasRegisteredTranslation(locale, "/app")).toBe(true);
-    expect(hasRegisteredTranslation(locale, "/app/channels")).toBe(false);
+    expect(hasRegisteredTranslation(locale, "/app/channels")).toBe(locale === "pt");
   }
 });
 

@@ -20,6 +20,8 @@
   X-Robots-Tag: noindex
 /ko/app/*
   X-Robots-Tag: noindex
+/pt/app/*
+  X-Robots-Tag: noindex
 /404
   X-Robots-Tag: noindex
 https://:subdomain.workers.dev/*
