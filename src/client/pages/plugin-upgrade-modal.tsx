@@ -3,6 +3,7 @@ import { useLocale } from "../locale";
 import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/plugin-upgrade-modal-page";
 import { copy as koCopy } from "../../shared/i18n/ko/copy/plugin-upgrade-modal-page";
 import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { pricingCopyPt } from "../../shared/i18n/pt/copy/pricing";
 import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
@@ -140,16 +141,18 @@ export function PluginUpgradeModal({
           {plusOffers.map((preset) => {
             const offer = catalog?.offers.find((item) => item.id === preset.id);
             const annual = preset.interval === "year";
+            const name =
+              locale === "pt" ? pricingCopyPt.plans.offerName(preset.interval) : preset.name;
             return (
               <article
                 key={preset.id}
                 className={`plugin-upgrade-plan${annual ? " annual" : ""}`}
-                aria-label={preset.name}
+                aria-label={name}
               >
                 <span className="plugin-upgrade-badge">
                   {annual ? pageCopy["年付更划算"] : pageCopy["灵活选择"]}
                 </span>
-                <h3>{preset.name}</h3>
+                <h3>{name}</h3>
                 <p className="plugin-upgrade-price">
                   <strong>¥{offer?.price ?? preset.amount / 100}</strong>
                   <span>/ {annual ? pageCopy["年"] : pageCopy["月"]}</span>

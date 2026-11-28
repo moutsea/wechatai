@@ -195,3 +195,21 @@ Kandev 现有工作树接管仍受仓库未关联限制，评审使用本文件�
 本轮最终本地验证使用 Node 22.23.5 和现有锁文件。`pnpm check` 通过，Worker 2514 项、客户端 497 项通过，lint、类型检查、构建与 SEO 通过。完整浏览器回归 342 项通过，其中新增 5 条由修前失败转为通过。OpenClaw 27 项通过。最后的浏览器断言调整后再次执行 lint 和类型检查，均通过。真实 HTTP 48 项和 HTTP SEO 通过，内部文档与新增截图返回 404，`/api/docs` 返回 401。331 个公开资源及运行文件的内部文档标识扫描零命中。临时预览进程与测试密钥已清理。
 
 首轮全量检查曾有 3 项既有 Worker 测试触发 5 秒超时，原命令复跑后全部通过。原始证据位于 `/tmp/93062de0-rework-check-timeouts.log`，最终证据采用 `/tmp/93062de0-rework-` 前缀，包含 `check.log`、`browser-red.log`、`browser-green.log`、`browser-full.log`、`lint.log`、`typecheck.log`、`openclaw.log`、`http.log`、`seo-http.log`、`isolation.json`。任务执行期间曾发现 PR #57 已关闭且未合并，已依照本轮保持唯一 OPEN PR 的指令重新打开原 PR。
+
+
+## 第二次独立评审返工（2026-11-28）
+
+独立评审唯一 P1 为 Free 用户打开 `/pt/app/plugins` 并点击 `Configurar Xiaowei` 后，升级弹窗的套餐标题和无障碍名称仍为 `Plus 月付`、`Plus 年付`。弹窗按 `BILLING_OFFERS` 枚举套餐时直接使用默认名称，葡语取词遗漏了这两处。
+
+本轮复用葡语定价词典的 `pricingCopyPt.plans.offerName`，按套餐周期生成 `Plus Mensal` 和 `Plus Anual`，同一名称用于标题和 `aria-label`。购买按钮继续使用 API 目录中匹配的 offer，金额沿用现有目录价格及档位金额。
+
+新增桌面 1280px 与手机 390px 的 Free 升级弹窗回归，检查两个套餐标题、无障碍名称、购买按钮、金额及页面葡语文案。修前真实构建上的两项测试均因中文套餐标题失败，证据位于 `/tmp/93062de0-rework2/browser-red.log`。回归使用测试账户和模拟账单 API。
+
+- [Free 升级弹窗手机截图](pt-app-subroutes/upgrade-plans-mobile.png)
+
+本轮继续使用 PR #57。后续独立复审覆盖原始完整需求及基线 `669bcf08abf2d344c3328e7e774f8fd16ee6b469` 到最终 HEAD 的全部差异。
+
+
+本轮最终 `pnpm check` 通过，Worker 114 个文件、2514 项测试通过，客户端 44 个文件、497 项测试通过，lint、类型检查、构建与 SEO 全部通过。新增两项弹窗回归由修前失败转为修后通过，完整浏览器套件为 344 passed，OpenClaw 为 27 passed。截图调整后再次执行 lint 和类型检查，均通过。真实 HTTP 49 项及 HTTP SEO 通过，内部文档和四张截图返回 404，`/api/docs` 返回 401。331 个构建运行文件对内部文档标识零命中。预览进程与临时测试密钥已清理。
+
+本轮证据统一位于 `/tmp/93062de0-rework2/`，包含 `browser-red.log`、`browser-green.log`、`check.log`、`browser-full.log`、`openclaw.log`、`lint.log`、`typecheck.log`、`http.log`、`seo-http.log` 和 `isolation.json`。金额、周期名称与公开定价页按现有共享档位及葡语词典核对。

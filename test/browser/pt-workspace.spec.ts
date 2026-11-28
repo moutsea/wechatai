@@ -561,6 +561,53 @@ test("connection and post-save model import failures use Portuguese", async ({ p
   await portugueseUi(page);
 });
 
+for (const width of [1280, 390]) {
+  test(`Portuguese Free upgrade plan names are localized at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const snapshot = await fixture(page);
+    snapshot.plan = "free";
+    snapshot.planUntil = 0;
+    await page.route("**/api/billing/catalog", (route) =>
+      route.fulfill({
+        json: {
+          mode: "test",
+          offers: BILLING_OFFERS.map((offer) => ({
+            ...offer,
+            price: offer.amount / 100,
+            currency: "cny",
+            enabled: true,
+          })),
+        },
+      }),
+    );
+    await page.goto(`${origin}/pt/app/plugins`);
+    await page.getByRole("button", { name: "Configurar Xiaowei", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator(".plugin-upgrade-plan h3")).toHaveText([
+      "Plus Mensal",
+      "Plus Anual",
+    ]);
+    for (const [index, name] of ["Plus Mensal", "Plus Anual"].entries()) {
+      const plan = dialog.getByRole("article", { name, exact: true });
+      await expect(plan).toBeVisible();
+      await expect(plan.getByRole("button")).toBeEnabled();
+      await expect(plan.locator(".plugin-upgrade-price strong")).toHaveText(
+        `¥${BILLING_OFFERS[index].amount / 100}`,
+      );
+    }
+    await portugueseUi(page);
+    if (width === 390) {
+      await dialog.locator(".plugin-upgrade-plans").scrollIntoViewIfNeeded();
+      await mkdir("test-results/pt-workspace", { recursive: true });
+      await page.screenshot({
+        path: "test-results/pt-workspace/upgrade-plans-mobile.png",
+        fullPage: false,
+        animations: "disabled",
+      });
+    }
+  });
+}
+
 for (const entry of ["plugin", "billing", "portal"] as const) {
   const outcomes = entry === "portal" ? ["portal"] : ["success", "cancelled"];
   for (const outcome of outcomes) {
