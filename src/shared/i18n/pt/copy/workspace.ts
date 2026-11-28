@@ -1,4 +1,4 @@
-export const workspaceCopy: Readonly<Record<string, string>> = {
+const translations = {
   通知: "Notificações",
   "产品更新、使用提示和服务公告，都在这里。":
     "Atualizações do produto, dicas de uso e avisos de serviço.",
@@ -2197,6 +2197,7 @@ export const workspaceCopy: Readonly<Record<string, string>> = {
   NOTICES: "NOTIFICAÇÕES",
   "BETTER WITH FRIENDS": "MELHOR COM AMIGOS",
   "CREDIT HISTORY": "HISTÓRICO DE CRÉDITOS",
+  "READY IN A MOMENT": "PRONTO EM INSTANTES",
   PLUGINS: "PLUGINS",
   "YOUR FAMILIAR PLACE": "SEU ESPAÇO FAMILIAR",
   "A LITTLE MORE POSSIBILITY": "MAIS POSSIBILIDADES",
@@ -2246,4 +2247,70 @@ export const workspaceCopy: Readonly<Record<string, string>> = {
     "2. Leia o endereço POST e a key do webhook da Routine 「{routine}」 e envie-os com a ferramenta wechatai_register_webhook do conector 「{connector}」. A key deve estar sem o prefixo Bearer.",
   "3. 工具返回成功后告诉我「配置完成」，我会在微信发 @{shortcut} 加一句任务来测试。":
     "3. Após o sucesso da ferramenta, diga “Configuração concluída”. Enviarei no WeChat @{shortcut} e uma tarefa para testar.",
+  "，{value0} 个暂未同步": ", {value0} ainda sem sincronização",
+  " {value0} 的": " de {value0}",
+  此渠道的: " deste canal",
+  "（未知）": "(desconhecido)",
+  "（直接访问）": "(acesso direto)",
+  "Grok Bot 派发服务暂不可用，请在服务恢复后再发送新任务。":
+    "O serviço de envio de tarefas ao Grok Bot está temporariamente indisponível. Aguarde a recuperação para enviar novas tarefas.",
+  自定义: "Personalizado",
+  "LLM 对话": "Conversa com LLM",
+  "历史 / 未分类调用": "Chamadas antigas ou sem categoria",
+  直接访问: "Acesso direto",
+  未知来源: "Origem desconhecida",
+  "最近更新 {time}": "Última atualização em {time}",
+  "error.request_failed":
+    "Não foi possível concluir a solicitação. Confira a configuração e a conexão e tente novamente.",
+  "error.not_found": "O item solicitado não foi encontrado. Atualize a página e tente novamente.",
+  "error.invalid_input": "Confira os dados informados e salve novamente.",
+  "error.plus_required": "Este recurso requer Plus. Confira ou renove sua assinatura.",
+  "error.cloud_agent_unavailable":
+    "O serviço na nuvem está temporariamente indisponível. Tente novamente em breve.",
+  "error.cloud_agent_admin_only": "O Xiaowei está em teste com acesso restrito a administradores.",
+  "error.connection_paused":
+    "A conexão de destino do WeChat está pausada. Escolha outra conexão ou renove o Plus.",
+  "error.wechat_not_connected": "Conecte o WeChat por código QR e envie /wx help nessa conversa.",
+  "error.wechat_context_required":
+    "Envie /wx help na conversa do WeChat para abrir o canal de resposta antes de testar o envio. O comando é gratuito em credits.",
+  "error.wechat_reply_window_expired":
+    "Envie uma nova mensagem pela conversa de destino do WeChat para reabrir a janela de resposta.",
+  "error.wechat_channel_required": "Configure um canal antes de conectar o WeChat.",
+  "error.wechat_channel_incomplete": "Complete a configuração do canal antes de conectar o WeChat.",
+  "error.wechat_model_required":
+    "Configure um modelo de texto disponível antes de conectar o WeChat.",
+  "error.legacy_unknown": "Falha antiga sem motivo registrado.",
+  "error.kimiseek_insufficient_balance": "Saldo insuficiente no KimiSeek.",
+  "error.upstream_payment_required": "O provedor está sem saldo ou exige pagamento.",
+  "error.model_http_error": "Falha na solicitação ao serviço do modelo.",
+  "error.image_upstream": "Falha no serviço de geração de imagens.",
+  "error.remote_agent_failed": "O agente remoto não concluiu a tarefa.",
+  "error.request_timeout": "A solicitação excedeu o tempo limite.",
+  "error.image_timeout": "A geração de imagem excedeu o tempo limite.",
+  "error.empty_reply": "O modelo retornou uma resposta vazia.",
+  "error.model_failed": "O modelo não conseguiu concluir a solicitação.",
+  "error.tool_call_incomplete": "A chamada de ferramenta do modelo foi interrompida.",
+  "error.tool_call_invalid": "O modelo retornou uma chamada de ferramenta inválida.",
+  "error.plugin_empty_result": "O plugin não retornou um resultado utilizável.",
+  "error.empty_result": "O modelo ou plugin retornou uma resposta vazia.",
+  "error.context_limit": "O limite de contexto do modelo foi excedido.",
+  "error.message_too_long": "A mensagem é muito longa.",
+  "error.invalid_context_window": "A janela de contexto configurada é inválida.",
+  "error.budget_too_small": "O limite de credits por rodada é insuficiente.",
+  "error.image_download": "Não foi possível baixar a imagem.",
+  "error.image_response": "O serviço retornou dados de imagem inválidos.",
+  "error.image_size": "A imagem excede o tamanho permitido.",
+  "error.unsafe_url": "O endereço solicitado não é permitido.",
+  "error.model_redirect": "O serviço do modelo retornou um redirecionamento inválido.",
+  "error.context_changed": "O contexto mudou. Envie a solicitação novamente.",
+  "error.search_failed": "A busca falhou. Tente novamente.",
+  "error.interrupted_request": "A solicitação foi interrompida.",
+  "error.personal_recovery_expired": "O prazo de recuperação da tarefa do assistente expirou.",
+  "error.personal_recovery_changed":
+    "A configuração do assistente mudou. Envie uma nova solicitação.",
+  "error.personal_recovery_missing":
+    "Os dados para recuperar a tarefa do assistente estão indisponíveis.",
 };
+
+export const workspaceCopy: Readonly<typeof translations> & Readonly<Record<string, string>> =
+  translations;

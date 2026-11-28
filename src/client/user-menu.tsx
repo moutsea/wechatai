@@ -299,7 +299,11 @@ export function UserMenu({ user }: { user: MenuUser }) {
             ) : null}
           </div>
           {isAdmin && (
-            <Link className="account-menu-item" to={localizedHref(locale, "/app/admin")} onClick={() => setOpen(false)}>
+            <Link
+              className="account-menu-item"
+              to={localizedHref(locale, "/app/admin")}
+              onClick={() => setOpen(false)}
+            >
               <ShieldCheck size={17} />
               {copy.admin}
               <ArrowUpRight size={15} className="account-menu-arrow" />

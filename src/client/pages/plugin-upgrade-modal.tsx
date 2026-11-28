@@ -1,4 +1,9 @@
-import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
+import { workspaceError } from "../workspace-copy";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/plugin-upgrade-modal-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/plugin-upgrade-modal-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
@@ -21,8 +26,10 @@ export function PluginUpgradeModal({
   target: PluginUpgradeTarget;
   onClose: () => void;
 }) {
-  const errorText = useWorkspaceError();
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const { data, request, base, user } = useApp();
   const [catalog, setCatalog] = useState<BillingCatalog | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionInfo>(null);
@@ -47,13 +54,13 @@ export function PluginUpgradeModal({
         setSubscription(nextSubscription);
       })
       .catch((e: Error) => {
-        if (!controller.signal.aborted) setError(errorText(e));
+        if (!controller.signal.aborted) setError(workspaceError(e, locale));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [request, retry]);
+  }, [request, retry, locale]);
   if (!data) return null;
   const recurring =
     subscription &&
@@ -75,23 +82,25 @@ export function PluginUpgradeModal({
       );
       const url = new URL(result.url);
       if (url.protocol !== "https:" || url.hostname !== "checkout.stripe.com")
-        throw new Error(copyText("支付链接无效，请重试。"));
+        throw new Error(pageCopy["支付链接无效，请重试。"]);
       rememberPluginUpgrade(user.email, target);
       window.location.assign(result.url);
     } catch (e) {
-      setError(errorText(e));
+      setError(workspaceError(e as Error, locale));
     } finally {
       setBusy("");
     }
   }
   return (
     <Modal
-      title={cloud ? copyText("开通 Plus，解锁小薇") : copyText("开通 Plus，配置更多插件")}
+      title={cloud ? pageCopy["开通 Plus，解锁小薇"] : pageCopy["开通 Plus，配置更多插件"]}
       description={
         cloud
-          ? copyText("小薇是 Plus 专属云端助手，在微信交代任务、处理文件和生成文档。")
-          : copyText(
-              "Free 最多配置 {value0} 个插件，你已使用当前名额。Plus 可配置不限数量的插件。",
+          ? pageCopy["小薇是 Plus 专属云端助手，在微信交代任务、处理文件和生成文档。"]
+          : formatCopy(
+              pageCopy[
+                "Free 最多配置 {value0} 个插件，你已使用当前名额。Plus 可配置不限数量的插件。"
+              ],
               { value0: PLUGIN_LIMITS.free },
             )
       }
@@ -102,16 +111,18 @@ export function PluginUpgradeModal({
     >
       <div className="plugin-upgrade-body">
         <p className="plugin-upgrade-note">
-          {copyText("Plus 不包含模型 API 费用，需另付服务商；使用小薇需先配置自己的模型 API Key。")}
+          {pageCopy["Plus 不包含模型 API 费用，需另付服务商；使用小薇需先配置自己的模型 API Key。"]}
         </p>
         <ul className="plugin-upgrade-features">
           {[
-            copyText("每天赠送 {value0} credits", { value0: data.wallet.dailyGrants.plus }),
-            copyText("最多 {value0} 个微信连接", { value0: WECHAT_LINK_LIMITS.plus }),
-            copyText("插件配置数量不限"),
-            copyText("小薇 AI 云端助手"),
-            copyText("图片与文件输入"),
-            copyText("网页查看聊天记录"),
+            formatCopy(pageCopy["每天赠送 {value0} credits"], {
+              value0: data.wallet.dailyGrants.plus,
+            }),
+            formatCopy(pageCopy["最多 {value0} 个微信连接"], { value0: WECHAT_LINK_LIMITS.plus }),
+            pageCopy["插件配置数量不限"],
+            pageCopy["小薇 AI 云端助手"],
+            pageCopy["图片与文件输入"],
+            pageCopy["网页查看聊天记录"],
           ].map((feature) => (
             <li key={feature}>
               <Check size={16} aria-hidden="true" /> {feature}
@@ -120,7 +131,7 @@ export function PluginUpgradeModal({
         </ul>
         {catalog?.mode === "test" && (
           <p className="form-hint" role="status">
-            {copyText("测试模式 · 支付仅用于测试，不会产生真实扣款。")}
+            {pageCopy["测试模式 · 支付仅用于测试，不会产生真实扣款。"]}
           </p>
         )}
         <div className="plugin-upgrade-plans">
@@ -134,21 +145,21 @@ export function PluginUpgradeModal({
                 aria-label={preset.name}
               >
                 <span className="plugin-upgrade-badge">
-                  {annual ? copyText("年付更划算") : copyText("灵活选择")}
+                  {annual ? pageCopy["年付更划算"] : pageCopy["灵活选择"]}
                 </span>
                 <h3>{preset.name}</h3>
                 <p className="plugin-upgrade-price">
                   <strong>¥{offer?.price ?? preset.amount / 100}</strong>
-                  <span>/ {annual ? copyText("年") : copyText("月")}</span>
+                  <span>/ {annual ? pageCopy["年"] : pageCopy["月"]}</span>
                 </p>
-                <p>{copyText("单次购买，到期手动续费")}</p>
+                <p>{pageCopy["单次购买，到期手动续费"]}</p>
                 {recurring ? (
                   <Link
                     className="button secondary"
                     to={`${base}/billing`}
                     onClick={() => rememberPluginUpgrade(user.email, target)}
                   >
-                    {copyText("管理已有订阅 ")}
+                    {pageCopy["管理已有订阅 "]}
                     <ArrowRight size={15} aria-hidden="true" />
                   </Link>
                 ) : (
@@ -160,18 +171,18 @@ export function PluginUpgradeModal({
                     {busy === preset.id ? (
                       <>
                         <Loader2 size={16} className="spin" aria-hidden="true" />
-                        {copyText(" 正在跳转…")}
+                        {pageCopy[" 正在跳转…"]}
                       </>
                     ) : loading ? (
-                      copyText("正在加载…")
+                      pageCopy["正在加载…"]
                     ) : offer?.enabled ? (
                       annual ? (
-                        copyText("开通年付 Plus")
+                        pageCopy["开通年付 Plus"]
                       ) : (
-                        copyText("开通月付 Plus")
+                        pageCopy["开通月付 Plus"]
                       )
                     ) : (
-                      copyText("暂未开放购买")
+                      pageCopy["暂未开放购买"]
                     )}
                   </button>
                 )}
@@ -184,23 +195,23 @@ export function PluginUpgradeModal({
             {error}{" "}
             {!catalog && (
               <button className="text-link" onClick={() => setRetry((value) => value + 1)}>
-                {copyText("重新加载")}
+                {pageCopy["重新加载"]}
               </button>
             )}
           </p>
         )}
         <p className="plugin-upgrade-note">
-          {copyText("月付与年付权益相同，不自动续费。小薇执行次数与可用状态以插件页为准。")}
+          {pageCopy["月付与年付权益相同，不自动续费。小薇执行次数与可用状态以插件页为准。"]}
         </p>
         {!cloud && (
           <p className="plugin-upgrade-note">
-            {copyText("也可以删除不用的插件配置，释放 Free 名额；仅停用不会释放名额。")}
+            {pageCopy["也可以删除不用的插件配置，释放 Free 名额；仅停用不会释放名额。"]}
           </p>
         )}
       </div>
       <div className="modal-actions">
         <button className="button secondary" disabled={Boolean(busy)} onClick={onClose}>
-          {copyText("暂时不用")}
+          {pageCopy["暂时不用"]}
         </button>
         <Link
           className="text-link"
@@ -211,7 +222,7 @@ export function PluginUpgradeModal({
             else rememberPluginUpgrade(user.email, target);
           }}
         >
-          {copyText("查看全部会员权益 ")}
+          {pageCopy["查看全部会员权益 "]}
           <ArrowRight size={15} aria-hidden="true" />
         </Link>
       </div>

@@ -1,4 +1,9 @@
-import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
+import { workspaceError } from "../workspace-copy";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/personal-reminder-status-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/personal-reminder-status-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { formatCopy } from "../../shared/i18n/dashboard";
 import { AlertTriangle } from "lucide-react";
 import {
   beijingTime,
@@ -6,55 +11,63 @@ import {
   type ReminderFailureReason,
 } from "../../shared/personal-assistant";
 
-export const reminderStatuses: Record<string, string> = {
-  scheduled: "等待提醒",
-  sent: "已提醒",
-  paused: "已暂停",
-  retry: "发送重试中",
-  waiting_context: "等待微信恢复",
-  blocked: "需重新设置",
-  expired: "未送达，已过期",
-};
+export function reminderStatusesFor(locale = "zh-CN"): Record<string, string> {
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+  return {
+    scheduled: pageCopy["等待提醒"],
+    sent: pageCopy["已提醒"],
+    paused: pageCopy["已暂停"],
+    retry: pageCopy["发送重试中"],
+    waiting_context: pageCopy["等待微信恢复"],
+    blocked: pageCopy["需重新设置"],
+    expired: pageCopy["未送达，已过期"],
+  };
+}
+
+export const reminderStatuses = reminderStatusesFor();
 
 function nextStep(
   record: PersonalRecord,
   failure: ReminderFailureReason | undefined,
-  copyText: ReturnType<typeof useWorkspaceText>,
+  pageCopy: typeof sourceCopy = sourceCopy,
 ) {
   const state = record.reminderState;
   if (state === "expired")
-    return copyText("已停止补发。若仍需提醒，请编辑并保存一个新的提醒时间。");
+    return pageCopy["已停止补发。若仍需提醒，请编辑并保存一个新的提醒时间。"];
   if (state === "blocked")
     return record.repeat === "none"
-      ? copyText("请检查接收微信，再编辑并保存一个新的提醒时间。")
-      : copyText("请检查接收微信，再编辑并重新保存提醒；系统将按原周期恢复下一次未来提醒。");
+      ? pageCopy["请检查接收微信，再编辑并保存一个新的提醒时间。"]
+      : pageCopy["请检查接收微信，再编辑并重新保存提醒；系统将按原周期恢复下一次未来提醒。"];
   if (failure?.code === "wechat_expired")
-    return copyText("请在微信链接页面重新扫码连接，再编辑并重新保存提醒。");
+    return pageCopy["请在微信链接页面重新扫码连接，再编辑并重新保存提醒。"];
   if (failure?.code === "reminder_plugin_paused")
-    return copyText("请启用个人助理或恢复套餐；恢复后会继续尝试尚未过期的提醒。");
+    return pageCopy["请启用个人助理或恢复套餐；恢复后会继续尝试尚未过期的提醒。"];
   if (state === "paused")
-    return copyText("请检查接收微信的连接和套餐；恢复后会继续尝试尚未过期的提醒。");
+    return pageCopy["请检查接收微信的连接和套餐；恢复后会继续尝试尚未过期的提醒。"];
   if (state === "scheduled")
-    return copyText("本次已停止补发，下一次仍会按计划尝试。请检查接收微信的连接。");
+    return pageCopy["本次已停止补发，下一次仍会按计划尝试。请检查接收微信的连接。"];
   const dailyTasks = record.reminderType === "daily_tasks";
   const retryWindow = dailyTasks
-    ? copyText("预定提醒当天（北京时间）")
-    : copyText("预定时间后的 24 小时内");
-  const cutoff = dailyTasks ? copyText("，跨天后不再补发") : "";
+    ? pageCopy["预定提醒当天（北京时间）"]
+    : pageCopy["预定时间后的 24 小时内"];
+  const cutoff = dailyTasks ? pageCopy["，跨天后不再补发"] : "";
   if (state === "waiting_context" || failure?.ret === -2 || failure?.errcode === -2)
-    return copyText("请先向接收微信发送一条消息。系统会在{value0}继续重试{value1}。", {
+    return formatCopy(pageCopy["请先向接收微信发送一条消息。系统会在{value0}继续重试{value1}。"], {
       value0: retryWindow,
       value1: cutoff,
     });
-  return copyText("系统会在{value0}自动重试{value1}；持续失败请检查微信连接或联系管理员。", {
-    value0: retryWindow,
-    value1: cutoff,
-  });
+  return formatCopy(
+    pageCopy["系统会在{value0}自动重试{value1}；持续失败请检查微信连接或联系管理员。"],
+    { value0: retryWindow, value1: cutoff },
+  );
 }
 
 export function ReminderFailureNotice({ record }: { record: PersonalRecord }) {
-  const errorText = useWorkspaceError();
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const failure = record.reminderLastFailure;
   const state = record.reminderState ?? "";
   // Scheduled rows may describe a missed occurrence before nextReminderAt.
@@ -75,12 +88,12 @@ export function ReminderFailureNotice({ record }: { record: PersonalRecord }) {
   if (!problem && !failure) return null;
   const title =
     state === "expired"
-      ? copyText("这条提醒未送达，已过期")
+      ? pageCopy["这条提醒未送达，已过期"]
       : state === "scheduled"
-        ? copyText("上次提醒未送达")
+        ? pageCopy["上次提醒未送达"]
         : state === "retry"
-          ? copyText("提醒发送失败，正在重试")
-          : copyText("提醒尚未送达，需要处理");
+          ? pageCopy["提醒发送失败，正在重试"]
+          : pageCopy["提醒尚未送达，需要处理"];
   return (
     <div className={`personal-reminder-failure${problem ? " needs-attention" : ""}`}>
       {problem && (
@@ -89,42 +102,46 @@ export function ReminderFailureNotice({ record }: { record: PersonalRecord }) {
           <div>
             <strong>{title}</strong>
             <p>
-              {errorText(currentReason ?? record.reminderError ?? copyText("暂未记录具体原因。"))}
+              {(currentReason
+                ? workspaceError(currentReason, locale)
+                : record.reminderError
+                  ? workspaceError(record.reminderError, locale)
+                  : undefined) || pageCopy["暂未记录具体原因。"]}
             </p>
-            <p>{nextStep(record, currentReason, copyText)}</p>
+            <p>{nextStep(record, currentReason, pageCopy)}</p>
             {state === "expired" && !currentReason && (
-              <p>{copyText("这条历史提醒未保留原始失败原因。")}</p>
+              <p>{pageCopy["这条历史提醒未保留原始失败原因。"]}</p>
             )}
           </div>
         </div>
       )}
       {failure && (
         <details>
-          <summary>{copyText("查看最近失败详情")}</summary>
+          <summary>{pageCopy["查看最近失败详情"]}</summary>
           <p>
-            {copyText("对应提醒时间：")}
+            {pageCopy["对应提醒时间："]}
             {beijingTime(failure.dueAt)}
-            {copyText("（北京时间）")}
+            {pageCopy["（北京时间）"]}
           </p>
           <p>
-            {copyText("失败时间：")}
+            {pageCopy["失败时间："]}
             {failure.at === null
-              ? copyText("历史记录未保存时间")
-              : copyText("{value0}（北京时间）", { value0: beijingTime(failure.at) })}
+              ? pageCopy["历史记录未保存时间"]
+              : formatCopy(pageCopy["{value0}（北京时间）"], { value0: beijingTime(failure.at) })}
           </p>
           <p>
-            {copyText("失败原因：")}
-            {errorText(failure)}
+            {pageCopy["失败原因："]}
+            {workspaceError(failure, locale)}
           </p>
           <p>
-            {copyText("错误标识：")}
+            {pageCopy["错误标识："]}
             <code>{failure.code}</code>
             {failure.upstreamStatus !== undefined && ` · HTTP ${failure.upstreamStatus}`}
             {failure.ret !== undefined && ` · ret=${failure.ret}`}
             {failure.errcode !== undefined && ` · errcode=${failure.errcode}`}
           </p>
           {(!problem || !currentFailure || !!currentBlock) && (
-            <p>{copyText("以上为历史失败记录，当前提醒状态以页面显示为准。")}</p>
+            <p>{pageCopy["以上为历史失败记录，当前提醒状态以页面显示为准。"]}</p>
           )}
         </details>
       )}

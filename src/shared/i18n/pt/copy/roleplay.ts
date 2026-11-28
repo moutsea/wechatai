@@ -221,4 +221,5 @@ const characters: Record<
 export const roleplayPresets: readonly RoleplayPreset[] = sourcePresets.map((preset) => ({
   ...preset,
   ...characters[preset.id],
+  character: { ...characters[preset.id].character, userName: "Você" },
 }));

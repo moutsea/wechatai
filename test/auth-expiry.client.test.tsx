@@ -159,6 +159,14 @@ async function render(path = returnTo) {
                   </AppProvider>
                 }
               />
+              <Route
+                path="/ko/app/*"
+                element={
+                  <AppProvider request={request}>
+                    <WorkspaceProbe />
+                  </AppProvider>
+                }
+              />
               <Route path="/login" element={<AuthPage />} />
               <Route path="/register" element={<AuthPage register />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -373,8 +381,8 @@ it("does not navigate back after leaving a pending sign-in confirmation", async 
   );
 });
 
-it("restores a Portuguese child including query and fragment after session expiry", async () => {
-  const target = "/pt/app/channels?channel=abc#settings";
+it.each(["pt", "ko"])("restores a %s child including query and fragment after session expiry", async (locale) => {
+  const target = `/${locale}/app/channels?channel=abc#settings`;
   window.history.replaceState({}, "", target);
   await render(target);
   await expire();

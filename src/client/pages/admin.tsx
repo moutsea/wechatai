@@ -1,5 +1,10 @@
-import { useLocale, localizedHref } from "../locale";
-import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
+import { workspaceError, workspaceLabel } from "../workspace-copy";
+import { localizedHref } from "../locale";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/admin-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/admin-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { formatCopy } from "../../shared/i18n/dashboard";
 import { AdminNotices } from "./admin-notices";
 import { AdminServer } from "./admin-server";
 import { AdminAnalytics } from "./admin-analytics";
@@ -50,8 +55,11 @@ import "./admin.css";
 
 const number = (n: number) =>
   new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(n);
-const compact = (n: number, locale: string) =>
-  new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(n);
+const compact = (n: number, locale = "zh-CN") =>
+  new Intl.NumberFormat(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
 const money = (n: number) =>
   `¥${new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(n)}`;
 const date = (n: number | null, time = true) =>
@@ -64,17 +72,22 @@ const date = (n: number | null, time = true) =>
         ...(time ? { hour: "2-digit", minute: "2-digit", hour12: false } : {}),
       }).format(n)
     : "—";
-const metrics = [
-  { key: "requests", name: "成功调用", format: number },
-  { key: "failedRequests", name: "失败调用", format: number },
-  { key: "revenue", name: "收入", format: money },
-  { key: "newUsers", name: "新增用户", format: number },
-  { key: "credits", name: "Credits 消耗", format: formatCredits },
-] as const;
 
 function Trends({ daily }: { daily: AdminDay[] }) {
-  const copyText = useWorkspaceText();
-  const [metric, setMetric] = useState<(typeof metrics)[number]>(metrics[0]);
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
+  const metrics = [
+    { key: "requests", name: pageCopy["成功调用"], format: number },
+    { key: "failedRequests", name: pageCopy["失败调用"], format: number },
+    { key: "revenue", name: pageCopy["收入"], format: money },
+    { key: "newUsers", name: pageCopy["新增用户"], format: number },
+    { key: "credits", name: pageCopy["Credits 消耗"], format: formatCredits },
+  ] as const;
+
+  const [metricKey, setMetricKey] = useState<(typeof metrics)[number]["key"]>(metrics[0].key);
+  const metric = metrics.find((item) => item.key === metricKey)!;
   const [selected, setSelected] = useState<string | null>(null);
   const current = daily.find((d) => d.day === selected) || daily.at(-1)!;
   const max = Math.max(1, ...daily.map((d) => d[metric.key]));
@@ -82,32 +95,32 @@ function Trends({ daily }: { daily: AdminDay[] }) {
     <section className="admin-panel admin-trends">
       <div className="admin-panel-heading">
         <div>
-          <h2>{copyText("近 30 天")}</h2>
-          <p>{copyText("调用、收入与新增用户趋势")}</p>
+          <h2>{pageCopy["近 30 天"]}</h2>
+          <p>{pageCopy["调用、收入与新增用户趋势"]}</p>
         </div>
-        <span className="admin-muted">{copyText("北京时间")}</span>
+        <span className="admin-muted">{pageCopy["北京时间"]}</span>
       </div>
-      <div className="admin-metric-tabs" aria-label={copyText("趋势指标")}>
+      <div className="admin-metric-tabs" aria-label={pageCopy["趋势指标"]}>
         {metrics.map((item) => (
           <button
             key={item.key}
             className={item.key === metric.key ? "active" : ""}
             aria-pressed={item.key === metric.key}
-            onClick={() => setMetric(item)}
+            onClick={() => setMetricKey(item.key)}
           >
-            {copyText(item.name)}
+            {item.name}
           </button>
         ))}
       </div>
       <div className="admin-chart-value">
         <strong>{metric.format(current[metric.key])}</strong>
         <span>
-          {current.day} · {copyText(metric.name)}
+          {current.day} · {metric.name}
         </span>
       </div>
       <div
         className="admin-bars"
-        aria-label={copyText("{value0}每日趋势", { value0: copyText(metric.name) })}
+        aria-label={formatCopy(pageCopy["{value0}每日趋势"], { value0: metric.name })}
       >
         {daily.map((d) => (
           <button
@@ -130,18 +143,18 @@ function Trends({ daily }: { daily: AdminDay[] }) {
         <span>{daily.at(-1)!.day.slice(5)}</span>
       </div>
       <details className="admin-daily-details">
-        <summary>{copyText("查看每日明细")}</summary>
+        <summary>{pageCopy["查看每日明细"]}</summary>
         <div className="admin-table-scroll">
           <table>
             <thead>
               <tr>
-                <th>{copyText("日期")}</th>
-                <th>{copyText("新增用户")}</th>
-                <th>{copyText("活跃用户")}</th>
-                <th>{copyText("成功")}</th>
-                <th>{copyText("失败")}</th>
+                <th>{pageCopy["日期"]}</th>
+                <th>{pageCopy["新增用户"]}</th>
+                <th>{pageCopy["活跃用户"]}</th>
+                <th>{pageCopy["成功"]}</th>
+                <th>{pageCopy["失败"]}</th>
                 <th>Credits</th>
-                <th>{copyText("收入")}</th>
+                <th>{pageCopy["收入"]}</th>
               </tr>
             </thead>
             <tbody>
@@ -166,35 +179,37 @@ function Trends({ daily }: { daily: AdminDay[] }) {
 
 function Overview({ data }: { data: AdminOverview }) {
   const { locale } = useLocale();
-  const copyText = useWorkspaceText();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const s = data.summary;
   const today = data.daily.at(-1)!;
   const hasStats = data.coverage.synced > 0;
   const cards = [
     {
-      label: copyText("注册用户"),
+      label: pageCopy["注册用户"],
       value: number(s.users),
-      detail: copyText("今日新增 {value0} 人", { value0: number(today.newUsers) }),
+      detail: formatCopy(pageCopy["今日新增 {value0} 人"], { value0: number(today.newUsers) }),
       icon: Users,
     },
     {
-      label: copyText("Plus 会员"),
+      label: pageCopy["Plus 会员"],
       value: hasStats ? number(s.plus) : "—",
-      detail: copyText("当前会员有效期内"),
+      detail: pageCopy["当前会员有效期内"],
       icon: Crown,
     },
     {
-      label: copyText("累计收入"),
+      label: pageCopy["累计收入"],
       value: money(s.revenue),
-      detail: copyText("{value0} 笔已付款订单", { value0: number(s.paidOrders) }),
+      detail: formatCopy(pageCopy["{value0} 笔已付款订单"], { value0: number(s.paidOrders) }),
       icon: Wallet,
     },
     {
-      label: copyText("成功调用"),
-      value: hasStats ? compact(s.requests, locale === "pt" ? "pt-BR" : "zh-CN") : "—",
-      detail: copyText("累计失败 {value0} 次 · {value1} tokens 已结算", {
+      label: pageCopy["成功调用"],
+      value: hasStats ? compact(s.requests, locale) : "—",
+      detail: formatCopy(pageCopy["累计失败 {value0} 次 · {value1} tokens 已结算"], {
         value0: number(s.failedRequests),
-        value1: compact(s.tokens, locale === "pt" ? "pt-BR" : "zh-CN"),
+        value1: compact(s.tokens, locale),
       }),
       icon: MessageCircle,
     },
@@ -213,22 +228,22 @@ function Overview({ data }: { data: AdminOverview }) {
           </article>
         ))}
       </div>
-      <section className="admin-today" aria-label={copyText("今日数据")}>
+      <section className="admin-today" aria-label={pageCopy["今日数据"]}>
         <div className="admin-today-title">
           <span className="tiny-dot" />
-          <strong>{copyText("今天")}</strong>
+          <strong>{pageCopy["今天"]}</strong>
           <small>{today.day.slice(5)}</small>
         </div>
         {[
-          [copyText("活跃用户"), number(today.activeUsers)],
-          [copyText("成功调用"), number(today.requests)],
-          [copyText("失败调用"), number(today.failedRequests)],
-          [copyText("Credits 消耗"), formatCredits(today.credits)],
-          [copyText("收入"), money(today.revenue)],
+          [pageCopy["活跃用户"], number(today.activeUsers)],
+          [pageCopy["成功调用"], number(today.requests)],
+          [pageCopy["失败调用"], number(today.failedRequests)],
+          [pageCopy["Credits 消耗"], formatCredits(today.credits)],
+          [pageCopy["收入"], money(today.revenue)],
         ].map(([label, val]) => (
           <div key={label}>
             <span>{label}</span>
-            <strong>{hasStats || label === copyText("收入") ? val : "—"}</strong>
+            <strong>{hasStats || label === pageCopy["收入"] ? val : "—"}</strong>
           </div>
         ))}
       </section>
@@ -237,8 +252,8 @@ function Overview({ data }: { data: AdminOverview }) {
         <section className="admin-panel admin-plugin-ranking">
           <div className="admin-panel-heading">
             <div>
-              <h2>{copyText("大家在用什么")}</h2>
-              <p>{copyText("近 30 天 · 按已结算调用排序")}</p>
+              <h2>{pageCopy["大家在用什么"]}</h2>
+              <p>{pageCopy["近 30 天 · 按已结算调用排序"]}</p>
             </div>
             <Activity size={19} />
           </div>
@@ -253,9 +268,11 @@ function Overview({ data }: { data: AdminOverview }) {
                     </span>
                     <div>
                       <div className="admin-ranking-title">
-                        <strong>{copyText(adminPluginNames[p.pluginId] || p.pluginId)}</strong>
+                        <strong>
+                          {workspaceLabel(locale, adminPluginNames[p.pluginId]) || p.pluginId}
+                        </strong>
                         <b>
-                          {number(p.requests)} <small>{copyText("次")}</small>
+                          {number(p.requests)} <small>{pageCopy["次"]}</small>
                         </b>
                       </div>
                       <div className="admin-ranking-track">
@@ -267,7 +284,7 @@ function Overview({ data }: { data: AdminOverview }) {
                       </div>
                       <p>
                         {number(p.users)}
-                        {copyText(" 位用户")}
+                        {pageCopy[" 位用户"]}
                         <span>{formatCredits(p.credits)} credits</span>
                       </p>
                     </div>
@@ -278,7 +295,7 @@ function Overview({ data }: { data: AdminOverview }) {
           ) : (
             <div className="admin-empty">
               <MessageCircle />
-              <p>{hasStats ? copyText("暂无近期调用") : copyText("同步后查看使用情况")}</p>
+              <p>{hasStats ? pageCopy["暂无近期调用"] : pageCopy["同步后查看使用情况"]}</p>
             </div>
           )}
         </section>
@@ -287,8 +304,8 @@ function Overview({ data }: { data: AdminOverview }) {
         <section className="admin-panel">
           <div className="admin-panel-heading">
             <div>
-              <h2>{copyText("支付与 credits")}</h2>
-              <p>{copyText("订单收入与平台用量分开统计")}</p>
+              <h2>{pageCopy["支付与 credits"]}</h2>
+              <p>{pageCopy["订单收入与平台用量分开统计"]}</p>
             </div>
             <Coins size={19} />
           </div>
@@ -296,38 +313,38 @@ function Overview({ data }: { data: AdminOverview }) {
             <div>
               <dt>
                 <ArrowDownLeft size={15} />
-                {copyText("会员收入")}
+                {pageCopy["会员收入"]}
               </dt>
               <dd>{money(s.membershipRevenue)}</dd>
             </div>
             <div>
-              <dt>{copyText("Credits 购买收入")}</dt>
+              <dt>{pageCopy["Credits 购买收入"]}</dt>
               <dd>{money(s.creditsRevenue)}</dd>
             </div>
             <div>
-              <dt>{copyText("付费用户")}</dt>
+              <dt>{pageCopy["付费用户"]}</dt>
               <dd>
                 {number(s.payingUsers)}
-                {copyText(" 人")}
+                {pageCopy[" 人"]}
               </dd>
             </div>
             <div>
-              <dt>{copyText("平均订单金额")}</dt>
+              <dt>{pageCopy["平均订单金额"]}</dt>
               <dd>{money(s.paidOrders ? s.revenue / s.paidOrders : 0)}</dd>
             </div>
             <div>
               <dt>
                 <ArrowUpRight size={15} />
-                {copyText("累计 credits 消耗")}
+                {pageCopy["累计 credits 消耗"]}
               </dt>
               <dd>{hasStats ? formatCredits(s.credits) : "—"}</dd>
             </div>
             <div>
-              <dt>{copyText("未使用的购买 credits")}</dt>
+              <dt>{pageCopy["未使用的购买 credits"]}</dt>
               <dd>{hasStats ? formatCredits(s.purchasedCredits) : "—"}</dd>
             </div>
             <div>
-              <dt>{copyText("待抵扣 credits")}</dt>
+              <dt>{pageCopy["待抵扣 credits"]}</dt>
               <dd>{hasStats ? formatCredits(s.debt) : "—"}</dd>
             </div>
           </dl>
@@ -335,19 +352,19 @@ function Overview({ data }: { data: AdminOverview }) {
         <section className="admin-panel">
           <div className="admin-panel-heading">
             <div>
-              <h2>{copyText("连接与配置")}</h2>
-              <p>{copyText("账户在微伴上的使用情况")}</p>
+              <h2>{pageCopy["连接与配置"]}</h2>
+              <p>{pageCopy["账户在微伴上的使用情况"]}</p>
             </div>
             <Link2 size={19} />
           </div>
           <div className="admin-assets">
             {[
-              [copyText("微信链接"), s.links],
-              [copyText("已连接且可用"), s.connected],
-              [copyText("渠道"), s.channels],
-              [copyText("模型配置"), s.models],
-              [copyText("插件配置"), s.plugins],
-              [copyText("会话"), s.sessions],
+              [pageCopy["微信链接"], s.links],
+              [pageCopy["已连接且可用"], s.connected],
+              [pageCopy["渠道"], s.channels],
+              [pageCopy["模型配置"], s.models],
+              [pageCopy["插件配置"], s.plugins],
+              [pageCopy["会话"], s.sessions],
             ].map(([label, val]) => (
               <div key={label}>
                 <strong>{hasStats ? number(Number(val)) : "—"}</strong>
@@ -357,18 +374,20 @@ function Overview({ data }: { data: AdminOverview }) {
           </div>
           <div className="admin-referrals">
             <Check size={16} />
-            <span>{copyText("已发奖邀请")}</span>
+            <span>{pageCopy["已发奖邀请"]}</span>
             <strong>
               {number(s.rewardedReferrals)}
-              {copyText(" 对")}
+              {pageCopy[" 对"]}
             </strong>
           </div>
         </section>
       </div>
       <p className="admin-footnote">
-        {copyText(
-          "收入为本站当前支付环境的人民币已付款订单金额，未扣支付手续费、未计退款调整，不包含上游模型或 KimiSeek 的充值。活跃用户指当天有成功结算调用的用户；调用包含模型测试和远程插件主动推送。 失败统计记录已开始处理但未完成的调用，不扣 credits；不含指令和发送前的校验拦截。 历史失败仅补录仍保留的记录，具体原因可能缺失。 打开管理后台会自动同步账户统计，页面可见时每分钟更新一次；也可点击「同步最新数据」手动更新。",
-        )}
+        {
+          pageCopy[
+            "收入为本站当前支付环境的人民币已付款订单金额，未扣支付手续费、未计退款调整，不包含上游模型或 KimiSeek 的充值。活跃用户指当天有成功结算调用的用户；调用包含模型测试和远程插件主动推送。 失败统计记录已开始处理但未完成的调用，不扣 credits；不含指令和发送前的校验拦截。 历史失败仅补录仍保留的记录，具体原因可能缺失。 打开管理后台会自动同步账户统计，页面可见时每分钟更新一次；也可点击「同步最新数据」手动更新。"
+          ]
+        }
       </p>
     </>
   );
@@ -383,8 +402,10 @@ function GiftMembership({
   onClose: () => void;
   onGranted: () => void;
 }) {
-  const errorText = useWorkspaceError();
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const { data } = useAuth();
   const storageKey = `wechatai:plus-gift:${data?.user.id}:${user.id}`;
   const [pending, setPending] = useState<AdminGiftInput | null>(() => {
@@ -414,10 +435,10 @@ function GiftMembership({
         if (!controller.signal.aborted) setMembership(value);
       })
       .catch((e) => {
-        if (!controller.signal.aborted) setError(errorText(e));
+        if (!controller.signal.aborted) setError(workspaceError(e, locale));
       });
     return () => controller.abort();
-  }, [user.id, reload]);
+  }, [user.id, reload, locale]);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting.current || !membership || result) return;
@@ -445,7 +466,9 @@ function GiftMembership({
       onGranted();
     } catch (e) {
       setError(
-        copyText("{value0}。可重试核对同一次赠送，不会重复发放。", { value0: errorText(e) }),
+        formatCopy(pageCopy["{value0}。可重试核对同一次赠送，不会重复发放。"], {
+          value0: workspaceError(e as Error, locale),
+        }),
       );
     } finally {
       submitting.current = false;
@@ -454,7 +477,7 @@ function GiftMembership({
   };
   return (
     <Modal
-      title={copyText("赠送一个月 Plus")}
+      title={pageCopy["赠送一个月 Plus"]}
       description={user.email}
       onClose={() => {
         if (!submitting.current) onClose();
@@ -465,14 +488,14 @@ function GiftMembership({
           <span className="admin-gift-symbol">
             <Check size={28} />
           </span>
-          <h3>{copyText("已赠送一个月 Plus 会员")}</h3>
+          <h3>{pageCopy["已赠送一个月 Plus 会员"]}</h3>
           <p>
-            {copyText("本次赠送后的到期时间：")}
+            {pageCopy["本次赠送后的到期时间："]}
             {date(result.gift.planUntil)}
           </p>
           <div className="modal-actions">
             <button className="button" onClick={onClose}>
-              {copyText("完成")}
+              {pageCopy["完成"]}
             </button>
           </div>
         </div>
@@ -483,46 +506,48 @@ function GiftMembership({
               <div className="admin-gift-summary">
                 <Gift size={24} />
                 <div>
-                  <strong>{copyText("Plus 会员 · 1 个月")}</strong>
-                  <p>{copyText("免费赠送，立即生效。已有会员从当前到期时间顺延。")}</p>
+                  <strong>{pageCopy["Plus 会员 · 1 个月"]}</strong>
+                  <p>{pageCopy["免费赠送，立即生效。已有会员从当前到期时间顺延。"]}</p>
                 </div>
               </div>
               <dl className="admin-facts">
                 <div>
-                  <dt>{copyText("当前会员")}</dt>
+                  <dt>{pageCopy["当前会员"]}</dt>
                   <dd>
                     {membership.planUntil > Date.now()
-                      ? copyText("Plus · {value0} 到期", { value0: date(membership.planUntil) })
+                      ? formatCopy(pageCopy["Plus · {value0} 到期"], {
+                          value0: date(membership.planUntil),
+                        })
                       : "Free"}
                   </dd>
                 </div>
                 {!pending && (
                   <div>
-                    <dt>{copyText("赠送后到期")}</dt>
+                    <dt>{pageCopy["赠送后到期"]}</dt>
                     <dd>{date(extendMembership(Math.max(Date.now(), membership.planUntil), 1))}</dd>
                   </div>
                 )}
               </dl>
               {pending && (
                 <p className="admin-gift-note">
-                  {copyText("上次赠送结果尚未确认。点击重试会核对原操作，不会重复赠送。")}
+                  {pageCopy["上次赠送结果尚未确认。点击重试会核对原操作，不会重复赠送。"]}
                 </p>
               )}
               <label className="field">
-                {copyText("赠送原因（选填）")}
+                {pageCopy["赠送原因（选填）"]}
                 <textarea
                   value={reason}
                   maxLength={200}
                   rows={2}
                   disabled={busy || Boolean(pending)}
-                  placeholder={copyText("例如：注册问题补偿")}
+                  placeholder={pageCopy["例如：注册问题补偿"]}
                   onChange={(e) => setReason(e.target.value)}
                 />
               </label>
               {membership.gifts.length > 0 && (
                 <details className="admin-gift-history">
                   <summary>
-                    {copyText("最近赠送记录（")}
+                    {pageCopy["最近赠送记录（"]}
                     {membership.gifts.length}）
                   </summary>
                   <ul>
@@ -530,11 +555,11 @@ function GiftMembership({
                       <li key={gift.id}>
                         <strong>
                           {date(gift.createdAt)}
-                          {copyText(" · 赠送 1 个月")}
+                          {pageCopy[" · 赠送 1 个月"]}
                         </strong>
-                        <span>{gift.reason || copyText("未填写原因")}</span>
+                        <span>{gift.reason || pageCopy["未填写原因"]}</span>
                         <small>
-                          {copyText("赠送后到期：")}
+                          {pageCopy["赠送后到期："]}
                           {date(gift.planUntil)}
                         </small>
                       </li>
@@ -544,25 +569,25 @@ function GiftMembership({
               )}
             </>
           ) : (
-            !error && <p role="status">{copyText("正在读取会员信息…")}</p>
+            !error && <p role="status">{pageCopy["正在读取会员信息…"]}</p>
           )}
           {error && (
             <div className="admin-error" role="alert">
               {error}
               {!membership && (
                 <button type="button" onClick={() => setReload((v) => v + 1)}>
-                  {copyText("重新加载")}
+                  {pageCopy["重新加载"]}
                 </button>
               )}
             </div>
           )}
           <div className="modal-actions">
             <button type="button" className="button secondary" disabled={busy} onClick={onClose}>
-              {copyText("取消")}
+              {pageCopy["取消"]}
             </button>
             <button className="button" disabled={busy || !membership}>
               <Gift size={16} />
-              {busy ? copyText("正在处理…") : pending ? copyText("重试赠送") : copyText("确认赠送")}
+              {busy ? pageCopy["正在处理…"] : pending ? pageCopy["重试赠送"] : pageCopy["确认赠送"]}
             </button>
           </div>
         </form>
@@ -572,9 +597,10 @@ function GiftMembership({
 }
 
 export function Admin() {
-  const errorText = useWorkspaceError();
   const { locale } = useLocale();
-  const copyText = useWorkspaceText();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const [params, setParams] = useSearchParams();
   const tab =
     params.get("tab") === "notices"
@@ -634,7 +660,7 @@ export function Admin() {
       })
       .catch((e) => {
         if (!controller.signal.aborted) {
-          setError(errorText(e));
+          setError(workspaceError(e, locale));
           setForbidden(e instanceof ApiError && e.status === 403);
         }
       })
@@ -642,7 +668,7 @@ export function Admin() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [tab, query, page, plan, refresh]);
+  }, [tab, query, page, plan, refresh, locale]);
   const changeParams = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [key, val] of Object.entries(patch)) {
@@ -657,7 +683,7 @@ export function Admin() {
     syncController.current = controller;
     setSyncing(true);
     setSyncError("");
-    setProgress(copyText("正在同步账户统计…"));
+    setProgress(pageCopy["正在同步账户统计…"]);
     let processed = 0,
       failed = 0;
     let cursor: string | null = null;
@@ -672,9 +698,11 @@ export function Admin() {
         cursor = result.next;
         if (!controller.signal.aborted)
           setProgress(
-            copyText("已检查 {value0} 个账户{value1}", {
+            formatCopy(pageCopy["已检查 {value0} 个账户{value1}"], {
               value0: processed,
-              value1: failed ? copyText("，{count} 个暂未同步", { count: failed }) : "",
+              value1: failed
+                ? formatCopy(pageCopy["，{value0} 个暂未同步"], { value0: failed })
+                : "",
             }),
           );
       } while (cursor && !controller.signal.aborted);
@@ -682,14 +710,20 @@ export function Admin() {
         setRefresh((v) => v + 1);
         setProgress(
           failed
-            ? copyText("{value0} 个账户未同步成功，保留上次数据。可稍后重试。", { value0: failed })
-            : copyText("数据已更新"),
+            ? formatCopy(pageCopy["{value0} 个账户未同步成功，保留上次数据。可稍后重试。"], {
+                value0: failed,
+              })
+            : pageCopy["数据已更新"],
         );
       }
     } catch (e) {
       if (!controller.signal.aborted) {
-        setSyncError(copyText("账户统计同步失败：{value0}", { value0: errorText(e) }));
-        setProgress(copyText("同步未完成，保留已同步的数据"));
+        setSyncError(
+          formatCopy(pageCopy["账户统计同步失败：{value0}"], {
+            value0: workspaceError(e as Error, locale),
+          }),
+        );
+        setProgress(pageCopy["同步未完成，保留已同步的数据"]);
         // Earlier batches may already have succeeded before this request failed.
         setRefresh((v) => v + 1);
         if (e instanceof ApiError && [401, 403].includes(e.status)) setForbidden(true);
@@ -698,7 +732,7 @@ export function Admin() {
       if (syncController.current === controller) syncController.current = null;
       if (!controller.signal.aborted) setSyncing(false);
     }
-  }, []);
+  }, [pageCopy, locale]);
   // Start only after an authorized read succeeds. Re-renders, filters and batch
   // refreshes must not restart the loop or launch concurrent synchronizations.
   const canSync = accountTab && overview !== null && !forbidden;
@@ -714,7 +748,7 @@ export function Admin() {
       syncController.current = null;
     };
   }, [canSync, sync]);
-  const pendingStats = syncing ? copyText("同步中…") : copyText("待同步");
+  const pendingStats = syncing ? pageCopy["同步中…"] : pageCopy["待同步"];
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
     changeParams({ q: search.trim(), page: "" });
@@ -723,10 +757,10 @@ export function Admin() {
     return (
       <div className="full-state">
         <ShieldCheck size={34} />
-        <h1>{copyText("仅管理员可访问")}</h1>
-        <p>{copyText("当前账号没有管理权限。")}</p>
+        <h1>{pageCopy["仅管理员可访问"]}</h1>
+        <p>{pageCopy["当前账号没有管理权限。"]}</p>
         <Link className="button secondary" to={localizedHref(locale, "/app")}>
-          {copyText("回到工作台")}
+          {pageCopy["回到工作台"]}
         </Link>
       </div>
     );
@@ -734,15 +768,17 @@ export function Admin() {
     <div className="admin-page page-enter">
       <header className="admin-heading">
         <div>
-          <div className="eyebrow">{copyText("OPERATIONS")}</div>
+          <div className="eyebrow">
+            {locale === "pt" ? ptCopy["OPERATIONS"] : "OPERATIONS"}
+          </div>
           <h1>
-            {copyText("管理后台")}{" "}
+            {pageCopy["管理后台"]}{" "}
             <span>
               <ShieldCheck size={13} />
-              {copyText("管理员")}
+              {pageCopy["管理员"]}
             </span>
           </h1>
-          <p>{copyText("查看流量、用户、收入、使用情况与服务器状态。")}</p>
+          <p>{pageCopy["查看流量、用户、收入、使用情况与服务器状态。"]}</p>
         </div>
         {accountTab && (
           <button
@@ -751,18 +787,18 @@ export function Admin() {
             disabled={syncing || !overview}
           >
             <RefreshCw size={16} className={syncing ? "admin-spinning" : ""} />
-            {syncing ? copyText("正在同步…") : copyText("同步最新数据")}
+            {syncing ? pageCopy["正在同步…"] : pageCopy["同步最新数据"]}
           </button>
         )}
       </header>
-      <nav className="admin-tabs" aria-label={copyText("管理后台导航")}>
+      <nav className="admin-tabs" aria-label={pageCopy["管理后台导航"]}>
         <button
           className={tab === "overview" ? "active" : ""}
           aria-current={tab === "overview" ? "page" : undefined}
           onClick={() => changeParams({ tab: "", page: "", q: "", plan: "" })}
         >
           <LayoutDashboard size={16} />
-          {copyText("数据概览")}
+          {pageCopy["数据概览"]}
         </button>
         <button
           className={tab === "analytics" ? "active" : ""}
@@ -770,7 +806,7 @@ export function Admin() {
           onClick={() => changeParams({ tab: "analytics", page: "", q: "", plan: "" })}
         >
           <BarChart3 size={16} />
-          {copyText("流量统计")}
+          {pageCopy["流量统计"]}
         </button>
         <button
           className={tab === "users" ? "active" : ""}
@@ -778,7 +814,7 @@ export function Admin() {
           onClick={() => changeParams({ tab: "users" })}
         >
           <Users size={16} />
-          {copyText("用户列表")}
+          {pageCopy["用户列表"]}
         </button>
         <button
           className={tab === "notices" ? "active" : ""}
@@ -786,7 +822,7 @@ export function Admin() {
           onClick={() => changeParams({ tab: "notices", page: "", q: "", plan: "" })}
         >
           <Megaphone size={16} />
-          {copyText("通知管理")}
+          {pageCopy["通知管理"]}
         </button>
         <button
           className={tab === "server" ? "active" : ""}
@@ -794,23 +830,23 @@ export function Admin() {
           onClick={() => changeParams({ tab: "server", page: "", q: "", plan: "" })}
         >
           <Server size={16} />
-          {copyText("服务器")}
+          {pageCopy["服务器"]}
         </button>
         {overview?.mode === "test" && (
-          <span className="admin-test-badge">{copyText("测试支付环境")}</span>
+          <span className="admin-test-badge">{pageCopy["测试支付环境"]}</span>
         )}
       </nav>
       {accountTab && error && (
         <div className="admin-error" role="alert">
           {error}
-          <button onClick={() => setRefresh((v) => v + 1)}>{copyText("重新加载")}</button>
+          <button onClick={() => setRefresh((v) => v + 1)}>{pageCopy["重新加载"]}</button>
         </div>
       )}
       {accountTab && syncError && (
         <div className="admin-error" role="alert">
           {syncError}
           <button onClick={() => void sync()} disabled={syncing}>
-            {copyText("重试同步")}
+            {pageCopy["重试同步"]}
           </button>
         </div>
       )}
@@ -820,15 +856,17 @@ export function Admin() {
         >
           <span>
             <span className="tiny-dot" />
-            {copyText("账户统计已覆盖 ")}
+            {pageCopy["账户统计已覆盖 "]}
             {overview.coverage.synced} / {overview.summary.users}
-            {copyText(" 人 ·")}{" "}
+            {pageCopy[" 人 ·"]}{" "}
             {overview.coverage.oldest
-              ? copyText("最早快照 {value0}", { value0: date(overview.coverage.oldest) })
-              : copyText("正在准备账户统计")}
+              ? formatCopy(pageCopy["最早快照 {value0}"], {
+                  value0: date(overview.coverage.oldest),
+                })
+              : pageCopy["正在准备账户统计"]}
           </span>
           <span role="status">
-            {progress || copyText("账户统计自动更新 · 注册与订单数据实时读取")}
+            {progress || pageCopy["账户统计自动更新 · 注册与订单数据实时读取"]}
           </span>
         </div>
       )}
@@ -841,7 +879,7 @@ export function Admin() {
       ) : loading ? (
         <div className="admin-loading" role="status">
           <span className="spinner" />
-          {copyText("正在加载数据…")}
+          {pageCopy["正在加载数据…"]}
         </div>
       ) : tab === "overview" && overview ? (
         <Overview data={overview} />
@@ -850,10 +888,10 @@ export function Admin() {
           <div className="admin-panel-heading">
             <div>
               <h2>
-                {copyText("用户列表 ")}
+                {pageCopy["用户列表 "]}
                 <span className="admin-count">{users.total}</span>
               </h2>
-              <p>{copyText("按注册时间倒序 · 每页 20 位")}</p>
+              <p>{pageCopy["按注册时间倒序 · 每页 20 位"]}</p>
             </div>
           </div>
           <div className="admin-user-toolbar">
@@ -863,27 +901,27 @@ export function Admin() {
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={copyText("搜索邮箱或昵称")}
+                placeholder={pageCopy["搜索邮箱或昵称"]}
                 maxLength={100}
-                aria-label={copyText("搜索用户")}
+                aria-label={pageCopy["搜索用户"]}
               />
-              <button className="button small secondary">{copyText("搜索")}</button>
+              <button className="button small secondary">{pageCopy["搜索"]}</button>
             </form>
             <select
-              aria-label={copyText("会员类型")}
+              aria-label={pageCopy["会员类型"]}
               value={plan}
               onChange={(e) => changeParams({ plan: e.target.value, page: "" })}
             >
-              <option value="">{copyText("全部会员类型")}</option>
-              <option value="plus">{copyText("Plus 会员")}</option>
-              <option value="free">{copyText("Free 用户")}</option>
+              <option value="">{pageCopy["全部会员类型"]}</option>
+              <option value="plus">{pageCopy["Plus 会员"]}</option>
+              <option value="free">{pageCopy["Free 用户"]}</option>
             </select>
             {(query || plan) && (
               <button
                 className="text-link"
                 onClick={() => changeParams({ q: "", plan: "", page: "" })}
               >
-                {copyText("清除筛选")}
+                {pageCopy["清除筛选"]}
               </button>
             )}
           </div>
@@ -892,15 +930,15 @@ export function Admin() {
               <table className="admin-user-table">
                 <thead>
                   <tr>
-                    <th>{copyText("用户")}</th>
-                    <th>{copyText("会员")}</th>
-                    <th>{copyText("微信链接")}</th>
-                    <th>{copyText("调用统计")}</th>
-                    <th>{copyText("最近失败")}</th>
-                    <th>{copyText("Credits 消耗")}</th>
-                    <th>{copyText("付款总额")}</th>
-                    <th>{copyText("最近成功")}</th>
-                    <th>{copyText("操作")}</th>
+                    <th>{pageCopy["用户"]}</th>
+                    <th>{pageCopy["会员"]}</th>
+                    <th>{pageCopy["微信链接"]}</th>
+                    <th>{pageCopy["调用统计"]}</th>
+                    <th>{pageCopy["最近失败"]}</th>
+                    <th>{pageCopy["Credits 消耗"]}</th>
+                    <th>{pageCopy["付款总额"]}</th>
+                    <th>{pageCopy["最近成功"]}</th>
+                    <th>{pageCopy["操作"]}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -911,14 +949,14 @@ export function Admin() {
                           <span className="admin-avatar">{Array.from(u.name || u.email)[0]}</span>
                           <div>
                             <strong>
-                              {u.name || copyText("未设置昵称")}
+                              {u.name || pageCopy["未设置昵称"]}
                               {Boolean(u.isAdmin) && (
-                                <ShieldCheck size={13} aria-label={copyText("管理员")} />
+                                <ShieldCheck size={13} aria-label={pageCopy["管理员"]} />
                               )}
                             </strong>
                             <span>{u.email}</span>
                             <small>
-                              {copyText("注册于 ")}
+                              {pageCopy["注册于 "]}
                               {date(u.createdAt, false)}
                             </small>
                           </div>
@@ -935,7 +973,7 @@ export function Admin() {
                             {Boolean(u.planUntil) && (
                               <small>
                                 {date(u.planUntil, false)}
-                                {copyText(" 到期")}
+                                {pageCopy[" 到期"]}
                               </small>
                             )}
                           </>
@@ -949,18 +987,20 @@ export function Admin() {
                         ) : (
                           <>
                             {u.connected} / {u.links}
-                            <small>{copyText("已连接 / 总数")}</small>
+                            <small>{pageCopy["已连接 / 总数"]}</small>
                           </>
                         )}
                       </td>
                       <td>
                         {u.requests === null
                           ? pendingStats
-                          : copyText("成功 {value0}", { value0: number(u.requests) })}
+                          : formatCopy(pageCopy["成功 {value0}"], { value0: number(u.requests) })}
                         <small className={u.failedRequests ? "admin-failure-count" : ""}>
                           {u.failedRequests == null
-                            ? copyText("失败：{value0}", { value0: pendingStats })
-                            : copyText("失败 {value0}", { value0: number(u.failedRequests) })}
+                            ? formatCopy(pageCopy["失败：{value0}"], { value0: pendingStats })
+                            : formatCopy(pageCopy["失败 {value0}"], {
+                                value0: number(u.failedRequests),
+                              })}
                         </small>
                       </td>
                       <td className="admin-failure-cell">
@@ -969,12 +1009,14 @@ export function Admin() {
                         ) : u.lastFailureAt ? (
                           <>
                             <span>
-                              {callFailureReason(u.lastFailureCode, u.lastFailureStatus, copyText)}
+                              {locale === "ko"
+                                ? `${workspaceError({ code: u.lastFailureCode ?? "request_failed" }, locale)}${u.lastFailureStatus ? ` (HTTP ${u.lastFailureStatus})` : ""}`
+                                : callFailureReason(u.lastFailureCode, u.lastFailureStatus, (text) => workspaceLabel(locale, text))}
                             </span>
                             <small>{date(u.lastFailureAt)}</small>
                           </>
                         ) : (
-                          <span className="admin-muted">{copyText("暂无失败记录")}</span>
+                          <span className="admin-muted">{pageCopy["暂无失败记录"]}</span>
                         )}
                       </td>
                       <td>{u.credits === null ? pendingStats : formatCredits(u.credits)}</td>
@@ -983,13 +1025,15 @@ export function Admin() {
                         {u.syncedAt
                           ? u.lastActiveAt
                             ? date(u.lastActiveAt)
-                            : copyText("暂无成功调用")
+                            : pageCopy["暂无成功调用"]
                           : pendingStats}
                         {u.syncedAt && (
                           <small
-                            title={copyText("统计时间：{value0}", { value0: date(u.syncedAt) })}
+                            title={formatCopy(pageCopy["统计时间：{value0}"], {
+                              value0: date(u.syncedAt),
+                            })}
                           >
-                            {copyText("统计于 ")}
+                            {pageCopy["统计于 "]}
                             {date(u.syncedAt)}
                           </small>
                         )}
@@ -997,7 +1041,7 @@ export function Admin() {
                       <td>
                         <button className="button small secondary" onClick={() => setGiftTarget(u)}>
                           <Gift size={14} />
-                          {copyText("赠送会员")}
+                          {pageCopy["赠送会员"]}
                         </button>
                       </td>
                     </tr>
@@ -1008,20 +1052,20 @@ export function Admin() {
           ) : (
             <div className="admin-empty">
               <Users />
-              <h3>{copyText("没有找到用户")}</h3>
-              <p>{copyText("换个邮箱、昵称或会员类型试试。会员筛选仅包含已同步账户。")}</p>
+              <h3>{pageCopy["没有找到用户"]}</h3>
+              <p>{pageCopy["换个邮箱、昵称或会员类型试试。会员筛选仅包含已同步账户。"]}</p>
             </div>
           )}
-          <nav className="admin-pagination" aria-label={copyText("用户分页")}>
+          <nav className="admin-pagination" aria-label={pageCopy["用户分页"]}>
             <span>
-              {copyText("共 ")}
+              {pageCopy["共 "]}
               {number(users.total)}
-              {copyText(" 位用户")}
+              {pageCopy[" 位用户"]}
             </span>
             <div>
               <button
                 className="icon-button"
-                aria-label={copyText("上一页")}
+                aria-label={pageCopy["上一页"]}
                 disabled={users.page <= 1}
                 onClick={() => changeParams({ page: String(users.page - 1) })}
               >
@@ -1032,7 +1076,7 @@ export function Admin() {
               </span>
               <button
                 className="icon-button"
-                aria-label={copyText("下一页")}
+                aria-label={pageCopy["下一页"]}
                 disabled={users.page >= users.totalPages}
                 onClick={() => changeParams({ page: String(users.page + 1) })}
               >

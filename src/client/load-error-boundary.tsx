@@ -1,5 +1,5 @@
-import { useWorkspaceText } from "./workspace-copy";
-import { localizedHref, useLocale } from "./locale";
+import { useLocale, localizedHref } from "./locale";
+import { dashboardCopy } from "../shared/i18n/dashboard";
 import { Component, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -44,18 +44,21 @@ export class LoadErrorBoundary extends Component<LoadErrorBoundaryProps, LoadErr
 export function RouteLoadErrorBoundary({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const { locale } = useLocale();
-  const copyText = useWorkspaceText();
+  const localizedWorkspace = (locale === "ko" || locale === "pt")
+    && (pathname === `/${locale}/app` || pathname.startsWith(`/${locale}/app/`));
   return (
     <LoadErrorBoundary
       resetKey={pathname}
       fallback={
         <main className="full-state" role="alert">
-          <h1>{copyText("页面未能加载")}</h1>
-          <p>{copyText("请检查网络后重新加载页面。")}</p>
+          <h1>{localizedWorkspace ? dashboardCopy[locale].shell.loadFailed : "页面未能加载"}</h1>
+          <p>{localizedWorkspace ? dashboardCopy[locale].shell.refreshFailed : "请检查网络后重新加载页面。"}</p>
           <button type="button" className="button" onClick={reloadPage}>
-            {copyText("重新加载页面")}
+            {localizedWorkspace ? dashboardCopy[locale].shell.reload : "重新加载页面"}
           </button>
-          <a href={localizedHref(locale, "/")}>{copyText("返回首页")}</a>
+          <a href={localizedWorkspace ? localizedHref(locale, "/app") : "/"}>
+            {localizedWorkspace ? dashboardCopy[locale].shell.workspace : "返回首页"}
+          </a>
         </main>
       }
     >

@@ -208,7 +208,12 @@ const presetInstructions =
 
 export function createRoleplayFromPreset(
   preset: RoleplayPreset,
-  context: { modelId: string; enabled: boolean; occupiedShortcuts: readonly string[] },
+  context: {
+    modelId: string;
+    enabled: boolean;
+    occupiedShortcuts: readonly string[];
+    instructions?: string;
+  },
 ): RoleplayInput {
   const occupied = new Set(context.occupiedShortcuts.map((s) => s.trim().toLowerCase()));
   const base = preset.character.shortcut;
@@ -224,7 +229,9 @@ export function createRoleplayFromPreset(
     modelId: context.modelId || "unselected",
     enabled: context.enabled,
     shortcut,
-    instructions: [presetInstructions, preset.character.instructions].filter(Boolean).join("\n"),
+    instructions: [context.instructions ?? presetInstructions, preset.character.instructions]
+      .filter(Boolean)
+      .join("\n"),
   });
   // A missing user model stays visibly unselected and cannot be saved by the editor.
   return { ...form, modelId: context.modelId };

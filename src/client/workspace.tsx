@@ -2,8 +2,9 @@ import { NoticeProvider } from "./notices";
 import { Notices } from "./pages/notices";
 import { lazy, Suspense, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { useLocale, localizedHref } from "./locale";
+import { useLocale } from "./locale";
 import { dashboardCopy } from "../shared/i18n/dashboard";
+import { localizedPath } from "../shared/i18n";
 import { AppProvider } from "./context";
 import { Shell } from "./shell";
 import { Dashboard } from "./pages/dashboard";
@@ -26,6 +27,7 @@ const Admin = lazy(() => import("./pages/admin").then((module) => ({ default: mo
 export function Workspace() {
   const { locale } = useLocale();
   const loading = dashboardCopy[locale].shell.loading;
+  const base = locale === "ko" || locale === "pt" ? localizedPath(locale, "/app") : "/app";
   const [historyRevision, setHistoryRevision] = useState(0);
   return (
     <AppProvider>
@@ -40,7 +42,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      {locale === "pt" ? loading : "正在加载插件…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载插件…"}
                     </div>
                   }
                 >
@@ -54,7 +56,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      {locale === "pt" ? loading : "正在加载云端任务…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载云端任务…"}
                     </div>
                   }
                 >
@@ -70,7 +72,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state" role="status">
-                      {locale === "pt" ? loading : "正在加载会话记录…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载会话记录…"}
                     </div>
                   }
                 >
@@ -88,7 +90,7 @@ export function Workspace() {
                 <Suspense
                   fallback={
                     <div className="full-state">
-                      {locale === "pt" ? loading : "正在加载管理后台…"}
+                      {locale === "ko" || locale === "pt" ? loading : "正在加载管理后台…"}
                     </div>
                   }
                 >
@@ -96,7 +98,7 @@ export function Workspace() {
                 </Suspense>
               }
             />
-            <Route path="*" element={<Navigate to={localizedHref(locale, "/app")} replace />} />
+            <Route path="*" element={<Navigate to={base} replace />} />
           </Routes>
         </Shell>
       </NoticeProvider>

@@ -153,7 +153,8 @@ export function AppProvider({
     return () => clearInterval(timer);
   }, [data?.connections.map((l) => `${l.id}:${l.status}:${l.paused}`).join(","), refresh]);
   const showRefreshFailure = Boolean(data && failure && !notice);
-  const toast = notice ?? (showRefreshFailure ? { text: copy.refreshFailed, error: true } : null);
+  const toast =
+    notice ?? (showRefreshFailure ? { text: copy.refreshFailed, error: true } : null);
   return (
     <State.Provider
       value={{
@@ -161,7 +162,7 @@ export function AppProvider({
         request,
         refresh,
         isAdmin,
-        base: locale === "pt" ? localizedPath(locale, "/app") : "/app",
+        base: locale === "ko" || locale === "pt" ? localizedPath(locale, "/app") : "/app",
         user,
         notify,
       }}

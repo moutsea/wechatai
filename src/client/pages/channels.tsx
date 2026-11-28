@@ -1,4 +1,9 @@
-import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
+import { workspaceError, workspaceLabel } from "../workspace-copy";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/channels-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/channels-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { formatCopy } from "../../shared/i18n/dashboard";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -75,15 +80,24 @@ const newModel: ModelInput = {
 };
 
 export function Channels() {
-  const errorText = useWorkspaceError();
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const { data, base, request, refresh, notify } = useApp();
+  const initialModel =
+    locale === "ko" || locale === "pt"
+      ? {
+          ...newModel,
+          systemPrompt: pageCopy["你是一个友好、可靠的助手。请用清晰简洁的中文回答。"],
+        }
+      : newModel;
   const [params, setParams] = useSearchParams();
   const [channelEditor, setChannelEditor] = useState<Channel | "new" | null>(null);
   const [modelEditor, setModelEditor] = useState<Assistant | "new" | null>(null);
   const [channelForm, setChannelForm] = useState<ChannelInput>(newChannel);
   const [providerId, setProviderId] = useState(DEFAULT_CHANNEL_PROVIDER);
-  const [form, setForm] = useState<ModelInput>(newModel);
+  const [form, setForm] = useState<ModelInput>(initialModel);
   const effectiveInput = Math.max(0, modelInputBudget(form));
   const estimatedCallCredits =
     Math.ceil(
@@ -108,10 +122,10 @@ export function Channels() {
       setChannelEditor("new");
       const id = channelProvider(params.get("provider") ?? "")?.id ?? DEFAULT_CHANNEL_PROVIDER;
       setProviderId(id);
-      setChannelForm(selectChannelProvider(newChannel, id));
+      setChannelForm(selectChannelProvider(newChannel, id, (name) => workspaceLabel(locale, name)));
       setParams({}, { replace: true });
     }
-  }, [params, setParams]);
+  }, [params, setParams, locale]);
   useEffect(() => {
     const id = params.get("channel");
     if (id && data) document.getElementById(`channel-${id}`)?.scrollIntoView({ block: "nearest" });
@@ -128,14 +142,7 @@ export function Channels() {
     setError("");
     setModelEditor(a);
     setForm(
-      a === "new"
-        ? {
-            ...newModel,
-            systemPrompt: copyText(newModel.systemPrompt),
-            channelId: channel.id,
-            color: channel.color,
-          }
-        : { ...a },
+      a === "new" ? { ...initialModel, channelId: channel.id, color: channel.color } : { ...a },
     );
   };
   const update = <K extends keyof ModelInput>(key: K, value: ModelInput[K]) =>
@@ -144,7 +151,7 @@ export function Channels() {
     setChannelForm((f) => ({ ...f, [key]: value }));
   const changeProvider = (id: string) => {
     setProviderId(id);
-    setChannelForm((f) => selectChannelProvider(f, id));
+    setChannelForm((f) => selectChannelProvider(f, id, (name) => workspaceLabel(locale, name)));
     setError("");
   };
   const saveChannel = async (event: FormEvent) => {
@@ -169,27 +176,32 @@ export function Channels() {
       setChannelEditor(null);
       if (result.models || result.importError) {
         const text = result.models
-          ? modelImportMessage(result.models, data.limits.modelsPerChannel, copyText)
-          : copyText("渠道已保存；获取模型失败：{value0}。可重试「获取可用模型」或手动添加模型。", {
-              value0: errorText(result.importError),
-            });
+          ? modelImportMessage(result.models, data.limits.modelsPerChannel, locale)
+          : formatCopy(
+              pageCopy[
+                "渠道已保存；获取模型失败：{value0}。可重试「获取可用模型」或手动添加模型。"
+              ],
+              { value0: workspaceError(result.importError, locale) },
+            );
         setImportResults((results) => ({
           ...results,
           [result.channel.id]: { text, failed: Boolean(result.importError) },
         }));
         notify(
           result.models?.imported
-            ? copyText("渠道已保存，已导入 {value0} 个模型", { value0: result.models.imported })
-            : copyText("渠道已保存，请在渠道卡片中查看模型导入结果"),
+            ? formatCopy(pageCopy["渠道已保存，已导入 {value0} 个模型"], {
+                value0: result.models.imported,
+              })
+            : pageCopy["渠道已保存，请在渠道卡片中查看模型导入结果"],
         );
       } else
         notify(
           channelEditor === "new"
-            ? copyText("渠道已保存，可以获取可用模型或手动添加")
-            : copyText("渠道已保存，所属模型共用这份连接配置"),
+            ? pageCopy["渠道已保存，可以获取可用模型或手动添加"]
+            : pageCopy["渠道已保存，所属模型共用这份连接配置"],
         );
     } catch (e) {
-      setError(errorText(e));
+      setError(workspaceError(e as Error, locale));
       setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
@@ -208,9 +220,9 @@ export function Channels() {
       );
       await refresh();
       setModelEditor(null);
-      notify(copyText("模型已保存"));
+      notify(pageCopy["模型已保存"]);
     } catch (e) {
-      setError(errorText(e));
+      setError(workspaceError(e as Error, locale));
       setLimitCode(limitErrorCode(e));
     } finally {
       setBusy("");
@@ -220,7 +232,7 @@ export function Channels() {
     setBusy(`import:${channel.id}`);
     setImportResults((results) => ({
       ...results,
-      [channel.id]: { text: copyText("正在获取上游模型…"), failed: false },
+      [channel.id]: { text: pageCopy["正在获取上游模型…"], failed: false },
     }));
     try {
       const result = await request<ModelImportResult>(`/channels/${channel.id}/models/import`, {
@@ -234,14 +246,14 @@ export function Channels() {
       setImportResults((results) => ({
         ...results,
         [channel.id]: {
-          text: modelImportMessage(result, data.limits.modelsPerChannel, copyText),
+          text: modelImportMessage(result, data.limits.modelsPerChannel, locale),
           failed: false,
         },
       }));
     } catch (e) {
       setImportResults((results) => ({
         ...results,
-        [channel.id]: { text: errorText(e), failed: true },
+        [channel.id]: { text: workspaceError(e as Error, locale), failed: true },
       }));
     } finally {
       setBusy("");
@@ -264,16 +276,16 @@ export function Channels() {
       setDeleting(null);
       notify(
         action === "test"
-          ? copyText("{value0} · 消耗 {value1} credits", {
+          ? formatCopy(pageCopy["{value0} · 消耗 {value1} credits"], {
               value0: String(result.text),
               value1: String(result.cost),
             })
           : action === "delete"
-            ? copyText("已删除")
-            : copyText("已切换微信当前使用的渠道和模型"),
+            ? pageCopy["已删除"]
+            : pageCopy["已切换微信当前使用的渠道和模型"],
       );
     } catch (e) {
-      notify(errorText(e), true);
+      notify(workspaceError(e as Error, locale), true);
     } finally {
       setBusy("");
     }
@@ -282,18 +294,18 @@ export function Channels() {
     <div className="page-enter">
       {data.connections.length > 1 && (
         <div className="simple-note wechat-link-note">
-          {copyText("当前管理：")}
+          {pageCopy["当前管理："]}
           {data.connections.find((l) => l.id === data.selectedConnectionId)?.name}
-          {copyText(" · 切换渠道或模型只影响此链接。")}{" "}
+          {pageCopy[" · 切换渠道或模型只影响此链接。"]}{" "}
           <Link className="text-link" to={`${base}/wechat`}>
-            {copyText("更换链接")}
+            {pageCopy["更换链接"]}
           </Link>
         </div>
       )}
       <PageHead
-        eyebrow={copyText("YOUR CONNECTIONS")}
-        title={copyText("渠道与模型")}
-        description={copyText("{value0} / {value1} 个渠道 · {value2} 个模型", {
+        eyebrow="YOUR CONNECTIONS"
+        title={pageCopy["渠道与模型"]}
+        description={formatCopy(pageCopy["{value0} / {value1} 个渠道 · {value2} 个模型"], {
           value0: data.channels.length,
           value1: data.limits.channels,
           value2: data.assistants.length,
@@ -301,20 +313,20 @@ export function Channels() {
         action={
           <button className="button" onClick={() => openChannel("new")} disabled={Boolean(busy)}>
             <Plus size={17} />
-            {copyText("添加渠道")}
+            {pageCopy["添加渠道"]}
           </button>
         }
       />
       {kimiseek.pendingUrl && (
         <p className="simple-note" role="status">
-          {copyText("正在关联 KimiSeek… 若新窗口未打开，")}
+          {pageCopy["正在关联 KimiSeek… 若新窗口未打开，"]}
           <a
             className="text-link"
             href={kimiseek.pendingUrl}
             target="_blank"
             rel="noopener noreferrer"
           >
-            {copyText("点击继续关联")}
+            {pageCopy["点击继续关联"]}
           </a>
           。
         </p>
@@ -329,7 +341,7 @@ export function Channels() {
                 className={`channel-card panel ${activeHere ? "is-current" : ""}`}
                 id={`channel-${channel.id}`}
                 key={channel.id}
-                aria-label={copyText("{value0} 渠道", { value0: channel.name })}
+                aria-label={formatCopy(pageCopy["{value0} 渠道"], { value0: channel.name })}
               >
                 <div className="channel-card-header">
                   <ChannelIcon small channel={channel} />
@@ -340,8 +352,10 @@ export function Channels() {
                   <div className="channel-card-tools">
                     <button
                       className="icon-button"
-                      aria-label={copyText("编辑渠道 {value0}", { value0: channel.name })}
-                      title={copyText("编辑渠道")}
+                      aria-label={formatCopy(pageCopy["编辑渠道 {value0}"], {
+                        value0: channel.name,
+                      })}
+                      title={pageCopy["编辑渠道"]}
                       disabled={Boolean(busy)}
                       onClick={() => openChannel(channel)}
                     >
@@ -349,8 +363,10 @@ export function Channels() {
                     </button>
                     <button
                       className="icon-button"
-                      aria-label={copyText("删除渠道 {value0}", { value0: channel.name })}
-                      title={copyText("删除渠道")}
+                      aria-label={formatCopy(pageCopy["删除渠道 {value0}"], {
+                        value0: channel.name,
+                      })}
+                      title={pageCopy["删除渠道"]}
                       disabled={Boolean(busy)}
                       onClick={() =>
                         setDeleting({ kind: "channel", id: channel.id, name: channel.name })
@@ -361,10 +377,12 @@ export function Channels() {
                   </div>
                 </div>
                 <div className="channel-card-meta">
-                  <span className="tag">{protocolLabels[channel.protocol]}</span>
+                  <span className="tag">
+                    {workspaceLabel(locale, protocolLabels[channel.protocol])}
+                  </span>
                   <span>
                     {models.length}
-                    {copyText(" 个模型")}
+                    {pageCopy[" 个模型"]}
                   </span>
                 </div>
                 {channel.description && (
@@ -384,15 +402,17 @@ export function Channels() {
                       return (
                         <details className="channel-model-group" key={kind} open>
                           <summary>
-                            {copyText(modelKindLabels[kind])}
+                            {workspaceLabel(locale, modelKindLabels[kind])}
                             <span>{group.length}</span>
                           </summary>
                           {kind === "image" && (
-                            <p>{copyText("在「AI 生图」插件中选择这些模型使用。")}</p>
+                            <p>{pageCopy["在「AI 生图」插件中选择这些模型使用。"]}</p>
                           )}
                           <ul
                             className="channel-card-models"
-                            aria-label={copyText("{value0} 的模型", { value0: channel.name })}
+                            aria-label={formatCopy(pageCopy["{value0} 的模型"], {
+                              value0: channel.name,
+                            })}
                           >
                             {group.map((a) => {
                               const active = data.currentSession?.assistantId === a.id;
@@ -408,22 +428,21 @@ export function Channels() {
                                     <strong title={label}>{label}</strong>
                                     {label !== a.model && <small title={a.model}>{a.model}</small>}
                                     {protocolIssue && (
-                                      <small className="form-error">
-                                        {copyText(protocolIssue)}
-                                      </small>
+                                      <small className="form-error">{protocolIssue}</small>
                                     )}
                                     {shortcutConflicts.has(a.shortcut.toLowerCase()) && (
                                       <button
                                         className="text-link shortcut-conflict"
                                         disabled={Boolean(busy)}
                                         onClick={() => openModel(channel, a)}
-                                        aria-label={copyText("修改模型 {value0} 的重复别名", {
-                                          value0: a.name,
-                                        })}
+                                        aria-label={formatCopy(
+                                          pageCopy["修改模型 {value0} 的重复别名"],
+                                          { value0: a.name },
+                                        )}
                                       >
-                                        {copyText("别名 @")}
+                                        {pageCopy["别名 @"]}
                                         {a.shortcut}
-                                        {copyText(" 重复 · 修改")}
+                                        {pageCopy[" 重复 · 修改"]}
                                       </button>
                                     )}
                                   </div>
@@ -432,27 +451,27 @@ export function Channels() {
                                       (active ? (
                                         <span className="channel-model-current">
                                           <Check size={13} />
-                                          {copyText("当前")}
+                                          {pageCopy["当前"]}
                                         </span>
                                       ) : (
                                         <button
                                           className="channel-model-use"
                                           disabled={Boolean(busy)}
-                                          aria-label={copyText("使用模型 {value0}", {
+                                          aria-label={formatCopy(pageCopy["使用模型 {value0}"], {
                                             value0: a.name,
                                           })}
                                           onClick={() => void action("model", a.id, "activate")}
                                         >
-                                          {copyText("使用")}
+                                          {pageCopy["使用"]}
                                         </button>
                                       ))}
                                     {isChatModel(a) && (
                                       <button
                                         className="icon-button"
-                                        aria-label={copyText("测试模型 {value0}", {
+                                        aria-label={formatCopy(pageCopy["测试模型 {value0}"], {
                                           value0: a.name,
                                         })}
-                                        title={copyText("测试连接，会消耗少量 credits")}
+                                        title={pageCopy["测试连接，会消耗少量 credits"]}
                                         disabled={Boolean(busy)}
                                         onClick={() => void action("model", a.id, "test")}
                                       >
@@ -465,8 +484,10 @@ export function Channels() {
                                     )}
                                     <button
                                       className="icon-button"
-                                      aria-label={copyText("编辑模型 {value0}", { value0: a.name })}
-                                      title={copyText("编辑模型")}
+                                      aria-label={formatCopy(pageCopy["编辑模型 {value0}"], {
+                                        value0: a.name,
+                                      })}
+                                      title={pageCopy["编辑模型"]}
                                       disabled={Boolean(busy)}
                                       onClick={() => openModel(channel, a)}
                                     >
@@ -474,8 +495,10 @@ export function Channels() {
                                     </button>
                                     <button
                                       className="icon-button"
-                                      aria-label={copyText("删除模型 {value0}", { value0: a.name })}
-                                      title={copyText("删除模型")}
+                                      aria-label={formatCopy(pageCopy["删除模型 {value0}"], {
+                                        value0: a.name,
+                                      })}
+                                      title={pageCopy["删除模型"]}
                                       disabled={Boolean(busy)}
                                       onClick={() =>
                                         setDeleting({ kind: "model", id: a.id, name: a.name })
@@ -493,7 +516,7 @@ export function Channels() {
                     })}
                   </div>
                 ) : (
-                  <div className="channel-card-empty">{copyText("获取上游模型，或手动添加。")}</div>
+                  <div className="channel-card-empty">{pageCopy["获取上游模型，或手动添加。"]}</div>
                 )}
                 {importResults[channel.id] && (
                   <p
@@ -509,8 +532,10 @@ export function Channels() {
                       className="text-button"
                       disabled={Boolean(busy)}
                       onClick={() => void importModels(channel)}
-                      aria-label={copyText("为 {value0} 获取可用模型", { value0: channel.name })}
-                      title={copyText("从上游获取并导入模型，自动跳过已添加的模型")}
+                      aria-label={formatCopy(pageCopy["为 {value0} 获取可用模型"], {
+                        value0: channel.name,
+                      })}
+                      title={pageCopy["从上游获取并导入模型，自动跳过已添加的模型"]}
                     >
                       {busy === `import:${channel.id}` ? (
                         <LoaderCircle className="spin" size={15} />
@@ -518,17 +543,19 @@ export function Channels() {
                         <Download size={15} />
                       )}
                       {busy === `import:${channel.id}`
-                        ? copyText("获取中…")
-                        : copyText("获取可用模型")}
+                        ? pageCopy["获取中…"]
+                        : pageCopy["获取可用模型"]}
                     </button>
                     <button
                       className="text-button"
                       disabled={Boolean(busy)}
                       onClick={() => openModel(channel, "new")}
-                      aria-label={copyText("为 {value0} 添加模型", { value0: channel.name })}
+                      aria-label={formatCopy(pageCopy["为 {value0} 添加模型"], {
+                        value0: channel.name,
+                      })}
                     >
                       <Plus size={15} />
-                      {copyText("添加模型")}
+                      {pageCopy["添加模型"]}
                     </button>
                   </div>
                   {!activeHere && models.some(isChatModel) && (
@@ -536,10 +563,12 @@ export function Channels() {
                       className="text-button channel-card-activate"
                       disabled={Boolean(busy)}
                       onClick={() => void action("channel", channel.id, "activate")}
-                      aria-label={copyText("使用渠道 {value0}", { value0: channel.name })}
-                      title={copyText("继续此渠道上次使用的模型")}
+                      aria-label={formatCopy(pageCopy["使用渠道 {value0}"], {
+                        value0: channel.name,
+                      })}
+                      title={pageCopy["继续此渠道上次使用的模型"]}
                     >
-                      {copyText("使用此渠道")}
+                      {pageCopy["使用此渠道"]}
                       <ArrowRight size={14} />
                     </button>
                   )}
@@ -552,12 +581,12 @@ export function Channels() {
         <div className="panel">
           <Empty
             icon={<Network size={30} />}
-            title={copyText("添加你的第一个渠道")}
-            description={copyText("填写服务地址和 API Key，再添加它支持的模型。")}
+            title={pageCopy["添加你的第一个渠道"]}
+            description={pageCopy["填写服务地址和 API Key，再添加它支持的模型。"]}
             action={
               <button className="button" onClick={() => openChannel("new")}>
                 <Plus size={17} />
-                {copyText("添加渠道")}
+                {pageCopy["添加渠道"]}
               </button>
             }
           />
@@ -568,13 +597,13 @@ export function Channels() {
           wide
           title={
             channelEditor === "new"
-              ? copyText("添加渠道")
-              : copyText("编辑渠道 · {value0}", { value0: channelEditor.name })
+              ? pageCopy["添加渠道"]
+              : formatCopy(pageCopy["编辑渠道 · {value0}"], { value0: channelEditor.name })
           }
           description={
             channelEditor === "new"
-              ? copyText("选择服务商，填写你自己的 API Key。保存后即可配置模型。")
-              : copyText("同一渠道下的模型共用协议、服务地址和 API Key。")
+              ? pageCopy["选择服务商，填写你自己的 API Key。保存后即可配置模型。"]
+              : pageCopy["同一渠道下的模型共用协议、服务地址和 API Key。"]
           }
           onClose={() => {
             if (!busy) setChannelEditor(null);
@@ -596,21 +625,21 @@ export function Channels() {
                     disabled={Boolean(busy)}
                     onClick={() => void kimiseek.start("connect")}
                   >
-                    {kimiseek.busy ? copyText("正在关联…") : copyText("kimiseek 一键导入")}
+                    {kimiseek.busy ? pageCopy["正在关联…"] : pageCopy["kimiseek 一键导入"]}
                   </button>
                 }
                 importStatus={
                   <>
                     {kimiseek.pendingUrl && (
                       <small>
-                        {copyText("正在打开 KimiSeek 充值页，完成后自动导入。")}
+                        {pageCopy["正在打开 KimiSeek 充值页，完成后自动导入。"]}
                         <a
                           className="text-link"
                           href={kimiseek.pendingUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
-                          {copyText("未打开？点此继续")}
+                          {pageCopy["未打开？点此继续"]}
                         </a>
                       </small>
                     )}
@@ -622,7 +651,7 @@ export function Channels() {
               />
               {channelEditor !== "new" && (
                 <div className="form-hint">
-                  {copyText("更新连接配置后，此渠道下所有模型的新请求都会使用新配置。")}
+                  {pageCopy["更新连接配置后，此渠道下所有模型的新请求都会使用新配置。"]}
                 </div>
               )}
               {error && (
@@ -639,16 +668,16 @@ export function Channels() {
                 disabled={Boolean(busy)}
                 onClick={() => setChannelEditor(null)}
               >
-                {copyText("取消")}
+                {pageCopy["取消"]}
               </button>
               <button className="button" disabled={Boolean(busy)}>
                 {busy
                   ? channelEditor === "new" && providerId !== "custom"
-                    ? copyText("正在保存并获取模型…")
-                    : copyText("正在保存…")
+                    ? pageCopy["正在保存并获取模型…"]
+                    : pageCopy["正在保存…"]
                   : channelEditor === "new" && providerId !== "custom"
-                    ? copyText("保存并获取模型")
-                    : copyText("保存渠道")}
+                    ? pageCopy["保存并获取模型"]
+                    : pageCopy["保存渠道"]}
                 <ArrowRight size={16} />
               </button>
             </div>
@@ -660,10 +689,10 @@ export function Channels() {
           wide
           title={
             modelEditor === "new"
-              ? copyText("添加模型")
-              : copyText("编辑模型 · {value0}", { value0: modelEditor.name })
+              ? pageCopy["添加模型"]
+              : formatCopy(pageCopy["编辑模型 · {value0}"], { value0: modelEditor.name })
           }
-          description={copyText("所属渠道：{value0}。连接配置直接使用渠道设置。", {
+          description={formatCopy(pageCopy["所属渠道：{value0}。连接配置直接使用渠道设置。"], {
             value0: data.channels.find((c) => c.id === form.channelId)?.name ?? "",
           })}
           onClose={() => {
@@ -674,56 +703,56 @@ export function Channels() {
             <div className="form-body">
               <div className="form-grid">
                 <label>
-                  {copyText("显示名称")}
+                  {pageCopy["显示名称"]}
                   <input
                     autoFocus
                     required
                     maxLength={40}
                     value={form.name}
                     onChange={(e) => update("name", e.target.value)}
-                    placeholder={copyText("例如：DeepSeek Chat")}
+                    placeholder={pageCopy["例如：DeepSeek Chat"]}
                   />
                 </label>
                 <label>
-                  {copyText("模型 ID")}
+                  {pageCopy["模型 ID"]}
                   <input
                     required
                     readOnly={modelEditor !== "new"}
                     maxLength={120}
                     value={form.model}
                     onChange={(e) => update("model", e.target.value)}
-                    placeholder={copyText("填写供应商提供的模型 ID")}
+                    placeholder={pageCopy["填写供应商提供的模型 ID"]}
                   />
                   {modelEditor !== "new" && (
-                    <small>{copyText("使用其他模型 ID 请添加新模型，保留原会话归属。")}</small>
+                    <small>{pageCopy["使用其他模型 ID 请添加新模型，保留原会话归属。"]}</small>
                   )}
                 </label>
               </div>
               <label>
-                {copyText("备注（可选）")}
+                {pageCopy["备注（可选）"]}
                 <input
                   maxLength={160}
                   value={form.description}
                   onChange={(e) => update("description", e.target.value)}
-                  placeholder={copyText("例如：用于日常提问")}
+                  placeholder={pageCopy["例如：用于日常提问"]}
                 />
               </label>
               <label>
-                {copyText("模型类型")}
+                {pageCopy["模型类型"]}
                 <select
                   value={modelKind(form)}
                   onChange={(e) => update("kind", e.target.value as ModelKind)}
                 >
                   {Object.entries(modelKindLabels).map(([value, label]) => (
                     <option key={value} value={value}>
-                      {copyText(label)}
+                      {workspaceLabel(locale, label)}
                     </option>
                   ))}
                 </select>
-                <small>{copyText("优先读取上游分类；未提供时自动识别，也可在这里调整。")}</small>
+                <small>{pageCopy["优先读取上游分类；未提供时自动识别，也可在这里调整。"]}</small>
               </label>
               <label>
-                {copyText("系统提示词（可选）")}
+                {pageCopy["系统提示词（可选）"]}
                 <textarea
                   rows={3}
                   maxLength={12000}
@@ -737,10 +766,10 @@ export function Channels() {
                   modelEditor !== "new" && shortcutConflicts.has(modelEditor.shortcut.toLowerCase())
                 }
               >
-                <summary>{copyText("更多设置：输入、输出与消耗上限")}</summary>
+                <summary>{pageCopy["更多设置：输入、输出与消耗上限"]}</summary>
                 <div className="form-grid">
                   <label>
-                    {copyText("输入 Token 上限")}
+                    {pageCopy["输入 Token 上限"]}
                     <input
                       type="number"
                       required
@@ -751,7 +780,7 @@ export function Channels() {
                     />
                   </label>
                   <label>
-                    {copyText("输出 Token 上限")}
+                    {pageCopy["输出 Token 上限"]}
                     <input
                       type="number"
                       required
@@ -762,7 +791,7 @@ export function Channels() {
                     />
                   </label>
                   <label>
-                    {copyText("模型上下文窗口（含输出）")}
+                    {pageCopy["模型上下文窗口（含输出）"]}
                     <input
                       type="number"
                       required
@@ -780,7 +809,7 @@ export function Channels() {
                     </datalist>
                   </label>
                   <label>
-                    {copyText("单轮 credits 上限（0 为不限）")}
+                    {pageCopy["单轮 credits 上限（0 为不限）"]}
                     <input
                       type="number"
                       min={0}
@@ -791,14 +820,14 @@ export function Channels() {
                     />
                   </label>
                   <label>
-                    {copyText("快捷名称 ")}
+                    {pageCopy["快捷名称 "]}
                     <span className="inline-plus">PLUS</span>
                     <input
                       disabled={data.plan !== "plus"}
                       maxLength={24}
                       value={form.shortcut}
                       onChange={(e) => update("shortcut", e.target.value)}
-                      placeholder={copyText("例如：写作（不含 @）")}
+                      placeholder={pageCopy["例如：写作（不含 @）"]}
                     />
                     {data.plan !== "plus" && form.shortcut && (
                       <button
@@ -807,46 +836,52 @@ export function Channels() {
                         disabled={Boolean(busy)}
                         onClick={() => update("shortcut", "")}
                       >
-                        {copyText("移除旧快捷名")}
+                        {pageCopy["移除旧快捷名"]}
                       </button>
                     )}
                     {shortcutConflicts.has(form.shortcut.toLowerCase()) && (
                       <small>
-                        {copyText("此别名与其他模型或插件重复，大小写不能用于区分。")}
+                        {pageCopy["此别名与其他模型或插件重复，大小写不能用于区分。"]}
                         {data.plan === "plus"
-                          ? copyText("请修改别名后保存，再使用 @ 调用。")
-                          : copyText("可移除旧快捷名后保存；仍可通过渠道和模型菜单使用此模型。")}
-                        {copyText("也可到 ")}
-                        <Link to={`${base}/plugins`}>{copyText("插件")}</Link>
-                        {copyText(" 修改另一方的别名。")}
+                          ? pageCopy["请修改别名后保存，再使用 @ 调用。"]
+                          : pageCopy["可移除旧快捷名后保存；仍可通过渠道和模型菜单使用此模型。"]}
+                        {pageCopy["也可到 "]}
+                        <Link to={`${base}/plugins`}>{pageCopy["插件"]}</Link>
+                        {pageCopy[" 修改另一方的别名。"]}
                       </small>
                     )}
                   </label>
                 </div>
                 <small>
-                  {copyText("有效输入上限 ")}
-                  {effectiveInput.toLocaleString("zh-CN")}{" "}
-                  {copyText(
-                    "tokens，已为回复和安全余量预留空间。 按输入、输出上限估算，一次回答约",
-                  )}{" "}
+                  {pageCopy["有效输入上限 "]}
+                  {effectiveInput.toLocaleString(locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN")}{" "}
+                  {
+                    pageCopy[
+                      "tokens，已为回复和安全余量预留空间。 按输入、输出上限估算，一次回答约"
+                    ]
+                  }{" "}
                   {formatCredits(estimatedCallCredits)}
-                  {copyText(" credits；自动摘要不额外扣本站额度。")}
+                  {pageCopy[" credits；自动摘要不额外扣本站额度。"]}
                 </small>
                 <small>
-                  {copyText(
-                    "输入包含系统提示词、历史摘要、最近对话与本次消息，按平台 Token 计量；接近有效上限的 80% 时自动整理历史。摘要也遵守输入、输出上限。上游超过输出上限时平台会截取回复，单轮 credits 上限限制本站扣费。 模型上下文窗口请按供应商实际能力填写。",
-                  )}
+                  {
+                    pageCopy[
+                      "输入包含系统提示词、历史摘要、最近对话与本次消息，按平台 Token 计量；接近有效上限的 80% 时自动整理历史。摘要也遵守输入、输出上限。上游超过输出上限时平台会截取回复，单轮 credits 上限限制本站扣费。 模型上下文窗口请按供应商实际能力填写。"
+                    ]
+                  }
                 </small>
                 {form.maxCredits > 0 && estimatedCallCredits > form.maxCredits && (
                   <small>
-                    {copyText(
-                      "当前单轮 credits 上限更低，系统会进一步限制回复长度；预算不足时提示调整设置。",
-                    )}
+                    {
+                      pageCopy[
+                        "当前单轮 credits 上限更低，系统会进一步限制回复长度；预算不足时提示调整设置。"
+                      ]
+                    }
                   </small>
                 )}
                 {effectiveInput < 64 && (
                   <small>
-                    {copyText("上下文窗口不足以容纳回复，请降低输出上限或增大上下文窗口。")}
+                    {pageCopy["上下文窗口不足以容纳回复，请降低输出上限或增大上下文窗口。"]}
                   </small>
                 )}
               </details>
@@ -864,10 +899,10 @@ export function Channels() {
                 disabled={Boolean(busy)}
                 onClick={() => setModelEditor(null)}
               >
-                {copyText("取消")}
+                {pageCopy["取消"]}
               </button>
               <button className="button" disabled={Boolean(busy)}>
-                {busy ? copyText("正在保存…") : copyText("保存模型")}
+                {busy ? pageCopy["正在保存…"] : pageCopy["保存模型"]}
                 <ArrowRight size={16} />
               </button>
             </div>
@@ -876,16 +911,16 @@ export function Channels() {
       )}
       {deleting && (
         <Modal
-          title={copyText("删除{value0}「{value1}」？", {
-            value0: deleting.kind === "channel" ? copyText("渠道") : copyText("模型"),
+          title={formatCopy(pageCopy["删除{value0}「{value1}」？"], {
+            value0: deleting.kind === "channel" ? pageCopy["渠道"] : pageCopy["模型"],
             value1: deleting.name,
           })}
           description={
             deleting.kind === "channel"
-              ? copyText("此渠道、所属模型、绑定的插件配置及相关会话消息将永久删除，无法恢复。")
-              : copyText(
-                  "此模型、绑定的插件配置及相关会话消息将永久删除，无法恢复。渠道和其他模型会保留。",
-                )
+              ? pageCopy["此渠道、所属模型、绑定的插件配置及相关会话消息将永久删除，无法恢复。"]
+              : pageCopy[
+                  "此模型、绑定的插件配置及相关会话消息将永久删除，无法恢复。渠道和其他模型会保留。"
+                ]
           }
           onClose={() => {
             if (!busy) setDeleting(null);
@@ -897,14 +932,14 @@ export function Channels() {
               disabled={Boolean(busy)}
               onClick={() => setDeleting(null)}
             >
-              {copyText("取消")}
+              {pageCopy["取消"]}
             </button>
             <button
               className="button danger"
               disabled={Boolean(busy)}
               onClick={() => void action(deleting.kind, deleting.id, "delete")}
             >
-              {busy ? copyText("正在删除…") : copyText("确认删除")}
+              {busy ? pageCopy["正在删除…"] : pageCopy["确认删除"]}
             </button>
           </div>
         </Modal>

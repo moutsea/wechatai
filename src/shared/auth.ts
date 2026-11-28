@@ -10,6 +10,7 @@ export function authReturnPath(value: string | null): string {
     return url.origin === "https://wechatai.app" &&
       (url.pathname === DASHBOARD_PATH ||
         url.pathname.startsWith("/app/") ||
+        url.pathname.startsWith("/ko/app/") ||
         localized?.path === DASHBOARD_PATH ||
         (localized?.locale === "pt" && localized.path.startsWith(`${DASHBOARD_PATH}/`)) ||
         url.pathname === "/pricing" ||

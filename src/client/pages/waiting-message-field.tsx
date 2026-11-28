@@ -1,4 +1,7 @@
-import { useWorkspaceText } from "../workspace-copy";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/waiting-message-field-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/waiting-message-field-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import {
   MAX_WAITING_MESSAGE_LENGTH,
   type WaitingMessageSettings,
@@ -13,7 +16,10 @@ export function WaitingMessageField({
   defaultMessage: string;
   onChange: (value: WaitingMessageSettings) => void;
 }) {
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   return (
     <div className="waiting-message-field">
       <label className="check-label">
@@ -22,17 +28,17 @@ export function WaitingMessageField({
           checked={value.waitingMessageEnabled}
           onChange={(e) => onChange({ ...value, waitingMessageEnabled: e.target.checked })}
         />
-        {copyText("发送等待提示")}
+        {pageCopy["发送等待提示"]}
       </label>
       <p className="form-note">
         {value.waitingMessageEnabled
-          ? copyText("收到请求后，先在微信发送一条提示。提示不消耗 credits。")
-          : copyText("已关闭等待提示，完成后直接发送结果；出错时仍会告知原因。")}
+          ? pageCopy["收到请求后，先在微信发送一条提示。提示不消耗 credits。"]
+          : pageCopy["已关闭等待提示，完成后直接发送结果；出错时仍会告知原因。"]}
       </p>
       {value.waitingMessageEnabled && (
         <>
           <label>
-            {copyText("提示文案")}
+            {pageCopy["提示文案"]}
             <textarea
               rows={2}
               required
@@ -41,9 +47,9 @@ export function WaitingMessageField({
               onChange={(e) => onChange({ ...value, waitingMessage: e.target.value })}
             />
             <small>
-              {copyText("最多 ")}
+              {pageCopy["最多 "]}
               {MAX_WAITING_MESSAGE_LENGTH}
-              {copyText(" 字，保存后生效。")}
+              {pageCopy[" 字，保存后生效。"]}
             </small>
           </label>
           <button
@@ -51,7 +57,7 @@ export function WaitingMessageField({
             className="text-button"
             onClick={() => onChange({ ...value, waitingMessage: defaultMessage })}
           >
-            {copyText("恢复默认文案")}
+            {pageCopy["恢复默认文案"]}
           </button>
         </>
       )}

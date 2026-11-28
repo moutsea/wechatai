@@ -18,6 +18,8 @@
   X-Robots-Tag: noindex
 /app/*
   X-Robots-Tag: noindex
+/ko/app/*
+  X-Robots-Tag: noindex
 /pt/app/*
   X-Robots-Tag: noindex
 /404

@@ -12,7 +12,7 @@ import {
   renderSitemap,
 } from "../src/shared/seo";
 import { pluginUpgradeReturnPath, rememberPluginUpgrade } from "../src/client/plugin-upgrade";
-import { workspaceLedgerNote } from "../src/client/workspace-copy";
+import { ledgerNote, workspaceError } from "../src/client/workspace-copy";
 import { workspaceCopy } from "../src/shared/i18n/pt/copy/workspace";
 
 afterEach(() => {
@@ -109,13 +109,13 @@ describe("Portuguese workspace route boundaries", () => {
 });
 
 it("localizes generated ledger notes without changing amounts or custom notes", () => {
-  expect(workspaceLedgerNote("实际消耗 0.548 credits", "pt")).toBe("Consumo efetivo 0.548 credits");
-  expect(workspaceLedgerNote("每日赠送；抵扣欠额 2.340 credits", "pt")).toBe(
+  expect(ledgerNote("pt", "实际消耗 0.548 credits")).toBe("Consumo efetivo 0.548 credits");
+  expect(ledgerNote("pt", "每日赠送；抵扣欠额 2.340 credits")).toBe(
     "Créditos diários. Abatimento do saldo devedor de 2.340 credits",
   );
-  expect(workspaceLedgerNote("管理员自定义中文说明", "pt")).toBe("管理员自定义中文说明");
-  expect(workspaceLedgerNote("通知", "pt")).toBe("通知");
-  expect(workspaceLedgerNote("每日赠送", "zh-CN")).toBe("每日赠送");
+  expect(ledgerNote("pt", "管理员自定义中文说明")).toBe("管理员自定义中文说明");
+  expect(ledgerNote("pt", "通知")).toBe("通知");
+  expect(ledgerNote("zh-CN", "每日赠送")).toBe("每日赠送");
 });
 
 it("localizes connector instructions while retaining credentials, names and protocol fields", () => {
@@ -142,4 +142,24 @@ it("localizes connector instructions while retaining credentials, names and prot
   expect(grokReopenPrompt({ shortcut: "my-bot" })).toContain(
     "微伴的 Webhook 登记已重新开放，30 分钟内有效",
   );
+});
+
+it("covers every shared workspace page copy and interpolation", () => {
+  const pages = import.meta.glob<Record<string, string>>(
+    "../src/shared/i18n/zh-CN/copy/*-page.ts",
+    { eager: true, import: "copy" },
+  );
+  for (const sourceCopy of Object.values(pages)) {
+    for (const source of Object.keys(sourceCopy)) {
+      expect(Object.hasOwn(workspaceCopy, source), source).toBe(true);
+    }
+  }
+});
+
+it("keeps product errors in Portuguese, including status-only and unknown failures", () => {
+  expect(workspaceError({ status: 401 }, "pt")).toBe(workspaceCopy["error.unauthorized"]);
+  expect(workspaceError({ code: "model_failed" }, "pt")).toBe(workspaceCopy["error.model_failed"]);
+  expect(workspaceError(new Error("Failed to fetch"), "pt")).toBe(workspaceCopy["操作未完成，请重试"]);
+  expect(workspaceError(new Error(workspaceCopy["支付链接无效"]), "pt")).toBe(workspaceCopy["支付链接无效"]);
+  expect(ledgerNote("pt", "用户备注；抵扣欠额 0.50 credits")).toBe("用户备注；抵扣欠额 0.50 credits");
 });

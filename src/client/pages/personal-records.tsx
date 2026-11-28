@@ -1,4 +1,9 @@
-import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
+import { workspaceError } from "../workspace-copy";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/personal-records-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/personal-records-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { formatCopy } from "../../shared/i18n/dashboard";
 import { pluginAvailable } from "../../shared/plugin-access";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
@@ -17,7 +22,7 @@ import { Modal } from "../ui";
 import { json } from "../api";
 import { ChatMarkdown } from "../chat-markdown";
 import { DailyTasksReminder } from "./personal-daily-reminder";
-import { ReminderFailureNotice, reminderStatuses as statuses } from "./personal-reminder-status";
+import { ReminderFailureNotice, reminderStatusesFor } from "./personal-reminder-status";
 import {
   beijingDate,
   beijingTime,
@@ -28,7 +33,7 @@ import {
   type PersonalRecords as RecordPage,
 } from "../../shared/personal-assistant";
 import "./personal-assistant.css";
-const labels = { note: "普通笔记", entry: "账目", task: "待办", reminder: "提醒" };
+
 const blank = (
   kind: PersonalRecordInput["kind"],
   currency: PersonalRecordInput["currency"],
@@ -60,7 +65,8 @@ export function PersonalRecords({
   plugin: PersonalAssistantPlugin;
   onClose: () => void;
 }) {
-  const errorText = useWorkspaceError();
+  const { locale } = useLocale();
+
   const { data, request, notify } = useApp();
   const [connectionId, setConnectionId] = useState(
     plugin.recordScope === "connection" && data?.connections.length
@@ -75,12 +81,12 @@ export function PersonalRecords({
         if (!cancelled) setSavedScopes(scopes);
       })
       .catch((error) => {
-        if (!cancelled) notify(errorText(error), true);
+        if (!cancelled) notify(workspaceError(error, locale), true);
       });
     return () => {
       cancelled = true;
     };
-  }, [plugin.id, request, notify]);
+  }, [plugin.id, request, notify, locale]);
   return (
     <ScopedPersonalRecords
       key={`${plugin.id}:${connectionId}`}
@@ -106,9 +112,19 @@ function ScopedPersonalRecords({
   onConnectionChange: (id: string) => void;
   savedScopes: string[];
 }) {
-  const errorText = useWorkspaceError();
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
+  const labels = {
+    note: pageCopy["普通笔记"],
+    entry: pageCopy["账目"],
+    task: pageCopy["待办"],
+    reminder: pageCopy["提醒"],
+  };
+
   const { data, request, notify } = useApp();
+  const statuses = reminderStatusesFor(locale);
   const [kind, setKind] = useState<PersonalRecordInput["kind"]>("note"),
     [query, setQuery] = useState(""),
     [search, setSearch] = useState(""),
@@ -162,12 +178,12 @@ function ScopedPersonalRecords({
         if (id === sequence.current) setPage(value);
       })
       .catch((e) => {
-        if (id === sequence.current) setError(errorText(e));
+        if (id === sequence.current) setError(workspaceError(e, locale));
       })
       .finally(() => {
         if (id === sequence.current) setLoading(false);
       });
-  }, [plugin.id, connectionId, kind, search, queryFrom, queryTo, offset, refresh, request]);
+  }, [plugin.id, connectionId, kind, search, queryFrom, queryTo, offset, refresh, request, locale]);
   const update = <K extends keyof PersonalRecordInput>(key: K, value: PersonalRecordInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const open = (record: PersonalRecord | "new") => {
@@ -185,7 +201,7 @@ function ScopedPersonalRecords({
     try {
       const parsed = personalRecordInputSchema.safeParse(form);
       if (!parsed.success)
-        throw new Error(parsed.error.issues[0]?.message ?? copyText("请检查填写内容"));
+        throw new Error(parsed.error.issues[0]?.message ?? pageCopy["请检查填写内容"]);
       const record = parsed.data;
       await request(
         `/plugins/${plugin.id}/records`,
@@ -198,9 +214,9 @@ function ScopedPersonalRecords({
       );
       setEditing(null);
       setRefresh((n) => n + 1);
-      notify(copyText("记录已保存"));
+      notify(pageCopy["记录已保存"]);
     } catch (e) {
-      setError(errorText(e));
+      setError(workspaceError(e as Error, locale));
     } finally {
       setBusy(false);
     }
@@ -219,7 +235,7 @@ function ScopedPersonalRecords({
       );
       setRefresh((n) => n + 1);
     } catch (e) {
-      setError(errorText(e));
+      setError(workspaceError(e as Error, locale));
     } finally {
       setBusy(false);
     }
@@ -235,9 +251,9 @@ function ScopedPersonalRecords({
       setDeleting(null);
       setOffset(0);
       setRefresh((n) => n + 1);
-      notify(copyText("记录已删除"));
+      notify(pageCopy["记录已删除"]);
     } catch (e) {
-      setError(errorText(e));
+      setError(workspaceError(e as Error, locale));
     } finally {
       setBusy(false);
     }
@@ -247,7 +263,7 @@ function ScopedPersonalRecords({
     setError("");
     try {
       if (page.total > 1000)
-        throw new Error(copyText("一次最多导出 1,000 条，请按日期或关键词缩小范围"));
+        throw new Error(pageCopy["一次最多导出 1,000 条，请按日期或关键词缩小范围"]);
       const records: PersonalRecord[] = [];
       for (let at = 0; at < page.total; at += 50) {
         const result = await request<RecordPage>(
@@ -266,37 +282,37 @@ function ScopedPersonalRecords({
       }
       const rows = [
         [
-          copyText("类型"),
-          copyText("标题"),
-          copyText("内容"),
-          copyText("日期"),
-          copyText("分类"),
-          copyText("收支"),
-          copyText("币种"),
-          copyText("金额"),
-          copyText("完成"),
-          copyText("提醒状态"),
-          copyText("提醒时间（北京时间）"),
-          copyText("重复"),
+          pageCopy["类型"],
+          pageCopy["标题"],
+          pageCopy["内容"],
+          pageCopy["日期"],
+          pageCopy["分类"],
+          pageCopy["收支"],
+          pageCopy["币种"],
+          pageCopy["金额"],
+          pageCopy["完成"],
+          pageCopy["提醒状态"],
+          pageCopy["提醒时间（北京时间）"],
+          pageCopy["重复"],
         ],
         ...records.map((r) => [
-          r.reminderType === "daily_tasks" ? copyText("每日待办提醒") : copyText(labels[r.kind]),
+          r.reminderType === "daily_tasks" ? pageCopy["每日待办提醒"] : labels[r.kind],
           r.title,
           r.content,
           r.date,
           r.category,
           r.kind === "entry"
             ? r.direction === "income"
-              ? copyText("收入")
-              : copyText("支出")
+              ? pageCopy["收入"]
+              : pageCopy["支出"]
             : "",
           r.kind === "entry" ? r.currency : "",
           r.amount ?? "",
-          r.kind === "task" ? (r.completed ? copyText("已完成") : copyText("未完成")) : "",
+          r.kind === "task" ? (r.completed ? pageCopy["已完成"] : pageCopy["未完成"]) : "",
           r.kind === "reminder"
             ? !r.reminderEnabled
-              ? copyText("已取消")
-              : copyText(statuses[r.reminderState ?? ""] ?? "等待设置")
+              ? pageCopy["已取消"]
+              : (statuses[r.reminderState ?? ""] ?? pageCopy["等待设置"])
             : "",
           r.remindAt ? beijingTime(Date.parse(r.remindAt)) : "",
           r.repeat,
@@ -309,14 +325,14 @@ function ScopedPersonalRecords({
       );
       const a = document.createElement("a");
       a.href = url;
-      a.download = copyText("个人助理-{value0}-{value1}.csv", {
-        value0: copyText(labels[kind]),
+      a.download = formatCopy(pageCopy["个人助理-{value0}-{value1}.csv"], {
+        value0: labels[kind],
         value1: beijingDate(),
       });
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      setError(errorText(e));
+      setError(workspaceError(e as Error, locale));
     } finally {
       setBusy(false);
     }
@@ -324,11 +340,11 @@ function ScopedPersonalRecords({
   return (
     <Modal
       wide
-      title={copyText("{value0} · 我的记录", { value0: plugin.name })}
+      title={formatCopy(pageCopy["{value0} · 我的记录"], { value0: plugin.name })}
       description={
         plugin.recordScope === "connection"
-          ? copyText("微信按链接使用各自的记录。时间按北京时间，账目按币种分别统计。")
-          : copyText("微信使用共享记录。时间按北京时间，账目按币种分别统计。")
+          ? pageCopy["微信按链接使用各自的记录。时间按北京时间，账目按币种分别统计。"]
+          : pageCopy["微信使用共享记录。时间按北京时间，账目按币种分别统计。"]
       }
       onClose={() => {
         if (!busy) onClose();
@@ -336,28 +352,28 @@ function ScopedPersonalRecords({
     >
       <div className="personal-workspace" ref={workspace}>
         <label className="personal-scope-selector">
-          {copyText("记录范围")}
+          {pageCopy["记录范围"]}
           <select
-            aria-label={copyText("记录范围")}
+            aria-label={pageCopy["记录范围"]}
             value={connectionId}
             disabled={busy}
             onChange={(e) => onConnectionChange(e.target.value)}
           >
             <option value="">
-              {copyText("共享记录")}
-              {plugin.recordScope === "connection" ? copyText("（当前微信不使用）") : ""}
+              {pageCopy["共享记录"]}
+              {plugin.recordScope === "connection" ? pageCopy["（当前微信不使用）"] : ""}
             </option>
             {data?.connections.map((link) => (
               <option key={link.id} value={link.id}>
                 {link.name}
-                {copyText(" · 独立记录")}
+                {pageCopy[" · 独立记录"]}
               </option>
             ))}
             {savedScopes
               .filter((id) => id && !data?.connections.some((link) => link.id === id))
               .map((id) => (
                 <option key={id} value={id}>
-                  {copyText("已删除的微信链接 · ")}
+                  {pageCopy["已删除的微信链接 · "]}
                   {id.slice(0, 8)}
                 </option>
               ))}
@@ -365,10 +381,10 @@ function ScopedPersonalRecords({
         </label>
         {(plugin.recordScope === "connection") !== !!connectionId && (
           <p className="personal-section-hint">
-            {copyText("此范围的记录已保留，微信当前不会读取。已有提醒仍会按原接收链接发送。")}
+            {pageCopy["此范围的记录已保留，微信当前不会读取。已有提醒仍会按原接收链接发送。"]}
           </p>
         )}
-        <nav className="personal-tabs" aria-label={copyText("记录类型")}>
+        <nav className="personal-tabs" aria-label={pageCopy["记录类型"]}>
           {(
             [
               ["note", FileText],
@@ -389,19 +405,19 @@ function ScopedPersonalRecords({
             >
               <Icon size={17} />
               {value === "note"
-                ? copyText("笔记")
+                ? pageCopy["笔记"]
                 : value === "entry"
-                  ? copyText("账本")
-                  : copyText("提醒")}
+                  ? pageCopy["账本"]
+                  : pageCopy["提醒"]}
             </button>
           ))}
         </nav>
         {(kind === "note" || kind === "task") && (
-          <div className="personal-note-types" role="group" aria-label={copyText("笔记类型")}>
+          <div className="personal-note-types" role="group" aria-label={pageCopy["笔记类型"]}>
             {(
               [
-                ["note", copyText("普通笔记")],
-                ["task", copyText("待办清单")],
+                ["note", pageCopy["普通笔记"]],
+                ["task", pageCopy["待办清单"]],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -423,14 +439,14 @@ function ScopedPersonalRecords({
         )}
         <p className="personal-section-hint">
           {kind === "task"
-            ? copyText(
-                "按计划日期安排待办，完成后勾选。开启每日提醒，就能在微信收到当天未完成的清单。",
-              )
+            ? pageCopy[
+                "按计划日期安排待办，完成后勾选。开启每日提醒，就能在微信收到当天未完成的清单。"
+              ]
             : kind === "reminder"
-              ? copyText("到点通过微信通知你，提醒不会加入待办清单。")
+              ? pageCopy["到点通过微信通知你，提醒不会加入待办清单。"]
               : kind === "note"
-                ? copyText("随手记下想法和信息，也可以切换到待办清单。")
-                : copyText("按币种分别统计收入和支出。")}
+                ? pageCopy["随手记下想法和信息，也可以切换到待办清单。"]
+                : pageCopy["按币种分别统计收入和支出。"]}
         </p>
         {kind === "task" && !editing && (
           <>
@@ -443,7 +459,7 @@ function ScopedPersonalRecords({
               refreshKey={refresh}
               onSaved={() => setRefresh((n) => n + 1)}
             />
-            <div className="personal-task-filter" role="group" aria-label={copyText("待办范围")}>
+            <div className="personal-task-filter" role="group" aria-label={pageCopy["待办范围"]}>
               <button
                 aria-pressed={todayOnly}
                 disabled={busy}
@@ -453,7 +469,7 @@ function ScopedPersonalRecords({
                   setDeleting(null);
                 }}
               >
-                {copyText("今日待办")}
+                {pageCopy["今日待办"]}
               </button>
               <button
                 aria-pressed={!todayOnly}
@@ -464,12 +480,12 @@ function ScopedPersonalRecords({
                   setDeleting(null);
                 }}
               >
-                {copyText("全部待办")}
+                {pageCopy["全部待办"]}
               </button>
               {todayOnly && (
                 <span>
                   {today}
-                  {copyText(" · 北京时间")}
+                  {pageCopy[" · 北京时间"]}
                 </span>
               )}
             </div>
@@ -478,11 +494,11 @@ function ScopedPersonalRecords({
         {editing ? (
           <form className="personal-record-form" onSubmit={save}>
             <h3>
-              {editing === "new" ? copyText("新增") : copyText("编辑")}
-              {copyText(labels[form.kind])}
+              {editing === "new" ? pageCopy["新增"] : pageCopy["编辑"]}
+              {labels[form.kind]}
             </h3>
             <label>
-              {copyText("标题")}
+              {pageCopy["标题"]}
               <input
                 required
                 maxLength={160}
@@ -490,18 +506,18 @@ function ScopedPersonalRecords({
                 onChange={(e) => update("title", e.target.value)}
                 placeholder={
                   kind === "entry"
-                    ? copyText("例如：午饭")
+                    ? pageCopy["例如：午饭"]
                     : kind === "task"
-                      ? copyText("例如：寄快递")
+                      ? pageCopy["例如：寄快递"]
                       : kind === "reminder"
-                        ? copyText("例如：喝水")
-                        : copyText("给这条笔记起个名字")
+                        ? pageCopy["例如：喝水"]
+                        : pageCopy["给这条笔记起个名字"]
                 }
               />
             </label>
             <div className="form-grid">
               <label>
-                {kind === "task" ? copyText("计划日期") : copyText("日期")}
+                {kind === "task" ? pageCopy["计划日期"] : pageCopy["日期"]}
                 <input
                   type="date"
                   required
@@ -510,29 +526,29 @@ function ScopedPersonalRecords({
                 />
               </label>
               <label>
-                {copyText("分类")}
+                {pageCopy["分类"]}
                 <input
                   maxLength={40}
                   value={form.category}
                   onChange={(e) => update("category", e.target.value)}
-                  placeholder={copyText("可选")}
+                  placeholder={pageCopy["可选"]}
                 />
               </label>
             </div>
             {kind === "entry" && (
               <div className="personal-money-fields">
                 <label>
-                  {copyText("收支")}
+                  {pageCopy["收支"]}
                   <select
                     value={form.direction}
                     onChange={(e) => update("direction", e.target.value as "income" | "expense")}
                   >
-                    <option value="expense">{copyText("支出")}</option>
-                    <option value="income">{copyText("收入")}</option>
+                    <option value="expense">{pageCopy["支出"]}</option>
+                    <option value="income">{pageCopy["收入"]}</option>
                   </select>
                 </label>
                 <label>
-                  {copyText("币种")}
+                  {pageCopy["币种"]}
                   <select
                     value={form.currency}
                     onChange={(e) =>
@@ -545,7 +561,7 @@ function ScopedPersonalRecords({
                   </select>
                 </label>
                 <label>
-                  {copyText("金额")}
+                  {pageCopy["金额"]}
                   <input
                     required
                     inputMode="decimal"
@@ -557,7 +573,7 @@ function ScopedPersonalRecords({
               </div>
             )}
             <label>
-              {kind === "note" ? copyText("笔记内容") : copyText("备注")}
+              {kind === "note" ? pageCopy["笔记内容"] : pageCopy["备注"]}
               <textarea
                 rows={kind === "note" ? 6 : 3}
                 maxLength={6000}
@@ -572,19 +588,21 @@ function ScopedPersonalRecords({
                   checked={form.completed}
                   onChange={(e) => update("completed", e.target.checked)}
                 />
-                {copyText("已完成")}
+                {pageCopy["已完成"]}
               </label>
             )}
             {kind === "reminder" && (
               <>
                 <p className="form-note">
-                  {copyText(
-                    "提醒依赖有效微信连接及最近互动后的 24 小时回复窗口。请定期向 ClawBot 发消息；单次提醒超过预定时间 24 小时停止补发，每日待办跨天不补发，重复提醒跳过错过的时间。",
-                  )}
+                  {
+                    pageCopy[
+                      "提醒依赖有效微信连接及最近互动后的 24 小时回复窗口。请定期向 ClawBot 发消息；单次提醒超过预定时间 24 小时停止补发，每日待办跨天不补发，重复提醒跳过错过的时间。"
+                    ]
+                  }
                 </p>
                 <div className="form-grid">
                   <label>
-                    {copyText("提醒时间（北京时间）")}
+                    {pageCopy["提醒时间（北京时间）"]}
                     <input
                       type="datetime-local"
                       required
@@ -597,7 +615,7 @@ function ScopedPersonalRecords({
                     />
                   </label>
                   <label>
-                    {copyText("重复")}
+                    {pageCopy["重复"]}
                     <select
                       disabled={!form.remindAt || form.reminderType === "daily_tasks"}
                       value={form.repeat}
@@ -605,9 +623,9 @@ function ScopedPersonalRecords({
                         update("repeat", e.target.value as PersonalRecordInput["repeat"])
                       }
                     >
-                      <option value="none">{copyText("一次性")}</option>
-                      <option value="daily">{copyText("每天")}</option>
-                      <option value="weekly">{copyText("每周")}</option>
+                      <option value="none">{pageCopy["一次性"]}</option>
+                      <option value="daily">{pageCopy["每天"]}</option>
+                      <option value="weekly">{pageCopy["每周"]}</option>
                     </select>
                   </label>
                 </div>
@@ -617,13 +635,15 @@ function ScopedPersonalRecords({
                     checked={form.reminderEnabled}
                     onChange={(e) => update("reminderEnabled", e.target.checked)}
                   />
-                  {copyText("启用提醒（取消勾选后保留记录，停止发送）")}
+                  {pageCopy["启用提醒（取消勾选后保留记录，停止发送）"]}
                 </label>
                 {form.reminderType === "daily_tasks" && (
                   <p className="form-hint">
-                    {copyText(
-                      "这是每日今日待办汇总，到点读取当天最新的未完成待办；标题和备注不会作为提醒正文发送。",
-                    )}
+                    {
+                      pageCopy[
+                        "这是每日今日待办汇总，到点读取当天最新的未完成待办；标题和备注不会作为提醒正文发送。"
+                      ]
+                    }
                   </p>
                 )}
               </>
@@ -640,10 +660,10 @@ function ScopedPersonalRecords({
                 disabled={busy}
                 onClick={() => setEditing(null)}
               >
-                {copyText("返回列表")}
+                {pageCopy["返回列表"]}
               </button>
               <button className="button" disabled={busy || !writable}>
-                {busy ? copyText("正在保存…") : copyText("保存记录")}
+                {busy ? pageCopy["正在保存…"] : pageCopy["保存记录"]}
               </button>
             </div>
           </form>
@@ -659,13 +679,13 @@ function ScopedPersonalRecords({
               >
                 <Search size={16} />
                 <input
-                  aria-label={copyText("搜索记录")}
-                  placeholder={copyText("搜索标题、内容或分类")}
+                  aria-label={pageCopy["搜索记录"]}
+                  placeholder={pageCopy["搜索标题、内容或分类"]}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
                 <button type="submit" className="text-link">
-                  {copyText("搜索")}
+                  {pageCopy["搜索"]}
                 </button>
               </form>
               {kind === "reminder" && (
@@ -674,7 +694,7 @@ function ScopedPersonalRecords({
                   disabled={busy || loading}
                   onClick={() => setRefresh((n) => n + 1)}
                 >
-                  {copyText("刷新状态")}
+                  {pageCopy["刷新状态"]}
                 </button>
               )}
               <button
@@ -683,7 +703,7 @@ function ScopedPersonalRecords({
                 disabled={busy || loading || !page.total}
               >
                 <Download size={15} />
-                {copyText("导出")}
+                {pageCopy["导出"]}
               </button>
               <button
                 className="button small"
@@ -691,22 +711,22 @@ function ScopedPersonalRecords({
                 onClick={() => open("new")}
               >
                 <Plus size={15} />
-                {copyText("新增")}
-                {copyText(labels[kind])}
+                {pageCopy["新增"]}
+                {labels[kind]}
               </button>
             </div>
             {kind === "task" && todayOnly ? (
               <p className="personal-section-hint">
-                {copyText("共 ")}
+                {pageCopy["共 "]}
                 {page.total}
-                {copyText(" 项今日待办（含已完成）")}
+                {pageCopy[" 项今日待办（含已完成）"]}
               </p>
             ) : (
               <div className="personal-dates">
                 <label>
-                  {copyText("开始")}
+                  {pageCopy["开始"]}
                   <input
-                    aria-label={copyText("开始日期")}
+                    aria-label={pageCopy["开始日期"]}
                     type="date"
                     value={queryFrom}
                     disabled={kind === "task" && todayOnly}
@@ -718,9 +738,9 @@ function ScopedPersonalRecords({
                 </label>
                 <span>—</span>
                 <label>
-                  {copyText("结束")}
+                  {pageCopy["结束"]}
                   <input
-                    aria-label={copyText("结束日期")}
+                    aria-label={pageCopy["结束日期"]}
                     type="date"
                     value={queryTo}
                     disabled={kind === "task" && todayOnly}
@@ -732,7 +752,7 @@ function ScopedPersonalRecords({
                 </label>
                 <span>
                   {page.total}
-                  {copyText(" 条记录")}
+                  {pageCopy[" 条记录"]}
                 </span>
               </div>
             )}
@@ -741,18 +761,18 @@ function ScopedPersonalRecords({
                 <div className="personal-totals" key={t.currency}>
                   <span>
                     {t.currency}
-                    <small>{copyText("当前筛选范围")}</small>
+                    <small>{pageCopy["当前筛选范围"]}</small>
                   </span>
                   <span>
-                    {copyText("收入")}
+                    {pageCopy["收入"]}
                     <strong className="income">{t.income}</strong>
                   </span>
                   <span>
-                    {copyText("支出")}
+                    {pageCopy["支出"]}
                     <strong>{t.expense}</strong>
                   </span>
                   <span>
-                    {copyText("结余")}
+                    {pageCopy["结余"]}
                     <strong>{t.net}</strong>
                   </span>
                 </div>
@@ -765,44 +785,44 @@ function ScopedPersonalRecords({
             {deleting && (
               <div className="personal-delete">
                 <span>
-                  {copyText("删除「")}
+                  {pageCopy["删除「"]}
                   {deleting.title}」？
                   {deleting.kind === "reminder"
-                    ? copyText("此提醒将停止发送。")
-                    : copyText("此操作无法撤销。")}
+                    ? pageCopy["此提醒将停止发送。"]
+                    : pageCopy["此操作无法撤销。"]}
                 </span>
                 <button className="text-link" disabled={busy} onClick={() => setDeleting(null)}>
-                  {copyText("取消")}
+                  {pageCopy["取消"]}
                 </button>
                 <button
                   className="button danger small"
                   disabled={busy}
                   onClick={() => void remove()}
                 >
-                  {copyText("确认删除")}
+                  {pageCopy["确认删除"]}
                 </button>
               </div>
             )}
             {loading ? (
-              <p className="personal-empty">{copyText("正在读取记录…")}</p>
+              <p className="personal-empty">{pageCopy["正在读取记录…"]}</p>
             ) : !page.records.length ? (
               <div className="personal-empty">
                 <FileText size={30} />
                 <h3>
-                  {copyText("还没有")}
-                  {copyText(labels[kind])}
+                  {pageCopy["还没有"]}
+                  {labels[kind]}
                 </h3>
                 <p>
-                  {copyText("在微信发送")}{" "}
+                  {pageCopy["在微信发送"]}{" "}
                   <code>
                     @{plugin.shortcut}{" "}
                     {kind === "note"
-                      ? copyText("记一下，下周想读一本新书")
+                      ? pageCopy["记一下，下周想读一本新书"]
                       : kind === "entry"
-                        ? copyText("今天咖啡花了 22 元")
+                        ? pageCopy["今天咖啡花了 22 元"]
                         : kind === "task"
-                          ? copyText("添加待办：整理这周的会议记录")
-                          : copyText("明天下午三点提醒我寄快递")}
+                          ? pageCopy["添加待办：整理这周的会议记录"]
+                          : pageCopy["明天下午三点提醒我寄快递"]}
                   </code>
                 </p>
               </div>
@@ -814,7 +834,7 @@ function ScopedPersonalRecords({
                       {kind === "task" && (
                         <button
                           className={`personal-check ${r.completed ? "checked" : ""}`}
-                          aria-label={r.completed ? copyText("标为未完成") : copyText("完成待办")}
+                          aria-label={r.completed ? pageCopy["标为未完成"] : pageCopy["完成待办"]}
                           disabled={!writable || busy}
                           onClick={() => void complete(r)}
                         >
@@ -831,7 +851,7 @@ function ScopedPersonalRecords({
                       <div className="personal-record-actions">
                         <button
                           className="icon-button"
-                          aria-label={copyText("编辑{value0}", { value0: r.title })}
+                          aria-label={formatCopy(pageCopy["编辑{value0}"], { value0: r.title })}
                           disabled={!writable || busy}
                           onClick={() => open(r)}
                         >
@@ -839,7 +859,7 @@ function ScopedPersonalRecords({
                         </button>
                         <button
                           className="icon-button"
-                          aria-label={copyText("删除{value0}", { value0: r.title })}
+                          aria-label={formatCopy(pageCopy["删除{value0}"], { value0: r.title })}
                           disabled={busy}
                           onClick={() => setDeleting(r)}
                         >
@@ -851,10 +871,10 @@ function ScopedPersonalRecords({
                       <span>{r.date}</span>
                       {r.category && <span>{r.category}</span>}
                       {r.kind === "task" && (
-                        <span>{r.completed ? copyText("已完成") : copyText("待完成")}</span>
+                        <span>{r.completed ? pageCopy["已完成"] : pageCopy["待完成"]}</span>
                       )}
                       {r.reminderType === "daily_tasks" && (
-                        <span>{copyText("每日今日待办汇总")}</span>
+                        <span>{pageCopy["每日今日待办汇总"]}</span>
                       )}
                     </div>
                     {r.content && (
@@ -868,14 +888,14 @@ function ScopedPersonalRecords({
                         <span>
                           {beijingTime(r.nextReminderAt ?? Date.parse(r.remindAt))}
                           {r.repeat === "daily"
-                            ? copyText(" · 每天")
+                            ? pageCopy[" · 每天"]
                             : r.repeat === "weekly"
-                              ? copyText(" · 每周")
+                              ? pageCopy[" · 每周"]
                               : ""}{" "}
                           ·{" "}
                           {!r.reminderEnabled
-                            ? copyText("已取消")
-                            : copyText(statuses[r.reminderState ?? ""] ?? "等待设置")}
+                            ? pageCopy["已取消"]
+                            : (statuses[r.reminderState ?? ""] ?? pageCopy["等待设置"])}
                         </span>
                       </div>
                     )}
@@ -890,7 +910,7 @@ function ScopedPersonalRecords({
                 disabled={loading || offset === 0 || busy}
                 onClick={() => setOffset((n) => Math.max(0, n - 20))}
               >
-                {copyText("上一页")}
+                {pageCopy["上一页"]}
               </button>
               <span>
                 {Math.floor(offset / 20) + 1} / {Math.max(1, Math.ceil(page.total / 20))}
@@ -900,14 +920,16 @@ function ScopedPersonalRecords({
                 disabled={loading || offset + 20 >= page.total || busy}
                 onClick={() => setOffset((n) => n + 20)}
               >
-                {copyText("下一页")}
+                {pageCopy["下一页"]}
               </button>
             </div>
             {!writable && (
               <p className="form-hint">
-                {copyText(
-                  "记录仍可查看、导出或删除；启用助理且配置未超出套餐上限时，可继续新增、编辑和使用提醒。",
-                )}
+                {
+                  pageCopy[
+                    "记录仍可查看、导出或删除；启用助理且配置未超出套餐上限时，可继续新增、编辑和使用提醒。"
+                  ]
+                }
               </p>
             )}
           </>

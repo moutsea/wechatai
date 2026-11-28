@@ -1,4 +1,8 @@
-import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
+import { workspaceError } from "../workspace-copy";
+import { useLocale } from "../locale";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/notices-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/notices-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
 import { useEffect, useState } from "react";
 import { CheckCheck, ChevronLeft, ChevronRight, Bell } from "lucide-react";
 import { useApp } from "../context";
@@ -8,8 +12,10 @@ import { unreadNoticeCount, type UserNotices } from "../../shared/site-notices";
 import { ConnectorUpdateCard } from "../connector-update-notice";
 
 export function Notices() {
-  const errorText = useWorkspaceError();
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const { request, base } = useApp();
   const { open, busy, readAll, version, readConnectorUpdate } = useNotices();
   const [page, setPage] = useState(1);
@@ -29,19 +35,19 @@ export function Notices() {
         }
       })
       .catch((e) => {
-        if (!controller.signal.aborted) setError(errorText(e));
+        if (!controller.signal.aborted) setError(workspaceError(e, locale));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [request, page, version, retry]);
+  }, [request, page, version, retry, locale]);
   return (
     <div className="notices-page page-enter">
       <PageHead
-        eyebrow={copyText("NOTICES")}
-        title={copyText("通知")}
-        description={copyText("产品更新、使用提示和服务公告，都在这里。")}
+        eyebrow="NOTICES"
+        title={pageCopy["通知"]}
+        description={pageCopy["产品更新、使用提示和服务公告，都在这里。"]}
         action={
           <button
             className="button secondary"
@@ -49,7 +55,7 @@ export function Notices() {
             onClick={() => data && void readAll(data)}
           >
             <CheckCheck size={16} />
-            {copyText("全部已读")}
+            {pageCopy["全部已读"]}
           </button>
         }
       />
@@ -58,12 +64,12 @@ export function Notices() {
           <div className="notice-empty" role="alert">
             <p>{error}</p>
             <button className="button secondary" onClick={() => setRetry((v) => v + 1)}>
-              {copyText("重新加载")}
+              {pageCopy["重新加载"]}
             </button>
           </div>
         ) : loading ? (
           <p className="notice-empty" role="status">
-            {copyText("正在加载通知…")}
+            {pageCopy["正在加载通知…"]}
           </p>
         ) : data && (data.items.length || data.connectorUpdate) ? (
           <>
@@ -82,21 +88,21 @@ export function Notices() {
         ) : (
           <div className="notice-empty">
             <Bell size={28} />
-            <h2>{copyText("暂时没有通知")}</h2>
-            <p>{copyText("有新消息时，右上角的小铃铛会提醒你。")}</p>
+            <h2>{pageCopy["暂时没有通知"]}</h2>
+            <p>{pageCopy["有新消息时，右上角的小铃铛会提醒你。"]}</p>
           </div>
         )}
       </section>
       {data && data.totalPages > 1 && (
-        <nav className="notice-pagination" aria-label={copyText("通知分页")}>
+        <nav className="notice-pagination" aria-label={pageCopy["通知分页"]}>
           <span>
-            {copyText("共 ")}
+            {pageCopy["共 "]}
             {data.total}
-            {copyText(" 条")}
+            {pageCopy[" 条"]}
           </span>
           <button
             className="icon-button"
-            aria-label={copyText("上一页")}
+            aria-label={pageCopy["上一页"]}
             disabled={loading || page <= 1}
             onClick={() => setPage(page - 1)}
           >
@@ -107,7 +113,7 @@ export function Notices() {
           </span>
           <button
             className="icon-button"
-            aria-label={copyText("下一页")}
+            aria-label={pageCopy["下一页"]}
             disabled={loading || page >= data.totalPages}
             onClick={() => setPage(page + 1)}
           >

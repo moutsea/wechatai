@@ -2172,7 +2172,7 @@ test("keeps the signed-in Korean pricing account menu in Korean", async ({ page 
   await expect(menu.getByRole("link", { name: "워크스페이스 열기" }))
     .toHaveAttribute("href", "/ko/app");
   await expect(menu.getByRole("link", { name: "멤버십 갱신" }))
-    .toHaveAttribute("href", "/app/billing");
+    .toHaveAttribute("href", "/ko/app/billing");
   await expect(menu.getByRole("button", { name: "로그아웃" })).toBeVisible();
   await expect(menu).not.toContainText(/\p{Script=Han}/u);
 });

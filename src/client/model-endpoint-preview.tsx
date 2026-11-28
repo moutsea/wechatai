@@ -1,4 +1,7 @@
-import { useWorkspaceText } from "./workspace-copy";
+import { useLocale } from "./locale";
+import { copy as sourceCopy } from "../shared/i18n/zh-CN/copy/model-endpoint-preview-page";
+import { copy as koCopy } from "../shared/i18n/ko/copy/model-endpoint-preview-page";
+import { workspaceCopy as ptCopy } from "../shared/i18n/pt/copy/workspace";
 import { modelEndpoint } from "../shared/model-endpoint";
 import type { Protocol } from "../shared/types";
 
@@ -9,7 +12,10 @@ export function ModelEndpointPreview({
   baseUrl: string;
   protocol: Protocol;
 }) {
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   let endpoint = "";
   try {
     const url = new URL(baseUrl.trim());
@@ -33,7 +39,7 @@ export function ModelEndpointPreview({
       aria-live="polite"
       aria-atomic="true"
     >
-      <span className="model-endpoint-preview-title">{copyText("实际请求地址")}</span>
+      <span className="model-endpoint-preview-title">{pageCopy["实际请求地址"]}</span>
       {endpoint ? (
         <div className="model-endpoint-preview-url">
           <span>POST</span>
@@ -42,8 +48,8 @@ export function ModelEndpointPreview({
       ) : (
         <small>
           {baseUrl.trim()
-            ? copyText("请输入有效的 HTTP(S) 服务地址，不要包含密钥、查询参数或 # 片段。")
-            : copyText("填写 Base URL 后显示。")}
+            ? pageCopy["请输入有效的 HTTP(S) 服务地址，不要包含密钥、查询参数或 # 片段。"]
+            : pageCopy["填写 Base URL 后显示。"]}
         </small>
       )}
     </div>

@@ -3,8 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { BrowserRouter, matchRoutes, useLocation, useRoutes, type RouteObject } from "react-router-dom";
 import "../shared/i18n/load";
 import { DASHBOARD_PATH, hasRegisteredTranslation, splitLocalePath } from "../shared/i18n";
-import { useWorkspaceText } from "./workspace-copy";
-import { LocaleProvider } from "./locale";
+import { workspaceLabel } from "./workspace-copy";
+import { LocaleProvider, useLocale } from "./locale";
 import { AuthProvider } from "./auth";
 import { Landing } from "./public-pages";
 import { PageMetadata } from "./seo";
@@ -111,9 +111,13 @@ const notFoundRoutes = [notFoundRoute];
 function appRouteTarget(pathname: string) {
   const split = splitLocalePath(pathname);
   if (!split) return { routes, pathname };
-  if (split.locale === "pt" && split.path.startsWith(`${DASHBOARD_PATH}/`))
+  if (
+    (split.locale === "ko" || split.locale === "pt") &&
+    (split.path === DASHBOARD_PATH || split.path.startsWith(`${DASHBOARD_PATH}/`))
+  )
     return { routes: localizedWorkspaceRoutes, pathname };
-  if (!hasRegisteredTranslation(split.locale, split.path)) return { routes: notFoundRoutes, pathname };
+  if (!hasRegisteredTranslation(split.locale, split.path))
+    return { routes: notFoundRoutes, pathname };
   if (split.path === DASHBOARD_PATH) return { routes: localizedWorkspaceRoutes, pathname };
   return { routes: localizedRoutes, pathname: split.path };
 }
@@ -166,10 +170,10 @@ function ScrollReset({ initialDocument }: { initialDocument?: DocumentState }) {
   return null;
 }
 function PageLoading() {
-  const copyText = useWorkspaceText();
+  const { locale } = useLocale();
   return (
     <div className="full-state" role="status">
-      {copyText("正在加载页面…")}
+      {workspaceLabel(locale, "正在加载页面…")}
     </div>
   );
 }

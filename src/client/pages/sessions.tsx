@@ -1,5 +1,9 @@
+import { workspaceError } from "../workspace-copy";
 import { useLocale } from "../locale";
-import { useWorkspaceText, useWorkspaceError } from "../workspace-copy";
+import { copy as sourceCopy } from "../../shared/i18n/zh-CN/copy/sessions-page";
+import { copy as koCopy } from "../../shared/i18n/ko/copy/sessions-page";
+import { workspaceCopy as ptCopy } from "../../shared/i18n/pt/copy/workspace";
+import { formatCopy } from "../../shared/i18n/dashboard";
 import { isChatModel } from "../../shared/model-compatibility";
 import { readyCloudAgents } from "../../shared/wechat-readiness";
 import { isCloudAgent } from "../../shared/cloud-agent";
@@ -31,9 +35,10 @@ import { type ChatMessage, type ChatSession } from "../../shared/types";
 import { ChatMessageBubble, ModelAvatar } from "../chat-message";
 import { pluginIconSource, roleAvatarSource } from "../../shared/plugin-visuals";
 export function Sessions() {
-  const errorText = useWorkspaceError();
   const { locale } = useLocale();
-  const copyText = useWorkspaceText();
+  const pageCopy =
+    locale === "ko" ? koCopy : locale === "pt" ? ptCopy : sourceCopy;
+
   const { data, base, request, refresh, notify } = useApp();
   const [params, setParams] = useSearchParams();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -79,11 +84,11 @@ export function Sessions() {
       setSessions(rows);
       setSelected((prev) => (rows.some((s) => s.id === prev) ? prev : rows[0]?.id || ""));
     } catch (e) {
-      if (!signal.aborted) notify(errorText(e), true);
+      if (!signal.aborted) notify(workspaceError(e as Error, locale), true);
     } finally {
       if (!signal.aborted) setLoading(false);
     }
-  }, [request, data?.plan, notify]);
+  }, [request, data?.plan, notify, locale]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -109,13 +114,13 @@ export function Sessions() {
       })
       .catch((e) => {
         if (!controller.signal.aborted)
-          setMessageError(errorText(e) || copyText("暂时无法读取消息"));
+          setMessageError(workspaceError(e, locale) || pageCopy["暂时无法读取消息"]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingMessages(false);
       });
     return () => controller.abort();
-  }, [selected, request, data?.plan, version, notify]);
+  }, [selected, request, data?.plan, version, notify, pageCopy, locale]);
   useLayoutEffect(() => {
     const viewport = messageViewport.current;
     const intent = scrollIntent.current;
@@ -155,7 +160,7 @@ export function Sessions() {
         selectedRef.current === sessionId &&
         messageRequest.current === requestVersion
       )
-        notify(errorText(error), true);
+        notify(workspaceError(error as Error, locale), true);
     } finally {
       if (
         !signal.aborted &&
@@ -176,7 +181,7 @@ export function Sessions() {
     })),
     ...readyCloudAgents(data).map((plugin) => ({
       value: `plugin:${plugin.id}`,
-      label: copyText("{value0} · 云端助手", { value0: plugin.name }),
+      label: formatCopy(pageCopy["{value0} · 云端助手"], { value0: plugin.name }),
       assistantId: undefined,
       pluginInstanceId: plugin.id,
     })),
@@ -210,7 +215,7 @@ export function Sessions() {
     try {
       if (action === "new" || action === "new-story") {
         if (action === "new" && !selectedTarget) {
-          notify(copyText("请选择可用的模型或小薇。"), true);
+          notify(pageCopy["请选择可用的模型或小薇。"], true);
           return;
         }
         const created = await request<ChatSession>("/sessions", {
@@ -247,20 +252,20 @@ export function Sessions() {
       notify(
         (
           {
-            switch: copyText("已切换微信当前会话"),
-            rename: copyText("会话已重命名"),
-            reset: copyText("上下文已重置，原记录保留"),
-            archive: copyText("会话已归档"),
-            restore: copyText("会话已恢复"),
-            clear: copyText("当前会话记录已清空"),
-            delete: copyText("会话已删除，已释放一个会话名额"),
-            new: copyText("新会话已创建，并设为微信当前会话"),
-            "new-story": copyText("新故事已创建，原会话已保留"),
+            switch: pageCopy["已切换微信当前会话"],
+            rename: pageCopy["会话已重命名"],
+            reset: pageCopy["上下文已重置，原记录保留"],
+            archive: pageCopy["会话已归档"],
+            restore: pageCopy["会话已恢复"],
+            clear: pageCopy["当前会话记录已清空"],
+            delete: pageCopy["会话已删除，已释放一个会话名额"],
+            new: pageCopy["新会话已创建，并设为微信当前会话"],
+            "new-story": pageCopy["新故事已创建，原会话已保留"],
           } as Record<string, string>
-        )[action] || copyText("操作完成"),
+        )[action] || pageCopy["操作完成"],
       );
     } catch (e) {
-      if (!signal.aborted) notify(errorText(e), true);
+      if (!signal.aborted) notify(workspaceError(e as Error, locale), true);
     } finally {
       if (!signal.aborted) setBusy(false);
     }
@@ -269,40 +274,40 @@ export function Sessions() {
     return (
       <div className="page-enter">
         <PageHead
-          eyebrow={copyText("EVERY CONVERSATION MATTERS")}
-          title={copyText("会话记录")}
-          description={copyText("把聊过的灵感，留在触手可及的地方。")}
+          eyebrow="EVERY CONVERSATION MATTERS"
+          title={pageCopy["会话记录"]}
+          description={pageCopy["把聊过的灵感，留在触手可及的地方。"]}
         />
         <div className="premium-gate panel">
           <span className="premium-gate-icon">
             <LockKeyhole size={34} />
           </span>
-          <span className="tag green">{copyText("PLUS 专属")}</span>
-          <h2>{copyText("不止聊过，还可以回看。")}</h2>
+          <span className="tag green">{pageCopy["PLUS 专属"]}</span>
+          <h2>{pageCopy["不止聊过，还可以回看。"]}</h2>
           <p>
-            {copyText("升级 Plus，在网页查看微信聊天记录，")}
+            {pageCopy["升级 Plus，在网页查看微信聊天记录，"]}
             <br />
-            {copyText("整理话题、切换会话，让每一个想法都有自己的位置。")}
+            {pageCopy["整理话题、切换会话，让每一个想法都有自己的位置。"]}
           </p>
           <div className="gate-features">
             <span>
               <Check size={16} />
-              {copyText("完整会话记录")}
+              {pageCopy["完整会话记录"]}
             </span>
             <span>
               <Check size={16} />
-              {copyText("归档与恢复")}
+              {pageCopy["归档与恢复"]}
             </span>
             <span>
               <Check size={16} />
-              {copyText("网页切换会话")}
+              {pageCopy["网页切换会话"]}
             </span>
           </div>
           <Link className="button" to={`${base}/billing`}>
-            {copyText("了解 Plus")}
+            {pageCopy["了解 Plus"]}
             <ArrowRight size={17} />
           </Link>
-          <small>{copyText("Free 仍可在微信使用 /new、/sessions、/switch 等会话指令。")}</small>
+          <small>{pageCopy["Free 仍可在微信使用 /new、/sessions、/switch 等会话指令。"]}</small>
         </div>
       </div>
     );
@@ -312,9 +317,9 @@ export function Sessions() {
         <RoleSummary key={summaryId} sessionId={summaryId} onClose={() => setSummaryId("")} />
       )}
       <PageHead
-        eyebrow={copyText("EVERY CONVERSATION MATTERS")}
-        title={copyText("会话记录")}
-        description={copyText("一个话题，一个空间。随时回来，继续未完的对话。")}
+        eyebrow="EVERY CONVERSATION MATTERS"
+        title={pageCopy["会话记录"]}
+        description={pageCopy["一个话题，一个空间。随时回来，继续未完的对话。"]}
         action={
           <button
             className="button"
@@ -334,19 +339,19 @@ export function Sessions() {
             }}
           >
             <Plus size={17} />
-            {copyText("新建会话")}
+            {pageCopy["新建会话"]}
           </button>
         }
       />
       {!creationTargets.length && (
         <p className="form-note">
-          {copyText("当前没有可用的文本模型或小薇。请检查")}
+          {pageCopy["当前没有可用的文本模型或小薇。请检查"]}
           <Link className="text-link" to={`${base}/channels`}>
-            {copyText("渠道与模型")}
+            {pageCopy["渠道与模型"]}
           </Link>
-          {copyText("或")}
+          {pageCopy["或"]}
           <Link className="text-link" to={`${base}/plugins`}>
-            {copyText("插件状态")}
+            {pageCopy["插件状态"]}
           </Link>
           。
         </p>
@@ -359,7 +364,7 @@ export function Sessions() {
               aria-pressed={tab === "active"}
               onClick={() => setTab("active")}
             >
-              {copyText("全部会话")}
+              {pageCopy["全部会话"]}
               <span>{sessions.filter((s) => !s.archived).length}</span>
             </button>
             <button
@@ -368,21 +373,21 @@ export function Sessions() {
               onClick={() => setTab("archived")}
             >
               <Archive size={14} />
-              {copyText("已归档")}
+              {pageCopy["已归档"]}
             </button>
           </div>
           <div className="session-search">
             <Search size={16} />
             <input
-              aria-label={copyText("搜索会话名称")}
-              placeholder={copyText("搜索会话名称…")}
+              aria-label={pageCopy["搜索会话名称"]}
+              placeholder={pageCopy["搜索会话名称…"]}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
           <div className="session-list">
             {loading ? (
-              <div className="list-loading">{copyText("正在加载会话…")}</div>
+              <div className="list-loading">{pageCopy["正在加载会话…"]}</div>
             ) : visible.length ? (
               visible.map((s) => {
                 const a = data.assistants.find((a) => a.id === s.assistantId);
@@ -402,21 +407,19 @@ export function Sessions() {
                     <div className="session-item-copy">
                       <div className="session-item-title">
                         <strong>{s.title}</strong>
-                        <time>
-                          {relativeTime(s.updatedAt, locale === "pt" ? "pt-BR" : "zh-CN")}
-                        </time>
+                        <time>{relativeTime(s.updatedAt, locale)}</time>
                       </div>
                       <p>
                         <span>
                           {data.connections.find((l) => l.id === (s.connectionId ?? "default"))
-                            ?.name ?? copyText("已删除链接")}{" "}
-                          · {pluginName(s) || a?.name || copyText("模型")}
+                            ?.name ?? pageCopy["已删除链接"]}{" "}
+                          · {pluginName(s) || a?.name || pageCopy["模型"]}
                         </span>
                         {data.connections.some((l) => l.currentSessionId === s.id) && (
                           <span
                             className="session-current-dot"
-                            title={copyText("微信当前会话")}
-                            aria-label={copyText("微信当前会话")}
+                            title={pageCopy["微信当前会话"]}
+                            aria-label={pageCopy["微信当前会话"]}
                           />
                         )}
                       </p>
@@ -428,13 +431,13 @@ export function Sessions() {
               <Empty
                 title={
                   query
-                    ? copyText("没有匹配的会话")
+                    ? pageCopy["没有匹配的会话"]
                     : tab === "archived"
-                      ? copyText("还没有归档会话")
-                      : copyText("还没有会话")
+                      ? pageCopy["还没有归档会话"]
+                      : pageCopy["还没有会话"]
                 }
                 description={
-                  query ? copyText("试试其他名称。") : copyText("在微信开始聊天，或新建一个会话。")
+                  query ? pageCopy["试试其他名称。"] : pageCopy["在微信开始聊天，或新建一个会话。"]
                 }
               />
             )}
@@ -442,7 +445,7 @@ export function Sessions() {
           <div className="session-sidebar-foot">
             <History size={14} />
             {sessions.length} / {data.limits.sessions}
-            {copyText(" 个会话")}
+            {pageCopy[" 个会话"]}
           </div>
         </aside>
         <section className="session-detail">
@@ -452,7 +455,7 @@ export function Sessions() {
                 <button
                   type="button"
                   className="icon-button session-back"
-                  aria-label={copyText("返回会话列表")}
+                  aria-label={pageCopy["返回会话列表"]}
                   onClick={() => {
                     setMobileDetail(false);
                     setMore(false);
@@ -464,11 +467,11 @@ export function Sessions() {
                 <div className="session-heading">
                   <h2>
                     {session.title}
-                    {session.archived && <span className="tag">{copyText("已归档")}</span>}
+                    {session.archived && <span className="tag">{pageCopy["已归档"]}</span>}
                   </h2>
                   <p>
                     {data.connections.find((l) => l.id === (session.connectionId ?? "default"))
-                      ?.name ?? copyText("已删除链接")}{" "}
+                      ?.name ?? pageCopy["已删除链接"]}{" "}
                     · {pluginName(session) ? `${pluginName(session)} · ` : ""}
                     {assistant ? (
                       <>
@@ -477,7 +480,7 @@ export function Sessions() {
                         {assistant.model}
                       </>
                     ) : (
-                      copyText("远端 Agent 会话")
+                      pageCopy["远端 Agent 会话"]
                     )}
                   </p>
                 </div>
@@ -485,7 +488,7 @@ export function Sessions() {
                   {data.connections.some((l) => l.currentSessionId === session.id) ? (
                     <span className="tag green">
                       <span className="tiny-dot" />
-                      {copyText("微信当前会话")}
+                      {pageCopy["微信当前会话"]}
                     </span>
                   ) : (
                     <button
@@ -493,14 +496,14 @@ export function Sessions() {
                       disabled={busy}
                       onClick={() => void act(session.archived ? "restore" : "switch")}
                     >
-                      {session.archived ? copyText("恢复会话") : copyText("切换到微信")}
+                      {session.archived ? pageCopy["恢复会话"] : pageCopy["切换到微信"]}
                       <ArrowRight size={14} />
                     </button>
                   )}
                   <div className="dropdown-anchor">
                     <button
                       className="icon-button"
-                      aria-label={copyText("会话操作")}
+                      aria-label={pageCopy["会话操作"]}
                       aria-expanded={more}
                       onClick={() => setMore(!more)}
                     >
@@ -517,7 +520,7 @@ export function Sessions() {
                               }}
                             >
                               <BookOpen size={15} />
-                              {copyText("剧情摘要")}
+                              {pageCopy["剧情摘要"]}
                             </button>
                             <button
                               disabled={busy || !role.enabled}
@@ -527,20 +530,20 @@ export function Sessions() {
                               }}
                             >
                               <Plus size={15} />
-                              {copyText("开始新故事")}
+                              {pageCopy["开始新故事"]}
                             </button>
                           </>
                         )}
                         {[
-                          ["rename", copyText("重命名"), Pencil],
-                          ["reset", copyText("重置上下文"), RotateCcw],
+                          ["rename", pageCopy["重命名"], Pencil],
+                          ["reset", pageCopy["重置上下文"], RotateCcw],
                           [
                             session.archived ? "restore" : "archive",
-                            session.archived ? copyText("恢复会话") : copyText("归档会话"),
+                            session.archived ? pageCopy["恢复会话"] : pageCopy["归档会话"],
                             session.archived ? ArchiveRestore : Archive,
                           ],
-                          ["clear", copyText("清空消息"), History],
-                          ["delete", copyText("删除会话"), Trash2],
+                          ["clear", pageCopy["清空消息"], History],
+                          ["delete", pageCopy["删除会话"], Trash2],
                         ].map(([action, label, Icon]) => {
                           const I = Icon as typeof Pencil;
                           return (
@@ -570,11 +573,11 @@ export function Sessions() {
                 ref={messageViewport}
                 role="region"
                 tabIndex={0}
-                aria-label={copyText("聊天记录")}
+                aria-label={pageCopy["聊天记录"]}
                 aria-busy={loadingMessages}
               >
                 {loadingMessages ? (
-                  <div className="list-loading">{copyText("正在读取消息…")}</div>
+                  <div className="list-loading">{pageCopy["正在读取消息…"]}</div>
                 ) : messageError ? (
                   <div className="session-message-error" role="alert">
                     <p>{messageError}</p>
@@ -582,7 +585,7 @@ export function Sessions() {
                       className="button secondary small"
                       onClick={() => setVersion((v) => v + 1)}
                     >
-                      {copyText("重新加载")}
+                      {pageCopy["重新加载"]}
                     </button>
                   </div>
                 ) : (
@@ -593,7 +596,7 @@ export function Sessions() {
                         disabled={loadingOlder}
                         onClick={() => void loadOlder()}
                       >
-                        {loadingOlder ? copyText("正在加载…") : copyText("加载更早的消息")}
+                        {loadingOlder ? pageCopy["正在加载…"] : pageCopy["加载更早的消息"]}
                       </button>
                     )}
                     {messages.length ? (
@@ -605,7 +608,7 @@ export function Sessions() {
                             <div className="message-day">
                               <time dateTime={new Date(m.createdAt).toISOString()}>
                                 {new Date(m.createdAt).toLocaleDateString(
-                                  locale === "pt" ? "pt-BR" : "zh-CN",
+                                  locale === "ko" ? "ko-KR" : locale === "pt" ? "pt-BR" : "zh-CN",
                                   {
                                     year: "numeric",
                                     month: "long",
@@ -625,8 +628,8 @@ export function Sessions() {
                     ) : (
                       <Empty
                         icon={<MessagesSquare size={26} />}
-                        title={copyText("为新的想法，留一页空白")}
-                        description={copyText("在微信发送消息，就可以从这里回看对话。")}
+                        title={pageCopy["为新的想法，留一页空白"]}
+                        description={pageCopy["在微信发送消息，就可以从这里回看对话。"]}
                       />
                     )}
                   </>
@@ -635,10 +638,10 @@ export function Sessions() {
               <div className="session-readonly">
                 <MessageCircle size={17} />
                 <div>
-                  <strong>{copyText("在微信继续对话")}</strong>
-                  <p>{copyText("这里用于回看与整理，查看记录不会切换当前会话。")}</p>
+                  <strong>{pageCopy["在微信继续对话"]}</strong>
+                  <p>{pageCopy["这里用于回看与整理，查看记录不会切换当前会话。"]}</p>
                 </div>
-                <span>{copyText("仅查看")}</span>
+                <span>{pageCopy["仅查看"]}</span>
               </div>
             </>
           ) : (
@@ -646,7 +649,7 @@ export function Sessions() {
               <button
                 type="button"
                 className="icon-button session-back"
-                aria-label={copyText("返回会话列表")}
+                aria-label={pageCopy["返回会话列表"]}
                 onClick={() => {
                   setMobileDetail(false);
                   setParams({}, { replace: true });
@@ -656,8 +659,8 @@ export function Sessions() {
               </button>
               <Empty
                 icon={<MessagesSquare size={30} />}
-                title={copyText("每一段对话，都有自己的位置")}
-                description={copyText("从左侧选择一个会话，或创建新的话题。")}
+                title={pageCopy["每一段对话，都有自己的位置"]}
+                description={pageCopy["从左侧选择一个会话，或创建新的话题。"]}
               />
             </>
           )}
@@ -668,45 +671,48 @@ export function Sessions() {
           title={
             (
               {
-                new: copyText("开启一段新对话"),
-                rename: copyText("给会话起个名字"),
-                reset: cloudSession ? copyText("重置云端对话？") : copyText("重置模型上下文？"),
-                archive: copyText("归档这段对话？"),
-                restore: copyText("恢复这段对话？"),
-                clear: copyText("清空会话消息？"),
-                delete: copyText("永久删除这个会话？"),
+                new: pageCopy["开启一段新对话"],
+                rename: pageCopy["给会话起个名字"],
+                reset: cloudSession ? pageCopy["重置云端对话？"] : pageCopy["重置模型上下文？"],
+                archive: pageCopy["归档这段对话？"],
+                restore: pageCopy["恢复这段对话？"],
+                clear: pageCopy["清空会话消息？"],
+                delete: pageCopy["永久删除这个会话？"],
               } as Record<string, string>
             )[operation]
           }
           description={
             (
               {
-                new: copyText("将为「{value0}」创建并切换到新会话。{value1}", {
+                new: formatCopy(pageCopy["将为「{value0}」创建并切换到新会话。{value1}"], {
                   value0:
                     data.connections.find((l) => l.id === data.selectedConnectionId)?.name ??
-                    copyText("我的微信"),
+                    pageCopy["我的微信"],
                   value1: selectedTarget?.pluginInstanceId
-                    ? copyText(
-                        "创建会话不会提交任务或消耗执行次数。已有任务继续执行，结果可在云端任务页查看。",
-                      )
+                    ? pageCopy[
+                        "创建会话不会提交任务或消耗执行次数。已有任务继续执行，结果可在云端任务页查看。"
+                      ]
                     : "",
                 }),
-                rename: copyText("用一个容易找到的名字，记住这个话题。"),
+                rename: pageCopy["用一个容易找到的名字，记住这个话题。"],
                 reset: cloudSession
-                  ? copyText(
-                      "后续任务将使用新的云端对话，历史记录及已保存的云端记忆仍保留。未结束的任务会请求停止。",
-                    )
-                  : copyText("历史消息仍然保留，后续请求不再把它们发送给模型。"),
-                archive: copyText(
-                  "记录会移入归档，不会释放会话名额。如这是当前会话，仅在微信链接和模型或插件可用时自动新建，否则退出当前会话。未结束的云端任务会请求停止。",
-                ),
-                restore: copyText("会话将回到常用列表，恢复后可以手动切换继续聊。"),
-                clear: copyText(
-                  "平台上的消息记录、模型上下文和对应云端任务内容都会删除，无法恢复。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。微信记录及云端服务中的历史与记忆不会同步删除。",
-                ),
-                delete: copyText(
-                  "会话、消息和对应云端任务内容会从平台删除，无法恢复，并释放一个会话名额。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。删除当前会话后不会自动新建。微信记录及云端服务中的历史与记忆不会同步删除。",
-                ),
+                  ? pageCopy[
+                      "后续任务将使用新的云端对话，历史记录及已保存的云端记忆仍保留。未结束的任务会请求停止。"
+                    ]
+                  : pageCopy["历史消息仍然保留，后续请求不再把它们发送给模型。"],
+                archive:
+                  pageCopy[
+                    "记录会移入归档，不会释放会话名额。如这是当前会话，仅在微信链接和模型或插件可用时自动新建，否则退出当前会话。未结束的云端任务会请求停止。"
+                  ],
+                restore: pageCopy["会话将回到常用列表，恢复后可以手动切换继续聊。"],
+                clear:
+                  pageCopy[
+                    "平台上的消息记录、模型上下文和对应云端任务内容都会删除，无法恢复。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。微信记录及云端服务中的历史与记忆不会同步删除。"
+                  ],
+                delete:
+                  pageCopy[
+                    "会话、消息和对应云端任务内容会从平台删除，无法恢复，并释放一个会话名额。未结束的云端任务会请求停止，不再投递结果；已发生的外部操作无法撤销。删除当前会话后不会自动新建。微信记录及云端服务中的历史与记忆不会同步删除。"
+                  ],
               } as Record<string, string>
             )[operation]
           }
@@ -724,7 +730,7 @@ export function Sessions() {
               <div className="form-body">
                 {operation === "new" && data.connections.length > 1 && (
                   <label>
-                    {copyText("微信链接")}
+                    {pageCopy["微信链接"]}
                     <select
                       value={data.selectedConnectionId}
                       disabled={busy}
@@ -736,7 +742,7 @@ export function Sessions() {
                           });
                           await refresh();
                         } catch (error) {
-                          notify(errorText(error), true);
+                          notify(workspaceError(error as Error, locale), true);
                         } finally {
                           setBusy(false);
                         }
@@ -753,22 +759,22 @@ export function Sessions() {
                   </label>
                 )}
                 <label>
-                  {copyText("会话名称")}
+                  {pageCopy["会话名称"]}
                   <input
                     autoFocus
                     required={operation === "rename"}
                     maxLength={80}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder={copyText("例如：新项目的灵感")}
+                    placeholder={pageCopy["例如：新项目的灵感"]}
                   />
                 </label>
                 {operation === "new" && (
                   <label>
-                    {copyText("使用哪个模型或小薇")}
+                    {pageCopy["使用哪个模型或小薇"]}
                     <select required value={target} onChange={(e) => setTarget(e.target.value)}>
                       {!selectedTarget && (
-                        <option value="">{copyText("请选择可用的模型或小薇")}</option>
+                        <option value="">{pageCopy["请选择可用的模型或小薇"]}</option>
                       )}
                       {creationTargets.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -787,13 +793,13 @@ export function Sessions() {
                 onClick={() => setOperation("")}
                 disabled={busy}
               >
-                {copyText("取消")}
+                {pageCopy["取消"]}
               </button>
               <button
                 className={`button ${["clear", "delete"].includes(operation) ? "danger" : ""}`}
                 disabled={busy || (operation === "new" && !selectedTarget)}
               >
-                {busy ? copyText("正在处理…") : copyText("确认")}
+                {busy ? pageCopy["正在处理…"] : pageCopy["确认"]}
               </button>
             </div>
           </form>

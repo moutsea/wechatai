@@ -155,7 +155,9 @@ export function registeredTranslation(
   path: string,
 ): RegisteredTranslation | undefined {
   const normalized = normalizePath(path);
-  const page = registry.get(locale)?.get(normalized);
+  const pagePath =
+    (locale === "ko" || locale === "pt") && /^\/app\/tasks\/[^/]+$/.test(normalized) ? "/app/tasks" : normalized;
+  const page = registry.get(locale)?.get(pagePath);
   return page ? { ...page, locale } : undefined;
 }
 
@@ -167,8 +169,8 @@ export function registeredTranslationsForPath(path: string): readonly Registered
   const normalized = normalizePath(path);
   return AVAILABLE_LOCALES.flatMap((locale) => {
     if (locale === DEFAULT_LOCALE) return [];
-    const page = registry.get(locale)?.get(normalized);
-    return page ? [{ ...page, locale }] : [];
+    const page = registeredTranslation(locale, normalized);
+    return page ? [page] : [];
   });
 }
 
